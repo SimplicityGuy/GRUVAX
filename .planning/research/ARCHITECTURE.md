@@ -25,65 +25,45 @@
 
 ### High-Level Topology (current v1, with future ESP32 dashed)
 
-```
-              ┌───────────────────────────────────────────────────────────────────┐
-              │                       Home LAN (192.168.x.x)                      │
-              │                                                                   │
-              │   ┌────────────────────┐         ┌─────────────────────────────┐  │
-              │   │  Raspberry Pi 5    │  HTTP   │              lux            │  │
-              │   │  (Chromium kiosk)  │◀───────▶│      (Docker Compose host)  │  │
-              │   │                    │  SSE    │                             │  │
-              │   │  - 7" touchscreen  │         │ ┌───────────────────────┐   │  │
-              │   │  - Wayland/labwc   │         │ │   discogsography      │   │  │
-              │   │  - SPA: kiosk view │         │ │  (existing stack)     │   │  │
-              │   └────────────────────┘         │ │  - FastAPI            │   │  │
-              │                                  │ │  - Discogs sync       │   │  │
-              │   ┌────────────────────┐         │ │  - Neo4j (not used    │   │  │
-              │   │ Owner phone /      │  HTTP   │ │    by GRUVAX v1)      │   │  │
-              │   │ laptop (mobile     │◀───────▶│ └──────────┬────────────┘   │  │
-              │   │  admin)            │  SSE    │            │ (shares DB)    │  │
-              │   │  - SPA: /admin     │         │            ▼                │  │
-              │   └────────────────────┘         │ ┌───────────────────────┐   │  │
-              │                                  │ │      Postgres 16+     │   │  │
-              │                                  │ │ ┌────────────────┐    │   │  │
-              │                                  │ │ │discogsography  │ RO │   │  │
-              │                                  │ │ │schema (FTS+    │◀───┼───┼──┐
-              │                                  │ │ │trgm)           │    │   │  │
-              │                                  │ │ └────────────────┘    │   │  │
-              │                                  │ │ ┌────────────────┐    │   │  │
-              │                                  │ │ │ gruvax schema  │ RW │   │  │
-              │                                  │ │ │  (this project)│◀───┼───┼──┤
-              │                                  │ │ └────────────────┘    │   │  │
-              │                                  │ └───────────────────────┘   │  │
-              │                                  │                             │  │
-              │                                  │ ┌───────────────────────┐   │  │
-              │                                  │ │      gruvax-api       │───┼──┘
-              │                                  │ │  (FastAPI + Uvicorn)  │
-              │                                  │ │   - REST /api/*       │
-              │                                  │ │   - SSE /api/events   │
-              │                                  │ │   - static SPA at /   │
-              │                                  │ │   - aiomqtt publisher │
-              │                                  │ └──────────┬────────────┘   │  │
-              │                                  │            │ publish        │  │
-              │                                  │            ▼                │  │
-              │                                  │ ┌───────────────────────┐   │  │
-              │                                  │ │      Mosquitto        │   │  │
-              │                                  │ │  (eclipse-mosquitto   │   │  │
-              │                                  │ │   2.1-alpine)         │   │  │
-              │                                  │ │  - LAN listener :1883 │   │  │
-              │                                  │ │  - persistence vol    │   │  │
-              │                                  │ └──────────┬────────────┘   │  │
-              │                                  └────────────┼────────────────┘  │
-              │                                               │                   │
-              │                                  ┌────────────▼────────────────┐  │
-              │                                  │ ESP32 LED controllers       │  │
-              │                                  │  (FUTURE — not v1)          │  │
-              │                                  │  ┌───────┐  ┌───────┐       │  │
-              │                                  │  │unit-A │  │unit-B │  ...  │  │
-              │                                  │  │WS2812B│  │WS2812B│       │  │
-              │                                  │  └───────┘  └───────┘       │  │
-              │                                  └─────────────────────────────┘  │
-              └───────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart LR
+  subgraph LAN["Home LAN (192.168.x.x)"]
+    subgraph clients["Clients"]
+      Pi["Raspberry Pi 5<br/>Chromium kiosk<br/>(7&quot; touch, Wayland/labwc, kiosk SPA)"]
+      Phone["Owner phone / laptop<br/>(mobile admin SPA)"]
+    end
+
+    subgraph lux["lux (Docker Compose host)"]
+      subgraph dgs["discogsography (existing stack)"]
+        DGSAPI["FastAPI + Discogs sync<br/>Neo4j (not used by GRUVAX v1)"]
+      end
+
+      subgraph PG["Postgres 16+"]
+        DGSSchema["discogsography schema<br/>(FTS + trgm) — RO to gruvax"]
+        GruvaxSchema["gruvax schema<br/>(this project) — RW"]
+      end
+
+      GruvaxAPI["gruvax-api<br/>(FastAPI + Uvicorn)<br/>REST /api/* · SSE /api/events<br/>static SPA at / · aiomqtt publisher"]
+      Mosquitto["Mosquitto<br/>(eclipse-mosquitto 2.1-alpine)<br/>LAN listener :1883 · persistence vol"]
+    end
+
+    subgraph future["ESP32 LED controllers (FUTURE — not v1)"]
+      ESPA["unit-A (WS2812B)"]
+      ESPB["unit-B (WS2812B)"]
+    end
+  end
+
+  Pi <-- "HTTP + SSE" --> GruvaxAPI
+  Phone <-- "HTTP + SSE" --> GruvaxAPI
+  DGSAPI -- "shares DB" --> PG
+  GruvaxAPI -- "RO" --> DGSSchema
+  GruvaxAPI -- "RW" --> GruvaxSchema
+  GruvaxAPI -- "publish" --> Mosquitto
+  Mosquitto -. "subscribe (future)" .-> ESPA
+  Mosquitto -. "subscribe (future)" .-> ESPB
+
+  classDef future fill:#fff,stroke:#999,stroke-dasharray: 5 5,color:#666
+  class future,ESPA,ESPB future
 ```
 
 ### Arrows — Who Calls Whom (no surprises)
@@ -508,85 +488,45 @@ useEffect(() => {
 
 The dependency graph below answers "what blocks what" and "what can run in parallel". Per FEATURES.md, the position estimator is the single most-depended-on module — it shows up as the central node.
 
-```
-                ┌─────────────────────────────┐
-                │   Postgres + gruvax schema  │   ← Foundation. Nothing builds without it.
-                │   (Alembic init, units,     │
-                │   cube_boundaries, settings,│
-                │   admin_sessions, history)  │
-                └──────────────┬──────────────┘
-                               │
-        ┌──────────────────────┼──────────────────────────────────┐
-        │                      │                                  │
-        ▼                      ▼                                  ▼
- ┌────────────────┐  ┌────────────────────┐         ┌──────────────────────────┐
- │ v_collection   │  │ Pin auth +         │         │ FastAPI app skeleton:    │
- │ view + grants  │  │ admin_sessions     │         │ - lifespan (mqtt, db)    │
- │ from           │  │ + CSRF             │         │ - settings (pydantic)    │
- │ discogsography │  │                    │         │ - /health, /version      │
- └────────┬───────┘  └─────────┬──────────┘         └────────┬─────────────────┘
-          │                    │                             │
-          ▼                    ▼                             ▼
- ┌────────────────┐  ┌────────────────────┐         ┌──────────────────────────┐
- │ Search         │  │ Admin: boundary    │         │ MQTT publish path:       │
- │ endpoint       │  │ CRUD + history     │         │ - aiomqtt client in      │
- │ (FTS+trgm)     │  │ + validate +       │         │   lifespan               │
- │                │  │ suggest            │         │ - /api/illuminate route  │
- └────────┬───────┘  └─────────┬──────────┘         │ - LED settings           │
-          │                    │                    └────────┬─────────────────┘
-          │                    │                             │
-          │           ┌────────┴────────────┐                │
-          │           │                     │                │
-          │           ▼                     ▼                │
-          │  ┌─────────────────┐  ┌──────────────────┐       │
-          │  │ Admin wizard /  │  │ CSV/YAML import +│       │
-          │  │ bulk endpoint   │  │ diff preview     │       │
-          │  └────────┬────────┘  └──────────────────┘       │
-          │           │                                       │
-          ▼           ▼                                       │
- ┌─────────────────────────────────────┐                     │
- │ POSITION ESTIMATOR (its own         │                     │
- │ research stream; this milestone     │                     │
- │ depends only on the contract)       │                     │
- │ Input: release_id                   │                     │
- │ Output: {cube, label_span,          │                     │
- │   sub_cube_interval, confidence}    │                     │
- └────────────┬────────────────────────┘                     │
-              │                                              │
-              ▼                                              │
- ┌─────────────────────────────────────┐                    │
- │ /api/locate endpoint                │                    │
- └────────────┬────────────────────────┘                    │
-              │                                             │
-              │  ┌──────────────────────────────────────────┘
-              │  │
-              ▼  ▼
- ┌─────────────────────────────────────┐
- │ SSE channel /api/events             │
- │ (boundary_changed events fan-out)   │
- └────────────┬────────────────────────┘
-              │
-              ▼
- ┌─────────────────────────────────────────────────────────────────────┐
- │                          Frontend SPA                                │
- │ - Vite scaffold + Tailwind + router + Zustand + TanStack Query      │
- │ - Search box + results (gates on Search endpoint)                   │
- │ - Cube grid + highlight (gates on /api/units + /api/locate)         │
- │ - Sub-cube position bar (gates on /api/locate sub-cube field)       │
- │ - SSE consumer + offline banner (gates on /api/events + /health)    │
- │ - Admin shell + login (gates on PIN auth)                           │
- │ - Admin boundary editor (gates on admin CRUD + validate)            │
- │ - Wizard / CSV import (gates on bulk + history)                     │
- │ - Settings page (gates on /api/admin/settings)                      │
- └────────────┬────────────────────────────────────────────────────────┘
-              │
-              ▼
- ┌─────────────────────────────────────────────────────────────────────┐
- │ Pi 5 kiosk runtime                                                   │
- │ - Trixie + labwc + Chromium --kiosk                                 │
- │ - systemd --user supervisor                                         │
- │ - Pointing at http://lux.local:PORT/                                │
- └─────────────────────────────────────────────────────────────────────┘
+```mermaid
+flowchart TD
+  PG[("Postgres + gruvax schema<br/>Alembic init: units, cube_boundaries,<br/>settings, admin_sessions, history<br/><br/><b>Foundation — nothing builds without it</b>")]
+
+  View["v_collection view + RO grants<br/>from discogsography"]
+  Auth["PIN auth + admin_sessions + CSRF"]
+  Skel["FastAPI app skeleton:<br/>lifespan (mqtt, db), settings,<br/>/health, /version"]
+
+  Search["Search endpoint<br/>(FTS + trgm)"]
+  AdminCRUD["Admin: boundary CRUD + history<br/>+ validate + suggest"]
+  MQTT["MQTT publish path:<br/>aiomqtt client in lifespan,<br/>/api/illuminate, LED settings"]
+
+  Wizard["Admin wizard / bulk endpoint"]
+  Import["CSV/YAML import + diff preview"]
+
+  Estimator["POSITION ESTIMATOR<br/>(own research stream — this<br/>milestone depends only on the contract)<br/>release_id → {cube, label_span,<br/>sub_cube_interval, confidence}"]
+
+  Locate["/api/locate endpoint"]
+  SSE["SSE channel /api/events<br/>boundary_changed fan-out"]
+
+  SPA["Frontend SPA<br/>Vite + Tailwind + router + Zustand + TanStack Query<br/>Search · CubeGrid · SubCubeBar · OfflineBanner ·<br/>Admin shell · BoundaryEditor · Wizard · Import · Settings"]
+
+  Kiosk["Pi 5 kiosk runtime<br/>Trixie + labwc + Chromium --kiosk<br/>systemd --user supervisor<br/>http://lux.local:PORT/"]
+
+  PG --> View
+  PG --> Auth
+  PG --> Skel
+  View --> Search
+  Auth --> AdminCRUD
+  Skel --> MQTT
+  AdminCRUD --> Wizard
+  AdminCRUD --> Import
+  Search --> Estimator
+  Wizard --> Estimator
+  Estimator --> Locate
+  Locate --> SSE
+  MQTT --> SSE
+  SSE --> SPA
+  SPA --> Kiosk
 ```
 
 ### Critical path to a demoable v1
@@ -1012,100 +952,95 @@ class EventBus:
 
 ### Search → Cube Highlight
 
-```
-User taps key in kiosk
-    │
-    ▼ (React 19 useDeferredValue + 100ms debounce in Zustand)
-Search input value updates
-    │
-    ▼
-useQuery(['search', q]) — TanStack Query
-    │
-    ▼ HTTP GET /api/search?q=...
-gruvax-api
-    │
-    ▼ SQL: gruvax.v_collection FTS+trgm
-Postgres
-    │ ranked rows
-    ▼
-gruvax-api JSON response (≤ 50 ms p95)
-    │
-    ▼
-React re-renders results list; top result is auto-selected via Zustand action
-    │
-    ▼
-useQuery(['locate', release_id]) — fires automatically on selection
-    │
-    ▼ HTTP GET /api/locate?release_id=...
-gruvax-api
-    │
-    ▼ estimator.compute(release_id) — CPU only, cached boundaries
-Estimator returns {primary_cube, label_span, sub_cube_interval, confidence}
-    │
-    ▼
-React renders CubeGrid with new highlight state; GSAP timeline plays
-    │
-    ▼ (in parallel)
-POST /api/illuminate — fire and forget
-    │
-    ▼ aiomqtt.publish('gruvax/v1/leds/...', payload) with 250 ms timeout
-Mosquitto (v1: stores retained state; no subscribers yet)
+```mermaid
+sequenceDiagram
+  autonumber
+  participant User
+  participant SPA as Kiosk SPA<br/>(React 19 + Zustand + TanStack Query)
+  participant API as gruvax-api
+  participant Estimator as Position Estimator<br/>(in-process, cached boundaries)
+  participant PG as Postgres<br/>(gruvax.v_collection)
+  participant MQ as Mosquitto
+
+  User->>SPA: taps a key
+  Note over SPA: useDeferredValue + 100 ms debounce
+  SPA->>API: GET /api/search?q=...
+  API->>PG: SQL FTS + trgm over v_collection
+  PG-->>API: ranked rows
+  API-->>SPA: JSON response (≤ 50 ms p95)
+  Note over SPA: render results;<br/>top result auto-selected
+  SPA->>API: GET /api/locate?release_id=...
+  API->>Estimator: estimator.compute(release_id)
+  Note over Estimator: CPU-only,<br/>no DB calls
+  Estimator-->>API: {primary_cube, label_span,<br/>sub_cube_interval, confidence}
+  API-->>SPA: LocateResult
+  Note over SPA: CubeGrid re-renders;<br/>GSAP timeline plays
+  par fire-and-forget LED publish
+    SPA->>API: POST /api/illuminate
+    API->>MQ: aiomqtt.publish('gruvax/v1/leds/...')<br/>250 ms timeout
+    Note over MQ: v1: retained state stored;<br/>no subscribers yet
+  end
 ```
 
 **Critical: the illuminate publish is NOT awaited from the search flow.** It runs as `asyncio.create_task(...)` so a slow broker never affects the user's search latency.
 
 ### Admin Boundary Edit → Live Kiosk Update
 
-```
-Admin types new boundary in mobile UI
-    │
-    ▼ React Hook Form + Zod validation client-side
-PUT /api/admin/cubes/{u}/{r}/{c}/boundary
-    │ (with session cookie + X-CSRF-Token + Idempotency-Key)
-    ▼
-gruvax-api validates session, CSRF, idempotency
-    │
-    ▼ transaction begin
-SELECT current boundary for cube
-INSERT into boundary_history (prev_*, new_*, change_set_id, source='manual')
-UPDATE cube_boundaries SET new values
-    ▼ transaction commit
-event_bus.publish('boundary_changed', cube_ids=[(u,r,c)], change_set_id=...)
-    │
-    ▼ (all connected SSE clients)
-EventSourceResponse yields `event: boundary_changed` to:
-  - the mobile admin (echo of own change)
-  - the kiosk (gets the new view)
-    │
-    ▼
-TanStack Query invalidates ['cube', u, r, c] and ['admin', 'cubes'], ['admin', 'history']
-    │
-    ▼
-React refetches affected queries; kiosk re-highlights if the affected cube is selected;
-estimator boundary cache is invalidated via the same bus subscription.
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Admin as Admin (mobile)
+  participant API as gruvax-api
+  participant PG as Postgres
+  participant Bus as in-process<br/>event_bus
+  participant SSE as SSE clients<br/>(admin + kiosk)
+  participant Cache as Boundary cache<br/>+ TanStack Query
+
+  Admin->>Admin: React Hook Form + Zod client-side validation
+  Admin->>API: PUT /api/admin/cubes/{u}/{r}/{c}/boundary<br/>session cookie + X-CSRF-Token + Idempotency-Key
+  Note over API: validate session, CSRF,<br/>idempotency
+  rect rgb(245, 245, 245)
+    Note over API,PG: Transaction
+    API->>PG: SELECT current boundary
+    API->>PG: INSERT boundary_history<br/>(prev_*, new_*, change_set_id, source='manual')
+    API->>PG: UPDATE cube_boundaries
+  end
+  API->>Bus: publish('boundary_changed',<br/>cube_ids=[(u,r,c)], change_set_id)
+  par fan-out to all SSE clients
+    Bus->>SSE: event: boundary_changed (admin echo)
+    Bus->>SSE: event: boundary_changed (kiosk)
+  end
+  Bus->>Cache: invalidate boundary cache<br/>(same bus subscription)
+  SSE->>Cache: TanStack Query invalidates<br/>['cube', u, r, c], ['admin', 'cubes'], ['admin', 'history']
+  Note over SSE,Cache: React refetches affected queries;<br/>kiosk re-highlights if cube selected.
 ```
 
 End-to-end latency from admin save to kiosk re-render: typically < 500 ms over LAN.
 
 ### LED Diagnostic Sequence
 
-```
-Admin taps "Diagnostic" button
-    │
-    ▼ POST /api/admin/leds/diagnostic
-gruvax-api
-    │
-    ▼ aiomqtt.publish('gruvax/v1/leds/diagnostic', payload={'sequence': 'rainbow'}, qos=1)
-Mosquitto (v1: stores; no ESP32 to consume)
-    │ (when hardware milestone arrives)
-    ▼
-ESP32 firmware on each unit receives, executes pixel-by-pixel sequence
-    │
-    ▼ publishes back on gruvax/v1/leds/status/{unit_id}
-Mosquitto fans out to gruvax-api's subscription (hardware milestone adds this)
-    │
-    ▼ event_bus.publish('led_status', ...)
-SSE → admin diagnostics page updates
+```mermaid
+sequenceDiagram
+  autonumber
+  participant Admin
+  participant API as gruvax-api
+  participant MQ as Mosquitto
+  participant ESP as ESP32 firmware<br/>(FUTURE — not v1)
+  participant Bus as event_bus
+  participant SSE as Admin diagnostics SSE
+
+  Admin->>API: POST /api/admin/leds/diagnostic
+  API->>MQ: aiomqtt.publish('gruvax/v1/leds/diagnostic',<br/>{'sequence': 'rainbow'}, qos=1)
+  Note over MQ: v1: stores message;<br/>no ESP32 to consume yet
+  rect rgb(245, 245, 245)
+    Note over ESP,SSE: Hardware milestone (dormant in v1)
+    MQ-->>ESP: deliver diagnostic command
+    ESP->>ESP: execute pixel-by-pixel sequence per unit
+    ESP->>MQ: publish gruvax/v1/leds/status/{unit_id}
+    MQ-->>API: fan out to gruvax-api subscription
+    API->>Bus: publish('led_status', ...)
+    Bus->>SSE: admin diagnostics page updates
+  end
 ```
 
 In v1, only the publish half exists. The whole right side ("ESP32 firmware...") is dormant infrastructure ready to switch on.

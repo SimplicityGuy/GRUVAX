@@ -398,59 +398,89 @@ PROJECT.md is explicit: **periodic JSON export of `cube_boundaries` to git as a 
 
 ## Feature Dependencies
 
-```
-Search (typeahead)
-    └── requires ── Postgres FTS index on collection_items joined view
-    └── requires ── (for "did you mean") pg_trgm extension + GIN index
-    └── enhances ── Recently-pulled list (history feeds future autocomplete)
+```mermaid
+flowchart LR
+  %% Solid edges = requires; dashed edges = enhances; red dashed = conflicts-with
 
-Cube highlight (single cube)
-    └── requires ── Position estimation API
-                        └── requires ── Cube boundary data model
+  %% Infrastructure
+  FTS["Postgres FTS index<br/>on collection_items view"]
+  Trgm["pg_trgm extension<br/>+ GIN index"]
+  Boundary["Cube boundary<br/>data model"]
+  PIN["PIN auth +<br/>session middleware"]
+  SSEch["SSE channel +<br/>TanStack Query invalidation"]
+  MQTTc["MQTT client (aiomqtt)<br/>+ Mosquitto broker"]
+  Health["/healthz polling"]
+  Sanity["Sanity validation<br/>against collection_items"]
 
-Label-span highlight (multi-cube)
-    └── requires ── Position estimation API returning label-span
-    └── enhances ── Cube highlight (renders behind the primary cube)
+  %% Core features
+  Search["Search (typeahead)"]
+  PosAPI["Position estimation API"]
+  Cube["Cube highlight (single cube)"]
+  Span["Label-span highlight (multi-cube)"]
+  SubBar["Sub-cube position bar"]
+  Admin["Admin boundary edit<br/>(three workflows)"]
+  LiveKiosk["Live admin → kiosk update"]
+  LEDcube["LED publish-by-cube"]
+  Offline["Offline banner"]
+  HealthBase["Healthcheck / version / logging<br/>(ships in v1 baseline, independent)"]
+  ChangeLog["Boundary change log (undo)"]
+  Recent["Recently-pulled list"]
 
-Sub-cube position bar
-    └── requires ── Position estimation API returning sub-cube interval
-    └── requires ── Cube highlight
+  %% Differentiators / enhancements
+  SoftLock["Soft-lock indicator"]
+  Optimistic["Optimistic UI for admin"]
+  LEDspan["LED publish-by-label-span"]
+  LEDsub["LED publish-by-sub-cube-interval"]
+  LEDsettings["Brightness + color settings"]
+  LEDdiag["Test / diagnostic mode"]
+  LEDoff["All-off panic button"]
+  Reconnect["Reconnection animation"]
+  SWcache["(future)<br/>Service-worker cached results"]
+  Reshuffle["Reshuffle wizard<br/>(atomic change set)"]
+  Backup["Backup / restore<br/>(free side-effect)"]
+  Audit["Audit trail in admin"]
+  ServerHistory["Server-side full<br/>search history"]
 
-Admin boundary edit (any of the three workflows)
-    └── requires ── PIN auth + session middleware
-    └── requires ── Sanity validation against collection_items
-    └── enhances ── Undo / history (every edit writes to change log)
+  %% Requires (solid)
+  Search --> FTS
+  Search --> Trgm
+  Cube --> PosAPI
+  PosAPI --> Boundary
+  Span --> PosAPI
+  SubBar --> PosAPI
+  SubBar --> Cube
+  Admin --> PIN
+  Admin --> Sanity
+  LiveKiosk --> SSEch
+  LEDcube --> MQTTc
+  LEDcube --> PosAPI
+  Offline --> SSEch
+  Offline --> Health
+  Recent --> Search
 
-Live admin → kiosk update
-    └── requires ── SSE channel + TanStack Query invalidation
-    └── enhances ── Soft-lock indicator
-    └── enhances ── Optimistic UI for admin
+  %% Enhances (dashed)
+  Search -. enhances .-> Recent
+  Span -. enhances .-> Cube
+  Admin -. enhances .-> ChangeLog
+  LiveKiosk -. enhances .-> SoftLock
+  LiveKiosk -. enhances .-> Optimistic
+  LEDcube -. enhances .-> LEDspan
+  LEDcube -. enhances .-> LEDsub
+  LEDcube -. enhances .-> LEDsettings
+  LEDcube -. enhances .-> LEDdiag
+  LEDcube -. enhances .-> LEDoff
+  Offline -. enhances .-> Reconnect
+  Offline -. enhances .-> SWcache
+  ChangeLog -. enhances .-> Reshuffle
+  ChangeLog -. enhances .-> Backup
+  ChangeLog -. enhances .-> Audit
 
-LED publish-by-cube
-    └── requires ── MQTT client (aiomqtt) + Mosquitto broker
-    └── requires ── Position estimation API (LED endpoint takes a record query)
-    └── enhances ── LED publish-by-label-span (same plumbing)
-    └── enhances ── LED publish-by-sub-cube-interval (same plumbing)
-    └── enhances ── Brightness control + color settings (admin-stored, included in every publish)
-    └── enhances ── Test/diagnostic mode (same publish path)
-    └── enhances ── "All off" panic button (same plumbing)
+  %% Conflicts (red dashed)
+  Recent -. conflicts .-> ServerHistory
+  linkStyle 33 stroke:#c33,stroke-dasharray: 5 5
 
-Offline banner
-    └── requires ── SSE connection state OR /healthz polling
-    └── enhances ── Reconnection animation
-    └── enhances ── (future) Service-worker cached results
-
-Healthcheck / version / logging
-    └── independent ── ships in v1 baseline
-
-Boundary change log (undo)
-    └── enhances ── Reshuffle wizard (atomic change set)
-    └── enhances ── Backup/restore (free side-effect)
-    └── enhances ── Audit trail in admin
-
-Recently-pulled list
-    └── requires ── Search (already there)
-    └── conflicts-with ── Server-side full search history (privacy floor)
+  classDef baseline fill:#eef,stroke:#88a
+  class HealthBase baseline
 ```
 
 ### Dependency Notes
