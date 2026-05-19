@@ -193,17 +193,89 @@ Permanently excluded. Documented to prevent scope creep.
 
 ## Traceability
 
-Filled by the roadmapper during phase creation.
+Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMAP.md.
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| (Empty — populated by `/gsd:plan-phase` / roadmap) | — | Pending |
+| SRCH-01 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-03 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-04 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-05 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-06 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-07 | Phase 2 — Real Position Estimation | Pending |
+| SRCH-08 | Phase 2 — Real Position Estimation | Pending |
+| SRCH-09 | Phase 4 — Realtime + Offline Resilience | Pending |
+| CUBE-01 | Phase 1 — First Search → Cube Highlight | Pending |
+| CUBE-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| CUBE-03 | Phase 2 — Real Position Estimation | Pending |
+| CUBE-04 | Phase 2 — Real Position Estimation | Pending |
+| CUBE-05 | Phase 1 — First Search → Cube Highlight | Pending |
+| CUBE-06 | Phase 1 — First Search → Cube Highlight | Pending |
+| CUBE-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| CUBE-08 | Phase 2 — Real Position Estimation | Pending |
+| CUBE-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| CUBE-10 | Phase 2 — Real Position Estimation | Pending |
+| POS-01 | Phase 1 — First Search → Cube Highlight | Pending |
+| POS-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| POS-03 | Phase 2 — Real Position Estimation | Pending |
+| POS-04 | Phase 1 — First Search → Cube Highlight | Pending |
+| POS-05 | Phase 2 — Real Position Estimation | Pending |
+| POS-06 | Phase 2 — Real Position Estimation | Pending |
+| ADMN-01 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| ADMN-02 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| ADMN-03 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| ADMN-04 | Phase 6 — Wizards + Import/Export | Pending |
+| ADMN-05 | Phase 6 — Wizards + Import/Export | Pending |
+| ADMN-06 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| ADMN-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| ADMN-08 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| ADMN-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| ADMN-10 | Phase 6 — Wizards + Import/Export | Pending |
+| ADMN-11 | Phase 4 — Realtime + Offline Resilience | Pending |
+| ADMN-12 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| LED-01 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-02 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-03 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-04 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-05 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-06 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-07 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-08 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-09 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-10 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| RTM-01 | Phase 4 — Realtime + Offline Resilience | Pending |
+| RTM-02 | Phase 4 — Realtime + Offline Resilience | Pending |
+| RTM-03 | Phase 4 — Realtime + Offline Resilience | Pending |
+| RTM-04 | Phase 4 — Realtime + Offline Resilience | Pending |
+| OFF-01 | Phase 4 — Realtime + Offline Resilience | Pending |
+| OFF-02 | Phase 4 — Realtime + Offline Resilience | Pending |
+| OFF-03 | Phase 4 — Realtime + Offline Resilience | Pending |
+| OFF-04 | Phase 4 — Realtime + Offline Resilience | Pending |
+| OBS-01 | Phase 7 — Observability + Deployment Hardening | Pending |
+| OBS-02 | Phase 7 — Observability + Deployment Hardening | Pending |
+| OBS-03 | Phase 7 — Observability + Deployment Hardening | Pending |
+| OBS-04 | Phase 7 — Observability + Deployment Hardening | Pending |
+| OBS-05 | Phase 7 — Observability + Deployment Hardening | Pending |
+| OBS-06 | Phase 7 — Observability + Deployment Hardening | Pending |
+| OBS-07 | Phase 7 — Observability + Deployment Hardening | Pending |
+| PRIV-01 | Phase 4 — Realtime + Offline Resilience | Pending |
+| PRIV-02 | Phase 4 — Realtime + Offline Resilience | Pending |
+| PRIV-03 | Phase 4 — Realtime + Offline Resilience | Pending |
+| PRIV-04 | Phase 4 — Realtime + Offline Resilience | Pending |
+| BAK-01 | Phase 6 — Wizards + Import/Export | Pending |
+| BAK-02 | Phase 6 — Wizards + Import/Export | Pending |
+| DEP-01 | Phase 1 — First Search → Cube Highlight | Pending |
+| DEP-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| DEP-03 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| DEP-04 | Phase 7 — Observability + Deployment Hardening | Pending |
+| DEP-05 | Phase 7 — Observability + Deployment Hardening | Pending |
 
 **Coverage:**
 - v1 requirements: 73 total
-- Mapped to phases: 0 (roadmap not yet created)
-- Unmapped: 73 ⚠️ (expected at this stage)
+- Mapped to phases: 73 (100%)
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-19*
-*Last updated: 2026-05-19 after initial scoping*
+*Last updated: 2026-05-19 after roadmap creation (traceability populated)*
