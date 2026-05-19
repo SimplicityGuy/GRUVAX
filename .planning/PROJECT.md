@@ -20,7 +20,7 @@ Type artist, title, label, or catalog number → see the right cube (and a sub-c
 - [ ] Ranked results list with tap-to-select; top result highlights automatically; selection re-highlights
 - [ ] Configurable N×4×4 Kallax grid UI rendering the active cube selection (current N=2 units, 32 cubes)
 - [ ] Cube boundary data model: per-cube first/last `(label, catalog#)` bounds; binary-searched at query time
-- [ ] Catalog-number interpolation that returns both a label-span (cubes the label occupies) and a precise sub-cube position estimate (interval, may cross cube boundaries)
+- [ ] Position estimation API that returns both a label-span (cubes the label occupies) and a sub-cube position estimate (interval, may cross cube boundaries). The estimation approach is intentionally not specified here — see research stream below; the right approach likely varies with how a label's catalog numbers are distributed.
 - [ ] Admin mode (PIN-gated, session timeout) for editing cube boundaries
   - Mobile-first admin web UI (typing-friendly, used at desk)
   - Kiosk admin fallback (touchscreen, used at the shelf)
@@ -87,13 +87,13 @@ Type artist, title, label, or catalog number → see the right cube (and a sub-c
 | GRUVAX backend lives in this repo (not in discogsography) and deploys to `lux` | Keeps GRUVAX-specific code near the kiosk UI; discogsography stays focused on Discogs ingestion. Avoids cross-repo coupling for kiosk-only concerns. | — Pending |
 | Boundary table (16 rows × N units), not per-instance mapping | ~5–10 min reshuffle maintenance vs ~3,000 rows of one-time data entry. Deterministic ordering already gives positional precision via interpolation. | — Pending |
 | Dedicated `gruvax` schema in the same Postgres instance, reading discogsography tables read-only | Same-host = lowest latency. Schema isolation protects GRUVAX from discogsography migrations. | — Pending |
-| Cube + sub-cube position via catalog-number interpolation | Labels span 0+ cube boundaries; LEDs are RGB, so the API returns both a label-span and a precise position interval that may cross a cube boundary. | — Pending |
+| Cube + sub-cube position is computed, not stored per-record | Labels span 0+ cube boundaries; LEDs are RGB, so the API returns both a label-span and a position interval that may cross a cube boundary. The estimation method itself is deliberately undecided here. | — Pending |
 | LED endpoint exists in v1, hardware integration stubbed | Locks the API contract early so the UI + admin flows are complete; hardware milestone slots in without breaking changes. | — Pending |
 | Auth = single PIN with session timeout | Home LAN, single owner. PIN is enough; timeout reduces accidental edits during demos. | — Pending |
 | Docker Compose deployment, sibling to discogsography | Consistent ops story; shared Postgres is trivially reachable. | — Pending |
 | UI aesthetic intentionally not locked from the mockup | Mockup is a directional starting point; first frontend phase runs a fresh design pass. | — Pending |
 | LED color choices are admin-configurable, not hard-coded | Colors in earlier discussions (purple for label-span, etc.) were suggestions only; admin should be able to tune. | — Pending |
-| Interpolation is its own research stream | Catalog-number sort and label-span behavior have enough edge cases (case inconsistency, mixed prefix conventions, multi-cube spans) that they need a dedicated investigation validated against the real CSV. | — Pending |
+| Position-estimation is its own research stream | Catalog-number sort and label-span behavior have enough edge cases (case inconsistency, mixed prefix conventions, multi-cube spans) that they need a dedicated investigation. Research should compare multiple approaches against the actual label-by-label distributions in the local CSV; no algorithm is pre-selected. | — Pending |
 
 ## Evolution
 
