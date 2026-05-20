@@ -164,7 +164,7 @@ All values reference CSS custom properties from `gruvax-design-tokens.css`. Neve
 | Dim (default, no selection) | `--gruvax-cell-dim` (#D8E8F5) | `--gruvax-cell-dim-border` (#B8D0E8) | none | All cubes before/between searches |
 | Lit (found — primary) | `--gruvax-cell-lit` (#FFDA00) | `--gruvax-cell-lit-border` (#E6B800) | `--gruvax-shadow-led` | The single highlighted cube |
 | Hover | `--gruvax-cell-hover` (#EEF5FB) | `--gruvax-border` (#0051A2) | none | Pointer/touch hover on a cube (kiosk: touch, not hover) |
-| Empty (no boundary data) | `--gruvax-cell-empty` (#F2F2F2) | `#DDDDDD`, dashed | none | Cubes with `confidence: 0` / `primary_cube: null` for that label |
+| Empty (no boundary data) | `--gruvax-cell-empty` (#F2F2F2) | `--gruvax-cell-empty-border` (#DDDDDD), dashed | none | Cubes with `confidence: 0` / `primary_cube: null` for that label |
 
 **Lit cell rule:** A lit cell is ALWAYS yellow (`--gruvax-cell-lit`). Never recolor a lit cell with any other accent or semantic color. This rule applies to Phase 1 and all later phases.
 
@@ -264,7 +264,7 @@ Each cube shows a persistent address overlay in the top-left corner:
 |-------------|------|--------|--------------|--------|
 | `dim` | `--gruvax-cell-dim` | `--gruvax-cell-dim-border` | solid 1.5px | none |
 | `lit` | `--gruvax-cell-lit` | `--gruvax-cell-lit-border` | solid 1.5px | `--gruvax-shadow-led` |
-| `empty` | `--gruvax-cell-empty` | `#DDDDDD` | dashed 1.5px | none |
+| `empty` | `--gruvax-cell-empty` | `--gruvax-cell-empty-border` | dashed 1.5px | none |
 | `hover` | `--gruvax-cell-hover` | `--gruvax-border` | solid 1.5px | none |
 
 `border-radius`: `--gruvax-cell-radius-xl` (8px)

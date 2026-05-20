@@ -62,7 +62,8 @@
   --gruvax-cell-lit-border: #E6B800;   /* Found cube border */
   --gruvax-cell-hover:      #EEF5FB;   /* Hover state on cube */
   --gruvax-cell-selected:   #003D7A;   /* Selected / admin focused cube */
-  --gruvax-cell-empty:      #F2F2F2;   /* Empty / unconfigured cube */
+  --gruvax-cell-empty:        #F2F2F2;   /* Empty / unconfigured cube */
+  --gruvax-cell-empty-border: #DDDDDD;   /* Empty cube border (dashed) */
 
   /* ─────────────────────────────────────────
      TYPOGRAPHY

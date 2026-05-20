@@ -1,8 +1,8 @@
 ---
 phase: 01
 slug: first-search-cube-highlight
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-05-19
 ---
@@ -87,11 +87,13 @@ created: 2026-05-19
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 30s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (test infra in plan 01-01; per-area stubs land ahead of dependents in waves 1–3)
+- [x] No watch-mode flags
+- [x] Feedback latency < 30s
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+> `wave_0_complete` stays `false` until execution: the Wave 0 test files are authored during execute-phase, not at plan time. The validation *strategy* is approved; the *artifacts* are produced by the executor and the validator flips this flag when they land.
+
+**Approval:** approved 2026-05-19

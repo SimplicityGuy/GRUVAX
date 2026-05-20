@@ -1087,7 +1087,7 @@ export function Cube({ unitId, row, col, state, address }: CubeProps) {
 
 .cube[data-state="empty"] {
   background: var(--gruvax-cell-empty);
-  border: 1.5px dashed #DDDDDD;
+  border: 1.5px dashed var(--gruvax-cell-empty-border);
 }
 
 .cube-address {
@@ -1140,22 +1140,27 @@ export function Cube({ unitId, row, col, state, address }: CubeProps) {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three questions were resolved by adopting the stated recommendation; each is implemented in the Phase 1 plans (confirmed: 01-01 + 01-02).
 
 1. **`search_path` or view DDL for dev-vs-prod schema selection?**
    - What we know: The "configurable schema" approach (`OBSERVED_DISCOGSOGRAPHY_SCHEMA` env var, set via `search_path` on connection checkout) keeps application code branch-free.
    - What's unclear: Does discogsography's Postgres already have the `gruvax_app` user with `USAGE` on the `discogsography` schema granted, or does the operator need to run a provisioning step?
    - Recommendation: Include a `just provision-db` justfile target that runs the `GRANT` statements from ARCHITECTURE.md. Add a README note. Phase 1 can't proceed without this on `lux`.
+   - **RESOLVED:** Adopted. Plan 01-01 creates a `justfile` with a `provision-db` target and includes the read-only `GRANT` statements as a commented operator note; the synthetic dev path is branch-free via `search_path`. (Real-data path needs `just provision-db` on `lux`; demoability uses the committed synthetic seed.)
 
 2. **`CUBE_ONLY_CONFIDENCE` constant value**
    - What we know: Must be a float 0..1; less than 0.5 signals "cube identified but no sub-cube precision".
    - What's unclear: The exact value is planner discretion. `0.30` is the default in the code above.
    - Recommendation: Use `0.30`. Document it in `contract.py`. Phase 2 replaces with a formula.
+   - **RESOLVED:** Adopted. Plan 01-02 sets `CUBE_ONLY_CONFIDENCE = 0.30` in `contract.py` with `estimator_version="cube-only-v1"`; asserted in `tests/unit/test_algorithm.py`.
 
 3. **Alembic migration sequencing for dev seed vs production schema**
    - What we know: The dev seed (synthetic `gruvax_dev` tables + `v_collection` view pointed at them) needs to run in dev/CI but NOT in production where `v_collection` points at real discogsography tables.
    - What's unclear: Should the dev seed be a separate Alembic migration gated on `GRUVAX_ENV=dev`, or a standalone SQL script run by a justfile target?
    - Recommendation: **Standalone SQL script** (`fixtures/synth_collection.sql`) run by `just seed-dev`. Alembic migrations are environment-agnostic structural changes. Seed data belongs in a separate operation.
+   - **RESOLVED:** Adopted. Plan 01-01 ships `fixtures/synth_collection.sql` applied by a `just seed-dev` target, separate from environment-agnostic Alembic migrations (`just migrate` → `alembic upgrade head`).
 
 ---
 
