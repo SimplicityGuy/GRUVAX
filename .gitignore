@@ -217,6 +217,9 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Vim
+*.swp
+
 # GRUVAX — local-only design inputs (do not check in)
 background/
 *.csv
