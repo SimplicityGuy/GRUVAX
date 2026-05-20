@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: completed
-last_updated: "2026-05-20T15:17:01.138Z"
+status: "Phase 1 shipped — PR #3"
+last_updated: "2026-05-20T16:46:01.092Z"
 progress:
   total_phases: 7
   completed_phases: 1
@@ -33,7 +33,7 @@ Plan: 3 of 4
 
 - **Phase:** 1 — First Search → Cube Highlight
 - **Plan:** 01-03 complete; 01-04 next
-- **Status:** Phase 01 complete
+- **Status:** Phase 1 shipped — PR #3
 - **Progress:** [███████░░░] 75%
 
 ```
