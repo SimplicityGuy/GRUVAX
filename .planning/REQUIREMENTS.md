@@ -39,7 +39,7 @@
 - [x] **POS-03**: The estimator hits p95 ≤ 50 ms with no DB calls during compute; boundary data is held in an in-memory cache
 - [x] **POS-04**: The boundary cache loads at process startup and invalidates on `boundary_changed` events
 - [x] **POS-05**: v1 ships two estimator implementations behind the same contract: an index-based interpolator (INTERPOLATION.md §4.1) as primary and a cube-only fallback (§4.8) for timeouts/low-confidence cases
-- [ ] **POS-06**: A developer A/B harness runs candidate algorithms against the local CSV (gitignored) and emits per-distribution-shape error metrics
+- [x] **POS-06**: A developer A/B harness runs candidate algorithms against the local CSV (gitignored) and emits per-distribution-shape error metrics
 
 ### Admin / Data Management
 
@@ -221,7 +221,7 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | POS-03 | Phase 2 — Real Position Estimation | Complete |
 | POS-04 | Phase 1 — First Search → Cube Highlight | Complete |
 | POS-05 | Phase 2 — Real Position Estimation | Complete |
-| POS-06 | Phase 2 — Real Position Estimation | Pending |
+| POS-06 | Phase 2 — Real Position Estimation | Complete |
 | ADMN-01 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | ADMN-02 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | ADMN-03 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |

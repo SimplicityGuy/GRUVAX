@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-20T19:47:32.115Z"
+last_updated: "2026-05-20T20:05:48.493Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 8
-  completed_plans: 6
+  completed_plans: 7
   percent: 14
 ---
 
@@ -28,13 +28,13 @@ progress:
 
 ## Current Position
 
-Phase: 02 (Real Position Estimation) — EXECUTING
-Plan: 2 of 4
+Phase: 02 (Real Position Estimation) — COMPLETE
+Plan: 4 of 4
 
 - **Phase:** 02 — Real Position Estimation
-- **Plan:** 02-02 complete; 02-03 next
-- **Status:** Executing Phase 02
-- **Progress:** [████████░░] 75%
+- **Plan:** 02-04 complete; Phase 02 done
+- **Status:** Phase 02 complete — all 4 plans shipped
+- **Progress:** [██████████] 100% (Phase 02)
 
 ```
 Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
@@ -60,6 +60,7 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 | Phase 01-first-search-cube-highlight P04 | 1303 | 3 tasks | 22 files |
 | Phase 02-real-position-estimation P01 | 19 | 4 tasks | 15 files |
 | Phase 02-real-position-estimation P02 | 14 | 3 tasks | 9 files |
+| Phase 02-real-position-estimation P04 | 5min | 2 tasks | 3 files |
 
 ## Accumulated Context
 
@@ -97,6 +98,8 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 - [Phase 02-02]: **DID_YOU_MEAN_THRESHOLD = 0.35** — conservative per RESEARCH D-11; did_you_mean fires only when rows is empty; avoids spurious suggestions on partial FTS hits.
 - [Phase 02-02]: **Catalog boost via setweight() Option A** — catalog_number tokens weighted 'A', fts_vector tokens 'C'; ts_rank_cd scores 'A' highest; catalog records rank above text matches for catalog-like queries (D-12).
 - [Phase 02-02]: **onTap calls setQuery (not direct locate)** — D-10 explicit user confirmation; no silent auto-correct; user sees corrected term in search box.
+- [Phase 02-04]: **CUBE_ONLY_NULL_MIDPOINT=0.5** — §4.8 null sub_cube_interval scored as midpoint of cube for MAE comparison; worst-case analysis per plan spec.
+- [Phase 02-04]: **session-scoped harness_results fixture** — run_all_algorithms(ci=True) called once per pytest session; all CI tests consume shared per-shape {index, cube_only} dict.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
 
@@ -127,8 +130,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-20 (Phase 02 Plan 02 — SRCH-07/08 trigram did-you-mean + catalog boost; all 3 tasks complete)
-**Next action:** Phase 02 Plan 03 — next plan in phase.
+**Last touched:** 2026-05-20 (Phase 02 Plan 04 — POS-06 A/B harness; §4.1 proven >= §4.8 on all synthetic shapes)
+**Next action:** Phase 02 complete — run `/gsd:plan-phase 3` or `/gsd:verify-work 2` next.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
