@@ -1,5 +1,6 @@
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
+import gsap from 'gsap'
 import { fetchCubes, fetchUnits, searchCollection } from '../../api/client'
 import { useGruvaxStore } from '../../state/store'
 import { ResultsList } from './ResultsList'
@@ -15,15 +16,26 @@ const SHELF_NAMES = ['SHELF A', 'SHELF B', 'SHELF C', 'SHELF D']
  * Orchestrates SearchBox ↔ ResultsList ↔ ShelfGrid via Zustand store.
  *
  * Per 01-UI-SPEC.md §Layout / Kiosk View — Overall Page Layout.
+ *
+ * Phase 2 (CUBE-08): GSAP selection-lands timeline fires on animationToken change.
+ * Animated nodes are resolved by data-attribute/class selectors scoped to the
+ * .shelf-area container — no forwardRef plumbing needed.
  */
 export function KioskView() {
-  const { highlight, clearSearch } = useGruvaxStore()
+  const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch } =
+    useGruvaxStore()
   const [debouncedQuery, setDebouncedQuery] = useState('')
 
   // Loading indicator state — shown only after >300ms in flight (SRCH-05)
   const [showLoading, setShowLoading] = useState(false)
   const loadingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const [hasSearchError, setHasSearchError] = useState(false)
+
+  // ── GSAP refs (Task 3 / CUBE-08) ───────────────────────────────────────
+  /** Container ref — all GSAP selectors are scoped to this element */
+  const shelfAreaRef = useRef<HTMLDivElement | null>(null)
+  /** Holds the active GSAP timeline for hard-cancel on new selection (D-06) */
+  const timelineRef = useRef<gsap.core.Timeline | null>(null)
 
   // Fetch units from API (drives grid)
   const { data: unitsData } = useQuery({
@@ -96,6 +108,119 @@ export function KioskView() {
     }
   }, [debouncedQuery, clearSearch])
 
+  // ── GSAP selection-lands timeline (CUBE-08 / D-05 / D-06) ─────────────
+  //
+  // Fires on every animationToken increment (new selection or re-selection).
+  // Resolves animated nodes by data-attribute/class selectors scoped to
+  // shelfAreaRef — no forwardRef plumbing needed (02-UI-SPEC.md §Ref Strategy).
+  //
+  // Timeline: span fade-in → primary pulse → bar slide-in ≤600ms (SC-3).
+  // Hard-cancel: kill() on each run (D-06 — no cross-fade between selections).
+  // Will-change: .is-animating toggled on/off (never permanently set — Pitfall 16).
+  //
+  // useLayoutEffect: DOM nodes for the new selection are mounted before querying.
+  useLayoutEffect(() => {
+    // Hard-cancel previous in-flight timeline (D-06)
+    timelineRef.current?.kill()
+
+    const container = shelfAreaRef.current
+    if (!container) return
+
+    // Resolve animated nodes by stable selectors (Task 2 adds these hooks)
+    const primaryCube = container.querySelector<HTMLElement>('[data-state="lit"]')
+    const barNode = container.querySelector<HTMLElement>('.sub-cube-bar')
+    const bandNodes = Array.from(
+      container.querySelectorAll<HTMLElement>('.span-underlay__band'),
+    )
+
+    // Track resolved nodes for cleanup
+    const resolvedNodes: Array<HTMLElement | null> = [
+      primaryCube,
+      barNode,
+      ...bandNodes,
+    ]
+
+    // Apply will-change during animation window (Pi 5 compositor optimization)
+    resolvedNodes.forEach((n) => n?.classList.add('is-animating'))
+
+    // Reset elements to start state before building new timeline
+    bandNodes.forEach((band) => gsap.set(band, { opacity: 0 }))
+
+    const isSingleton =
+      subCubeInterval != null &&
+      subCubeInterval.start === 0 &&
+      subCubeInterval.end === 1
+
+    if (barNode) {
+      if (isSingleton) {
+        // Singleton: reset opacity (cross-fade in step 3 variant)
+        gsap.set(barNode, { opacity: 0 })
+      } else {
+        // Normal: reset scaleX for slide-in
+        gsap.set(barNode, { scaleX: 0, transformOrigin: 'left center' })
+      }
+    }
+
+    const tl = gsap.timeline({
+      onComplete: () => {
+        // Release will-change after animation settles (Pitfall 16)
+        resolvedNodes.forEach((n) => n?.classList.remove('is-animating'))
+      },
+    })
+
+    // Step 1: Span underlay fade-in (0ms → 150ms) — skip if no bands
+    if (bandNodes.length > 0) {
+      tl.fromTo(
+        bandNodes,
+        { opacity: 0 },
+        { opacity: 0.6, duration: 0.15, ease: 'power2.out' },
+      )
+    }
+
+    // Step 2a: Primary cube spring pulse — scale out (150ms → 250ms)
+    if (primaryCube) {
+      tl.fromTo(
+        primaryCube,
+        { scale: 1 },
+        { scale: 1.04, duration: 0.1, ease: 'back.out(1.7)' },
+        bandNodes.length > 0 ? '+=0' : '0',
+      )
+      // Step 2b: Primary cube settle — scale back (250ms → 350ms)
+      tl.to(primaryCube, { scale: 1, duration: 0.1, ease: 'power2.inOut' })
+    }
+
+    // Step 3: Bar animation — overlapped -=0.10 with step 2b (300ms → 500ms)
+    if (barNode) {
+      if (isSingleton) {
+        // Singleton variant: cross-fade in (no scaleX slide — D-02)
+        tl.fromTo(
+          barNode,
+          { opacity: 0 },
+          { opacity: 0.18, duration: 0.2, ease: 'power2.out' },
+          '-=0.10',
+        )
+      } else {
+        // Normal: slide-in from left (scaleX 0→1)
+        tl.fromTo(
+          barNode,
+          { scaleX: 0, transformOrigin: 'left center' },
+          { scaleX: 1, duration: 0.2, ease: 'power2.out' },
+          '-=0.10',
+        )
+      }
+    }
+
+    timelineRef.current = tl
+
+    return () => {
+      // Hard-cancel on effect cleanup (new animationToken or unmount)
+      tl.kill()
+      // Release will-change on interrupt — never leave compositor layer permanently
+      resolvedNodes.forEach((n) => n?.classList.remove('is-animating'))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animationToken])
+
   const searchResults = searchData?.items ?? []
   const showNoResults =
     debouncedQuery.trim().length > 0 &&
@@ -130,8 +255,8 @@ export function KioskView() {
           />
         </div>
 
-        {/* Shelf area — N×(4×4) grid */}
-        <div className="shelf-area">
+        {/* Shelf area — N×(4×4) grid — shelfAreaRef for GSAP selector scope */}
+        <div className="shelf-area" ref={shelfAreaRef}>
           {sortedUnits.map((unit, idx) => (
             <div key={unit.id} className="shelf-section">
               <ShelfLabel name={SHELF_NAMES[idx] ?? `SHELF ${idx + 1}`} />
@@ -140,6 +265,9 @@ export function KioskView() {
                 shelfIndex={idx}
                 litCube={highlight.primaryCube}
                 emptyCubes={emptyCubes}
+                labelSpan={labelSpan}
+                subCubeInterval={subCubeInterval}
+                confidence={confidence}
               />
             </div>
           ))}
@@ -155,6 +283,9 @@ export function KioskView() {
                     shelfIndex={idx}
                     litCube={highlight.primaryCube}
                     emptyCubes={emptyCubes}
+                    labelSpan={labelSpan}
+                    subCubeInterval={subCubeInterval}
+                    confidence={confidence}
                   />
                 </div>
               ))}
