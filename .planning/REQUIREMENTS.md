@@ -23,22 +23,22 @@
 
 - [x] **CUBE-01**: Kiosk renders a configurable N×4×4 grid driven by per-unit config (initial deployment: 2 units, 32 cubes)
 - [x] **CUBE-02**: On search selection, the primary cube containing the matched record is visibly highlighted
-- [ ] **CUBE-03**: When the matched record's label spans multiple cubes, all spanned cubes show a secondary highlight behind the primary
-- [ ] **CUBE-04**: Sub-cube position estimate is rendered as a horizontal range bar inside the primary cube; bar may cross a cube boundary when the interval does
+- [x] **CUBE-03**: When the matched record's label spans multiple cubes, all spanned cubes show a secondary highlight behind the primary
+- [x] **CUBE-04**: Sub-cube position estimate is rendered as a horizontal range bar inside the primary cube; bar may cross a cube boundary when the interval does
 - [x] **CUBE-05**: Empty cubes (no boundary data, or boundaries indicate emptiness) render in a distinct, desaturated visual state
 - [x] **CUBE-06**: Each cube shows a persistent address overlay (e.g., row letter + column number)
 - [ ] **CUBE-07**: Each cube displays a fill-level indicator computed from the boundary range
 - [ ] **CUBE-08**: Selection-lands animation choreographs label-span fade-in, primary-cube pulse, and sub-cube bar slide-in within ≤600 ms; the animation is interruptible by a new search
 - [ ] **CUBE-09**: User can tap a cube to reveal what's in it (reverse-lookup side panel listing the cube's first/last boundary records and a representative subset)
-- [ ] **CUBE-10**: Single-record labels render with a tick-mark indicator inside the cube rather than a width-proportional range bar
+- [x] **CUBE-10**: Single-record labels render with a tick-mark indicator inside the cube rather than a width-proportional range bar
 
 ### Position Estimation
 
 - [x] **POS-01**: A parser/comparator module normalizes catalog numbers (case-fold, separator-collapse, NFKC, numeric-aware split) and is used by every algorithm and the boundary save validator; raw-string comparison is forbidden
 - [x] **POS-02**: `GET /api/locate?release_id=` returns `LocateResult{primary_cube, label_span, sub_cube_interval, confidence, generated_at, estimator_version}` matching the architecture contract
-- [ ] **POS-03**: The estimator hits p95 ≤ 50 ms with no DB calls during compute; boundary data is held in an in-memory cache
+- [x] **POS-03**: The estimator hits p95 ≤ 50 ms with no DB calls during compute; boundary data is held in an in-memory cache
 - [x] **POS-04**: The boundary cache loads at process startup and invalidates on `boundary_changed` events
-- [ ] **POS-05**: v1 ships two estimator implementations behind the same contract: an index-based interpolator (INTERPOLATION.md §4.1) as primary and a cube-only fallback (§4.8) for timeouts/low-confidence cases
+- [x] **POS-05**: v1 ships two estimator implementations behind the same contract: an index-based interpolator (INTERPOLATION.md §4.1) as primary and a cube-only fallback (§4.8) for timeouts/low-confidence cases
 - [ ] **POS-06**: A developer A/B harness runs candidate algorithms against the local CSV (gitignored) and emits per-distribution-shape error metrics
 
 ### Admin / Data Management
@@ -208,19 +208,19 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | SRCH-09 | Phase 4 — Realtime + Offline Resilience | Pending |
 | CUBE-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-02 | Phase 1 — First Search → Cube Highlight | Complete |
-| CUBE-03 | Phase 2 — Real Position Estimation | Pending |
-| CUBE-04 | Phase 2 — Real Position Estimation | Pending |
+| CUBE-03 | Phase 2 — Real Position Estimation | Complete |
+| CUBE-04 | Phase 2 — Real Position Estimation | Complete |
 | CUBE-05 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-06 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | CUBE-08 | Phase 2 — Real Position Estimation | Pending |
 | CUBE-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
-| CUBE-10 | Phase 2 — Real Position Estimation | Pending |
+| CUBE-10 | Phase 2 — Real Position Estimation | Complete |
 | POS-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | POS-02 | Phase 1 — First Search → Cube Highlight | Complete |
-| POS-03 | Phase 2 — Real Position Estimation | Pending |
+| POS-03 | Phase 2 — Real Position Estimation | Complete |
 | POS-04 | Phase 1 — First Search → Cube Highlight | Complete |
-| POS-05 | Phase 2 — Real Position Estimation | Pending |
+| POS-05 | Phase 2 — Real Position Estimation | Complete |
 | POS-06 | Phase 2 — Real Position Estimation | Pending |
 | ADMN-01 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | ADMN-02 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |

@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-20T19:01:09.935Z"
+last_updated: "2026-05-20T19:29:01.947Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 8
-  completed_plans: 4
+  completed_plans: 5
   percent: 14
 ---
 
@@ -20,7 +20,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 01 — first-search-cube-highlight
+**Current Focus:** Phase 02 — Real Position Estimation
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -28,13 +28,13 @@ progress:
 
 ## Current Position
 
-Phase: 01 — COMPLETE
-Plan: 3 of 4
+Phase: 02 (Real Position Estimation) — EXECUTING
+Plan: 1 of 4
 
 - **Phase:** 1 — First Search → Cube Highlight
 - **Plan:** 01-03 complete; 01-04 next
-- **Status:** Ready to execute
-- **Progress:** [███████░░░] 75%
+- **Status:** Executing Phase 02
+- **Progress:** [██████░░░░] 63%
 
 ```
 Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
@@ -58,6 +58,7 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 | Phase 01-first-search-cube-highlight P02 | 1109 | 2 tasks | 8 files |
 | Phase 01-first-search-cube-highlight P03 | 1200 | 3 tasks | 15 files |
 | Phase 01-first-search-cube-highlight P04 | 1303 | 3 tasks | 22 files |
+| Phase 02-real-position-estimation P01 | 19 | 4 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -88,6 +89,10 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 - [Phase 01-04]: **python -m pattern in docker-entrypoint.sh** — uv copies venv from /build/.venv to /app/.venv; wrapper scripts have hardcoded shebangs (#!/build/.venv/bin/python) so direct invocation fails. Using `$PYTHON -m alembic` and `$PYTHON -m uvicorn` with absolute binary path avoids shebang issue entirely.
 - [Phase 01-04]: **Design tokens via relative path** — `../../design/gruvax-design-tokens.css` in frontend/src/main.tsx resolves locally; Docker stage copies design/ to /design/ (one level above /frontend-build workdir) so same relative path resolves in build.
 - [Phase 01-04]: **TanStack Query for /api/locate fires imperatively** — not as a hook key, to ensure each result selection triggers a fresh locate call without stale cube position caching.
+- [Phase 02-01]: **D-02 singleton override** — singletons return SubInterval(start=0.0, end=1.0) full-cube band at confidence 0.30, not a tick-mark. Overrides CUBE-10 literal wording per owner decision documented in algorithm.py.
+- [Phase 02-01]: **sub_cube_interval JSON contract** — emits {start, end, crosses_boundary, next_cube}; NO cube field. Frontend derives cube from primary_cube/label_span context (UI-SPEC §TypeScript Type Extension).
+- [Phase 02-01]: **locate() dispatcher** — no-snapshot → cube-only-v1; confidence<=CUBE_ONLY_CONFIDENCE → sub_cube_interval=None, cube-only-v1; else §4.1 index-v1 with populated sub_cube_interval.
+- [Phase 02-01]: **pythonpath=[.] strategy** — pyproject.toml + fixtures/__init__.py + root conftest.py; single source of truth for importable repo-root packages; consistent with Plan 02-04 scripts/ imports.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
 
@@ -118,8 +123,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-20 (Phase 01 Plan 04 — React SPA + Docker Compose; human-verify checkpoint reached)
-**Next action:** Human verifies the kiosk demo (see 01-04-PLAN.md Task 4 steps 4–8); then Phase 1 is complete.
+**Last touched:** 2026-05-20 (Phase 02 Plan 01 — §4.1 index-based estimator; all 4 tasks complete)
+**Next action:** Phase 02 Plan 02 — A/B harness using all_shapes() from fixtures/synth_collection.py.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
