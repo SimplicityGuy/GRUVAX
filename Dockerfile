@@ -2,7 +2,7 @@
 # Multi-stage Dockerfile for GRUVAX API + SPA
 #
 # Stage 1 (frontend-builder): Node.js image that runs npm ci + vite build.
-#   Output: frontend/dist/ (built SPA assets).
+#   Output: /static/ (built SPA assets at the vite outDir '../static' path).
 #
 # Stage 2 (python-builder): installs Python deps via uv with a cache mount so
 #   that subsequent builds hit the layer cache (seconds, not minutes).
@@ -24,10 +24,15 @@ RUN npm ci
 # Copy all frontend source
 COPY frontend/ ./
 
-# Build: emits dist/ (note: vite.config.ts sets outDir: '../static' for dev use,
-# but inside this Docker stage the working dir is /frontend-build, so dist/
-# lands at /frontend-build/dist — we COPY it in stage 3 explicitly)
-RUN npm run build -- --outDir dist
+# Copy the design tokens file — main.tsx imports it as '../../design/gruvax-design-tokens.css'
+# which resolves relative to the frontend/src/ dir → ../../design/ = one level above /frontend-build.
+# We place the design directory at that location so the relative path resolves.
+COPY design/ /design/
+
+# Build: vite.config.ts sets outDir: '../static' relative to the frontend/ workdir.
+# In this stage workdir is /frontend-build, so '../static' → /static.
+# Stage 3 COPYs from /static into the runtime image.
+RUN npm run build
 
 # ── Stage 2: Python dependency builder ───────────────────────────────────────
 FROM python:3.14-slim AS python-builder
@@ -38,7 +43,8 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 WORKDIR /build
 
 # Copy dependency manifests first so the dep layer caches between source changes
-COPY pyproject.toml uv.lock ./
+# README.md is referenced by pyproject.toml and must be present for uv to build the package
+COPY pyproject.toml uv.lock README.md ./
 
 # Install dependencies into an isolated virtual environment
 RUN --mount=type=cache,target=/root/.cache/uv \
@@ -65,12 +71,16 @@ COPY --from=python-builder /build/src /app/src
 
 # Copy the built SPA into static/ — FastAPI StaticFiles mounts this at /
 # (guarded: only mounts if the directory exists, see app.py)
-COPY --from=frontend-builder /frontend-build/dist ./static/
+COPY --from=frontend-builder /static ./static/
 
 # Copy runtime artifacts
 COPY migrations/ ./migrations/
 COPY alembic.ini ./
 COPY justfile ./
+
+# Copy and make the entrypoint script executable (done as root before USER switch)
+COPY docker-entrypoint.sh /app/docker-entrypoint.sh
+RUN chmod +x /app/docker-entrypoint.sh
 
 # Ensure the venv's bin is first on PATH
 ENV PATH="/app/.venv/bin:$PATH"
@@ -80,5 +90,7 @@ USER gruvax
 
 EXPOSE 8000
 
-# Run Alembic migrations then start Uvicorn
-CMD ["sh", "-c", "alembic upgrade head && uvicorn gruvax.app:app --host 0.0.0.0 --port 8000"]
+# Run Alembic migrations then start Uvicorn via entrypoint script.
+# Using a dedicated script ensures PATH=/app/.venv/bin is set even when
+# the Docker runtime (e.g. Rancher Desktop on macOS) injects the host PATH.
+CMD ["/app/docker-entrypoint.sh"]
