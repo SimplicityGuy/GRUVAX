@@ -7,6 +7,8 @@ interface ShelfGridProps {
   shelfIndex: number
   /** Which cube is currently lit — null if none */
   litCube: CubeRef | null
+  /** Set of cube keys flagged as empty, formatted "unitId-row-col" (0-based) */
+  emptyCubes?: Set<string>
 }
 
 /**
@@ -19,8 +21,11 @@ interface ShelfGridProps {
  *   Shelf A (shelfIndex=0) rows A-D, columns 1-4 → "A1".."D4"
  *   Shelf B (shelfIndex=1) rows E-H, columns 1-4 → "E1".."H4"
  * (CUBE-06)
+ *
+ * API convention: row and col are 0-based (matching cube_boundaries seed).
+ * The human-readable address label (rowLetter + (c+1)) is display-only.
  */
-export function ShelfGrid({ unit, shelfIndex, litCube }: ShelfGridProps) {
+export function ShelfGrid({ unit, shelfIndex, litCube, emptyCubes }: ShelfGridProps) {
   const ROW_LETTERS = 'ABCDEFGH'
   const baseRowOffset = shelfIndex * 4
 
@@ -28,30 +33,31 @@ export function ShelfGrid({ unit, shelfIndex, litCube }: ShelfGridProps) {
 
   for (let r = 0; r < unit.rows; r++) {
     for (let c = 0; c < unit.cols; c++) {
+      // Human-readable address label — display only, not used for API matching
       const rowLetter = ROW_LETTERS[baseRowOffset + r] ?? '?'
       const colNumber = c + 1
       const address = `${rowLetter}${colNumber}`
 
-      // 1-based row/col to match the API CubeRef convention
-      const rowApi = r + 1
-      const colApi = c + 1
+      // API convention: row/col are 0-based — match directly against loop indices
+      const isLit =
+        litCube != null &&
+        litCube.unit_id === unit.id &&
+        litCube.row === r &&
+        litCube.col === c
+
+      const isEmpty =
+        !isLit && (emptyCubes?.has(`${unit.id}-${r}-${c}`) ?? false)
 
       let state: CubeState = 'dim'
-      if (
-        litCube &&
-        litCube.unit_id === unit.id &&
-        litCube.row === rowApi &&
-        litCube.col === colApi
-      ) {
-        state = 'lit'
-      }
+      if (isLit) state = 'lit'
+      else if (isEmpty) state = 'empty'
 
       cells.push(
         <Cube
           key={address}
           unitId={unit.id}
-          row={rowApi}
-          col={colApi}
+          row={r}
+          col={c}
           state={state}
           address={address}
         />,
