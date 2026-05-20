@@ -32,7 +32,7 @@ interface ResultsListProps {
  * Per 01-UI-SPEC.md §Results List Component Contract + §Top-result auto-highlight.
  */
 export function ResultsList({ items, showNoResults, didYouMean }: ResultsListProps) {
-  const { selectedResult, setSelectedResult, setSelectedReleaseId, setHighlightCube, setQuery } =
+  const { selectedResult, setSelectedResult, setSelectedReleaseId, setHighlightCube, setLocateResult, setQuery } =
     useGruvaxStore()
 
   const isVisible = items.length > 0 || showNoResults
@@ -47,10 +47,10 @@ export function ResultsList({ items, showNoResults, didYouMean }: ResultsListPro
     const top = items[0]
     setSelectedResult(top)
     setSelectedReleaseId(top.release_id)
-    // Fire locate for top result
+    // Fire locate for top result — feed full result into store (CUBE-04/Phase 2)
     void locateRelease(top.release_id)
       .then((result) => {
-        setHighlightCube(result.primary_cube)
+        setLocateResult(result)
       })
       .catch(() => {
         setHighlightCube(null)
@@ -63,7 +63,7 @@ export function ResultsList({ items, showNoResults, didYouMean }: ResultsListPro
     setSelectedReleaseId(result.release_id)
     void locateRelease(result.release_id)
       .then((located) => {
-        setHighlightCube(located.primary_cube)
+        setLocateResult(located)
       })
       .catch(() => {
         setHighlightCube(null)
