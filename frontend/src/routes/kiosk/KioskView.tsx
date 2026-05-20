@@ -22,9 +22,14 @@ const SHELF_NAMES = ['SHELF A', 'SHELF B', 'SHELF C', 'SHELF D']
  * .shelf-area container — no forwardRef plumbing needed.
  */
 export function KioskView() {
-  const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch } =
+  const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch, setQuery } =
     useGruvaxStore()
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  // The query whose results the user explicitly dismissed (by selecting a row).
+  // The dropdown is derived as open when there is a query that hasn't been
+  // dismissed — so it reopens automatically on the next keystroke (new query)
+  // and collapses after a pick, without a set-state-in-effect.
+  const [dismissedQuery, setDismissedQuery] = useState<string | null>(null)
 
   // Loading indicator state — shown only after >300ms in flight (SRCH-05)
   const [showLoading, setShowLoading] = useState(false)
@@ -107,6 +112,20 @@ export function KioskView() {
       clearSearch()
     }
   }, [debouncedQuery, clearSearch])
+
+  // Derived: the dropdown is open when there is a query that the user has not
+  // dismissed by selecting a row. A new query (different string) reopens it
+  // automatically; an explicit selection records the query as dismissed.
+  const resultsOpen =
+    debouncedQuery.trim().length > 0 && dismissedQuery !== debouncedQuery
+
+  // "Did you mean" tap (D-10): set the query the user sees AND trigger the
+  // search immediately. setQuery drives the (controlled) SearchBox input;
+  // setDebouncedQuery runs the corrected search without waiting for debounce.
+  const handleDidYouMean = (term: string) => {
+    setQuery(term)
+    setDebouncedQuery(term)
+  }
 
   // ── GSAP selection-lands timeline (CUBE-08 / D-05 / D-06) ─────────────
   //
@@ -252,6 +271,9 @@ export function KioskView() {
             items={debouncedQuery.trim().length > 0 ? searchResults : []}
             showNoResults={showNoResults}
             didYouMean={searchData?.did_you_mean ?? null}
+            open={resultsOpen}
+            onResultSelect={() => setDismissedQuery(debouncedQuery)}
+            onDidYouMean={handleDidYouMean}
           />
         </div>
 

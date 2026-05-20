@@ -14,6 +14,19 @@ interface ResultsListProps {
   /** Trigram-similarity suggestion from /api/search (SRCH-07/D-11).
    *  Rendered below NoResultsRow; null = no suggestion or pg_trgm absent. */
   didYouMean?: string | null
+  /**
+   * Whether the dropdown is open. Reopened by the parent on each new query and
+   * set false after an explicit selection so the list collapses once the user
+   * picks a record (auto-select-top keeps it open; only an explicit tap/Enter
+   * dismisses it). Defaults to true so other call sites are unaffected.
+   */
+  open?: boolean
+  /** Called when the user explicitly selects a row (tap or Enter) so the parent
+   *  can collapse the dropdown. Not called by auto-select-top. */
+  onResultSelect?: () => void
+  /** Called when the user taps the "did you mean" suggestion (D-10). The parent
+   *  sets the search query AND triggers the corrected search. */
+  onDidYouMean?: (term: string) => void
 }
 
 /**
@@ -31,11 +44,18 @@ interface ResultsListProps {
  *
  * Per 01-UI-SPEC.md §Results List Component Contract + §Top-result auto-highlight.
  */
-export function ResultsList({ items, showNoResults, didYouMean }: ResultsListProps) {
-  const { selectedResult, setSelectedResult, setSelectedReleaseId, setHighlightCube, setLocateResult, setQuery } =
+export function ResultsList({
+  items,
+  showNoResults,
+  didYouMean,
+  open = true,
+  onResultSelect,
+  onDidYouMean,
+}: ResultsListProps) {
+  const { selectedResult, setSelectedResult, setSelectedReleaseId, setHighlightCube, setLocateResult } =
     useGruvaxStore()
 
-  const isVisible = items.length > 0 || showNoResults
+  const isVisible = open && (items.length > 0 || showNoResults)
 
   // Auto-select top result on arrival (SRCH-02 / D-08).
   // Key the effect on the top result's release_id — NOT the `items` array
@@ -59,6 +79,9 @@ export function ResultsList({ items, showNoResults, didYouMean }: ResultsListPro
   }, [topReleaseId])
 
   const handleSelect = (result: SearchResult) => {
+    // Collapse the dropdown immediately on an explicit pick — don't wait for
+    // the async locate (fixes: autocomplete list lingered over the grid).
+    onResultSelect?.()
     setSelectedResult(result)
     setSelectedReleaseId(result.release_id)
     void locateRelease(result.release_id)
@@ -73,7 +96,7 @@ export function ResultsList({ items, showNoResults, didYouMean }: ResultsListPro
   // D-10: onTap sets the search query — user sees the corrected term in the
   // search box and explicitly triggers the new search. No silent auto-correct.
   const handleDidYouMeanTap = (term: string) => {
-    setQuery(term)
+    onDidYouMean?.(term)
   }
 
   return (
