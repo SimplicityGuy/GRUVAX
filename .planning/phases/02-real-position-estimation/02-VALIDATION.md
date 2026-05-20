@@ -50,8 +50,10 @@ created: 2026-05-20
 | TBD | CUBE-10 | Singleton → faint full-cube band (D-02): start=0.0, end=1.0, confidence=0.30 | unit | `uv run pytest tests/unit/test_algorithm.py::test_singleton_full_cube_band -x` | ❌ W0 |
 | TBD | POS-03 | p95 ≤ 50 ms CPU-only, no DB calls during compute | benchmark | `uv run pytest tests/unit/test_algorithm.py -k benchmark --benchmark-only` | ❌ W0 |
 | TBD | POS-06 | A/B harness runs synthetic shapes; §4.1 MAE ≤ §4.8 MAE per shape | harness (CI+local) | `uv run python scripts/run_all_algorithms.py --ci` | ❌ W0 |
+| TBD | POS-06 | CI test: §4.1 MAE ≤ §4.8 MAE on every planted-truth shape | integration | `uv run pytest tests/integration/test_run_all_algorithms.py -x -q` | ❌ W0 |
 | TBD | CUBE-03 | label_span has ≥2 entries for a label straddling a cube boundary | integration | `uv run pytest tests/integration/test_locate.py::test_multi_cube_label_span -x` | ❌ W0 |
 | TBD | CUBE-04 | sub_cube_interval populated, 0≤start≤end≤1, may set crosses_boundary | integration | `uv run pytest tests/integration/test_locate.py::test_sub_cube_interval_bounds -x` | ❌ W0 |
+| TBD | SRCH-08 | is_catalog_query truth table + did_you_mean graceful-degrade (no DB) | unit | `uv run pytest tests/unit/test_queries.py -x -q` | ❌ W0 |
 | TBD | SRCH-07 | did_you_mean returned when FTS empty + high-trigram-sim candidate | integration | `uv run pytest tests/integration/test_search.py::test_did_you_mean -x` | ❌ W0 |
 | TBD | SRCH-08 | catalog-like query boosts catalog-number field score vs text query | integration | `uv run pytest tests/integration/test_search.py::test_catalog_boost -x` | ❌ W0 |
 | TBD | CUBE-08 | lands animation interruptible — new selection hard-cancels previous | manual | see Manual-Only Verifications | ❌ N/A |
@@ -73,10 +75,13 @@ created: 2026-05-20
 - [ ] `tests/unit/test_collection_snapshot.py` — snapshot unit tests (load, get_label_records, invalidate, testing seam)
 - [ ] `tests/unit/test_algorithm.py` — EXTEND with §4.1 golden cases + benchmark test
 - [ ] `tests/property/test_estimator_props.py` — Hypothesis invariants (new file)
-- [ ] `tests/fixtures/golden_cases.yaml` — golden case fixture (new file)
-- [ ] `tests/fixtures/synth_collection.py` — planted-truth synthetic generator (new file)
+- [ ] `fixtures/golden_cases.yaml` — golden case fixture (new file, repo-root `fixtures/` to match conftest `FIXTURE_DIR`)
+- [ ] `fixtures/synth_collection.py` — planted-truth synthetic generator (new file, repo-root `fixtures/`; importable via the `pythonpath="."` strategy)
+- [ ] `fixtures/__init__.py` + repo-root `conftest.py` + `pyproject.toml` `[tool.pytest.ini_options] pythonpath = ["."]` — IMPORT-PATH STRATEGY (single source of truth: makes `from fixtures.synth_collection import ...` and `from scripts.run_all_algorithms import ...` resolve in pytest)
+- [ ] `scripts/run_all_algorithms.py` + `scripts/__init__.py` — A/B harness (new files; harness inserts repo root onto `sys.path` for standalone runs; NOT in pytest collection — but `tests/integration/test_run_all_algorithms.py` IS)
+- [ ] `tests/unit/test_queries.py` — Wave-0 unit tests for `is_catalog_query` + `did_you_mean_query` graceful-degrade (mock `psycopg.errors.UndefinedFunction`); no live DB
+- [ ] `tests/integration/test_run_all_algorithms.py` — CI assertion that §4.1 MAE ≤ §4.8 MAE per shape (new file)
 - [ ] `tests/integration/test_locate.py` / `tests/integration/test_search.py` — extend for span/interval + did-you-mean/boost
-- [ ] `scripts/run_all_algorithms.py` — A/B harness (new file, NOT in pytest collection)
 
 ---
 

@@ -839,24 +839,26 @@ Directives that research confirms Phase 2 must respect:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **pg_trgm superuser privilege**
+> All four open questions are resolved downstream by the plans/UI-SPEC. Inline RESOLVED markers below cross-reference where.
+
+1. **pg_trgm superuser privilege** — **RESOLVED** (→ 02-02 Task 1: migration `0003_pg_trgm_indexes.py` wraps `CREATE EXTENSION IF NOT EXISTS pg_trgm` in try/except; `did_you_mean_query` catches `psycopg.errors.UndefinedFunction`; SRCH-07/08 degrade gracefully — Pitfall E. The `tests/unit/test_queries.py::test_did_you_mean_graceful_degrade` exercises the missing-extension path.)
    - What we know: GRUVAX's `gruvax_app` role has `USAGE` on discogsography schema and `SELECT` on specific tables; it was provisioned with limited privileges.
    - What's unclear: Does `gruvax_app` have `CREATE` privilege on the database (needed for `CREATE EXTENSION`)? Most setups give extensions to a superuser or the DB owner, not app roles.
    - Recommendation: The Alembic migration should try `CREATE EXTENSION IF NOT EXISTS pg_trgm` in a `try/except` block, logging a startup warning if it fails. The app health check should expose `pg_trgm_available: bool`. SRCH-07/08 degrade gracefully (no suggestion, no weight boost) when unavailable. The planner should add a manual verification task: `docker exec -it gruvax-db psql -U gruvax -c "SELECT 1 FROM pg_extension WHERE extname='pg_trgm'"`.
 
-2. **SpanUnderlay geometry for row-wrapping spans**
+2. **SpanUnderlay geometry for row-wrapping spans** — **RESOLVED** (→ 02-UI-SPEC.md §SpanUnderlay geometry/wrap-detection algorithm: group `label_span` by `(unit_id, row)` into runs, one pill band per run, no connector across the physical unit gap; cellSize/cellGap supplied as props from `gridGeometry.ts` constants per 02-03 Task 2. v1 ships the multi-band underlay, not the CSS-class-only fallback.)
    - What we know: Spanned cubes sorted by (unit_id, row, col) in row-major order. A label can span from (unit=0, row=3, col=2) to (unit=1, row=0, col=1) — crossing both a unit boundary and a row.
    - What's unclear: How the connecting underlay renders across the physical gap between two 4×4 grids (they're separate DOM nodes with spacing between them).
    - Recommendation: Delegate the visual design to `/gsd-ui-phase 2`. The planner should define the data contract (phase 2 provides `label_span: CubeRef[]`) and leave the underlay implementation as a flagged open item for the UI phase, with a fallback of "highlight all spanned cubes with a CSS class without a connector line" for v1.
 
-3. **Hypothesis database source for property tests**
-   - What we know: Tests use `tests/fixtures/synth_collection.py` for CI. The existing `boundary_cache` fixture uses `tests/fixtures/boundaries.yaml`.
+3. **Hypothesis database source for property tests** — **RESOLVED** (→ 02-01 Task 2b: a session-scoped `synth_snapshot`/`synth_cache` fixture built from `fixtures/synth_collection.all_shapes()` in-memory, no DB. NOTE corrected path: the generator lives at repo-root `fixtures/synth_collection.py` (matching conftest `FIXTURE_DIR`), imported via the `pythonpath="."` strategy — NOT `tests/fixtures/`.)
+   - What we know: Tests use repo-root `fixtures/synth_collection.py` for CI. The existing `boundary_cache` fixture uses repo-root `fixtures/boundaries.yaml`.
    - What's unclear: The Hypothesis properties require a `CollectionSnapshot` populated with records — should this come from the synthetic generator or a new YAML fixture?
    - Recommendation: Create a `synth_snapshot` pytest fixture (session-scoped) that uses `synth_collection.py` to build a `CollectionSnapshot` in-memory without DB. This is consistent with how `boundary_cache` avoids DB for unit tests.
 
-4. **§4.1 f=0 vs f=0.5 for singleton**
+4. **§4.1 f=0 vs f=0.5 for singleton** — **RESOLVED** (→ 02-01 Task 2a: singletons are special-cased FIRST, returning `SubInterval(start=0.0, end=1.0)` with `CUBE_ONLY_CONFIDENCE`, never letting the `f = idx/max(k-1,1)` formula run on k=1; non-singletons use the `±POSITION_HALF_WIDTH` band. Pitfall A / Pitfall 21.)
    - Documented above in Pitfall A. The formula produces f=0 for k=1; the code must special-case to return `SubInterval(start=0.0, end=1.0)` for singletons. The planner should make this explicit in the implementation task.
 
 ---
