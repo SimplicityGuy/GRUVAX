@@ -54,30 +54,42 @@ _SENTINEL: tuple[tuple[int, int], ...] = ((-1, 0),)
 def normalize_catalog(raw: str | None) -> str:
     """Normalize a catalog number for sorting and comparison.
 
-    Pipeline:
+    Pipeline (order matters for idempotency):
       1. Handle None and whitespace-only values → return ``""``
-      2. Take first part only for multi-value (comma-separated) catalogs
-      3. Unicode NFKC normalization + casefold
+      2. Unicode NFKC normalization + casefold (+ NFKC again — casefold can
+         denormalize). Done FIRST so compatibility characters that decompose
+         into separators or commas (e.g. U+1F101 "DIGIT ZERO COMMA" → "0,")
+         are resolved in the SAME pass as the comma-split / separator-collapse.
+      3. Take first part only for multi-value (comma-separated) catalogs
       4. Collapse separator runs (spaces, dashes, underscores, dots, slashes) → ``""``
 
     The result is stable: ``normalize_catalog(normalize_catalog(s)) == normalize_catalog(s)``.
+    Idempotency requires NFKC to precede the comma-split and separator-collapse;
+    otherwise a compatibility char that NFKC-expands into a comma/separator would
+    only be split on the second pass, breaking the fixed-point property.
     """
     if raw is None:
         return ""
     s: str = raw.strip()
     if not s:
         return ""
+    # NFKC (full-width digits, ligatures, compat decompositions) then casefold,
+    # then NFKC again because casefolding can itself denormalize. NFKC and
+    # casefold are each idempotent; NFKC→casefold→NFKC reaches a fixed point.
+    s = unicodedata.normalize("NFKC", s).casefold()
+    s = unicodedata.normalize("NFKC", s)
     # Multi-value: Discogs sometimes stores "BLP-100, BST-200"; take the first part only.
+    # (Any compat-comma from NFKC above is now a literal comma, handled here in-pass.)
     if "," in s:
         s = s.split(",", 1)[0].strip()
-    # Unicode NFKC (converts full-width digits, ligatures, etc.) then casefold.
-    s = unicodedata.normalize("NFKC", s).casefold()
     # Collapse all separator runs to nothing. The key is separator-invariant by design.
     s = _SEP_COLLAPSE.sub("", s)
-    # NFC after separator collapse ensures canonical combining-character order is stable.
-    # Without this, two combining marks separated by a stripped space could swap order
-    # on second normalization, breaking the idempotency invariant.
-    s = unicodedata.normalize("NFC", s)
+    # Final NFKC: collapsing a separator can leave a combining mark (e.g. one that
+    # NFKC produced from a spacing accent like U+00B4) adjacent to its base char in
+    # DECOMPOSED form. Re-compose so the output is a fixed point — without this the
+    # next pass would compose it and break idempotency. Collapse only removes chars,
+    # so this cannot reintroduce a separator or comma.
+    s = unicodedata.normalize("NFKC", s)
     return s
 
 
