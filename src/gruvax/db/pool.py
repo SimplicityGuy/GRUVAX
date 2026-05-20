@@ -60,11 +60,15 @@ async def _configure_connection(conn: AsyncConnection) -> None:
     # value, avoiding any SQL injection risk from the schema name.
     search_path_value = f"gruvax, {schema}, public"
     await conn.set_autocommit(True)
-    await conn.execute(
-        "SELECT pg_catalog.set_config('search_path', %s, false)",
-        (search_path_value,),
-    )
-    await conn.set_autocommit(False)
+    try:
+        await conn.execute(
+            "SELECT pg_catalog.set_config('search_path', %s, false)",
+            (search_path_value,),
+        )
+    finally:
+        # Always restore autocommit=False so a connection never returns to the
+        # pool (or is reused) in the wrong transaction mode if set_config raises.
+        await conn.set_autocommit(False)
 
 
 def create_pool(

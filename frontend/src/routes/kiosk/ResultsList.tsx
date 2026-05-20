@@ -31,23 +31,26 @@ export function ResultsList({ items, showNoResults }: ResultsListProps) {
 
   const isVisible = items.length > 0 || showNoResults
 
-  // Auto-select top result on arrival (SRCH-02 / D-08)
+  // Auto-select top result on arrival (SRCH-02 / D-08).
+  // Key the effect on the top result's release_id — NOT the `items` array
+  // reference — so it fires only when the top result actually changes, not on
+  // every parent re-render that hands down a new array identity (WR-02).
+  const topReleaseId = items.length > 0 ? items[0].release_id : null
   useEffect(() => {
-    if (items.length > 0) {
-      const top = items[0]
-      setSelectedResult(top)
-      setSelectedReleaseId(top.release_id)
-      // Fire locate for top result
-      void locateRelease(top.release_id)
-        .then((result) => {
-          setHighlightCube(result.primary_cube)
-        })
-        .catch(() => {
-          setHighlightCube(null)
-        })
-    }
+    if (topReleaseId == null) return
+    const top = items[0]
+    setSelectedResult(top)
+    setSelectedReleaseId(top.release_id)
+    // Fire locate for top result
+    void locateRelease(top.release_id)
+      .then((result) => {
+        setHighlightCube(result.primary_cube)
+      })
+      .catch(() => {
+        setHighlightCube(null)
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [items])
+  }, [topReleaseId])
 
   const handleSelect = (result: SearchResult) => {
     setSelectedResult(result)

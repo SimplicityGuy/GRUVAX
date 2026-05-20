@@ -41,8 +41,9 @@ async def search_collection(
     ``normalize_catalog``'s ``_SEP_COLLAPSE`` regex so ``blp4195``,
     ``BLP-4195``, and ``BLP 4195`` all match the same record.
 
-    Results are de-duplicated via ``DISTINCT ON (release_id)`` and
-    ordered by ``GREATEST(fts_score, cat_score) DESC``.
+    The two paths are combined with ``UNION ALL`` and de-duplicated via
+    ``DISTINCT ON (release_id)`` keeping the highest-scoring row per release,
+    then re-sorted by rank in Python.
 
     Args:
         pool: Open psycopg ``AsyncConnectionPool``.
@@ -59,18 +60,21 @@ async def search_collection(
     # This is fully parameterized — q is never interpolated into SQL (T-01-07).
     sql = """
 WITH fts AS (
+    -- websearch_to_tsquery is computed ONCE via the cross join (CR/WR-01),
+    -- not twice (rank + WHERE). tsq.query is the single derived tsquery.
     SELECT
-        release_id,
-        collection_item_id,
-        title,
-        primary_artist,
-        label,
-        catalog_number,
-        format,
-        year,
-        ts_rank_cd(fts_vector, websearch_to_tsquery('english', %s), 4) AS score
-    FROM gruvax.v_collection
-    WHERE fts_vector @@ websearch_to_tsquery('english', %s)
+        v.release_id,
+        v.collection_item_id,
+        v.title,
+        v.primary_artist,
+        v.label,
+        v.catalog_number,
+        v.format,
+        v.year,
+        ts_rank_cd(v.fts_vector, tsq.query, 4) AS score
+    FROM gruvax.v_collection v
+    CROSS JOIN websearch_to_tsquery('english', %s) AS tsq(query)
+    WHERE v.fts_vector @@ tsq.query
     LIMIT 40
 ),
 cat AS (
@@ -89,25 +93,17 @@ cat AS (
           LIKE lower(regexp_replace(%s, '[\\s\\-_./]+', '', 'g')) || '%%'
     LIMIT 20
 ),
+-- UNION ALL the two paths, then DISTINCT ON keeps the highest-scoring row per
+-- release_id (CR-04). This replaces the fragile 8-column FULL OUTER JOIN, which
+-- emitted duplicate rows when the same release differed in any joined column.
 combined AS (
-    SELECT
-        COALESCE(fts.release_id, cat.release_id)           AS release_id,
-        COALESCE(fts.collection_item_id, cat.collection_item_id) AS collection_item_id,
-        COALESCE(fts.title, cat.title)                     AS title,
-        COALESCE(fts.primary_artist, cat.primary_artist)   AS primary_artist,
-        COALESCE(fts.label, cat.label)                     AS label,
-        COALESCE(fts.catalog_number, cat.catalog_number)   AS catalog_number,
-        COALESCE(fts.format, cat.format)                   AS format,
-        COALESCE(fts.year, cat.year)                       AS year,
-        GREATEST(
-            COALESCE(fts.score, 0),
-            COALESCE(cat.score, 0)
-        ) AS rank
+    SELECT release_id, collection_item_id, title, primary_artist,
+           label, catalog_number, format, year, score
     FROM fts
-    FULL OUTER JOIN cat USING (
-        release_id, collection_item_id, title, primary_artist,
-        label, catalog_number, format, year
-    )
+    UNION ALL
+    SELECT release_id, collection_item_id, title, primary_artist,
+           label, catalog_number, format, year, score
+    FROM cat
 )
 SELECT DISTINCT ON (release_id)
     release_id,
@@ -118,15 +114,15 @@ SELECT DISTINCT ON (release_id)
     catalog_number,
     format,
     year,
-    rank
+    score AS rank
 FROM combined
-ORDER BY release_id, rank DESC
+ORDER BY release_id, score DESC
 LIMIT %s
 """
     t0 = time.perf_counter()
     async with pool.connection() as conn, conn.cursor() as cur:
-        # q appears 3 times: FTS WHERE, FTS rank_cd, and catalog LIKE path.
-        await cur.execute(sql, (q, q, q, limit))
+        # q appears twice: FTS tsquery (cross join) and catalog LIKE path.
+        await cur.execute(sql, (q, q, limit))
         rows_raw = await cur.fetchall()
         # cursor.description gives column names
         cols = [desc[0] for desc in (cur.description or [])]
