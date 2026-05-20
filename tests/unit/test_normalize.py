@@ -21,7 +21,6 @@ from gruvax.estimator.normalize import (
     parse_key,
 )
 
-
 # ── numeric-aware ordering ────────────────────────────────────────────────────
 
 
@@ -133,9 +132,10 @@ def test_multivalue_comma_split() -> None:
 
 
 def test_nfkc_fullwidth_digits() -> None:
-    """Full-width digits (U+FF10..U+FF19) should normalize to ASCII digits."""
-    # U+FF14 = full-width '4', U+FF11 = '1', U+FF19 = '9', U+FF15 = '5'
-    full_width = "BLP４１９５"
+    """Full-width digits (U+FF10..U+FF19) should normalize to ASCII digits via NFKC."""
+    # Build using chr() to avoid RUF001 ambiguous-character linter warning.
+    # U+FF14='4', U+FF11='1', U+FF19='9', U+FF15='5' (full-width forms)
+    full_width = "BLP" + chr(0xFF14) + chr(0xFF11) + chr(0xFF19) + chr(0xFF15)
     assert parse_key(full_width) == parse_key("BLP 4195")
 
 

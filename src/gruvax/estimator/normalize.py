@@ -33,7 +33,7 @@ _TOKEN: re.Pattern[str] = re.compile(r"([A-Za-z]+|\d+)")
 
 # Cap digit runs longer than this many digits to avoid barcode-style outliers
 # blowing up the integer (T-01-05 DoS mitigation). 12 digits covers all real
-# catalog numbers; barcodes/ISRCs are 12–13+ digits and are placeholders in Discogs.
+# catalog numbers; barcodes/ISRCs are 12-13+ digits and are placeholders in Discogs.
 _DIGIT_CAP: int = 12
 
 # Values that represent "no catalog number" — sort before all real catalogs.

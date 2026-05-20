@@ -14,13 +14,15 @@ Tests the behavior described in PLAN.md §Task 2 <behavior>:
 from __future__ import annotations
 
 import pytest
-import pytest_asyncio
 
-from gruvax.estimator.algorithm import CUBE_ONLY_CONFIDENCE, NO_BOUNDARY_CONFIDENCE, locate_cube_only
+from gruvax.estimator.algorithm import (
+    CUBE_ONLY_CONFIDENCE,
+    NO_BOUNDARY_CONFIDENCE,
+    locate_cube_only,
+)
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
 from gruvax.estimator.contract import CUBE_ONLY_CONFIDENCE as CONTRACT_CONFIDENCE
 from gruvax.estimator.contract import CubeRef, LocateResult, SubInterval
-
 
 # ── Contract shape tests (contract.py) ───────────────────────────────────────
 
@@ -64,7 +66,6 @@ def test_locate_result_default_version() -> None:
 
 def test_sub_interval_frozen() -> None:
     """SubInterval must be frozen (used as a value object)."""
-    import dataclasses
     cube = CubeRef(unit_id=1, row=0, col=0)
     interval = SubInterval(cube=cube, start=0.0, end=1.0, crosses_boundary=False)
     with pytest.raises((TypeError, AttributeError)):
@@ -95,7 +96,7 @@ def _make_cache_from_yaml(boundary_rows: list[dict]) -> BoundaryCache:
 
 
 def test_cache_from_yaml_has_32_rows(boundary_cache: list[dict]) -> None:
-    """YAML fixture must provide 32 rows (2 units × 4×4)."""
+    """YAML fixture must provide 32 rows (2 units x 4x4)."""
     cache = _make_cache_from_yaml(boundary_cache)
     assert len(cache.get_boundaries()) == 32
 
@@ -303,9 +304,13 @@ def test_numeric_edge_blp_9_vs_blp_9_range(boundary_cache: list[dict]) -> None:
 # ── BoundaryCache.load from DB ────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio
+@pytest.mark.asyncio(loop_scope="session")
 async def test_cache_load_from_db(db_pool: object) -> None:  # type: ignore[type-arg]
-    """BoundaryCache.load(pool) must populate 32 rows from the seeded DB."""
+    """BoundaryCache.load(pool) must populate 32 rows from the seeded DB.
+
+    Uses loop_scope="session" so this test shares the same event loop as the
+    session-scoped db_pool fixture (required by pytest-asyncio 1.x).
+    """
     cache = BoundaryCache()
     await cache.load(db_pool)
     assert len(cache.get_boundaries()) == 32, (

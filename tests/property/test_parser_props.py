@@ -19,7 +19,6 @@ from gruvax.estimator.normalize import (
     parse_key,
 )
 
-
 # ── total order ───────────────────────────────────────────────────────────────
 
 
@@ -162,7 +161,7 @@ def test_digit_cap_no_exception(n_digits: int, digit: int) -> None:
     try:
         result = parse_key(catalog)
         assert isinstance(result, tuple)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         raise AssertionError(
             f"parse_key raised on digit-run of length {n_digits}: {exc}"
         ) from exc
