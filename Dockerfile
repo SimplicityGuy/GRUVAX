@@ -1,14 +1,38 @@
 # syntax=docker/dockerfile:1.7
-# Multi-stage Dockerfile for GRUVAX API
+# Multi-stage Dockerfile for GRUVAX API + SPA
 #
-# Stage 1 (builder): installs Python deps via uv using a cache mount so that
-#   subsequent builds hit the cache and complete in seconds rather than minutes.
-# Stage 2 (runtime): lean python:3.14-slim image with a non-root gruvax user.
+# Stage 1 (frontend-builder): Node.js image that runs npm ci + vite build.
+#   Output: frontend/dist/ (built SPA assets).
+#
+# Stage 2 (python-builder): installs Python deps via uv with a cache mount so
+#   that subsequent builds hit the layer cache (seconds, not minutes).
+#
+# Stage 3 (runtime): lean python:3.14-slim image with a non-root gruvax user.
+#   Receives the .venv from stage 2 and the built SPA static/ from stage 1.
+#   FastAPI StaticFiles serves the SPA at / (mounted after all /api routers).
 
-# ── Stage 1: builder ─────────────────────────────────────────────────────────
-FROM python:3.14-slim AS builder
+# ── Stage 1: frontend build ───────────────────────────────────────────────────
+FROM node:22-slim AS frontend-builder
 
-# Install uv (pinned for reproducibility)
+WORKDIR /frontend-build
+
+# Copy dependency manifests first to maximize npm layer cache
+COPY frontend/package.json frontend/package-lock.json ./
+
+RUN npm ci
+
+# Copy all frontend source
+COPY frontend/ ./
+
+# Build: emits dist/ (note: vite.config.ts sets outDir: '../static' for dev use,
+# but inside this Docker stage the working dir is /frontend-build, so dist/
+# lands at /frontend-build/dist — we COPY it in stage 3 explicitly)
+RUN npm run build -- --outDir dist
+
+# ── Stage 2: Python dependency builder ───────────────────────────────────────
+FROM python:3.14-slim AS python-builder
+
+# Install uv (latest from the official image)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 WORKDIR /build
@@ -25,7 +49,7 @@ COPY src/ ./src/
 RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
-# ── Stage 2: runtime ─────────────────────────────────────────────────────────
+# ── Stage 3: runtime ──────────────────────────────────────────────────────────
 FROM python:3.14-slim
 
 # Create a non-root user (security baseline for 2026)
@@ -33,20 +57,20 @@ RUN groupadd --system gruvax && useradd --system --gid gruvax gruvax
 
 WORKDIR /app
 
-# Copy the virtual environment from the builder stage
-COPY --from=builder /build/.venv /app/.venv
+# Copy the virtual environment from the Python builder stage
+COPY --from=python-builder /build/.venv /app/.venv
 
 # Copy application source
-COPY --from=builder /build/src /app/src
+COPY --from=python-builder /build/src /app/src
+
+# Copy the built SPA into static/ — FastAPI StaticFiles mounts this at /
+# (guarded: only mounts if the directory exists, see app.py)
+COPY --from=frontend-builder /frontend-build/dist ./static/
 
 # Copy runtime artifacts
 COPY migrations/ ./migrations/
 COPY alembic.ini ./
 COPY justfile ./
-
-# TODO(plan-04): COPY frontend/dist/ ./static/
-#   The frontend static files are built in plan 04 and served by FastAPI
-#   StaticFiles.  This COPY will be uncommented once the frontend build lands.
 
 # Ensure the venv's bin is first on PATH
 ENV PATH="/app/.venv/bin:$PATH"

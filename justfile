@@ -71,13 +71,31 @@ provision-db:
     @echo "--                  discogsography.collection_items TO gruvax_app;"
     @echo "-- (No INSERT / UPDATE / DELETE granted.)"
 
+# ── frontend ─────────────────────────────────────────────────────────────────
+
+# Build the React SPA and emit dist into ./static/ (served by FastAPI StaticFiles)
+build-spa:
+    npm --prefix frontend run build
+
+# Run the Vite dev server (proxies /api → localhost:8000)
+dev-spa:
+    npm --prefix frontend run dev
+
+# Install frontend dependencies (required before first build)
+install-spa:
+    npm --prefix frontend install
+
 # ── docker ───────────────────────────────────────────────────────────────────
 
 # Start the full Docker Compose stack (builds if needed)
 up:
     docker compose up --build
 
-# Stop and remove containers
+# Start in detached mode
+up-d:
+    docker compose up --build -d
+
+# Stop and remove containers (NEVER use -v — that wipes mosquitto-data volume)
 down:
     docker compose down
 
