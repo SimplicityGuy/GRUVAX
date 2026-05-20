@@ -108,7 +108,7 @@
 ### Deployment
 
 - [ ] **DEP-01**: GRUVAX deploys via Docker Compose as a sibling of discogsography; services include `gruvax-api` and `mosquitto`; frontend is served via FastAPI `StaticFiles`
-- [ ] **DEP-02**: The schema is named `gruvax` within the shared Postgres instance; reads from discogsography go exclusively through a `gruvax.v_collection` view contract
+- [x] **DEP-02**: The schema is named `gruvax` within the shared Postgres instance; reads from discogsography go exclusively through a `gruvax.v_collection` view contract
 - [ ] **DEP-03**: The Mosquitto broker has no Compose `ports:` exposure in v1 (internal-network-only until the hardware milestone); persistence is configured with explicit retained-message expiry semantics
 - [ ] **DEP-04**: Each Compose service declares log-size limits to prevent disk exhaustion on `lux`
 - [ ] **DEP-05**: Each Compose service declares a healthcheck integrated with `restart: unless-stopped` for self-healing on transient failure
@@ -266,7 +266,7 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | BAK-01 | Phase 6 — Wizards + Import/Export | Pending |
 | BAK-02 | Phase 6 — Wizards + Import/Export | Pending |
 | DEP-01 | Phase 1 — First Search → Cube Highlight | Pending |
-| DEP-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| DEP-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-03 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | DEP-04 | Phase 7 — Observability + Deployment Hardening | Pending |
 | DEP-05 | Phase 7 — Observability + Deployment Hardening | Pending |

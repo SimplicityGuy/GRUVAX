@@ -41,7 +41,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 Plans:
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Project scaffold + gruvax schema + v_collection contract + synthetic seeds + Wave 0 test infra
+- [x] 01-01-PLAN.md — Project scaffold + gruvax schema + v_collection contract + synthetic seeds + Wave 0 test infra
 
 **Wave 2** *(blocked on Wave 1 completion)*
 

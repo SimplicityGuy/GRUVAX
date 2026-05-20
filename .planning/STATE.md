@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-20T03:01:33.576Z"
+last_updated: "2026-05-20T03:53:49.135Z"
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 4
-  completed_plans: 0
+  completed_plans: 2
   percent: 0
 ---
 
@@ -20,7 +20,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 1 — First Search → Cube Highlight. Deliver the smallest vertical slice that exercises Core Value end-to-end against fixture-seeded boundaries.
+**Current Focus:** Phase 01 — first-search-cube-highlight
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -28,9 +28,12 @@ progress:
 
 ## Current Position
 
+Phase: 01 (first-search-cube-highlight) — EXECUTING
+Plan: 2 of 4
+
 - **Phase:** 1 — First Search → Cube Highlight
-- **Plan:** Not yet planned (run `/gsd:plan-phase 1`)
-- **Status:** Ready to execute
+- **Plan:** 01-01 complete; 01-02 next
+- **Status:** Executing Phase 01
 - **Progress:** ░░░░░░░ 0/7 phases complete
 
 ```
@@ -65,6 +68,9 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 - **In-app numeric keypad** mitigates labwc/squeekboard #2926 (Pitfall 4) — built in Phase 3, no dependency on system on-screen keyboard.
 - **MVP boundary seed via fixture** — Phase 1 uses a committed CSV/YAML fixture (no PII) so the search→highlight slice is demoable before any admin UI exists. Admin tooling lands in Phase 3; wizards in Phase 6.
 - **Stack pinned** (research/STACK.md, HIGH confidence): Python 3.13, FastAPI 0.136.x, psycopg 3.2 async, SQLAlchemy 2.0 async, Alembic 1.18.x, sse-starlette 2.x, aiomqtt 3.x, eclipse-mosquitto:2.1-alpine, React 19 + Vite 7 + Tailwind + GSAP + Framer Motion, Raspberry Pi OS Trixie + labwc + Chromium kiosk.
+- **search_path set via connect event listener** (not execute-before-configure) — prevents Alembic autobegin bug where _in_external_transaction=True causes no COMMIT. Documented in 01-01-SUMMARY.md.
+- **alembic_version in public schema** (version_table_schema="public") — prevents DROP SCHEMA gruvax cascade from deleting version row before Alembic bookkeeping runs.
+- **psycopg_pool configure callback** must leave connection in IDLE state — use set_autocommit(True/False) around any execute() calls.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
 
@@ -95,8 +101,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-19 (Phase 1 UI-SPEC approved — gsd-ui-phase, 6/6 dimensions PASS)
-**Next action:** User approves the roadmap, then `/gsd:plan-phase 1` (planner will use `01-UI-SPEC.md` as design context).
+**Last touched:** 2026-05-19 (Phase 01 Plan 01 complete — walking skeleton, Alembic migrations, seeds)
+**Next action:** Execute Phase 01 Plan 02 (`/gsd:execute-phase 01 02`).
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
