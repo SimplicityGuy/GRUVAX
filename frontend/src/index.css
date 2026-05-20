@@ -1,0 +1,33 @@
+/* Global reset — minimal, lets the kiosk CSS tokens take full control */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  font-family: var(--gruvax-font-ui);
+  background: var(--gruvax-white);
+  color: var(--gruvax-text-secondary);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100%;
+}
+
+/* Remove default button/input styles */
+button,
+input {
+  font-family: inherit;
+  font-size: inherit;
+}

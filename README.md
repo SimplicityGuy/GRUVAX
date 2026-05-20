@@ -93,24 +93,89 @@ The atomic unit of the UI is the Kallax cube: a 4×4 grid where each cell is a r
 
 → **Read the full spec:** [`design/gruvax-design-language.md`](design/gruvax-design-language.md)
 
+## Running Locally (Demo)
+
+### Prerequisites
+
+- Docker + Docker Compose
+- A running `gruvax-dev-pg` container on `localhost:5432` (see below) with the dev DB seeded
+- `just` task runner (`brew install just` or see [just.systems](https://just.systems))
+
+### Quickstart
+
+```bash
+# 1. Seed the dev database (first time or after a schema reset)
+#    This starts a local Postgres container named gruvax-dev-pg,
+#    applies Alembic migrations, and loads the synthetic collection + boundaries.
+just seed-dev
+
+# 2. Build the SPA and start the full stack
+docker compose up
+
+# 3. Open the kiosk
+open http://localhost:8000
+```
+
+Type an artist, label, or catalog number (e.g. `Blue Note`, `BLP 4001`, or `ECM`).
+The top result auto-highlights its cube. Tap other results to move the highlight.
+Click the clear-X (×) to reset.
+
+### Stop / Restart
+
+```bash
+# Stop and remove containers — does NOT delete volumes (keeps mosquitto persistence)
+docker compose down
+
+# NEVER run `docker compose down -v` unless you intend to wipe the mosquitto-data
+# volume (persistent retained LED state in Phase 5+). The -v flag deletes volumes.
+```
+
+### Starting the Dev Postgres
+
+If `gruvax-dev-pg` is not running:
+
+```bash
+docker run -d --name gruvax-dev-pg \
+  -e POSTGRES_USER=gruvax \
+  -e POSTGRES_PASSWORD=gruvax \
+  -e POSTGRES_DB=gruvax \
+  -p 5432:5432 \
+  postgres:18
+```
+
+### Environment Variables
+
+Copy `.env.example` to `.env` and set your values. Key variables:
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `GRUVAX_DB_USER` | `gruvax` | Postgres user |
+| `GRUVAX_DB_PASSWORD` | `gruvax` | Postgres password |
+| `GRUVAX_DB_HOST` | `host.docker.internal` | DB hostname (from inside the container) |
+| `GRUVAX_DB_NAME` | `gruvax` | Database name |
+| `OBSERVED_DISCOGSOGRAPHY_SCHEMA` | `gruvax_dev` | Schema holding collection source tables |
+
+**DB connectivity from inside Docker (Linux):** The gruvax-api container reaches the host Postgres
+via `host.docker.internal`. On Linux, this resolves via the `extra_hosts: host-gateway` line
+in `compose.yaml`. On macOS/Windows, `host.docker.internal` is built in.
+
 ## 🗂️ Repository Layout
-
-> _The codebase has not yet been scaffolded. This section will be filled in as the backend, frontend, and supporting tooling are added during Phase 1 onward._
-
-The planned top-level structure follows `.planning/research/ARCHITECTURE.md`:
 
 ```
 gruvax/
-├── pyproject.toml
-├── compose.yaml
-├── justfile
-├── alembic.ini
-├── design/                  # design language: tokens, logos, banners, spec
-├── mosquitto/               # broker config
-├── migrations/              # Alembic
-├── src/gruvax/              # backend (FastAPI + estimator + mqtt + events)
-├── tests/                   # unit, integration (testcontainers), property (Hypothesis)
-└── frontend/                # Vite SPA serving kiosk + /admin routes
+├── pyproject.toml           # Python project (uv-managed)
+├── uv.lock                  # Python lockfile
+├── compose.yaml             # Docker Compose: gruvax-api + mosquitto
+├── Dockerfile               # Multi-stage: frontend build + Python runtime
+├── justfile                 # Task runner: test, lint, migrate, seed-dev, up
+├── alembic.ini              # Alembic migration config
+├── design/                  # Design language: tokens, logos, banners, spec
+├── mosquitto/               # Broker config (mosquitto.conf)
+├── fixtures/                # Synthetic collection seed + boundary YAML
+├── migrations/              # Alembic migration versions
+├── src/gruvax/              # Backend: FastAPI + estimator + mqtt
+├── tests/                   # Unit, integration, property (Hypothesis)
+└── frontend/                # Vite 8 + React 19 SPA (kiosk + future /admin)
 ```
 
 ## 🗺️ Planning Artifacts
@@ -125,9 +190,18 @@ This project is being built via the [Get Shit Done](https://github.com/Simplicit
 
 ## 📊 Status
 
-Planning is complete. Implementation begins with **Phase 1: First Search → Cube Highlight** — a typed query lighting the right cube on the touchscreen, end-to-end, against fixture-seeded boundaries before any admin UI exists.
+**Phase 1 complete.** The Core Value is demoable: `docker compose up` brings up the full stack, the
+React SPA serves from `http://localhost:8000`, and typing a query lights up the right cube in the
+2×(4×4) grid.
 
-No runnable application code in this repository yet.
+Stack versions as shipped (reconciled from RESEARCH.md against npm/PyPI):
+
+| Component | Version | Note |
+|-----------|---------|------|
+| Vite | 8.x | npm latest (CLAUDE.md said 7.x — updated) |
+| aiomqtt | 2.5.x | PyPI latest (no 3.x series exists) |
+| sse-starlette | 3.4.x | PyPI latest (was 2.x in STACK.md) |
+| Python | 3.14 | Dockerfile uses 3.14-slim |
 
 ## 📄 License
 

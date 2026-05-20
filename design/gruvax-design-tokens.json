@@ -35,7 +35,8 @@
       "litBorder":   { "value": "#E6B800" },
       "hover":       { "value": "#EEF5FB" },
       "selected":    { "value": "#003D7A" },
-      "empty":       { "value": "#F2F2F2", "comment": "Unconfigured cube" }
+      "empty":       { "value": "#F2F2F2", "comment": "Unconfigured cube" },
+      "emptyBorder": { "value": "#DDDDDD", "comment": "Empty cube border (dashed)" }
     },
     "semantic": {
       "success": { "value": "#1A7A4A" },

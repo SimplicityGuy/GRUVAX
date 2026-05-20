@@ -217,8 +217,22 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# Vim
+*.swp
+
 # GRUVAX — local-only design inputs (do not check in)
 background/
 *.csv
 .DS_Store
 .claude/
+
+# GRUVAX — generated / runtime artifacts (do not check in)
+mosquitto/passwd
+static/
+frontend/dist/
+frontend/node_modules/
+__pycache__/
+.venv/
+
+# Playwright MCP transient artifacts
+.playwright-mcp/

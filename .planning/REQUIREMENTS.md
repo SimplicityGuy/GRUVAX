@@ -9,24 +9,24 @@
 
 ### Search & Lookup
 
-- [ ] **SRCH-01**: User can type-ahead search across artist, title, label, and catalog#; results return within ~200 ms perceived from keystroke
-- [ ] **SRCH-02**: User sees a ranked results list with tap-to-select; the top result auto-highlights its cube on the grid
-- [ ] **SRCH-03**: User can clear the search field with a visible X button (touch-friendly tap target)
-- [ ] **SRCH-04**: User sees a "no results" state when the query matches nothing in the collection
-- [ ] **SRCH-05**: User sees a loading indicator only when a search request exceeds ~300 ms (no flicker for fast responses)
-- [ ] **SRCH-06**: Search debounces keystrokes client-side to avoid hammering the backend
+- [x] **SRCH-01**: User can type-ahead search across artist, title, label, and catalog#; results return within ~200 ms perceived from keystroke
+- [x] **SRCH-02**: User sees a ranked results list with tap-to-select; the top result auto-highlights its cube on the grid
+- [x] **SRCH-03**: User can clear the search field with a visible X button (touch-friendly tap target)
+- [x] **SRCH-04**: User sees a "no results" state when the query matches nothing in the collection
+- [x] **SRCH-05**: User sees a loading indicator only when a search request exceeds ~300 ms (no flicker for fast responses)
+- [x] **SRCH-06**: Search debounces keystrokes client-side to avoid hammering the backend
 - [ ] **SRCH-07**: Search returns a "did you mean" suggestion when no high-rank FTS match exists but a trigram-similar candidate does
 - [ ] **SRCH-08**: Search detects numeric-leading queries and boosts catalog-number field weight in ranking
 - [ ] **SRCH-09**: User sees a per-session recently-pulled list (kiosk-local, cleared on idle timeout)
 
 ### Cube-Level UX
 
-- [ ] **CUBE-01**: Kiosk renders a configurable N×4×4 grid driven by per-unit config (initial deployment: 2 units, 32 cubes)
-- [ ] **CUBE-02**: On search selection, the primary cube containing the matched record is visibly highlighted
+- [x] **CUBE-01**: Kiosk renders a configurable N×4×4 grid driven by per-unit config (initial deployment: 2 units, 32 cubes)
+- [x] **CUBE-02**: On search selection, the primary cube containing the matched record is visibly highlighted
 - [ ] **CUBE-03**: When the matched record's label spans multiple cubes, all spanned cubes show a secondary highlight behind the primary
 - [ ] **CUBE-04**: Sub-cube position estimate is rendered as a horizontal range bar inside the primary cube; bar may cross a cube boundary when the interval does
-- [ ] **CUBE-05**: Empty cubes (no boundary data, or boundaries indicate emptiness) render in a distinct, desaturated visual state
-- [ ] **CUBE-06**: Each cube shows a persistent address overlay (e.g., row letter + column number)
+- [x] **CUBE-05**: Empty cubes (no boundary data, or boundaries indicate emptiness) render in a distinct, desaturated visual state
+- [x] **CUBE-06**: Each cube shows a persistent address overlay (e.g., row letter + column number)
 - [ ] **CUBE-07**: Each cube displays a fill-level indicator computed from the boundary range
 - [ ] **CUBE-08**: Selection-lands animation choreographs label-span fade-in, primary-cube pulse, and sub-cube bar slide-in within ≤600 ms; the animation is interruptible by a new search
 - [ ] **CUBE-09**: User can tap a cube to reveal what's in it (reverse-lookup side panel listing the cube's first/last boundary records and a representative subset)
@@ -34,10 +34,10 @@
 
 ### Position Estimation
 
-- [ ] **POS-01**: A parser/comparator module normalizes catalog numbers (case-fold, separator-collapse, NFKC, numeric-aware split) and is used by every algorithm and the boundary save validator; raw-string comparison is forbidden
-- [ ] **POS-02**: `GET /api/locate?release_id=` returns `LocateResult{primary_cube, label_span, sub_cube_interval, confidence, generated_at, estimator_version}` matching the architecture contract
+- [x] **POS-01**: A parser/comparator module normalizes catalog numbers (case-fold, separator-collapse, NFKC, numeric-aware split) and is used by every algorithm and the boundary save validator; raw-string comparison is forbidden
+- [x] **POS-02**: `GET /api/locate?release_id=` returns `LocateResult{primary_cube, label_span, sub_cube_interval, confidence, generated_at, estimator_version}` matching the architecture contract
 - [ ] **POS-03**: The estimator hits p95 ≤ 50 ms with no DB calls during compute; boundary data is held in an in-memory cache
-- [ ] **POS-04**: The boundary cache loads at process startup and invalidates on `boundary_changed` events
+- [x] **POS-04**: The boundary cache loads at process startup and invalidates on `boundary_changed` events
 - [ ] **POS-05**: v1 ships two estimator implementations behind the same contract: an index-based interpolator (INTERPOLATION.md §4.1) as primary and a cube-only fallback (§4.8) for timeouts/low-confidence cases
 - [ ] **POS-06**: A developer A/B harness runs candidate algorithms against the local CSV (gitignored) and emits per-distribution-shape error metrics
 
@@ -107,8 +107,8 @@
 
 ### Deployment
 
-- [ ] **DEP-01**: GRUVAX deploys via Docker Compose as a sibling of discogsography; services include `gruvax-api` and `mosquitto`; frontend is served via FastAPI `StaticFiles`
-- [ ] **DEP-02**: The schema is named `gruvax` within the shared Postgres instance; reads from discogsography go exclusively through a `gruvax.v_collection` view contract
+- [x] **DEP-01**: GRUVAX deploys via Docker Compose as a sibling of discogsography; services include `gruvax-api` and `mosquitto`; frontend is served via FastAPI `StaticFiles`
+- [x] **DEP-02**: The schema is named `gruvax` within the shared Postgres instance; reads from discogsography go exclusively through a `gruvax.v_collection` view contract
 - [ ] **DEP-03**: The Mosquitto broker has no Compose `ports:` exposure in v1 (internal-network-only until the hardware milestone); persistence is configured with explicit retained-message expiry semantics
 - [ ] **DEP-04**: Each Compose service declares log-size limits to prevent disk exhaustion on `lux`
 - [ ] **DEP-05**: Each Compose service declares a healthcheck integrated with `restart: unless-stopped` for self-healing on transient failure
@@ -197,29 +197,29 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SRCH-01 | Phase 1 — First Search → Cube Highlight | Pending |
-| SRCH-02 | Phase 1 — First Search → Cube Highlight | Pending |
-| SRCH-03 | Phase 1 — First Search → Cube Highlight | Pending |
-| SRCH-04 | Phase 1 — First Search → Cube Highlight | Pending |
-| SRCH-05 | Phase 1 — First Search → Cube Highlight | Pending |
-| SRCH-06 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-01 | Phase 1 — First Search → Cube Highlight | Complete |
+| SRCH-02 | Phase 1 — First Search → Cube Highlight | Complete |
+| SRCH-03 | Phase 1 — First Search → Cube Highlight | Complete |
+| SRCH-04 | Phase 1 — First Search → Cube Highlight | Complete |
+| SRCH-05 | Phase 1 — First Search → Cube Highlight | Complete |
+| SRCH-06 | Phase 1 — First Search → Cube Highlight | Complete |
 | SRCH-07 | Phase 2 — Real Position Estimation | Pending |
 | SRCH-08 | Phase 2 — Real Position Estimation | Pending |
 | SRCH-09 | Phase 4 — Realtime + Offline Resilience | Pending |
-| CUBE-01 | Phase 1 — First Search → Cube Highlight | Pending |
-| CUBE-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| CUBE-01 | Phase 1 — First Search → Cube Highlight | Complete |
+| CUBE-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-03 | Phase 2 — Real Position Estimation | Pending |
 | CUBE-04 | Phase 2 — Real Position Estimation | Pending |
-| CUBE-05 | Phase 1 — First Search → Cube Highlight | Pending |
-| CUBE-06 | Phase 1 — First Search → Cube Highlight | Pending |
+| CUBE-05 | Phase 1 — First Search → Cube Highlight | Complete |
+| CUBE-06 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | CUBE-08 | Phase 2 — Real Position Estimation | Pending |
 | CUBE-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | CUBE-10 | Phase 2 — Real Position Estimation | Pending |
-| POS-01 | Phase 1 — First Search → Cube Highlight | Pending |
-| POS-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| POS-01 | Phase 1 — First Search → Cube Highlight | Complete |
+| POS-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | POS-03 | Phase 2 — Real Position Estimation | Pending |
-| POS-04 | Phase 1 — First Search → Cube Highlight | Pending |
+| POS-04 | Phase 1 — First Search → Cube Highlight | Complete |
 | POS-05 | Phase 2 — Real Position Estimation | Pending |
 | POS-06 | Phase 2 — Real Position Estimation | Pending |
 | ADMN-01 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
@@ -265,8 +265,8 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | PRIV-04 | Phase 4 — Realtime + Offline Resilience | Pending |
 | BAK-01 | Phase 6 — Wizards + Import/Export | Pending |
 | BAK-02 | Phase 6 — Wizards + Import/Export | Pending |
-| DEP-01 | Phase 1 — First Search → Cube Highlight | Pending |
-| DEP-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| DEP-01 | Phase 1 — First Search → Cube Highlight | Complete |
+| DEP-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-03 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | DEP-04 | Phase 7 — Observability + Deployment Hardening | Pending |
 | DEP-05 | Phase 7 — Observability + Deployment Hardening | Pending |

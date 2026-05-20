@@ -1,0 +1,100 @@
+[project]
+name = "gruvax"
+version = "0.1.0"
+description = "Touchscreen kiosk + REST API to locate vinyl records in a Kallax shelf collection"
+readme = "README.md"
+authors = [
+    { name = "Robert Wlodarczyk", email = "robert@simplicityguy.com" }
+]
+requires-python = ">=3.14"
+dependencies = [
+    "aiomqtt>=2.5",
+    "alembic>=1.18.4",
+    "asgi-lifespan>=2.1.0",
+    "fastapi>=0.136.1",
+    "psycopg[binary,pool]>=3.2",
+    "pydantic>=2.13.4",
+    "pydantic-settings>=2.14",
+    "pyyaml>=6.0.3",
+    "sqlalchemy[asyncio]>=2.0.49",
+    "sse-starlette>=3.4",
+    "uvicorn[standard]>=0.47.0",
+]
+
+[project.scripts]
+gruvax = "gruvax:main"
+
+[build-system]
+requires = ["uv_build>=0.11.15,<0.12.0"]
+build-backend = "uv_build"
+
+[dependency-groups]
+dev = [
+    "httpx>=0.28.1",
+    "hypothesis>=6.152.9",
+    "mypy>=2.1.0",
+    "natsort>=8.4",
+    "pytest>=9.0.3",
+    "pytest-asyncio>=1.3.0",
+    "pytest-benchmark>=5.2.3",
+    "pytest-cov>=7",
+    "ruff>=0.15.13",
+    "types-pyyaml>=6.0.12.20260518",
+]
+
+# ── pytest ──────────────────────────────────────────────────────────────────
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+testpaths = ["tests"]
+addopts = "-q --tb=short"
+
+[tool.hypothesis]
+# use deterministic mode in CI (set explicitly to avoid state leaks)
+deriving_xfail = true
+
+# ── ruff ────────────────────────────────────────────────────────────────────
+[tool.ruff]
+target-version = "py314"
+line-length = 100
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
+ignore = ["E501"]  # line-too-long handled by formatter
+
+[tool.ruff.lint.per-file-ignores]
+"tests/**" = ["S101"]
+# FastAPI intentionally uses Depends() in function default arguments (B008).
+"src/gruvax/api/**" = ["B008"]
+
+# ── mypy ────────────────────────────────────────────────────────────────────
+[tool.mypy]
+python_version = "3.14"
+plugins = ["pydantic.mypy"]
+mypy_path = "src"
+strict = true
+warn_unused_ignores = true
+warn_return_any = true
+namespace_packages = true
+explicit_package_bases = true
+
+[[tool.mypy.overrides]]
+module = ["tests.*"]
+ignore_errors = true
+
+[[tool.mypy.overrides]]
+module = ["aiomqtt.*", "sse_starlette.*", "psycopg.*", "psycopg_pool.*", "natsort.*"]
+ignore_missing_imports = true
+
+# ── coverage ─────────────────────────────────────────────────────────────────
+[tool.coverage.run]
+source = ["src/gruvax"]
+omit = ["tests/*", "migrations/*", "scripts/*"]
+
+[tool.coverage.report]
+skip_covered = false
+show_missing = true
+
+# NOTE: Version reconciliation (2026-05-20)
+# aiomqtt: STACK.md/CLAUDE.md reference "3.x" but PyPI latest is 2.5.1 (no 3.x exists).
+# sse-starlette: STACK.md says "2.x" but PyPI latest is 3.4.x; using 3.4+.
+# Vite: STACK.md says "7.x" but npm latest is 8.x; frontend uses 8.x.
