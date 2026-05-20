@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-20T03:53:49.135Z"
+last_updated: "2026-05-20T04:26:12.262Z"
 progress:
   total_phases: 7
   completed_phases: 0
@@ -32,9 +32,9 @@ Phase: 01 (first-search-cube-highlight) — EXECUTING
 Plan: 2 of 4
 
 - **Phase:** 1 — First Search → Cube Highlight
-- **Plan:** 01-01 complete; 01-02 next
+- **Plan:** 01-02 complete; 01-03 next
 - **Status:** Executing Phase 01
-- **Progress:** ░░░░░░░ 0/7 phases complete
+- **Progress:** [█████░░░░░] 50%
 
 ```
 Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
@@ -55,6 +55,7 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 | Phases planned | 0 / 7 |
 | Plans complete | 0 |
 | Phases shipped | 0 |
+| Phase 01-first-search-cube-highlight P02 | 1109 | 2 tasks | 8 files |
 
 ## Accumulated Context
 
@@ -71,6 +72,10 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 - **search_path set via connect event listener** (not execute-before-configure) — prevents Alembic autobegin bug where _in_external_transaction=True causes no COMMIT. Documented in 01-01-SUMMARY.md.
 - **alembic_version in public schema** (version_table_schema="public") — prevents DROP SCHEMA gruvax cascade from deleting version row before Alembic bookkeeping runs.
 - **psycopg_pool configure callback** must leave connection in IDLE state — use set_autocommit(True/False) around any execute() calls.
+- [Phase 01-02]: **D-13 resolved: Strategy C token-stream parser for POS-01** — zero dependency, fully explicit, all stages testable with Hypothesis; no raw string comparisons in estimator.
+- [Phase 01-02]: **BoundaryCache._load_rows() testing seam** — added to allow unit testing without live DB; undocumented in RESEARCH but required for proper TDD RED phase isolation.
+- [Phase 01-02]: **NFC after separator collapse in normalize_catalog** — Hypothesis found combining-char idempotency edge case; NFC stabilizes canonical combining-char order after separator stripping.
+- [Phase 01-02]: **pytest-asyncio loop_scope="session" for DB tests** — session-scoped db_pool fixture requires test to use same event loop; use `@pytest.mark.asyncio(loop_scope="session")` pattern for all future integration tests that use db_pool.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
 
@@ -101,8 +106,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-19 (Phase 01 Plan 01 complete — walking skeleton, Alembic migrations, seeds)
-**Next action:** Execute Phase 01 Plan 02 (`/gsd:execute-phase 01 02`).
+**Last touched:** 2026-05-20 (Phase 01 Plan 02 complete — POS-01 parser, LocateResult contract, BoundaryCache, cube-only estimator)
+**Next action:** Execute Phase 01 Plan 03 (`/gsd:execute-phase 01 03`).
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*

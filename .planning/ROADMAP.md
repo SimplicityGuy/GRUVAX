@@ -37,7 +37,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
   4. The kiosk can be demoed without any admin UI — boundaries are loaded from a versioned CSV/YAML fixture committed to the repo (no PII), parsed through the shared parser/comparator, validated against `gruvax.v_collection`, and held in an in-memory cache that loads at startup.
   5. The `gruvax-api` and `mosquitto` containers come up via `docker compose up` on `lux`, `gruvax-api` serves the SPA via FastAPI `StaticFiles`, and `/api/locate?release_id=...` returns a `LocateResult` whose contract (`primary_cube`, `label_span`, `sub_cube_interval`, `confidence`, `generated_at`, `estimator_version`) matches the architecture spec — with `sub_cube_interval: null` and `confidence: "cube_only"` for v1 (cube-only fallback per INTERPOLATION §4.8).
 
-**Plans:** 4 plans (4 waves)
+**Plans:** 2/4 plans executed
 Plans:
 **Wave 1**
 
@@ -45,7 +45,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-02-PLAN.md — POS-01 parser/comparator + locked LocateResult contract + boundary cache + cube-only estimator
+- [x] 01-02-PLAN.md — POS-01 parser/comparator + locked LocateResult contract + boundary cache + cube-only estimator
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -161,7 +161,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. First Search → Cube Highlight | 0/4 | Planned | - |
+| 1. First Search → Cube Highlight | 2/4 | In Progress|  |
 | 2. Real Position Estimation | 0/? | Not started | - |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 0/? | Not started | - |
 | 4. Realtime + Offline Resilience | 0/? | Not started | - |

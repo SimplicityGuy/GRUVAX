@@ -34,10 +34,10 @@
 
 ### Position Estimation
 
-- [ ] **POS-01**: A parser/comparator module normalizes catalog numbers (case-fold, separator-collapse, NFKC, numeric-aware split) and is used by every algorithm and the boundary save validator; raw-string comparison is forbidden
-- [ ] **POS-02**: `GET /api/locate?release_id=` returns `LocateResult{primary_cube, label_span, sub_cube_interval, confidence, generated_at, estimator_version}` matching the architecture contract
+- [x] **POS-01**: A parser/comparator module normalizes catalog numbers (case-fold, separator-collapse, NFKC, numeric-aware split) and is used by every algorithm and the boundary save validator; raw-string comparison is forbidden
+- [x] **POS-02**: `GET /api/locate?release_id=` returns `LocateResult{primary_cube, label_span, sub_cube_interval, confidence, generated_at, estimator_version}` matching the architecture contract
 - [ ] **POS-03**: The estimator hits p95 ≤ 50 ms with no DB calls during compute; boundary data is held in an in-memory cache
-- [ ] **POS-04**: The boundary cache loads at process startup and invalidates on `boundary_changed` events
+- [x] **POS-04**: The boundary cache loads at process startup and invalidates on `boundary_changed` events
 - [ ] **POS-05**: v1 ships two estimator implementations behind the same contract: an index-based interpolator (INTERPOLATION.md §4.1) as primary and a cube-only fallback (§4.8) for timeouts/low-confidence cases
 - [ ] **POS-06**: A developer A/B harness runs candidate algorithms against the local CSV (gitignored) and emits per-distribution-shape error metrics
 
@@ -216,10 +216,10 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | CUBE-08 | Phase 2 — Real Position Estimation | Pending |
 | CUBE-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | CUBE-10 | Phase 2 — Real Position Estimation | Pending |
-| POS-01 | Phase 1 — First Search → Cube Highlight | Pending |
-| POS-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| POS-01 | Phase 1 — First Search → Cube Highlight | Complete |
+| POS-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | POS-03 | Phase 2 — Real Position Estimation | Pending |
-| POS-04 | Phase 1 — First Search → Cube Highlight | Pending |
+| POS-04 | Phase 1 — First Search → Cube Highlight | Complete |
 | POS-05 | Phase 2 — Real Position Estimation | Pending |
 | POS-06 | Phase 2 — Real Position Estimation | Pending |
 | ADMN-01 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
