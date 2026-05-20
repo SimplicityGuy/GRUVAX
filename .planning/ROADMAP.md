@@ -34,7 +34,12 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
   3. The top result auto-highlights the cube it lives in; tapping a different result re-highlights the corresponding cube; cubes with no boundary data render in a desaturated empty state.
   4. The kiosk can be demoed without any admin UI — boundaries are loaded from a versioned CSV/YAML fixture committed to the repo (no PII), parsed through the shared parser/comparator, validated against `gruvax.v_collection`, and held in an in-memory cache that loads at startup.
   5. The `gruvax-api` and `mosquitto` containers come up via `docker compose up` on `lux`, `gruvax-api` serves the SPA via FastAPI `StaticFiles`, and `/api/locate?release_id=...` returns a `LocateResult` whose contract (`primary_cube`, `label_span`, `sub_cube_interval`, `confidence`, `generated_at`, `estimator_version`) matches the architecture spec — with `sub_cube_interval: null` and `confidence: "cube_only"` for v1 (cube-only fallback per INTERPOLATION §4.8).
-**Plans:** TBD
+**Plans:** 4 plans (4 waves)
+Plans:
+- [ ] 01-01-PLAN.md — Project scaffold + gruvax schema + v_collection contract + synthetic seeds + Wave 0 test infra
+- [ ] 01-02-PLAN.md — POS-01 parser/comparator + locked LocateResult contract + boundary cache + cube-only estimator
+- [ ] 01-03-PLAN.md — Backend API: app/lifespan (probe + cache + mqtt stub) + search (FTS+catalog) + locate + units + health
+- [ ] 01-04-PLAN.md — Kiosk SPA (tokens, grid, search, highlight) served via StaticFiles + Docker Compose (gruvax-api + mosquitto)
 **UI hint:** yes
 
 ### Phase 2: Real Position Estimation
@@ -123,7 +128,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. First Search → Cube Highlight | 0/? | Not started | - |
+| 1. First Search → Cube Highlight | 0/4 | Planned | - |
 | 2. Real Position Estimation | 0/? | Not started | - |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 0/? | Not started | - |
 | 4. Realtime + Offline Resilience | 0/? | Not started | - |
