@@ -329,8 +329,11 @@
   border-radius: var(--gruvax-radius-lg);
   padding: var(--gruvax-space-5);
   box-shadow: var(--gruvax-shadow-sm);
-  display: flex;
-  flex-wrap: wrap;
+  /* Kallax units tile at most 2 per row and the block is centered within the
+     bounding box (e.g. 5 units → rows of 2 + 2 + 1). */
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: center;
   gap: var(--gruvax-space-6);
 }
 
