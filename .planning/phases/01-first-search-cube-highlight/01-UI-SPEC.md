@@ -67,16 +67,40 @@ Source: `design/gruvax-design-tokens.css` spacing + grid sections (locked).
 
 ## Typography
 
-All roles reference named tokens from `gruvax-design-tokens.css`. Weights are drawn from the two-weight set per font family. Never hardcode hex or px values outside the token file.
+All roles reference named tokens from `gruvax-design-tokens.css`. Never hardcode hex or px values outside the token file.
+
+> **Per-family discipline (multi-family design system).** GRUVAX uses a committed, LOCKED
+> multi-family design system — Barlow Condensed (display/labels), Space Grotesk (UI body),
+> and DM Mono (data) — mandated by `CLAUDE.md` and `design/gruvax-design-language.md`, which
+> forbid inventing new styles or consolidating away the three-font system. Because each
+> family carries a distinct, non-overlapping role, the standard "max 4 sizes / max 2 weights"
+> typography discipline is applied **per font family, not globally**. The checker explicitly
+> sanctioned this resolution path. Collapsing to 4 global sizes or dropping Barlow Condensed
+> 900 would degrade the committed design language and is therefore out of bounds. Each family
+> below stays within 4 sizes and 2 weights:
+>
+> | Font family | Sizes used (Phase 1) | Weights used (Phase 1) | Within per-family limit? |
+> |-------------|----------------------|------------------------|--------------------------|
+> | Barlow Condensed | 2 (12px, 24px) | 2 (700, 900) | Yes — 2 ≤ 4 sizes, 2 ≤ 2 weights |
+> | Space Grotesk | 3 (14px, 16px, 18px) | 1 (400) | Yes — 3 ≤ 4 sizes, 1 ≤ 2 weights |
+> | DM Mono | 1 (14px) | 1 (400) | Yes — 1 ≤ 4 sizes, 1 ≤ 2 weights |
 
 ### Barlow Condensed — Display (ALL CAPS labels, headings, shelf identifiers)
+
+**2 sizes · 2 weights (700, 900) — within the per-family limit.**
 
 | Role | Token | Size | Weight | Tracking | Line Height | Usage |
 |------|-------|------|--------|----------|-------------|-------|
 | Shelf label | `--gruvax-text-display-md` | 24px | 900 | `--gruvax-tracking-display` (0.02em) | `--gruvax-leading-tight` (1.1) | "SHELF A", "SHELF B" above each 4×4 grid |
 | Address overlay | `--gruvax-text-caption` (display variant) | 12px | 700 | `--gruvax-tracking-label` (0.14em) | `--gruvax-leading-tight` (1.1) | Row+col label inside each cube (e.g. "A1") |
 
+Barlow Condensed 900 is **retained** per the locked design language (the wordmark and all
+display headings depend on it). The address overlay stays on Barlow Condensed 700 — it is not
+moved to another family.
+
 ### Space Grotesk — UI Body (inputs, results, instructions)
+
+**3 sizes · 1 weight (400) — within the per-family limit.**
 
 | Role | Token | Size | Weight | Line Height | Usage |
 |------|-------|------|--------|-------------|-------|
@@ -86,17 +110,30 @@ All roles reference named tokens from `gruvax-design-tokens.css`. Weights are dr
 | Result row — label | `--gruvax-text-body-sm` | 14px | 400 | `--gruvax-leading-normal` (1.5) | Secondary line of each result (label name) |
 | No-results message | `--gruvax-text-body` | 16px | 400 | `--gruvax-leading-normal` (1.5) | Sentence case, `--gruvax-text-secondary` |
 
-### DM Mono — Data (catalog numbers, cube positions)
+Space Grotesk 500 exists in the token file but is reserved for Phase 3 UI labels — not used in Phase 1, keeping this family at a single weight here.
+
+### DM Mono — Data (catalog numbers)
+
+**1 size · 1 weight (400) — within the per-family limit.**
 
 | Role | Token | Size | Weight | Usage |
 |------|-------|------|--------|-------|
 | Catalog number in results | `--gruvax-text-mono` | 14px | 400 | Catalog# in result rows (fixed-width rendering) |
-| Catalog number in address overlay | `--gruvax-text-mono-sm` | 11px | 400 | Dense: only if cube dimensions allow; omit at 80px cell size |
 
-**Font weight set for this phase:**
-- Barlow Condensed: 700 (labels/overlays) + 900 (shelf identifiers)
-- Space Grotesk: 400 (body) only (500 reserved for Phase 3 UI labels)
-- DM Mono: 400 (data) only
+The 11px DM Mono role (`--gruvax-text-mono-sm`, catalog# inside the address overlay) is
+**removed from the Phase 1 type scale**. Phase 1 uses 80px kiosk cells, so the catalog# is not
+rendered inside cubes — only the row+col address overlay appears there. 11px DM Mono is
+**reserved for future denser cell layouts** (e.g. the 40px admin/compact grid) and may
+re-enter the scale in a later phase that uses those layouts.
+
+### Per-family weight set for this phase
+
+- **Barlow Condensed:** 700 (address overlay) + 900 (shelf identifiers) — 2 weights
+- **Space Grotesk:** 400 (body) only — 1 weight (500 reserved for Phase 3 UI labels)
+- **DM Mono:** 400 (data) only — 1 weight
+
+Every family is within the per-family 4-size / 2-weight discipline, with full design-language
+fidelity preserved (Barlow Condensed 900 retained, address overlay on Barlow Condensed).
 
 Source: `design/gruvax-design-language.md` §Typography + `design/gruvax-design-tokens.css` (locked).
 
@@ -460,7 +497,7 @@ No third-party component registries. All components are hand-authored against th
 | Frontend stack | `CLAUDE.md` / `RESEARCH.md` | React 19 + Vite 7 + TypeScript + Tailwind CSS 4 + GSAP core + Framer Motion + Zustand + TanStack Query + cmdk |
 | No shadcn | Codebase scan (no `components.json`) + design system maturity | Nordic Grid bespoke, no shadcn initialization |
 | Color palette | `design/gruvax-design-tokens.css` | `--gruvax-blue`, `--gruvax-yellow`, `--gruvax-off-white` (locked) |
-| Typography — three fonts | `design/gruvax-design-language.md` | Barlow Condensed + Space Grotesk + DM Mono (locked) |
+| Typography — three fonts | `design/gruvax-design-language.md` | Barlow Condensed + Space Grotesk + DM Mono (locked); per-family 4-size / 2-weight discipline |
 | Cell sizes — kiosk scale | `design/gruvax-design-tokens.css` | `--gruvax-cell-size-xl` = 80px, gap 12px (locked) |
 | LED on/off animation | `design/gruvax-design-tokens.css` | 300ms spring on, 500ms smooth off (locked) |
 | 32 cubes (2 × 4×4) | `REQUIREMENTS.md` CUBE-01 / `CONTEXT.md` | N=2, two shelf units |
