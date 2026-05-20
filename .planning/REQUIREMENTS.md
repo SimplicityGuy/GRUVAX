@@ -9,10 +9,10 @@
 
 ### Search & Lookup
 
-- [ ] **SRCH-01**: User can type-ahead search across artist, title, label, and catalog#; results return within ~200 ms perceived from keystroke
-- [ ] **SRCH-02**: User sees a ranked results list with tap-to-select; the top result auto-highlights its cube on the grid
+- [x] **SRCH-01**: User can type-ahead search across artist, title, label, and catalog#; results return within ~200 ms perceived from keystroke
+- [x] **SRCH-02**: User sees a ranked results list with tap-to-select; the top result auto-highlights its cube on the grid
 - [ ] **SRCH-03**: User can clear the search field with a visible X button (touch-friendly tap target)
-- [ ] **SRCH-04**: User sees a "no results" state when the query matches nothing in the collection
+- [x] **SRCH-04**: User sees a "no results" state when the query matches nothing in the collection
 - [ ] **SRCH-05**: User sees a loading indicator only when a search request exceeds ~300 ms (no flicker for fast responses)
 - [ ] **SRCH-06**: Search debounces keystrokes client-side to avoid hammering the backend
 - [ ] **SRCH-07**: Search returns a "did you mean" suggestion when no high-rank FTS match exists but a trigram-similar candidate does
@@ -107,7 +107,7 @@
 
 ### Deployment
 
-- [ ] **DEP-01**: GRUVAX deploys via Docker Compose as a sibling of discogsography; services include `gruvax-api` and `mosquitto`; frontend is served via FastAPI `StaticFiles`
+- [x] **DEP-01**: GRUVAX deploys via Docker Compose as a sibling of discogsography; services include `gruvax-api` and `mosquitto`; frontend is served via FastAPI `StaticFiles`
 - [x] **DEP-02**: The schema is named `gruvax` within the shared Postgres instance; reads from discogsography go exclusively through a `gruvax.v_collection` view contract
 - [ ] **DEP-03**: The Mosquitto broker has no Compose `ports:` exposure in v1 (internal-network-only until the hardware milestone); persistence is configured with explicit retained-message expiry semantics
 - [ ] **DEP-04**: Each Compose service declares log-size limits to prevent disk exhaustion on `lux`
@@ -197,10 +197,10 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| SRCH-01 | Phase 1 — First Search → Cube Highlight | Pending |
-| SRCH-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-01 | Phase 1 — First Search → Cube Highlight | Complete |
+| SRCH-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | SRCH-03 | Phase 1 — First Search → Cube Highlight | Pending |
-| SRCH-04 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-04 | Phase 1 — First Search → Cube Highlight | Complete |
 | SRCH-05 | Phase 1 — First Search → Cube Highlight | Pending |
 | SRCH-06 | Phase 1 — First Search → Cube Highlight | Pending |
 | SRCH-07 | Phase 2 — Real Position Estimation | Pending |
@@ -265,7 +265,7 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | PRIV-04 | Phase 4 — Realtime + Offline Resilience | Pending |
 | BAK-01 | Phase 6 — Wizards + Import/Export | Pending |
 | BAK-02 | Phase 6 — Wizards + Import/Export | Pending |
-| DEP-01 | Phase 1 — First Search → Cube Highlight | Pending |
+| DEP-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-03 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | DEP-04 | Phase 7 — Observability + Deployment Hardening | Pending |

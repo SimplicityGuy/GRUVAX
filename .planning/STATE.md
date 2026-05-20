@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-20T04:26:12.262Z"
+last_updated: "2026-05-20T05:20:00.000Z"
 progress:
   total_phases: 7
   completed_phases: 0
   total_plans: 4
-  completed_plans: 2
-  percent: 0
+  completed_plans: 3
+  percent: 75
 ---
 
 # State: GRUVAX
@@ -29,12 +29,12 @@ progress:
 ## Current Position
 
 Phase: 01 (first-search-cube-highlight) — EXECUTING
-Plan: 2 of 4
+Plan: 3 of 4
 
 - **Phase:** 1 — First Search → Cube Highlight
-- **Plan:** 01-02 complete; 01-03 next
+- **Plan:** 01-03 complete; 01-04 next
 - **Status:** Executing Phase 01
-- **Progress:** [█████░░░░░] 50%
+- **Progress:** [███████░░░] 75%
 
 ```
 Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
@@ -56,6 +56,7 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 | Plans complete | 0 |
 | Phases shipped | 0 |
 | Phase 01-first-search-cube-highlight P02 | 1109 | 2 tasks | 8 files |
+| Phase 01-first-search-cube-highlight P03 | 1200 | 3 tasks | 15 files |
 
 ## Accumulated Context
 
@@ -76,6 +77,11 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 - [Phase 01-02]: **BoundaryCache._load_rows() testing seam** — added to allow unit testing without live DB; undocumented in RESEARCH but required for proper TDD RED phase isolation.
 - [Phase 01-02]: **NFC after separator collapse in normalize_catalog** — Hypothesis found combining-char idempotency edge case; NFC stabilizes canonical combining-char order after separator stripping.
 - [Phase 01-02]: **pytest-asyncio loop_scope="session" for DB tests** — session-scoped db_pool fixture requires test to use same event loop; use `@pytest.mark.asyncio(loop_scope="session")` pattern for all future integration tests that use db_pool.
+- [Phase 01-03]: **Circular import prevention** — dependency providers (get_pool, get_boundary_cache) live in api/deps.py; routers imported inside create_app() body, not at module level.
+- [Phase 01-03]: **psycopg placeholder syntax** — psycopg uses `%s` (Python DB-API 2.0), not `$1`/`$2` (PostgreSQL server-side syntax). Affects all SQL in queries.py.
+- [Phase 01-03]: **asgi-lifespan as production dependency** — LifespanManager correctly triggers FastAPI's lifespan context in async test fixtures; added as prod dep to avoid conditional import issues.
+- [Phase 01-03]: **test_no_boundary uses release_id=111** — Saturn label records have no boundary coverage because boundary (first_label=Saturn, last_label=ESP) has "saturn" > "esp" alphabetically, so label range check fails.
+- [Phase 01-03]: **MQTT aiomqtt stub** — uses client.__aenter__()/__aexit__() directly instead of `async with` to retain client reference in app.state.mqtt after context manager enters.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
 
@@ -106,8 +112,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-20 (Phase 01 Plan 02 complete — POS-01 parser, LocateResult contract, BoundaryCache, cube-only estimator)
-**Next action:** Execute Phase 01 Plan 03 (`/gsd:execute-phase 01 03`).
+**Last touched:** 2026-05-20 (Phase 01 Plan 03 complete — FastAPI backend API: search, locate, units/cubes, health)
+**Next action:** Execute Phase 01 Plan 04 (`/gsd:execute-phase 01 04`).
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
