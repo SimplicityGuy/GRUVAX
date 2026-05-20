@@ -77,6 +77,10 @@ COPY --from=frontend-builder /static ./static/
 COPY migrations/ ./migrations/
 COPY alembic.ini ./
 COPY justfile ./
+# fixtures/ ships the committed, PII-free dev assets (boundaries.yaml is seeded
+# into gruvax.cube_boundaries by the entrypoint; the local collection CSV is NOT
+# in fixtures/ and stays gitignored, so it never enters the image).
+COPY fixtures/ ./fixtures/
 
 # Copy and make the entrypoint script executable (done as root before USER switch)
 COPY docker-entrypoint.sh /app/docker-entrypoint.sh

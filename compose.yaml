@@ -21,10 +21,20 @@
 #
 # RUNBOOK (local dev)
 # ─────────────────────────────────────────────────────────────────────────────
-#   1. just seed-dev          # seed the host dev Postgres
-#   2. docker compose up      # builds gruvax-api, starts gruvax-api + mosquitto
-#   3. open http://localhost:8000
-#   4. docker compose down    # stop and remove containers (no -v to keep volumes!)
+#   1. just up                # ONE command: builds + starts gruvax-dev-pg
+#                             # (auto-seeds the synthetic collection via initdb),
+#                             # gruvax-api (auto-runs migrations + seeds cube
+#                             # boundaries), and mosquitto.
+#   2. open http://localhost:8000
+#   3. docker compose down    # stop and remove containers (no -v to keep volumes!)
+#
+# The synthetic collection (fixtures/synth_collection.sql) loads ONCE when the
+# gruvax-dev-pg data volume is first created. To re-seed from scratch, remove the
+# data volume: `docker compose down && docker volume rm gruvax_gruvax-dev-pg-data`.
+#
+# To point at the shared discogsography Postgres on `lux` instead of the bundled
+# dev Postgres, set GRUVAX_DB_HOST/PORT/USER/PASSWORD/NAME in the environment
+# before `docker compose up` (the dev-pg service can be left running or stopped).
 #
 # Never run `docker compose down -v` unless you intentionally want to wipe the
 # mosquitto-data volume (retained LED state in Phase 5+).
@@ -37,9 +47,10 @@ services:
       dockerfile: Dockerfile
     image: gruvax-api:local
     environment:
-      # For local dev: reach host Postgres via host.docker.internal
-      # In production: use the shared Postgres container hostname
-      DATABASE_URL: "postgresql+psycopg://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-host.docker.internal}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}"
+      # Default: the bundled gruvax-dev-pg service (same compose network).
+      # Override GRUVAX_DB_HOST (e.g. to the shared discogsography Postgres on lux)
+      # to point elsewhere without editing this file.
+      DATABASE_URL: "postgresql+psycopg://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-gruvax-dev-pg}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}"
       OBSERVED_DISCOGSOGRAPHY_SCHEMA: "${OBSERVED_DISCOGSOGRAPHY_SCHEMA:-gruvax_dev}"
       MQTT_HOST: "mosquitto"
       MQTT_PORT: "1883"
@@ -57,6 +68,8 @@ services:
       # macOS/Windows: host.docker.internal is built in — this is a no-op there
       - "host.docker.internal:host-gateway"
     depends_on:
+      gruvax-dev-pg:
+        condition: service_healthy
       mosquitto:
         condition: service_healthy
     healthcheck:
@@ -69,6 +82,37 @@ services:
       timeout: 5s
       retries: 5
       start_period: 30s
+    restart: unless-stopped
+
+  # Local dev Postgres. A single `just up` brings this up with data: on first
+  # start the mounted fixtures/synth_collection.sql runs via initdb, creating the
+  # gruvax_dev schema + ~200 synthetic records BEFORE gruvax-api migrates (so the
+  # v_collection view in migration 0002 resolves). gruvax-api seeds cube
+  # boundaries on startup. To use lux instead, set GRUVAX_DB_HOST (see header).
+  gruvax-dev-pg:
+    image: postgres:18
+    container_name: gruvax-dev-pg
+    environment:
+      POSTGRES_USER: "${GRUVAX_DB_USER:-gruvax}"
+      POSTGRES_PASSWORD: "${GRUVAX_DB_PASSWORD:-gruvax}"
+      POSTGRES_DB: "${GRUVAX_DB_NAME:-gruvax}"
+    ports:
+      - "5432:5432"
+    volumes:
+      # postgres:18+ stores data in a major-version subdir under this mount
+      # point — mount at /var/lib/postgresql (NOT /var/lib/postgresql/data).
+      - gruvax-dev-pg-data:/var/lib/postgresql
+      - ./fixtures/synth_collection.sql:/docker-entrypoint-initdb.d/10-synth_collection.sql:ro
+    networks:
+      - internal
+    healthcheck:
+      test:
+        - "CMD-SHELL"
+        - "pg_isready -U ${GRUVAX_DB_USER:-gruvax} -d ${GRUVAX_DB_NAME:-gruvax}"
+      interval: 5s
+      timeout: 3s
+      retries: 20
+      start_period: 10s
     restart: unless-stopped
 
   mosquitto:
@@ -94,6 +138,7 @@ services:
     restart: unless-stopped
 
 volumes:
+  gruvax-dev-pg-data:
   mosquitto-data:
   mosquitto-log:
 

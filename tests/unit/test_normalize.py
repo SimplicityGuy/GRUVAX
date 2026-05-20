@@ -170,7 +170,7 @@ def test_normalize_catalog_idempotent(raw: str | None) -> None:
         ("BLP 4001", "BLP 4002", -1),
         ("BLP 4001", "BLP 4001", 0),
         ("BLP 4002", "BLP 4001", 1),
-        ("BLP 9", "BLP 10", -1),   # numeric-aware
+        ("BLP 9", "BLP 10", -1),  # numeric-aware
         ("BST 4001", "BLP 4001", 1),  # multi-prefix ordering
         (None, "BLP 1", -1),  # placeholder sorts first
         ("", "BLP 1", -1),

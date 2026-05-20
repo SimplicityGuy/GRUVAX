@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef } from 'react'
 import { useGruvaxStore } from '../../state/store'
 
 interface SearchBoxProps {
@@ -21,20 +21,13 @@ interface SearchBoxProps {
  * All colors/fonts/motion from kiosk.css tokens — no hardcoded hex here.
  */
 export function SearchBox({ onDebouncedQuery, isLoading, hasError }: SearchBoxProps) {
+  // store.query is the single source of truth for the input value, so external
+  // setters (e.g. a "did you mean" tap calling setQuery) update the field too.
   const { query, setQuery, clearSearch } = useGruvaxStore()
-  const [localValue, setLocalValue] = useState(query)
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
-
-  // Sync local value when store query is cleared externally (clear-X press from elsewhere)
-  useEffect(() => {
-    if (query === '') {
-      setLocalValue('')
-    }
-  }, [query])
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
-    setLocalValue(val)
     setQuery(val)
 
     // Debounce: fire onDebouncedQuery ~250ms after last keystroke (SRCH-06)
@@ -46,12 +39,11 @@ export function SearchBox({ onDebouncedQuery, isLoading, hasError }: SearchBoxPr
 
   const handleClear = () => {
     if (debounceRef.current) clearTimeout(debounceRef.current)
-    setLocalValue('')
     clearSearch()
     onDebouncedQuery('')
   }
 
-  const showClearX = localValue.length > 0 && !isLoading
+  const showClearX = query.length > 0 && !isLoading
   const showLoading = isLoading
 
   const boxClass = [
@@ -81,7 +73,7 @@ export function SearchBox({ onDebouncedQuery, isLoading, hasError }: SearchBoxPr
       <input
         className="search-box__input"
         type="search"
-        value={localValue}
+        value={query}
         onChange={handleChange}
         placeholder="Type artist, title, label or catalog#"
         aria-label="Search vinyl collection"

@@ -1,5 +1,5 @@
 import { create } from 'zustand'
-import type { CubeRef, SearchResult } from '../api/types'
+import type { CubeRef, LocateResult, SearchResult, SubInterval } from '../api/types'
 
 interface HighlightState {
   primaryCube: CubeRef | null
@@ -21,6 +21,22 @@ interface GruvaxStore {
   /** Primary cube highlight state — set after /api/locate resolves */
   highlight: HighlightState
   setHighlightCube: (cube: CubeRef | null) => void
+
+  /** Label span — all cubes occupied by the label (sorted unit_id,row,col) */
+  labelSpan: CubeRef[]
+
+  /** Sub-cube position interval from /api/locate — null when only cube-level */
+  subCubeInterval: SubInterval | null
+
+  /** Position confidence 0.0–1.0 — drives bar opacity and "~" cue */
+  confidence: number
+
+  /**
+   * Set the full locate result atomically (CUBE-04 / D-01).
+   * Increments animationToken unconditionally — even on same-cube re-selection
+   * (Pitfall D) — so GSAP timeline always fires.
+   */
+  setLocateResult: (result: LocateResult) => void
 
   /** Animation token — incremented on each highlight change to trigger animations */
   animationToken: number
@@ -46,6 +62,20 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
       animationToken: s.animationToken + 1,
     })),
 
+  labelSpan: [],
+  subCubeInterval: null,
+  confidence: 0,
+
+  setLocateResult: (result) =>
+    set((s) => ({
+      highlight: { primaryCube: result.primary_cube },
+      labelSpan: result.label_span,
+      subCubeInterval: result.sub_cube_interval,
+      confidence: result.confidence,
+      // Token increments unconditionally — even same-cube re-selection fires GSAP (Pitfall D)
+      animationToken: s.animationToken + 1,
+    })),
+
   animationToken: 0,
 
   clearSearch: () =>
@@ -54,6 +84,9 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
       selectedReleaseId: null,
       selectedResult: null,
       highlight: { primaryCube: null },
+      labelSpan: [],
+      subCubeInterval: null,
+      confidence: 0,
       animationToken: 0,
     }),
 }))

@@ -51,8 +51,7 @@ def test_compare_catalogs_transitive(a: str, b: str, c: str) -> None:
     ac = compare_catalogs(a, c)
     if ab <= 0 and bc <= 0:
         assert ac <= 0, (
-            f"Transitivity violated: {a!r} <= {b!r} <= {c!r} but "
-            f"compare_catalogs({a!r},{c!r})={ac}"
+            f"Transitivity violated: {a!r} <= {b!r} <= {c!r} but compare_catalogs({a!r},{c!r})={ac}"
         )
 
 
@@ -81,7 +80,9 @@ def test_parse_key_stable_on_normalized(s: str) -> None:
 
 
 @given(
-    prefix=st.text(alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", min_size=1, max_size=5),
+    prefix=st.text(
+        alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", min_size=1, max_size=5
+    ),
     n=st.integers(min_value=0, max_value=9999),
 )
 @settings(max_examples=300)
@@ -109,7 +110,9 @@ def test_pure_numeric_monotone(n: int) -> None:
 
 
 @given(
-    prefix=st.text(alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", min_size=1, max_size=5),
+    prefix=st.text(
+        alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", min_size=1, max_size=5
+    ),
     n=st.integers(min_value=1, max_value=9999),
     sep=st.sampled_from([" ", "-", "_", ".", "/", ""]),
 )
@@ -129,7 +132,9 @@ def test_cosmetic_stability_separators(prefix: str, n: int, sep: str) -> None:
 
 
 @given(
-    prefix=st.text(alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", min_size=1, max_size=5),
+    prefix=st.text(
+        alphabet="ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz", min_size=1, max_size=5
+    ),
     n=st.integers(min_value=1, max_value=9999),
 )
 @settings(max_examples=300)
@@ -162,9 +167,7 @@ def test_digit_cap_no_exception(n_digits: int, digit: int) -> None:
         result = parse_key(catalog)
         assert isinstance(result, tuple)
     except Exception as exc:
-        raise AssertionError(
-            f"parse_key raised on digit-run of length {n_digits}: {exc}"
-        ) from exc
+        raise AssertionError(f"parse_key raised on digit-run of length {n_digits}: {exc}") from exc
 
 
 # ── catalog_in_range consistency ──────────────────────────────────────────────

@@ -29,5 +29,13 @@ echo "Database is up."
 # Run Alembic migrations
 "$PYTHON" -m alembic upgrade head
 
+# Seed cube boundaries (idempotent upsert on (unit_id, row, col)) so the kiosk
+# grid and /api/locate work on a fresh database. Safe to run on every start.
+# Skipped automatically if the fixtures file is absent (e.g. a future slim image).
+if [ -f fixtures/boundaries.yaml ]; then
+    echo "Seeding cube boundaries from fixtures/boundaries.yaml..."
+    "$PYTHON" -m gruvax.db.seed_boundaries fixtures/boundaries.yaml
+fi
+
 # Start the FastAPI app
 exec "$PYTHON" -m uvicorn gruvax.app:app --host 0.0.0.0 --port 8000

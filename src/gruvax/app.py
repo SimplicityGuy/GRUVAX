@@ -90,6 +90,18 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Proceed with empty cache — locate will return no-boundary results.
     app.state.boundary_cache = cache
 
+    # ── 3b. Collection snapshot (POS-03) ─────────────────────────────────────
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot
+
+    snapshot = CollectionSnapshot()
+    try:
+        await snapshot.load(pool)  # type: ignore[arg-type]
+        logger.info("Collection snapshot loaded (%d labels)", len(snapshot._by_label))
+    except Exception as exc:
+        logger.error("Collection snapshot load failed: %s", exc)
+        # Proceed with empty snapshot — locate falls back to cube-only-v1.
+    app.state.collection_snapshot = snapshot
+
     # ── 4. MQTT (non-blocking best-effort; DEP-01) ───────────────────────────
     await connect_mqtt(app)
 

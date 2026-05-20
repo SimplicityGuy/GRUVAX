@@ -1,0 +1,151 @@
+# Golden test cases for the §4.1 index-based estimator.
+#
+# Each entry drives a parametrized test in tests/unit/test_algorithm.py
+# (test_golden_cases). Fields:
+#   id              - unique string identifier for the test case
+#   label           - record label (used for snapshot + boundary lookup)
+#   catalog_number  - catalog number to locate (used for boundary lookup)
+#   release_id      - the release being located (must appear at the given sorted index)
+#   k               - total number of records for this label in the snapshot
+#   idx             - 0-based index of release_id in sorted snapshot (used to derive f)
+#   expected_start  - expected SubInterval.start (±tolerance)
+#   expected_end    - expected SubInterval.end (±tolerance)
+#   expected_confidence  - expected confidence value (±tolerance)
+#   expected_crosses_boundary - expected SubInterval.crosses_boundary
+#   tolerance       - allowable deviation for start/end/confidence comparisons
+
+cases:
+  # ── Singleton: k=1, full-cube band (D-02) ───────────────────────────────────
+  - id: singleton_full_cube_band
+    label: SingletonGold
+    catalog_number: "SG 001"
+    release_id: 1
+    k: 1
+    idx: 0
+    # Singleton: full-cube band regardless of index
+    expected_start: 0.0
+    expected_end: 1.0
+    expected_confidence: 0.30     # CUBE_ONLY_CONFIDENCE (D-02)
+    expected_crosses_boundary: false
+    tolerance: 0.001
+
+  # ── Tight pair: k=2, boundary records ────────────────────────────────────────
+  - id: tight_pair_first_record
+    label: TightPairGold
+    catalog_number: "TP 001"
+    release_id: 1
+    k: 2
+    idx: 0     # f = 0/1 = 0.0 → start=0.0, end=0.05
+    expected_start: 0.0           # max(0, 0.0 - 0.05)
+    expected_end: 0.05            # min(1, 0.0 + 0.05)
+    expected_confidence: 0.35     # compute_confidence(k=2)
+    expected_crosses_boundary: false
+    tolerance: 0.001
+
+  - id: tight_pair_last_record
+    label: TightPairGold
+    catalog_number: "TP 002"
+    release_id: 2
+    k: 2
+    idx: 1     # f = 1/1 = 1.0 → start=0.95, end=1.0
+    expected_start: 0.95          # max(0, 1.0 - 0.05)
+    expected_end: 1.0             # min(1, 1.0 + 0.05)
+    expected_confidence: 0.35
+    expected_crosses_boundary: false
+    tolerance: 0.001
+
+  # ── Dense k=5: mid-range record ───────────────────────────────────────────────
+  - id: dense_k5_midpoint
+    label: DenseK5Gold
+    catalog_number: "DK 003"
+    release_id: 3
+    k: 5
+    idx: 2     # f = 2/4 = 0.5 → start=0.45, end=0.55
+    expected_start: 0.45
+    expected_end: 0.55
+    expected_confidence: 0.60    # compute_confidence(k=5): min(0.70, 0.50+0.05*(5-3))=0.60
+    expected_crosses_boundary: false
+    tolerance: 0.001
+
+  # ── Sparse multi-record k=5: tests that formula applies ──────────────────────
+  - id: sparse_k5_first
+    label: SparseK5Gold
+    catalog_number: "SK 001"
+    release_id: 1
+    k: 5
+    idx: 0     # f = 0/4 = 0.0 → start=0.0, end=0.05
+    expected_start: 0.0
+    expected_end: 0.05
+    expected_confidence: 0.60    # compute_confidence(k=5): min(0.70, 0.50+0.05*(5-3))=0.60
+    expected_crosses_boundary: false
+    tolerance: 0.001
+
+  # ── Multi-prefix BLP/BST k=6: sorted by parse_key ───────────────────────────
+  - id: multi_prefix_blp_first
+    label: MultiPrefixGold
+    catalog_number: "BLP 100"
+    release_id: 1
+    k: 6
+    idx: 0     # BLP 100 is first in parse_key order → f=0/5=0.0
+    expected_start: 0.0
+    expected_end: 0.05
+    expected_confidence: 0.65    # compute_confidence(k=6): min(0.70, 0.50+0.05*(6-3))=0.65
+    expected_crosses_boundary: false
+    tolerance: 0.001
+
+  - id: multi_prefix_bst_last
+    label: MultiPrefixGold
+    catalog_number: "BST 84003"
+    release_id: 6
+    k: 6
+    idx: 5     # BST 84003 is last → f=5/5=1.0
+    expected_start: 0.95
+    expected_end: 1.0
+    expected_confidence: 0.65
+    expected_crosses_boundary: false
+    tolerance: 0.001
+
+  # ── Mixed separators: BLP 4195 == BLP-4195 ───────────────────────────────────
+  - id: mixed_separators_dash_form
+    label: MixedSepGold
+    catalog_number: "BLP-4195"    # dash form — parse_key sees same as "BLP 4195"
+    release_id: 3
+    k: 5
+    idx: 2     # BLP-4195 normalizes to same key as BLP 4195 (idx=2 in sorted list)
+    expected_start: 0.45
+    expected_end: 0.55
+    expected_confidence: 0.60    # compute_confidence(k=5)
+    expected_crosses_boundary: false
+    tolerance: 0.001
+
+  # ── Barcode outlier: very long numeric string → DoS guard (T-01-05) ──────────
+  - id: barcode_outlier_present
+    label: BarcodeGold
+    catalog_number: "1234567890123"    # 13-digit barcode — capped at 12 digits by _DIGIT_CAP
+    release_id: 2
+    k: 3
+    idx: 1     # f = 1/2 = 0.5
+    expected_start: 0.45
+    expected_end: 0.55
+    expected_confidence: 0.40    # compute_confidence(k=3)
+    expected_crosses_boundary: false
+    tolerance: 0.001
+
+  # ── Two-cube span: label occupies 2 cubes (CUBE-03) ─────────────────────────
+  # Note: label_span >= 2 is exercised by the integration test test_multi_cube_label_span.
+  # This unit golden case documents §4.1 for a record whose label spans two cubes.
+  # The test builder creates two cubes: cube0 covers TC 001-TC 005, cube1 TC 006-TC 010.
+  # TC 005 falls in cube0 only (catalog_in_range for cube0 includes TC 005).
+  # f = 4/9 ≈ 0.444 (single-cube path applies since label_span=[cube0]).
+  # start = max(0, 0.444 - 0.05) = 0.394, end = min(1, 0.444 + 0.05) = 0.494
+  - id: two_cube_span_label_crosses_both
+    label: TwoCubeGold
+    catalog_number: "TC 005"
+    release_id: 5
+    k: 10
+    idx: 4     # f = 4/9 ≈ 0.444; single-cube path (label_span=[cube0] for TC 005)
+    expected_start: 0.394
+    expected_end: 0.494
+    expected_confidence: 0.70    # compute_confidence(k=10): min(0.70, 0.50+0.05*(10-3))=0.70
+    expected_crosses_boundary: false
+    tolerance: 0.005    # slightly looser for float division

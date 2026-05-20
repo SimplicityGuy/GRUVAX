@@ -103,6 +103,14 @@
   color: var(--gruvax-text-faint);
 }
 
+/* Hide the browser's native type=search clear button — the app renders its own
+   blue clear-X (.search-box__action) and we don't want a duplicate gray one. */
+.search-box__input::-webkit-search-cancel-button,
+.search-box__input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .search-box__action {
   flex-shrink: 0;
   margin-right: var(--gruvax-space-2);
@@ -273,15 +281,67 @@
   line-height: var(--gruvax-leading-normal);
 }
 
+/* ── Did-you-mean row (SRCH-07) ──────────────────────────────────────────── */
+
+.did-you-mean {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  min-height: 44px; /* WCAG 2.5.5 touch target minimum */
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  border-top: 1px solid var(--gruvax-border-faint);
+  cursor: pointer;
+  background: transparent;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.did-you-mean:hover {
+  background: var(--gruvax-yellow-faint);
+}
+
+.did-you-mean:active {
+  background: var(--gruvax-yellow-faint);
+}
+
+.did-you-mean__icon {
+  flex-shrink: 0;
+  color: var(--gruvax-warning);
+  width: 20px;
+  height: 20px;
+}
+
+.did-you-mean__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.did-you-mean__copy {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+}
+
+.did-you-mean__term {
+  font-weight: 700;
+  color: var(--gruvax-text-secondary);
+}
+
 /* ── Shelf area ──────────────────────────────────────────────────────────── */
 
 .shelf-area {
+  position: relative; /* SpanUnderlay absolute bands anchor within this parent (D-04) */
   background: var(--gruvax-off-white);
   border-radius: var(--gruvax-radius-lg);
   padding: var(--gruvax-space-5);
   box-shadow: var(--gruvax-shadow-sm);
-  display: flex;
-  flex-wrap: wrap;
+  /* Kallax units tile at most 2 per row and the block is centered within the
+     bounding box (e.g. 5 units → rows of 2 + 2 + 1). */
+  display: grid;
+  grid-template-columns: repeat(2, max-content);
+  justify-content: center;
   gap: var(--gruvax-space-6);
 }
 
@@ -318,6 +378,7 @@
 
 .cube {
   position: relative;
+  z-index: 1; /* Sit above SpanUnderlay bands (D-04 — lit-cell rule) */
   width: var(--gruvax-cell-size-xl);
   height: var(--gruvax-cell-size-xl);
   border-radius: var(--gruvax-cell-radius-xl);
@@ -383,14 +444,19 @@
 /* Address overlay — always visible */
 .cube__address {
   position: absolute;
-  top: var(--gruvax-space-1);
-  left: var(--gruvax-space-1);
+  /* Large, faint, centered watermark — visible context that the position bar
+     can overlap without a hard collision. Sits behind the bar (z-index 0). */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 0;
   font-family: var(--gruvax-font-display);
-  font-size: var(--gruvax-text-caption);
+  font-size: var(--gruvax-text-display-lg);
   font-weight: 700;
   letter-spacing: var(--gruvax-tracking-label);
   line-height: var(--gruvax-leading-tight);
   color: var(--gruvax-text-muted);
+  opacity: 0.22;
   pointer-events: none;
   user-select: none;
 }
@@ -404,3 +470,98 @@
 .cube[data-state="empty"] .cube__address {
   color: var(--gruvax-text-faint);
 }
+
+/* ── Sub-cube position bar (CUBE-04 / D-01) ──────────────────────────────── */
+
+/*
+ * Tall vertical band inside the cube showing where within the cube the record
+ * lives. Width and left are set via inline style from SubCubeBar.tsx.
+ * Opacity is driven by CSS custom property --confidence (0.0–1.0).
+ *
+ * Formula: max(0.30, 0.30 + var(--confidence) * 0.30)  (subtle, ~0.30–0.60)
+ * CSS `max()` supports custom properties.
+ */
+
+.sub-cube-bar {
+  position: absolute;
+  /* A record stands vertically, filling most of the bin height (a 12" record in
+     a ~13" Kallax bin ≈ 92%), so the position reads as a tall vertical line/band
+     at the estimated horizontal location — not a dot. left/width (the interval)
+     are set inline by the component; height/vertical-centering live here. */
+  top: 50%;
+  transform: translateY(-50%);
+  height: 92%;
+  min-width: 4px;                  /* keep a narrow high-confidence interval visible as a line */
+  border-radius: var(--gruvax-radius-sm);
+  background: var(--gruvax-yellow);
+  /* Subtle but visible — confidence still drives it, but capped low so the bar
+     reads as a soft marker over the cube, not a heavy solid block (~0.30–0.60). */
+  opacity: max(0.30, calc(0.30 + var(--confidence, 0.5) * 0.30));
+  pointer-events: none;
+  z-index: 1;
+}
+
+/*
+ * On the lit (yellow) primary cube a yellow bar would be invisible, so the
+ * position line is drawn in IKEA blue — matching the blue address label already
+ * used on lit cubes (`.cube[data-state="lit"] .cube__address`). On dim companion
+ * cubes the bar stays yellow (good contrast on the light-blue dim fill).
+ */
+.cube[data-state="lit"] .sub-cube-bar {
+  background: var(--gruvax-blue);
+}
+
+/*
+ * Singleton full-cube band (D-02).
+ * CUBE-10 literal says "tick-mark"; D-02 overrides to faint full-cube band.
+ * opacity: 0.18 — deliberately faint, reads "scan the whole cube".
+ */
+.sub-cube-bar--singleton {
+  width: 100%;
+  left: 0;
+  opacity: 0.18;
+}
+
+/* Low-confidence text cue (D-03) — appears above the bar when confidence ≤ 0.50 */
+.sub-cube-bar__cue {
+  position: absolute;
+  top: var(--gruvax-space-1);             /* inside, near the top of the tall vertical bar */
+  left: var(--gruvax-space-1);            /* space-1 (4px) from bar left edge */
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-label);    /* 11px */
+  font-weight: 400;
+  line-height: var(--gruvax-leading-tight);
+  color: var(--gruvax-text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── Span underlay band (CUBE-03 / D-04) ────────────────────────────────── */
+
+/*
+ * Pill-shaped connector drawn behind spanned cubes (z-index 0, below .cube z-index 1).
+ * Initial opacity is 0 — GSAP animates it to 0.60 on selection-lands (D-05).
+ * Positioned absolutely within a position:relative shelf-grid wrapper.
+ */
+
+.span-underlay__band {
+  position: absolute;
+  z-index: 0;                              /* Below .cube (z-index 1) — D-04 lit-cell rule */
+  height: var(--gruvax-space-3);           /* 12px pill height */
+  background: var(--gruvax-yellow-faint);  /* rgba(255,218,0,0.12) */
+  border: 1px solid var(--gruvax-yellow-glow); /* rgba(255,218,0,0.35) */
+  border-radius: var(--gruvax-radius-pill); /* 9999px pill */
+  opacity: 0;                              /* Animated by GSAP to 0.60 */
+  pointer-events: none;
+}
+
+/* ── Will-change toggle for GSAP animation window (Pitfall 16) ───────────── */
+
+/*
+ * Applied by KioskView GSAP effect at animation start; removed on onComplete
+ * and cleanup. Never left permanently on Pi 5 compositor (would reserve layers).
+ */
+.is-animating {
+  will-change: transform, opacity;
+}
+

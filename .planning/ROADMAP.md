@@ -14,7 +14,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 ## Phases
 
 - [x] **Phase 1: First Search → Cube Highlight** - End-to-end Core Value: typed query lights the right cube on the touchscreen, backed by parser, view, fixture-seeded boundaries, and a cube-only estimator. (completed 2026-05-20)
-- [ ] **Phase 2: Real Position Estimation** - Sub-cube interval bar, label-span multi-cube highlight, §4.1 index-based estimator with A/B harness; the kiosk now answers "where exactly".
+- [x] **Phase 2: Real Position Estimation** - Sub-cube interval bar, label-span multi-cube highlight, §4.1 index-based estimator with A/B harness; the kiosk now answers "where exactly". (completed 2026-05-20)
 - [ ] **Phase 3: Admin Loop (PIN + Manual Entry + Undo)** - Owner can sign in (mobile or kiosk-with-in-app-keypad), enter boundaries, preview diffs, and undo mistakes — boundaries become a living artifact, not a fixture.
 - [ ] **Phase 4: Realtime + Offline Resilience** - Admin edits reach the kiosk live via SSE; kiosk gracefully degrades on connectivity loss; privacy floors and recently-pulled land here.
 - [ ] **Phase 5: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness.
@@ -71,7 +71,18 @@ Plans:
   4. `/api/locate` p95 latency stays ≤50 ms CPU-only with no DB calls (proved by `pytest-benchmark` against the cached boundaries), and search returns trigram "did you mean" suggestions on near-misses plus catalog-# field boost on numeric-leading queries.
   5. A developer-facing `run_all_algorithms.py` A/B harness exists, runs §4.1 (index) and §4.8 (cube-only) against the local CSV (gitignored) and a synthetic CI dataset, and emits per-distribution-shape error metrics — proving §4.1 is the right v1 default before locking it in.
 
-**Plans:** TBD
+**Plans:** 4/4 plans complete
+Plans:
+**Wave 1**
+
+- [x] 02-01-PLAN.md — §4.1 index estimator + in-memory collection snapshot + §4.8 fallback dispatcher behind locked LocateResult; Wave-0 unit/property/golden/benchmark tests; /api/locate wiring (POS-03, POS-05, CUBE-04/10/03 backend)
+- [x] 02-02-PLAN.md — Search refinements: pg_trgm migration + trigram "did you mean" (SRCH-07) + catalog-# rank boost (SRCH-08) + DidYouMean kiosk row
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 02-03-PLAN.md — Kiosk position UI: SubCubeBar + SpanUnderlay + singleton band + GSAP selection-lands choreography (CUBE-04, CUBE-03, CUBE-10, CUBE-08) [has human-verify checkpoint]
+- [x] 02-04-PLAN.md — Developer A/B harness run_all_algorithms.py + planted-truth synthetic shapes proving §4.1 ≥ §4.8 (POS-06)
+
 **UI hint:** yes
 
 ### Phase 3: Admin Loop (PIN + Manual Entry + Undo)
@@ -162,7 +173,7 @@ Plans:
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. First Search → Cube Highlight | 4/4 | Complete   | 2026-05-20 |
-| 2. Real Position Estimation | 0/? | Not started | - |
+| 2. Real Position Estimation | 4/4 | Complete   | 2026-05-20 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 0/? | Not started | - |
 | 4. Realtime + Offline Resilience | 0/? | Not started | - |
 | 5. LED Contract over MQTT (Hardware Stubbed) | 0/? | Not started | - |

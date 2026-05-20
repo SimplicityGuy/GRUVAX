@@ -20,6 +20,9 @@ export interface SearchResult {
 export interface SearchResponse {
   items: SearchResult[]
   took_ms: number
+  /** Trigram-similarity suggestion returned when FTS finds nothing strong (SRCH-07/D-11).
+   *  null when pg_trgm is unavailable or no strong candidate exists. */
+  did_you_mean: string | null
 }
 
 export interface CubeRef {
@@ -28,11 +31,24 @@ export interface CubeRef {
   col: number
 }
 
+/** Normalized sub-cube interval returned by /api/locate (Phase 2: plan 01 backend). */
+export interface SubInterval {
+  /** Normalized start position within the cube: 0.0–1.0 */
+  start: number
+  /** Normalized end position within the cube: 0.0–1.0; ≥ start */
+  end: number
+  /** True when the range extends past this cube into next_cube */
+  crosses_boundary: boolean
+  /** Present when crosses_boundary === true (omitted from JSON when false) */
+  next_cube?: CubeRef
+}
+
 export interface LocateResult {
   release_id: number
   primary_cube: CubeRef | null
   label_span: CubeRef[]
-  sub_cube_interval: null
+  /** Sub-cube position interval — null when only cube-level location is known */
+  sub_cube_interval: SubInterval | null
   confidence: number
   generated_at: string
   estimator_version: string

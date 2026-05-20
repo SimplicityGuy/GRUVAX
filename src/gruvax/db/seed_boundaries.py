@@ -93,7 +93,11 @@ async def load_boundaries(yaml_path: Path) -> None:
     data: dict[str, Any] = yaml.safe_load(yaml_path.read_text())
     units: list[dict[str, Any]] = data["units"]
 
-    async with get_pool_context(min_size=1, max_size=2) as pool, pool.connection() as conn, conn.transaction():
+    async with (
+        get_pool_context(min_size=1, max_size=2) as pool,
+        pool.connection() as conn,
+        conn.transaction(),
+    ):
         await _upsert_units(conn, units)
 
         total = 0

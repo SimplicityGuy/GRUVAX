@@ -29,6 +29,7 @@ BOUNDARIES_YAML = FIXTURE_DIR / "boundaries.yaml"
 
 # ── event loop ───────────────────────────────────────────────────────────────
 
+
 @pytest.fixture(scope="session")
 def event_loop_policy() -> asyncio.DefaultEventLoopPolicy:
     """Use the default event loop policy (no uvloop in tests for simplicity)."""
@@ -36,6 +37,7 @@ def event_loop_policy() -> asyncio.DefaultEventLoopPolicy:
 
 
 # ── database ─────────────────────────────────────────────────────────────────
+
 
 @pytest_asyncio.fixture(scope="session")
 async def db_pool():  # type: ignore[no-untyped-def]
@@ -57,6 +59,7 @@ async def db_pool():  # type: ignore[no-untyped-def]
 
 
 # ── boundary fixture ─────────────────────────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def boundary_cache() -> list[dict[str, Any]]:

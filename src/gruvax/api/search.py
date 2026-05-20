@@ -6,9 +6,14 @@ Query parameters:
 
 Response:
   ``{items: [{release_id, collection_item_id, title, primary_artist,
-              label, catalog_number, format, year, rank}], took_ms}``
+              label, catalog_number, format, year, rank}],
+     took_ms,
+     did_you_mean: string | null}``
 
 SRCH-04: ``q=zzznomatch`` → HTTP 200 with ``{items: []}``.
+SRCH-07: ``did_you_mean`` is a trigram-similarity suggestion returned only
+         when FTS finds nothing strong; ``null`` otherwise or when pg_trgm
+         is unavailable (Pitfall E graceful degradation).
 """
 
 from __future__ import annotations
@@ -44,13 +49,16 @@ async def search(
         limit: Maximum results (1-50, default 20, T-01-08).
 
     Returns:
-        ``{items: [SearchRow, ...], took_ms: float}``
+        ``{items: [SearchRow, ...], took_ms: float, did_you_mean: str | None}``
         Items are ordered by relevance (highest rank first).
         Returns ``{items: []}`` on no match (SRCH-04).
+        ``did_you_mean`` is non-null only when items is empty and pg_trgm
+        finds a high-similarity candidate (SRCH-07/D-11).
     """
-    rows, took_ms = await search_collection(pool, q, limit)
+    rows, took_ms, did_you_mean = await search_collection(pool, q, limit)
 
     return {
         "items": rows,
         "took_ms": round(took_ms, 2),
+        "did_you_mean": did_you_mean,
     }

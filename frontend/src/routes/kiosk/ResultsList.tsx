@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { locateRelease } from '../../api/client'
 import type { SearchResult } from '../../api/types'
 import { useGruvaxStore } from '../../state/store'
+import { DidYouMean } from './DidYouMean'
 import { NoResultsRow } from './NoResultsRow'
 import { ResultRow } from './ResultRow'
 
@@ -10,6 +11,22 @@ interface ResultsListProps {
   items: SearchResult[]
   /** True when query is non-empty but items is empty */
   showNoResults: boolean
+  /** Trigram-similarity suggestion from /api/search (SRCH-07/D-11).
+   *  Rendered below NoResultsRow; null = no suggestion or pg_trgm absent. */
+  didYouMean?: string | null
+  /**
+   * Whether the dropdown is open. Reopened by the parent on each new query and
+   * set false after an explicit selection so the list collapses once the user
+   * picks a record (auto-select-top keeps it open; only an explicit tap/Enter
+   * dismisses it). Defaults to true so other call sites are unaffected.
+   */
+  open?: boolean
+  /** Called when the user explicitly selects a row (tap or Enter) so the parent
+   *  can collapse the dropdown. Not called by auto-select-top. */
+  onResultSelect?: () => void
+  /** Called when the user taps the "did you mean" suggestion (D-10). The parent
+   *  sets the search query AND triggers the corrected search. */
+  onDidYouMean?: (term: string) => void
 }
 
 /**
@@ -21,15 +38,24 @@ interface ResultsListProps {
  *  3. Framer Motion AnimatePresence handles enter/exit.
  *
  * On tap of a different row → calls /api/locate for that release.
+ * On tap of DidYouMean row → calls setQuery(term) to set the search box
+ *   (D-10: no silent auto-correct — user explicitly initiates the search).
  * On clear (empty items, empty query) → handled by parent; store is cleared.
  *
  * Per 01-UI-SPEC.md §Results List Component Contract + §Top-result auto-highlight.
  */
-export function ResultsList({ items, showNoResults }: ResultsListProps) {
-  const { selectedResult, setSelectedResult, setSelectedReleaseId, setHighlightCube } =
+export function ResultsList({
+  items,
+  showNoResults,
+  didYouMean,
+  open = true,
+  onResultSelect,
+  onDidYouMean,
+}: ResultsListProps) {
+  const { selectedResult, setSelectedResult, setSelectedReleaseId, setHighlightCube, setLocateResult } =
     useGruvaxStore()
 
-  const isVisible = items.length > 0 || showNoResults
+  const isVisible = open && (items.length > 0 || showNoResults)
 
   // Auto-select top result on arrival (SRCH-02 / D-08).
   // Key the effect on the top result's release_id — NOT the `items` array
@@ -41,10 +67,10 @@ export function ResultsList({ items, showNoResults }: ResultsListProps) {
     const top = items[0]
     setSelectedResult(top)
     setSelectedReleaseId(top.release_id)
-    // Fire locate for top result
+    // Fire locate for top result — feed full result into store (CUBE-04/Phase 2)
     void locateRelease(top.release_id)
       .then((result) => {
-        setHighlightCube(result.primary_cube)
+        setLocateResult(result)
       })
       .catch(() => {
         setHighlightCube(null)
@@ -53,15 +79,24 @@ export function ResultsList({ items, showNoResults }: ResultsListProps) {
   }, [topReleaseId])
 
   const handleSelect = (result: SearchResult) => {
+    // Collapse the dropdown immediately on an explicit pick — don't wait for
+    // the async locate (fixes: autocomplete list lingered over the grid).
+    onResultSelect?.()
     setSelectedResult(result)
     setSelectedReleaseId(result.release_id)
     void locateRelease(result.release_id)
       .then((located) => {
-        setHighlightCube(located.primary_cube)
+        setLocateResult(located)
       })
       .catch(() => {
         setHighlightCube(null)
       })
+  }
+
+  // D-10: onTap sets the search query — user sees the corrected term in the
+  // search box and explicitly triggers the new search. No silent auto-correct.
+  const handleDidYouMeanTap = (term: string) => {
+    onDidYouMean?.(term)
   }
 
   return (
@@ -78,7 +113,12 @@ export function ResultsList({ items, showNoResults }: ResultsListProps) {
         >
           <div className="results-list__scroll">
             {showNoResults && items.length === 0 ? (
-              <NoResultsRow />
+              <>
+                <NoResultsRow />
+                {didYouMean && (
+                  <DidYouMean suggestion={didYouMean} onTap={handleDidYouMeanTap} />
+                )}
+              </>
             ) : (
               items.map((item) => (
                 <ResultRow
