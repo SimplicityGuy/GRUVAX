@@ -20,7 +20,10 @@ Phase 2 additions (02-01 §Task 2a):
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
+import yaml
 
 from gruvax.estimator.algorithm import (
     CUBE_ONLY_CONFIDENCE,
@@ -34,6 +37,9 @@ from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
 from gruvax.estimator.constants import POSITION_HALF_WIDTH
 from gruvax.estimator.contract import CUBE_ONLY_CONFIDENCE as CONTRACT_CONFIDENCE
 from gruvax.estimator.contract import CubeRef, LocateResult, SubInterval
+
+# FIXTURE_DIR points to repo-root fixtures/ — same path as tests/conftest.py uses
+FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures"
 
 # ── Contract shape tests (contract.py) ───────────────────────────────────────
 
@@ -555,4 +561,153 @@ def test_locate_benchmark(benchmark) -> None:  # type: ignore[no-untyped-def]
     # p95 is in milliseconds: assert the batch p95 is well under the budget.
     assert benchmark.stats["mean"] * 1000 < 50, (
         f"benchmark mean {benchmark.stats['mean'] * 1000:.2f}ms exceeds 50ms budget (POS-03)"
+    )
+
+
+# ── Golden cases (Task 2b) ────────────────────────────────────────────────────
+
+
+def _load_golden_cases() -> list[dict]:
+    """Load golden_cases.yaml from the repo-root fixtures/ directory."""
+    golden_yaml = FIXTURE_DIR / "golden_cases.yaml"
+    data = yaml.safe_load(golden_yaml.read_text())
+    return data["cases"]
+
+
+def _make_golden_cache_and_snapshot(case: dict) -> tuple[BoundaryCache, CollectionSnapshot]:
+    """Build cache + snapshot for a golden case entry.
+
+    Creates k records for the label with sequential catalog numbers, placing
+    the target release_id at position idx in the sorted list.
+    """
+    label = case["label"]
+    k = case["k"]
+    idx = case["idx"]
+    target_cat = case["catalog_number"]
+    release_id = case["release_id"]
+
+    # Build k catalog numbers; target is at position idx
+    # Generate catalog numbers ensuring the target is at the right sorted position.
+    # For simplicity: use sequential catalog numbers matching the label prefix.
+    prefix = label[:3].upper()
+
+    # We need k records where the target (release_id) sits at sorted index idx.
+    # Strategy: place target catalog at position idx, fill others around it.
+    catalog_nums = []
+    other_release_ids = []
+
+    # Handle special cases from the golden_cases.yaml
+    if label == "SingletonGold":
+        catalog_nums = [target_cat]
+        other_release_ids = [release_id]
+    elif label == "TightPairGold":
+        catalogs = ["TP 001", "TP 002"]
+        catalog_nums = catalogs
+        other_release_ids = [1, 2]
+    elif label == "DenseK5Gold":
+        catalogs = [f"DK 00{i}" for i in range(1, k + 1)]
+        catalog_nums = catalogs
+        other_release_ids = list(range(1, k + 1))
+    elif label == "SparseK5Gold":
+        catalogs = [f"SK 00{i}" for i in range(1, k + 1)]
+        catalog_nums = catalogs
+        other_release_ids = list(range(1, k + 1))
+    elif label == "MultiPrefixGold":
+        catalogs = ["BLP 100", "BLP 200", "BLP 300", "BST 84001", "BST 84002", "BST 84003"]
+        catalog_nums = catalogs
+        other_release_ids = list(range(1, k + 1))
+    elif label == "MixedSepGold":
+        # 5 records; target is BLP-4195 at index 2
+        catalogs = ["BLP 4001", "BLP 4100", "BLP 4195", "BLP 4200", "BLP 4300"]
+        catalog_nums = catalogs
+        other_release_ids = list(range(1, k + 1))
+    elif label == "BarcodeGold":
+        # 3 records; barcode at index 1
+        catalogs = ["1000000000000", "1234567890123", "9999999999999"]
+        catalog_nums = catalogs
+        other_release_ids = list(range(1, k + 1))
+    elif label == "TwoCubeGold":
+        # 10 records spanning two cubes: TC 001-TC 005 in cube 0, TC 006-TC 010 in cube 1
+        catalogs = [f"TC {i:03d}" for i in range(1, k + 1)]
+        catalog_nums = catalogs
+        other_release_ids = list(range(1, k + 1))
+    else:
+        # Generic: sequential catalogs
+        catalogs = [f"{prefix} {i:03d}" for i in range(1, k + 1)]
+        catalog_nums = catalogs
+        other_release_ids = list(range(1, k + 1))
+
+    # Build cache: single cube covering first to last in sorted order
+    from gruvax.estimator.normalize import parse_key as _pk
+    sorted_pairs = sorted(zip(catalog_nums, other_release_ids), key=lambda x: _pk(x[0]))
+    sorted_cats = [p[0] for p in sorted_pairs]
+    sorted_ids = [p[1] for p in sorted_pairs]
+
+    # Special case: TwoCubeGold uses two cubes (CUBE-03 test)
+    if label == "TwoCubeGold":
+        mid = len(sorted_cats) // 2
+        rows = [
+            BoundaryRow(
+                unit_id=1, row=0, col=0,
+                first_label=label, first_catalog=sorted_cats[0],
+                last_label=label, last_catalog=sorted_cats[mid - 1],
+                is_empty=False,
+            ),
+            BoundaryRow(
+                unit_id=1, row=0, col=1,
+                first_label=label, first_catalog=sorted_cats[mid],
+                last_label=label, last_catalog=sorted_cats[-1],
+                is_empty=False,
+            ),
+        ]
+        cache = BoundaryCache()
+        cache._load_rows(rows)
+    else:
+        cache = _make_single_cube_cache(label, sorted_cats[0], sorted_cats[-1])
+
+    # Build snapshot
+    snapshot = CollectionSnapshot()
+    records = [
+        RecordRow(release_id=rid, label=label, catalog_number=cat)
+        for cat, rid in zip(sorted_cats, sorted_ids)
+    ]
+    by_label = {label.casefold(): records}
+    snapshot._load_snapshot(by_label)
+
+    return cache, snapshot
+
+
+@pytest.mark.parametrize("case", _load_golden_cases(), ids=[c["id"] for c in _load_golden_cases()])
+def test_golden_cases(case: dict) -> None:
+    """Each golden_cases.yaml entry produces expected start/end/confidence/crosses_boundary.
+
+    Verifies that locate_by_index computes the correct SubInterval for known inputs.
+    """
+    cache, snapshot = _make_golden_cache_and_snapshot(case)
+    tol = case.get("tolerance", 0.001)
+
+    result = locate_by_index(
+        release_id=case["release_id"],
+        label=case["label"],
+        catalog_number=case["catalog_number"],
+        cache=cache,
+        snapshot=snapshot,
+    )
+
+    assert result.sub_cube_interval is not None, (
+        f"[{case['id']}] Expected non-null SubInterval"
+    )
+    si = result.sub_cube_interval
+
+    assert abs(si.start - case["expected_start"]) <= tol, (
+        f"[{case['id']}] start={si.start:.4f} expected {case['expected_start']:.4f} ±{tol}"
+    )
+    assert abs(si.end - case["expected_end"]) <= tol, (
+        f"[{case['id']}] end={si.end:.4f} expected {case['expected_end']:.4f} ±{tol}"
+    )
+    assert abs(result.confidence - case["expected_confidence"]) <= tol, (
+        f"[{case['id']}] confidence={result.confidence:.4f} expected {case['expected_confidence']:.4f} ±{tol}"
+    )
+    assert si.crosses_boundary == case["expected_crosses_boundary"], (
+        f"[{case['id']}] crosses_boundary={si.crosses_boundary} expected {case['expected_crosses_boundary']}"
     )

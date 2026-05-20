@@ -47,6 +47,9 @@ dev = [
 asyncio_mode = "auto"
 testpaths = ["tests"]
 addopts = "-q --tb=short"
+# repo root on sys.path so `from fixtures.synth_collection import ...` and
+# `from scripts.run_all_algorithms import ...` resolve in pytest (Plan 02-01 §Task 2b)
+pythonpath = ["."]
 
 [tool.hypothesis]
 # use deterministic mode in CI (set explicitly to avoid state leaks)
