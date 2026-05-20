@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-20T19:29:01.947Z"
+last_updated: "2026-05-20T19:47:32.115Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 8
-  completed_plans: 5
+  completed_plans: 6
   percent: 14
 ---
 
@@ -29,12 +29,12 @@ progress:
 ## Current Position
 
 Phase: 02 (Real Position Estimation) — EXECUTING
-Plan: 1 of 4
+Plan: 2 of 4
 
-- **Phase:** 1 — First Search → Cube Highlight
-- **Plan:** 01-03 complete; 01-04 next
+- **Phase:** 02 — Real Position Estimation
+- **Plan:** 02-02 complete; 02-03 next
 - **Status:** Executing Phase 02
-- **Progress:** [██████░░░░] 63%
+- **Progress:** [████████░░] 75%
 
 ```
 Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
@@ -59,6 +59,7 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 | Phase 01-first-search-cube-highlight P03 | 1200 | 3 tasks | 15 files |
 | Phase 01-first-search-cube-highlight P04 | 1303 | 3 tasks | 22 files |
 | Phase 02-real-position-estimation P01 | 19 | 4 tasks | 15 files |
+| Phase 02-real-position-estimation P02 | 14 | 3 tasks | 9 files |
 
 ## Accumulated Context
 
@@ -93,6 +94,9 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 - [Phase 02-01]: **sub_cube_interval JSON contract** — emits {start, end, crosses_boundary, next_cube}; NO cube field. Frontend derives cube from primary_cube/label_span context (UI-SPEC §TypeScript Type Extension).
 - [Phase 02-01]: **locate() dispatcher** — no-snapshot → cube-only-v1; confidence<=CUBE_ONLY_CONFIDENCE → sub_cube_interval=None, cube-only-v1; else §4.1 index-v1 with populated sub_cube_interval.
 - [Phase 02-01]: **pythonpath=[.] strategy** — pyproject.toml + fixtures/__init__.py + root conftest.py; single source of truth for importable repo-root packages; consistent with Plan 02-04 scripts/ imports.
+- [Phase 02-02]: **DID_YOU_MEAN_THRESHOLD = 0.35** — conservative per RESEARCH D-11; did_you_mean fires only when rows is empty; avoids spurious suggestions on partial FTS hits.
+- [Phase 02-02]: **Catalog boost via setweight() Option A** — catalog_number tokens weighted 'A', fts_vector tokens 'C'; ts_rank_cd scores 'A' highest; catalog records rank above text matches for catalog-like queries (D-12).
+- [Phase 02-02]: **onTap calls setQuery (not direct locate)** — D-10 explicit user confirmation; no silent auto-correct; user sees corrected term in search box.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
 
@@ -123,8 +127,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-20 (Phase 02 Plan 01 — §4.1 index-based estimator; all 4 tasks complete)
-**Next action:** Phase 02 Plan 02 — A/B harness using all_shapes() from fixtures/synth_collection.py.
+**Last touched:** 2026-05-20 (Phase 02 Plan 02 — SRCH-07/08 trigram did-you-mean + catalog boost; all 3 tasks complete)
+**Next action:** Phase 02 Plan 03 — next plan in phase.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*

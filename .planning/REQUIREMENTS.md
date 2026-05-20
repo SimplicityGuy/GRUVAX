@@ -15,8 +15,8 @@
 - [x] **SRCH-04**: User sees a "no results" state when the query matches nothing in the collection
 - [x] **SRCH-05**: User sees a loading indicator only when a search request exceeds ~300 ms (no flicker for fast responses)
 - [x] **SRCH-06**: Search debounces keystrokes client-side to avoid hammering the backend
-- [ ] **SRCH-07**: Search returns a "did you mean" suggestion when no high-rank FTS match exists but a trigram-similar candidate does
-- [ ] **SRCH-08**: Search detects numeric-leading queries and boosts catalog-number field weight in ranking
+- [x] **SRCH-07**: Search returns a "did you mean" suggestion when no high-rank FTS match exists but a trigram-similar candidate does
+- [x] **SRCH-08**: Search detects numeric-leading queries and boosts catalog-number field weight in ranking
 - [ ] **SRCH-09**: User sees a per-session recently-pulled list (kiosk-local, cleared on idle timeout)
 
 ### Cube-Level UX
@@ -203,8 +203,8 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | SRCH-04 | Phase 1 — First Search → Cube Highlight | Complete |
 | SRCH-05 | Phase 1 — First Search → Cube Highlight | Complete |
 | SRCH-06 | Phase 1 — First Search → Cube Highlight | Complete |
-| SRCH-07 | Phase 2 — Real Position Estimation | Pending |
-| SRCH-08 | Phase 2 — Real Position Estimation | Pending |
+| SRCH-07 | Phase 2 — Real Position Estimation | Complete |
+| SRCH-08 | Phase 2 — Real Position Estimation | Complete |
 | SRCH-09 | Phase 4 — Realtime + Offline Resilience | Pending |
 | CUBE-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-02 | Phase 1 — First Search → Cube Highlight | Complete |
