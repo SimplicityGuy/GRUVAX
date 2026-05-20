@@ -1,10 +1,11 @@
 ---
 phase: 1
 slug: first-search-cube-highlight
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-05-20
+reviewed_at: 2026-05-19
 ---
 
 # Phase 1 — UI Design Contract: First Search → Cube Highlight
@@ -513,11 +514,11 @@ No third-party component registries. All components are hand-authored against th
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: PASS
+- [x] Dimension 5 Spacing: PASS
+- [x] Dimension 6 Registry Safety: PASS
 
-**Approval:** pending
+**Approval:** approved (2026-05-19, gsd-ui-checker — per-family typography scoping accepted for locked multi-family design system)
