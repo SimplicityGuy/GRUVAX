@@ -225,3 +225,11 @@ background/
 *.csv
 .DS_Store
 .claude/
+
+# GRUVAX — generated / runtime artifacts (do not check in)
+mosquitto/passwd
+static/
+frontend/dist/
+frontend/node_modules/
+__pycache__/
+.venv/
