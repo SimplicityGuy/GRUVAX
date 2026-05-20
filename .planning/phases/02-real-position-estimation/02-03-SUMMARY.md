@@ -68,7 +68,7 @@ completed: 2026-05-20
 - **Duration:** 9 min
 - **Started:** 2026-05-20T20:08:51Z
 - **Completed:** 2026-05-20T20:18:37Z
-- **Tasks:** 3 autonomous (Task 4 is human-verify checkpoint — pending)
+- **Tasks:** 4/4 complete (Task 4 = on-Pi human-verify — **approved 2026-05-20**)
 - **Files modified:** 10
 
 ## Accomplishments
@@ -89,7 +89,18 @@ Each task was committed atomically:
 2. **Task 2: SubCubeBar + SpanUnderlay + Cube/ShelfGrid + CSS** - `db76849` (feat)
 3. **Task 3: GSAP selection-lands timeline in KioskView** - `85aae6a` (feat)
 
-Task 4 (human-verify on Pi hardware) — **checkpoint pending**
+Task 4 (human-verify on Pi hardware) — **approved by operator 2026-05-20** (selection-lands choreography, singleton band, confidence attenuation, hard-cancel, and span z-order all confirmed acceptable).
+
+## Post-Checkpoint Refinements (operator UI feedback, committed after the checkpoint)
+
+These landed as standalone `fix(kiosk)` commits after the build, in response to live operator review:
+
+- **Position marker → tall vertical line** (`a010d05`): the bar now renders as a tall vertical band (~92% cube height, like a record standing in a bin) at the horizontal position, instead of an 8px bottom strip that read as a dot for narrow intervals.
+- **Visible on the lit cube** (`a010d05`): drawn in IKEA blue on the lit (yellow) cube — yellow-on-yellow was invisible — matching the blue address-label precedent; yellow retained on dim companion cubes.
+- **Subtler opacity + bin-ID watermark** (`d41f6a5`): bar opacity lowered to ~0.30–0.60; the bin ID became a large, centered, very-transparent (0.22) watermark behind the bar, resolving the label/bar overlap.
+- **Search-dropdown UX** (`c1cc8f1`): results dropdown collapses on explicit selection; "did you mean" tap now sets the query and runs the corrected search.
+
+These supersede the original §SubCubeBar visual spec (yellow horizontal bar) — see 02-UI-SPEC.md reconciliation note.
 
 ## Files Created/Modified
 
@@ -140,13 +151,8 @@ None — no external service configuration required.
 ## Next Phase Readiness
 
 - Autonomous tasks complete: types, store, components, GSAP timeline, CSS all compile and build clean
-- **Checkpoint open (Task 4):** Human must verify on Pi 5 + 7" touchscreen:
-  1. Span underlay fades in → primary cube pulses → bar slides in (≤600ms feel)
-  2. Singleton renders faint full-cube band (not tick), `~` cue appears
-  3. High-confidence vs low-confidence attenuation reads correctly (D-01)
-  4. Mid-animation selection interruption works cleanly (D-06)
-  5. Multi-cube label span: underlay behind, lit cell at full yellow on top (D-04)
-- After approval: ROADMAP can mark 02-03 complete; plan 02-04 (developer A/B harness) can proceed
+- **Checkpoint resolved (Task 4):** operator verified the experience and approved (2026-05-20). The five on-hardware checks (choreography ≤600ms feel, singleton band, confidence attenuation, mid-animation interruption, span z-order) are accepted, with the post-checkpoint refinements above applied.
+- Plan 02-03 is complete; plan 02-04 (developer A/B harness) completed in the same phase.
 
 ## Known Stubs
 
@@ -167,5 +173,5 @@ None — no new network endpoints or auth paths introduced. Client-side renderin
 
 ---
 *Phase: 02-real-position-estimation*
-*Plan: 03 (checkpoint-pending — Task 4 human-verify open)*
-*Completed autonomous tasks: 2026-05-20*
+*Plan: 03 (complete — Task 4 human-verify approved 2026-05-20)*
+*Completed: 2026-05-20*

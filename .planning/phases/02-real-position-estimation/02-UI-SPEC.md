@@ -511,6 +511,26 @@ No third-party component registries are used in Phase 2. All new components are 
 
 ---
 
+## Implementation Reconciliation (Phase 2 build, 2026-05-20)
+
+The following changes were made during live operator review **after** the initial
+build and supersede the spec text above. They are the authoritative current
+behavior; the earlier sections are retained for design-history context.
+
+| Spec said | Shipped | Why |
+|-----------|---------|-----|
+| Sub-cube bar: **horizontal** 8px strip at cube bottom, `--gruvax-yellow` fill, opacity `max(0.35, 0.35 + conf×0.65)` | **Tall vertical band** (~92% cube height) at the horizontal position; **IKEA blue** on the lit cube, yellow on dim companion cubes; opacity `max(0.30, 0.30 + conf×0.30)` (~0.30–0.60) | A record stands vertically in the bin (12″ in ~13″), so position reads better as a line. Yellow-on-yellow was invisible on the lit cube → blue, matching the existing blue address label. Original opacity read as a heavy/"ugly" block. |
+| Bin ID (`.cube__address`): small label, top-left corner | **Large, centered, very-transparent (0.22) watermark**, behind the bar (z-index 0) | Operator preference; removes the bar/label corner collision by making the ID a faint background mark the bar can overlap. (Phase-1 element, adjusted here.) |
+| Did-you-mean tap: "sets the search query" | Tap sets `store.query` **and** triggers the corrected search (SearchBox is now controlled by `store.query`) | The original implementation set a store field nothing read, so the tap did nothing. |
+| (unspecified) results dropdown dismissal | Dropdown collapses on explicit selection (tap/Enter); reopens on the next query | Auto-select-top kept the list open over the grid after a pick. |
+| (unspecified) native `type=search` clear button | Native webkit clear button hidden; only the app's single clear-X shows | Browser rendered a duplicate gray ×. |
+| (unspecified) shelf-area layout | Kallax units tile max 2 per row, centered in the bounding box | Operator preference for the multi-unit grid. |
+
+**Status:** Task 4 on-Pi human-verify checkpoint **approved 2026-05-20**. See `02-03-SUMMARY.md` → Post-Checkpoint Refinements for commit SHAs (`a010d05`, `d41f6a5`, `c1cc8f1`, `43e691e`).
+
+---
+
 *Phase: 02-real-position-estimation*
 *UI-SPEC created: 2026-05-20*
+*Reconciled with implementation: 2026-05-20*
 *Design system: Nordic Grid v1.0 — tokens in `design/gruvax-design-tokens.css` / `.json`*
