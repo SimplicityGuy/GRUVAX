@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-last_updated: 2026-05-20T22:12:33.194Z
+status: "Phase 2 shipped — PR #4"
+last_updated: "2026-05-20T22:15:28.543Z"
 progress:
   total_phases: 7
   completed_phases: 1
   total_plans: 8
   completed_plans: 8
   percent: 14
-stopped_at: Phase 02 complete (4/4) — ready to discuss Phase 3
 ---
 
 # State: GRUVAX
@@ -34,7 +33,7 @@ Plan: 4 of 4
 
 - **Phase:** 3
 - **Plan:** Not started
-- **Status:** Ready to plan
+- **Status:** Phase 2 shipped — PR #4
 - **Progress:** [██████████] 100% (Phase 02)
 
 ```
