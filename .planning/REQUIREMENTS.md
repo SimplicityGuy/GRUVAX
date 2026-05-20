@@ -11,22 +11,22 @@
 
 - [x] **SRCH-01**: User can type-ahead search across artist, title, label, and catalog#; results return within ~200 ms perceived from keystroke
 - [x] **SRCH-02**: User sees a ranked results list with tap-to-select; the top result auto-highlights its cube on the grid
-- [ ] **SRCH-03**: User can clear the search field with a visible X button (touch-friendly tap target)
+- [x] **SRCH-03**: User can clear the search field with a visible X button (touch-friendly tap target)
 - [x] **SRCH-04**: User sees a "no results" state when the query matches nothing in the collection
-- [ ] **SRCH-05**: User sees a loading indicator only when a search request exceeds ~300 ms (no flicker for fast responses)
-- [ ] **SRCH-06**: Search debounces keystrokes client-side to avoid hammering the backend
+- [x] **SRCH-05**: User sees a loading indicator only when a search request exceeds ~300 ms (no flicker for fast responses)
+- [x] **SRCH-06**: Search debounces keystrokes client-side to avoid hammering the backend
 - [ ] **SRCH-07**: Search returns a "did you mean" suggestion when no high-rank FTS match exists but a trigram-similar candidate does
 - [ ] **SRCH-08**: Search detects numeric-leading queries and boosts catalog-number field weight in ranking
 - [ ] **SRCH-09**: User sees a per-session recently-pulled list (kiosk-local, cleared on idle timeout)
 
 ### Cube-Level UX
 
-- [ ] **CUBE-01**: Kiosk renders a configurable N×4×4 grid driven by per-unit config (initial deployment: 2 units, 32 cubes)
-- [ ] **CUBE-02**: On search selection, the primary cube containing the matched record is visibly highlighted
+- [x] **CUBE-01**: Kiosk renders a configurable N×4×4 grid driven by per-unit config (initial deployment: 2 units, 32 cubes)
+- [x] **CUBE-02**: On search selection, the primary cube containing the matched record is visibly highlighted
 - [ ] **CUBE-03**: When the matched record's label spans multiple cubes, all spanned cubes show a secondary highlight behind the primary
 - [ ] **CUBE-04**: Sub-cube position estimate is rendered as a horizontal range bar inside the primary cube; bar may cross a cube boundary when the interval does
-- [ ] **CUBE-05**: Empty cubes (no boundary data, or boundaries indicate emptiness) render in a distinct, desaturated visual state
-- [ ] **CUBE-06**: Each cube shows a persistent address overlay (e.g., row letter + column number)
+- [x] **CUBE-05**: Empty cubes (no boundary data, or boundaries indicate emptiness) render in a distinct, desaturated visual state
+- [x] **CUBE-06**: Each cube shows a persistent address overlay (e.g., row letter + column number)
 - [ ] **CUBE-07**: Each cube displays a fill-level indicator computed from the boundary range
 - [ ] **CUBE-08**: Selection-lands animation choreographs label-span fade-in, primary-cube pulse, and sub-cube bar slide-in within ≤600 ms; the animation is interruptible by a new search
 - [ ] **CUBE-09**: User can tap a cube to reveal what's in it (reverse-lookup side panel listing the cube's first/last boundary records and a representative subset)
@@ -199,19 +199,19 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 |-------------|-------|--------|
 | SRCH-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | SRCH-02 | Phase 1 — First Search → Cube Highlight | Complete |
-| SRCH-03 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-03 | Phase 1 — First Search → Cube Highlight | Complete |
 | SRCH-04 | Phase 1 — First Search → Cube Highlight | Complete |
-| SRCH-05 | Phase 1 — First Search → Cube Highlight | Pending |
-| SRCH-06 | Phase 1 — First Search → Cube Highlight | Pending |
+| SRCH-05 | Phase 1 — First Search → Cube Highlight | Complete |
+| SRCH-06 | Phase 1 — First Search → Cube Highlight | Complete |
 | SRCH-07 | Phase 2 — Real Position Estimation | Pending |
 | SRCH-08 | Phase 2 — Real Position Estimation | Pending |
 | SRCH-09 | Phase 4 — Realtime + Offline Resilience | Pending |
-| CUBE-01 | Phase 1 — First Search → Cube Highlight | Pending |
-| CUBE-02 | Phase 1 — First Search → Cube Highlight | Pending |
+| CUBE-01 | Phase 1 — First Search → Cube Highlight | Complete |
+| CUBE-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-03 | Phase 2 — Real Position Estimation | Pending |
 | CUBE-04 | Phase 2 — Real Position Estimation | Pending |
-| CUBE-05 | Phase 1 — First Search → Cube Highlight | Pending |
-| CUBE-06 | Phase 1 — First Search → Cube Highlight | Pending |
+| CUBE-05 | Phase 1 — First Search → Cube Highlight | Complete |
+| CUBE-06 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | CUBE-08 | Phase 2 — Real Position Estimation | Pending |
 | CUBE-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |

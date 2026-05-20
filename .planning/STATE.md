@@ -3,13 +3,13 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-20T05:20:00.000Z"
+last_updated: "2026-05-20T05:29:29.171Z"
 progress:
   total_phases: 7
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 4
-  completed_plans: 3
-  percent: 75
+  completed_plans: 4
+  percent: 14
 ---
 
 # State: GRUVAX
@@ -57,6 +57,7 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 | Phases shipped | 0 |
 | Phase 01-first-search-cube-highlight P02 | 1109 | 2 tasks | 8 files |
 | Phase 01-first-search-cube-highlight P03 | 1200 | 3 tasks | 15 files |
+| Phase 01-first-search-cube-highlight P04 | 1303 | 3 tasks | 22 files |
 
 ## Accumulated Context
 
@@ -82,6 +83,11 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 - [Phase 01-03]: **asgi-lifespan as production dependency** — LifespanManager correctly triggers FastAPI's lifespan context in async test fixtures; added as prod dep to avoid conditional import issues.
 - [Phase 01-03]: **test_no_boundary uses release_id=111** — Saturn label records have no boundary coverage because boundary (first_label=Saturn, last_label=ESP) has "saturn" > "esp" alphabetically, so label range check fails.
 - [Phase 01-03]: **MQTT aiomqtt stub** — uses client.__aenter__()/__aexit__() directly instead of `async with` to retain client reference in app.state.mqtt after context manager enters.
+- [Phase 01-04]: **Vite 8 (not 7)** — npm latest is 8.0.x; CLAUDE.md/STACK.md pins treated as stale per environment directive; RESEARCH.md confirmed 8.x.
+- [Phase 01-04]: **eclipse-mosquitto:latest** — plan said 2.1-alpine; environment directive says use latest image tag.
+- [Phase 01-04]: **python -m pattern in docker-entrypoint.sh** — uv copies venv from /build/.venv to /app/.venv; wrapper scripts have hardcoded shebangs (#!/build/.venv/bin/python) so direct invocation fails. Using `$PYTHON -m alembic` and `$PYTHON -m uvicorn` with absolute binary path avoids shebang issue entirely.
+- [Phase 01-04]: **Design tokens via relative path** — `../../design/gruvax-design-tokens.css` in frontend/src/main.tsx resolves locally; Docker stage copies design/ to /design/ (one level above /frontend-build workdir) so same relative path resolves in build.
+- [Phase 01-04]: **TanStack Query for /api/locate fires imperatively** — not as a hook key, to ensure each result selection triggers a fresh locate call without stale cube position caching.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
 
@@ -112,8 +118,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-20 (Phase 01 Plan 03 complete — FastAPI backend API: search, locate, units/cubes, health)
-**Next action:** Execute Phase 01 Plan 04 (`/gsd:execute-phase 01 04`).
+**Last touched:** 2026-05-20 (Phase 01 Plan 04 — React SPA + Docker Compose; human-verify checkpoint reached)
+**Next action:** Human verifies the kiosk demo (see 01-04-PLAN.md Task 4 steps 4–8); then Phase 1 is complete.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*

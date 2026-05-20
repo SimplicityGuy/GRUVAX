@@ -13,7 +13,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 
 ## Phases
 
-- [ ] **Phase 1: First Search → Cube Highlight** - End-to-end Core Value: typed query lights the right cube on the touchscreen, backed by parser, view, fixture-seeded boundaries, and a cube-only estimator.
+- [x] **Phase 1: First Search → Cube Highlight** - End-to-end Core Value: typed query lights the right cube on the touchscreen, backed by parser, view, fixture-seeded boundaries, and a cube-only estimator. (completed 2026-05-20)
 - [ ] **Phase 2: Real Position Estimation** - Sub-cube interval bar, label-span multi-cube highlight, §4.1 index-based estimator with A/B harness; the kiosk now answers "where exactly".
 - [ ] **Phase 3: Admin Loop (PIN + Manual Entry + Undo)** - Owner can sign in (mobile or kiosk-with-in-app-keypad), enter boundaries, preview diffs, and undo mistakes — boundaries become a living artifact, not a fixture.
 - [ ] **Phase 4: Realtime + Offline Resilience** - Admin edits reach the kiosk live via SSE; kiosk gracefully degrades on connectivity loss; privacy floors and recently-pulled land here.
@@ -37,7 +37,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
   4. The kiosk can be demoed without any admin UI — boundaries are loaded from a versioned CSV/YAML fixture committed to the repo (no PII), parsed through the shared parser/comparator, validated against `gruvax.v_collection`, and held in an in-memory cache that loads at startup.
   5. The `gruvax-api` and `mosquitto` containers come up via `docker compose up` on `lux`, `gruvax-api` serves the SPA via FastAPI `StaticFiles`, and `/api/locate?release_id=...` returns a `LocateResult` whose contract (`primary_cube`, `label_span`, `sub_cube_interval`, `confidence`, `generated_at`, `estimator_version`) matches the architecture spec — with `sub_cube_interval: null` and `confidence: "cube_only"` for v1 (cube-only fallback per INTERPOLATION §4.8).
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 **Wave 1**
 
@@ -53,7 +53,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 01-04-PLAN.md — Kiosk SPA (tokens, grid, search, highlight) served via StaticFiles + Docker Compose (gruvax-api + mosquitto)
+- [x] 01-04-PLAN.md — Kiosk SPA (tokens, grid, search, highlight) served via StaticFiles + Docker Compose (gruvax-api + mosquitto)
 
 **UI hint:** yes
 
@@ -161,7 +161,7 @@ Plans:
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. First Search → Cube Highlight | 3/4 | In Progress|  |
+| 1. First Search → Cube Highlight | 4/4 | Complete   | 2026-05-20 |
 | 2. Real Position Estimation | 0/? | Not started | - |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 0/? | Not started | - |
 | 4. Realtime + Offline Resilience | 0/? | Not started | - |
