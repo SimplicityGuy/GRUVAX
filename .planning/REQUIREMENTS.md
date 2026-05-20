@@ -28,7 +28,7 @@
 - [x] **CUBE-05**: Empty cubes (no boundary data, or boundaries indicate emptiness) render in a distinct, desaturated visual state
 - [x] **CUBE-06**: Each cube shows a persistent address overlay (e.g., row letter + column number)
 - [ ] **CUBE-07**: Each cube displays a fill-level indicator computed from the boundary range
-- [ ] **CUBE-08**: Selection-lands animation choreographs label-span fade-in, primary-cube pulse, and sub-cube bar slide-in within ≤600 ms; the animation is interruptible by a new search
+- [x] **CUBE-08**: Selection-lands animation choreographs label-span fade-in, primary-cube pulse, and sub-cube bar slide-in within ≤600 ms; the animation is interruptible by a new search
 - [ ] **CUBE-09**: User can tap a cube to reveal what's in it (reverse-lookup side panel listing the cube's first/last boundary records and a representative subset)
 - [x] **CUBE-10**: Single-record labels render with a tick-mark indicator inside the cube rather than a width-proportional range bar
 
@@ -213,7 +213,7 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | CUBE-05 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-06 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
-| CUBE-08 | Phase 2 — Real Position Estimation | Pending |
+| CUBE-08 | Phase 2 — Real Position Estimation | Complete |
 | CUBE-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | CUBE-10 | Phase 2 — Real Position Estimation | Complete |
 | POS-01 | Phase 1 — First Search → Cube Highlight | Complete |
