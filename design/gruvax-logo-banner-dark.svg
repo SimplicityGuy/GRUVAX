@@ -1,0 +1,64 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 800 200" width="800" height="200" role="img">
+  <title>GRUVAX — Vinyl Shelf Navigator (banner, reversed)</title>
+  <desc>GRUVAX banner logo, reversed variant for dark backgrounds. Blue ground with white top and bottom borders, compact grid icon, yellow rule divider, white wordmark and descriptor.</desc>
+
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;900&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="800" height="200" fill="#0051A2"/>
+
+  <!-- White borders (top + bottom only) -->
+  <rect x="0" y="0"   width="800" height="12" fill="#FFFFFF"/>
+  <rect x="0" y="188" width="800" height="12" fill="#FFFFFF"/>
+
+  <!-- ── Grid: 4×4 · 20px cells · 4px gaps · origin (36, 54) ── -->
+
+  <!-- Dim cells -->
+  <rect x="36"  y="54"  width="20" height="20" rx="2" fill="#D8E8F5"/>
+  <rect x="60"  y="54"  width="20" height="20" rx="2" fill="#D8E8F5"/>
+  <rect x="108" y="54"  width="20" height="20" rx="2" fill="#D8E8F5"/>
+  <rect x="36"  y="78"  width="20" height="20" rx="2" fill="#D8E8F5"/>
+  <rect x="108" y="78"  width="20" height="20" rx="2" fill="#D8E8F5"/>
+  <rect x="108" y="102" width="20" height="20" rx="2" fill="#D8E8F5"/>
+  <rect x="36"  y="126" width="20" height="20" rx="2" fill="#D8E8F5"/>
+  <rect x="60"  y="126" width="20" height="20" rx="2" fill="#D8E8F5"/>
+  <rect x="84"  y="126" width="20" height="20" rx="2" fill="#D8E8F5"/>
+  <rect x="108" y="126" width="20" height="20" rx="2" fill="#D8E8F5"/>
+
+  <!-- Lit cells -->
+  <rect x="84" y="54"  width="20" height="20" rx="2" fill="#FFDA00"/>
+  <rect x="84" y="78"  width="20" height="20" rx="2" fill="#FFDA00"/>
+  <rect x="36" y="102" width="20" height="20" rx="2" fill="#FFDA00"/>
+  <rect x="60" y="102" width="20" height="20" rx="2" fill="#FFDA00"/>
+  <rect x="84" y="102" width="20" height="20" rx="2" fill="#FFDA00"/>
+
+  <!-- Vinyl cell [row 1, col 1] · center (70, 88) -->
+  <circle cx="70" cy="88" r="10" fill="none" stroke="#FFFFFF" stroke-width="1.5"/>
+  <circle cx="70" cy="88" r="2.5" fill="#FFFFFF"/>
+
+  <!-- Yellow divider -->
+  <rect x="150" y="54" width="5" height="92" fill="#FFDA00"/>
+
+  <!-- Wordmark -->
+  <text
+    x="175" y="128"
+    font-family="'Barlow Condensed', 'Arial Narrow', Arial, sans-serif"
+    font-weight="900"
+    font-size="72"
+    fill="#FFFFFF"
+    letter-spacing="2">GRUVAX</text>
+
+  <!-- Descriptor -->
+  <text
+    x="175" y="148"
+    font-family="'Barlow Condensed', 'Arial Narrow', Arial, sans-serif"
+    font-weight="700"
+    font-size="12"
+    fill="#BFD6EE"
+    letter-spacing="3">VINYL SHELF NAVIGATOR</text>
+
+</svg>

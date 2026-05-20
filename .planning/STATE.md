@@ -72,9 +72,15 @@ To be resolved during plan-phase or as the user provides input:
 
 None.
 
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260519-p8t | Add design-language assets and rewrite README in discogsography pattern | 2026-05-20 | b786b47 | [260519-p8t-add-design-language-assets-and-rewrite-r](./quick/260519-p8t-add-design-language-assets-and-rewrite-r/) |
+
 ## Session Continuity
 
-**Last touched:** 2026-05-19 (roadmap creation)
+**Last touched:** 2026-05-20 (quick task 260519-p8t — Nordic Grid design language + README)
 **Next action:** User approves the roadmap, then `/gsd:plan-phase 1`.
 
 ---

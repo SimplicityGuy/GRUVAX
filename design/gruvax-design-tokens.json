@@ -1,0 +1,180 @@
+{
+  "$schema": "https://gruvax.local/tokens/v1",
+  "name": "GRUVAX Design Tokens",
+  "version": "1.0.0",
+
+  "color": {
+    "brand": {
+      "blue":          { "value": "#0051A2", "comment": "Primary brand · borders · wordmark" },
+      "blueDark":      { "value": "#003D7A", "comment": "Hover states · pressed · deep backgrounds" },
+      "blueDarker":    { "value": "#002855", "comment": "Active / deepest accent" },
+      "blueLight":     { "value": "#D8E8F5", "comment": "Dim cell fill · inactive states" },
+      "blueFaint":     { "value": "#EEF5FB", "comment": "Hover background · selected row bg" },
+      "yellow":        { "value": "#FFDA00", "comment": "LED lit · accent · CTAs" },
+      "yellowDark":    { "value": "#E6B800", "comment": "LED lit border · yellow hover" },
+      "yellowGlow":    { "value": "rgba(255, 218, 0, 0.35)", "comment": "LED ambient glow" },
+      "yellowFaint":   { "value": "rgba(255, 218, 0, 0.12)", "comment": "Subtle highlight background" },
+      "white":         { "value": "#FFFFFF", "comment": "Primary background" },
+      "offWhite":      { "value": "#F7F9FC", "comment": "Secondary surface" }
+    },
+    "text": {
+      "primary":   { "value": "#0051A2" },
+      "secondary": { "value": "#555555" },
+      "muted":     { "value": "#777777" },
+      "faint":     { "value": "#999999" }
+    },
+    "border": {
+      "strong": { "value": "#0051A2" },
+      "light":  { "value": "#C5DBF0" },
+      "faint":  { "value": "#E5EEF7" }
+    },
+    "cell": {
+      "dim":         { "value": "#D8E8F5", "comment": "Default / unlit cube" },
+      "dimBorder":   { "value": "#B8D0E8" },
+      "lit":         { "value": "#FFDA00", "comment": "Active / found cube" },
+      "litBorder":   { "value": "#E6B800" },
+      "hover":       { "value": "#EEF5FB" },
+      "selected":    { "value": "#003D7A" },
+      "empty":       { "value": "#F2F2F2", "comment": "Unconfigured cube" }
+    },
+    "semantic": {
+      "success": { "value": "#1A7A4A" },
+      "warning": { "value": "#E6A800" },
+      "error":   { "value": "#C0392B" }
+    }
+  },
+
+  "typography": {
+    "fontFamily": {
+      "display": "'Barlow Condensed', 'Arial Narrow', Arial, sans-serif",
+      "ui":      "'Space Grotesk', system-ui, -apple-system, sans-serif",
+      "mono":    "'DM Mono', 'Menlo', 'Monaco', monospace"
+    },
+    "fontWeight": {
+      "regular":     400,
+      "medium":      500,
+      "bold":        700,
+      "black":       900
+    },
+    "fontSize": {
+      "wordmark":   "84px",
+      "displayXl":  "48px",
+      "displayLg":  "36px",
+      "displayMd":  "24px",
+      "displaySm":  "16px",
+      "bodyLg":     "18px",
+      "body":       "16px",
+      "bodySm":     "14px",
+      "caption":    "12px",
+      "label":      "11px",
+      "monoLg":     "16px",
+      "mono":       "14px",
+      "monoSm":     "11px"
+    },
+    "letterSpacing": {
+      "wordmark":    "0.04em",
+      "display":     "0.02em",
+      "label":       "0.14em",
+      "descriptor":  "0.20em"
+    },
+    "lineHeight": {
+      "tight":   1.1,
+      "normal":  1.5,
+      "relaxed": 1.7
+    }
+  },
+
+  "grid": {
+    "columns": 4,
+    "rows":    4,
+    "cell": {
+      "sizeXl": "80px",
+      "sizeLg": "56px",
+      "sizeMd": "40px",
+      "sizeSm": "28px"
+    },
+    "gap": {
+      "xl": "12px",
+      "lg": "8px",
+      "md": "6px",
+      "sm": "4px"
+    },
+    "borderRadius": {
+      "xl": "8px",
+      "lg": "6px",
+      "md": "4px",
+      "sm": "3px"
+    }
+  },
+
+  "spacing": {
+    "1":  "4px",
+    "2":  "8px",
+    "3":  "12px",
+    "4":  "16px",
+    "5":  "24px",
+    "6":  "32px",
+    "7":  "48px",
+    "8":  "64px",
+    "9":  "96px",
+    "10": "128px"
+  },
+
+  "borderRadius": {
+    "sm":   "4px",
+    "md":   "8px",
+    "lg":   "12px",
+    "xl":   "16px",
+    "pill": "9999px"
+  },
+
+  "shadow": {
+    "sm":  "0 1px 3px rgba(0, 81, 162, 0.10)",
+    "md":  "0 4px 12px rgba(0, 81, 162, 0.12)",
+    "lg":  "0 8px 24px rgba(0, 81, 162, 0.15)",
+    "led": "0 0 12px rgba(255, 218, 0, 0.6), 0 0 24px rgba(255, 218, 0, 0.3)"
+  },
+
+  "animation": {
+    "duration": {
+      "fast":   "150ms",
+      "base":   "250ms",
+      "slow":   "400ms",
+      "enter":  "600ms",
+      "ledOn":  "300ms",
+      "ledOff": "500ms"
+    },
+    "easing": {
+      "standard":   "cubic-bezier(0.4, 0.0, 0.2, 1)",
+      "decelerate": "cubic-bezier(0.0, 0.0, 0.2, 1)",
+      "accelerate": "cubic-bezier(0.4, 0.0, 1.0, 1)",
+      "spring":     "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "ledOn":      "cubic-bezier(0.34, 1.56, 0.64, 1)",
+      "ledOff":     "cubic-bezier(0.4, 0.0, 0.2, 1)"
+    }
+  },
+
+  "zIndex": {
+    "base":        0,
+    "grid":        10,
+    "overlay":     20,
+    "modal":       30,
+    "screensaver": 40,
+    "admin":       50
+  },
+
+  "logo": {
+    "assets": {
+      "square":  "gruvax-logo-square.svg",
+      "banner":  "gruvax-logo-banner.svg",
+      "icon":    "gruvax-logo-icon.svg",
+      "favicon": "gruvax-favicon.svg"
+    },
+    "minWidth": {
+      "square": "120px",
+      "banner": "240px",
+      "icon":   "24px"
+    },
+    "clearspace": "12.5%"
+  }
+}

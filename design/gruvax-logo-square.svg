@@ -1,0 +1,65 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 500 500" width="500" height="500" role="img">
+  <title>GRUVAX — Vinyl Shelf Navigator</title>
+  <desc>GRUVAX logo, square format. White ground with IKEA-blue border, 4×4 Kallax grid icon with yellow LED cells, bold wordmark.</desc>
+
+  <defs>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;900&amp;display=swap');
+    </style>
+  </defs>
+
+  <!-- Background -->
+  <rect width="500" height="500" fill="#FFFFFF"/>
+
+  <!-- Blue border -->
+  <rect x="10" y="10" width="480" height="480" fill="none" stroke="#0051A2" stroke-width="20"/>
+
+  <!-- ── Grid: 4×4 · 38px cells · 7px gaps · origin (60,60) ── -->
+  <!-- Columns x: 60 · 105 · 150 · 195 -->
+  <!-- Rows    y: 60 · 105 · 150 · 195 -->
+
+  <!-- Dim cells -->
+  <rect x="60"  y="60"  width="38" height="38" rx="3" fill="#D8E8F5"/>
+  <rect x="105" y="60"  width="38" height="38" rx="3" fill="#D8E8F5"/>
+  <rect x="195" y="60"  width="38" height="38" rx="3" fill="#D8E8F5"/>
+  <rect x="60"  y="105" width="38" height="38" rx="3" fill="#D8E8F5"/>
+  <rect x="195" y="105" width="38" height="38" rx="3" fill="#D8E8F5"/>
+  <rect x="195" y="150" width="38" height="38" rx="3" fill="#D8E8F5"/>
+  <rect x="60"  y="195" width="38" height="38" rx="3" fill="#D8E8F5"/>
+  <rect x="105" y="195" width="38" height="38" rx="3" fill="#D8E8F5"/>
+  <rect x="150" y="195" width="38" height="38" rx="3" fill="#D8E8F5"/>
+  <rect x="195" y="195" width="38" height="38" rx="3" fill="#D8E8F5"/>
+
+  <!-- Lit cells (yellow LED) -->
+  <rect x="150" y="60"  width="38" height="38" rx="3" fill="#FFDA00"/>
+  <rect x="150" y="105" width="38" height="38" rx="3" fill="#FFDA00"/>
+  <rect x="60"  y="150" width="38" height="38" rx="3" fill="#FFDA00"/>
+  <rect x="105" y="150" width="38" height="38" rx="3" fill="#FFDA00"/>
+  <rect x="150" y="150" width="38" height="38" rx="3" fill="#FFDA00"/>
+
+  <!-- Vinyl cell [row 1, col 1] · center (124, 124) -->
+  <circle cx="124" cy="124" r="19" fill="none" stroke="#0051A2" stroke-width="3"/>
+  <circle cx="124" cy="124" r="5"  fill="#0051A2"/>
+
+  <!-- Wordmark -->
+  <text
+    x="60" y="388"
+    font-family="'Barlow Condensed', 'Arial Narrow', Arial, sans-serif"
+    font-weight="900"
+    font-size="84"
+    fill="#0051A2"
+    letter-spacing="2">GRUVAX</text>
+
+  <!-- Yellow rule -->
+  <rect x="60" y="400" width="380" height="6" fill="#FFDA00"/>
+
+  <!-- Descriptor -->
+  <text
+    x="60" y="424"
+    font-family="'Barlow Condensed', 'Arial Narrow', Arial, sans-serif"
+    font-weight="700"
+    font-size="13"
+    fill="#777777"
+    letter-spacing="3">VINYL SHELF NAVIGATOR</text>
+
+</svg>
