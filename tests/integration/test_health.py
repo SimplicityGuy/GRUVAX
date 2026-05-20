@@ -54,6 +54,22 @@ async def test_view_probe(client) -> None:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_index_html_no_store(client) -> None:  # type: ignore[no-untyped-def]
+    """index.html is served with Cache-Control: no-store (T-01-13).
+
+    Skips when the SPA bundle has not been built into ``static/`` in this
+    environment (the StaticFiles mount is then absent and ``/`` 404s).
+    """
+    ac, _app = client
+    response = await ac.get("/")
+    if response.status_code == 404:
+        pytest.skip("SPA static/ not built — StaticFiles mount absent")
+    assert response.status_code == 200
+    assert response.headers.get("content-type", "").startswith("text/html")
+    assert response.headers.get("cache-control") == "no-store"
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_health_keys(client) -> None:  # type: ignore[no-untyped-def]
     """All required keys are present in the health response."""
     ac, _app = client

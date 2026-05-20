@@ -28,12 +28,31 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.responses import Response
+from starlette.types import Scope
 
 from gruvax.db.pool import create_pool
 from gruvax.estimator.boundary_cache import BoundaryCache
 from gruvax.mqtt.client import connect_mqtt, disconnect_mqtt
 
 logger = logging.getLogger(__name__)
+
+
+class SpaStaticFiles(StaticFiles):
+    """StaticFiles that marks text/html responses ``Cache-Control: no-store``.
+
+    Prevents a browser from serving a stale ``index.html`` (and thus stale JS)
+    after a redeploy (T-01-13). Vite content-hashes JS/CSS asset filenames, so
+    those are safely cacheable; only the HTML entry document must not be cached.
+    ``StaticFiles(html=True)`` only enables SPA fallback routing — it does NOT
+    set any cache-control header, so this subclass adds it explicitly.
+    """
+
+    async def get_response(self, path: str, scope: Scope) -> Response:
+        response = await super().get_response(path, scope)
+        if response.headers.get("content-type", "").startswith("text/html"):
+            response.headers["Cache-Control"] = "no-store"
+        return response
 
 
 @asynccontextmanager
@@ -121,7 +140,8 @@ def create_app() -> FastAPI:
     # development or before the first SPA build.
     static_dir = Path("static")
     if static_dir.exists() and static_dir.is_dir():
-        app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="spa")
+        # SpaStaticFiles adds Cache-Control: no-store on index.html (T-01-13).
+        app.mount("/", SpaStaticFiles(directory=str(static_dir), html=True), name="spa")
         logger.info("StaticFiles SPA mounted from %s", static_dir.resolve())
     else:
         logger.info(
