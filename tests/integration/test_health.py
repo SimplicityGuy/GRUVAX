@@ -32,12 +32,11 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
     DB is running before the app boots.
     """
     app = create_app()
-    async with LifespanManager(app) as manager:
-        async with AsyncClient(
-            transport=ASGITransport(app=manager.app),
-            base_url="http://test",
-        ) as ac:
-            yield ac, app
+    async with LifespanManager(app) as manager, AsyncClient(
+        transport=ASGITransport(app=manager.app),
+        base_url="http://test",
+    ) as ac:
+        yield ac, app
 
 
 @pytest.mark.asyncio(loop_scope="session")

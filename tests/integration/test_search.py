@@ -26,12 +26,11 @@ from gruvax.app import create_app
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan."""
     app = create_app()
-    async with LifespanManager(app) as manager:
-        async with AsyncClient(
-            transport=ASGITransport(app=manager.app),
-            base_url="http://test",
-        ) as ac:
-            yield ac
+    async with LifespanManager(app) as manager, AsyncClient(
+        transport=ASGITransport(app=manager.app),
+        base_url="http://test",
+    ) as ac:
+        yield ac
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -60,7 +59,7 @@ async def test_catalog_path_normalized(client) -> None:  # type: ignore[no-untyp
     assert response.status_code == 200
     body = response.json()
     items = body["items"]
-    assert items, f"Expected results for 'blp4001', got none"
+    assert items, "Expected results for 'blp4001', got none"
     catalog_numbers = [item["catalog_number"] for item in items]
     assert any("BLP 4001" in cn for cn in catalog_numbers), (
         f"Separator-normalized 'blp4001' should match 'BLP 4001'. Got: {catalog_numbers}"
@@ -74,7 +73,7 @@ async def test_fts_artist(client) -> None:  # type: ignore[no-untyped-def]
     assert response.status_code == 200
     body = response.json()
     items = body["items"]
-    assert items, f"Expected at least one result for 'Miles Davis', got none"
+    assert items, "Expected at least one result for 'Miles Davis', got none"
 
     artists = [item["primary_artist"] for item in items]
     assert any("Miles Davis" in (a or "") for a in artists), (

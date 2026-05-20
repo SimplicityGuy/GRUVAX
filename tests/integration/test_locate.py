@@ -42,12 +42,11 @@ NO_BOUNDARY_RELEASE_ID = 111
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan."""
     app = create_app()
-    async with LifespanManager(app) as manager:
-        async with AsyncClient(
-            transport=ASGITransport(app=manager.app),
-            base_url="http://test",
-        ) as ac:
-            yield ac
+    async with LifespanManager(app) as manager, AsyncClient(
+        transport=ASGITransport(app=manager.app),
+        base_url="http://test",
+    ) as ac:
+        yield ac
 
 
 @pytest.mark.asyncio(loop_scope="session")
