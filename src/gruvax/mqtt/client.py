@@ -62,7 +62,7 @@ async def connect_mqtt(app: FastAPI) -> None:
         app.state.mqtt = client
         app.state.mqtt_ok = True
         logger.info("MQTT connected to %s:%d", settings.MQTT_HOST, settings.MQTT_PORT)
-    except Exception as exc:  # noqa: BLE001
+    except Exception as exc:
         logger.warning(
             "MQTT connection failed (broker unreachable or misconfigured); "
             "API continues in degraded mode. Reason: %s",
@@ -79,5 +79,5 @@ async def disconnect_mqtt(app: FastAPI) -> None:
         try:
             await client.__aexit__(None, None, None)
             logger.info("MQTT disconnected cleanly")
-        except Exception as exc:  # noqa: BLE001
+        except Exception as exc:
             logger.warning("MQTT disconnect error (ignored): %s", exc)

@@ -21,10 +21,10 @@ Router registration order (CRITICAL — Pitfall 3):
 from __future__ import annotations
 
 import logging
+from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
-from typing import Any, AsyncGenerator
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -37,7 +37,7 @@ logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
-async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:
+async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """FastAPI lifespan: startup setup → yield → teardown."""
 
     # ── 1. DB pool ───────────────────────────────────────────────────────────
@@ -105,10 +105,10 @@ def create_app() -> FastAPI:
     # ── Register /api/* routers FIRST (Pitfall 3: StaticFiles catch-all order) ──
     # Import here (not at module level) to avoid circular imports:
     # app.py → api/*.py → deps.py → (no back-reference to app.py)
-    from gruvax.api.health import router as health_router  # noqa: PLC0415
-    from gruvax.api.locate import router as locate_router  # noqa: PLC0415
-    from gruvax.api.search import router as search_router  # noqa: PLC0415
-    from gruvax.api.units import router as units_router  # noqa: PLC0415
+    from gruvax.api.health import router as health_router
+    from gruvax.api.locate import router as locate_router
+    from gruvax.api.search import router as search_router
+    from gruvax.api.units import router as units_router
 
     app.include_router(health_router, prefix="/api")
     app.include_router(search_router, prefix="/api")
