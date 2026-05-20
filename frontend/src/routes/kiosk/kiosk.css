@@ -273,6 +273,54 @@
   line-height: var(--gruvax-leading-normal);
 }
 
+/* ── Did-you-mean row (SRCH-07) ──────────────────────────────────────────── */
+
+.did-you-mean {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  min-height: 44px; /* WCAG 2.5.5 touch target minimum */
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  border-top: 1px solid var(--gruvax-border-faint);
+  cursor: pointer;
+  background: transparent;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.did-you-mean:hover {
+  background: var(--gruvax-yellow-faint);
+}
+
+.did-you-mean:active {
+  background: var(--gruvax-yellow-faint);
+}
+
+.did-you-mean__icon {
+  flex-shrink: 0;
+  color: var(--gruvax-warning);
+  width: 20px;
+  height: 20px;
+}
+
+.did-you-mean__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.did-you-mean__copy {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+}
+
+.did-you-mean__term {
+  font-weight: 700;
+  color: var(--gruvax-text-secondary);
+}
+
 /* ── Shelf area ──────────────────────────────────────────────────────────── */
 
 .shelf-area {

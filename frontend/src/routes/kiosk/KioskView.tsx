@@ -126,6 +126,7 @@ export function KioskView() {
           <ResultsList
             items={debouncedQuery.trim().length > 0 ? searchResults : []}
             showNoResults={showNoResults}
+            didYouMean={searchData?.did_you_mean ?? null}
           />
         </div>
 

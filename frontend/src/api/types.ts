@@ -20,6 +20,9 @@ export interface SearchResult {
 export interface SearchResponse {
   items: SearchResult[]
   took_ms: number
+  /** Trigram-similarity suggestion returned when FTS finds nothing strong (SRCH-07/D-11).
+   *  null when pg_trgm is unavailable or no strong candidate exists. */
+  did_you_mean: string | null
 }
 
 export interface CubeRef {

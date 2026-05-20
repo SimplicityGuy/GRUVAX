@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { locateRelease } from '../../api/client'
 import type { SearchResult } from '../../api/types'
 import { useGruvaxStore } from '../../state/store'
+import { DidYouMean } from './DidYouMean'
 import { NoResultsRow } from './NoResultsRow'
 import { ResultRow } from './ResultRow'
 
@@ -10,6 +11,9 @@ interface ResultsListProps {
   items: SearchResult[]
   /** True when query is non-empty but items is empty */
   showNoResults: boolean
+  /** Trigram-similarity suggestion from /api/search (SRCH-07/D-11).
+   *  Rendered below NoResultsRow; null = no suggestion or pg_trgm absent. */
+  didYouMean?: string | null
 }
 
 /**
@@ -21,12 +25,14 @@ interface ResultsListProps {
  *  3. Framer Motion AnimatePresence handles enter/exit.
  *
  * On tap of a different row → calls /api/locate for that release.
+ * On tap of DidYouMean row → calls setQuery(term) to set the search box
+ *   (D-10: no silent auto-correct — user explicitly initiates the search).
  * On clear (empty items, empty query) → handled by parent; store is cleared.
  *
  * Per 01-UI-SPEC.md §Results List Component Contract + §Top-result auto-highlight.
  */
-export function ResultsList({ items, showNoResults }: ResultsListProps) {
-  const { selectedResult, setSelectedResult, setSelectedReleaseId, setHighlightCube } =
+export function ResultsList({ items, showNoResults, didYouMean }: ResultsListProps) {
+  const { selectedResult, setSelectedResult, setSelectedReleaseId, setHighlightCube, setQuery } =
     useGruvaxStore()
 
   const isVisible = items.length > 0 || showNoResults
@@ -64,6 +70,12 @@ export function ResultsList({ items, showNoResults }: ResultsListProps) {
       })
   }
 
+  // D-10: onTap sets the search query — user sees the corrected term in the
+  // search box and explicitly triggers the new search. No silent auto-correct.
+  const handleDidYouMeanTap = (term: string) => {
+    setQuery(term)
+  }
+
   return (
     <AnimatePresence>
       {isVisible && (
@@ -78,7 +90,12 @@ export function ResultsList({ items, showNoResults }: ResultsListProps) {
         >
           <div className="results-list__scroll">
             {showNoResults && items.length === 0 ? (
-              <NoResultsRow />
+              <>
+                <NoResultsRow />
+                {didYouMean && (
+                  <DidYouMean suggestion={didYouMean} onTap={handleDidYouMeanTap} />
+                )}
+              </>
             ) : (
               items.map((item) => (
                 <ResultRow
