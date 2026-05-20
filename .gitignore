@@ -233,3 +233,6 @@ frontend/dist/
 frontend/node_modules/
 __pycache__/
 .venv/
+
+# Playwright MCP transient artifacts
+.playwright-mcp/
