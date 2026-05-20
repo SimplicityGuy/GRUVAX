@@ -3,10 +3,10 @@
 #
 # Stage 1 (builder): installs Python deps via uv using a cache mount so that
 #   subsequent builds hit the cache and complete in seconds rather than minutes.
-# Stage 2 (runtime): lean python:3.13-slim image with a non-root gruvax user.
+# Stage 2 (runtime): lean python:3.14-slim image with a non-root gruvax user.
 
 # ── Stage 1: builder ─────────────────────────────────────────────────────────
-FROM python:3.13-slim AS builder
+FROM python:3.14-slim AS builder
 
 # Install uv (pinned for reproducibility)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
@@ -26,7 +26,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # ── Stage 2: runtime ─────────────────────────────────────────────────────────
-FROM python:3.13-slim
+FROM python:3.14-slim
 
 # Create a non-root user (security baseline for 2026)
 RUN groupadd --system gruvax && useradd --system --gid gruvax gruvax

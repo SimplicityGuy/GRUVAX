@@ -36,7 +36,7 @@ def _conninfo(database_url: str) -> str:
     return database_url.replace("postgresql+psycopg://", "postgresql://", 1)
 
 
-async def _configure_connection(conn: AsyncConnection) -> None:  # type: ignore[type-arg]
+async def _configure_connection(conn: AsyncConnection) -> None:
     """Pool ``configure`` callback: set search_path on each new connection.
 
     search_path order:
@@ -72,7 +72,7 @@ def create_pool(
     min_size: int = 2,
     max_size: int = 10,
     open: bool = False,
-) -> AsyncConnectionPool:  # type: ignore[type-arg]
+) -> AsyncConnectionPool:
     """Create (but do not open) an async psycopg connection pool.
 
     Args:
@@ -99,7 +99,7 @@ async def get_pool_context(
     *,
     min_size: int = 2,
     max_size: int = 10,
-) -> AsyncGenerator[AsyncConnectionPool]:  # type: ignore[type-arg]
+) -> AsyncGenerator[AsyncConnectionPool]:
     """Async context manager that opens a pool and closes it on exit.
 
     Convenience wrapper for use in tests and scripts.
