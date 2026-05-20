@@ -49,15 +49,22 @@ async def _configure_connection(conn: AsyncConnection) -> None:  # type: ignore[
     ``pg_catalog.set_config`` accepts a parameterised value so this is safe
     against injection even though OBSERVED_DISCOGSOGRAPHY_SCHEMA comes from
     validated settings (not end-user input).
+
+    The configure callback MUST leave the connection in ``IDLE`` transaction
+    status (psycopg_pool enforces this and discards the connection otherwise).
+    We use ``autocommit=True`` around the set_config call so no implicit
+    transaction is started.
     """
     schema = settings.OBSERVED_DISCOGSOGRAPHY_SCHEMA
     # pg_catalog.set_config(setting, value, is_local) fully parameterises the
     # value, avoiding any SQL injection risk from the schema name.
     search_path_value = f"gruvax, {schema}, public"
+    await conn.set_autocommit(True)
     await conn.execute(
         "SELECT pg_catalog.set_config('search_path', %s, false)",
         (search_path_value,),
     )
+    await conn.set_autocommit(False)
 
 
 def create_pool(

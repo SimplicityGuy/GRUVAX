@@ -46,9 +46,18 @@ migrate-roundtrip:
     uv run alembic upgrade head
 
 # Seed the dev database: apply migrations + synthetic data
+#
+# Order is significant:
+#   1. migration 0001 — creates gruvax schema, units, cube_boundaries
+#   2. synth_collection.sql — creates gruvax_dev schema + source tables
+#      (must exist before migration 0002 so the v_collection view body
+#       can resolve the unqualified table names at DDL validation time)
+#   3. migration 0002 — creates gruvax.v_collection over gruvax_dev
+#   4. boundary loader — INSERTs fixtures/boundaries.yaml into cube_boundaries
 seed-dev:
+    uv run alembic upgrade 0001
+    docker exec -i gruvax-dev-pg psql -U gruvax -d gruvax < fixtures/synth_collection.sql
     uv run alembic upgrade head
-    docker exec -i gruvax-dev-pg psql -U gruvax -d gruvax -f fixtures/synth_collection.sql
     uv run python -m gruvax.db.seed_boundaries fixtures/boundaries.yaml
 
 # ── provisioning ─────────────────────────────────────────────────────────────
