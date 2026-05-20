@@ -1,6 +1,7 @@
 ---
 phase: 01-first-search-cube-highlight
 reviewed: 2026-05-20T00:00:00Z
+resolution: partial — Phase-1 subset fixed (commit 56bc819); MQTT/security deferred to Phase 5
 depth: standard
 files_reviewed: 54
 files_reviewed_list:
@@ -72,6 +73,24 @@ status: issues_found
 **Depth:** standard
 **Files Reviewed:** 54
 **Status:** issues_found
+
+## Resolution (2026-05-20, commit `56bc819`)
+
+**Fixed (Phase-1 correctness/reliability subset):**
+- **CR-04** — `/api/search` dedup rewritten as `UNION ALL` + `DISTINCT ON` (was the fragile 8-column `FULL OUTER JOIN`). Verified live: broad query 30 rows / 30 unique, no duplicates.
+- **CR-05** — `deps.get_pool`/`get_boundary_cache` now return HTTP 503 instead of `AttributeError`/500 when `app.state` isn't ready.
+- **WR-01** — `websearch_to_tsquery` computed once via `CROSS JOIN`.
+- **WR-02** — `ResultsList` auto-highlight effect keys on the top result's `release_id`, not the array identity (no more redundant `/api/locate` calls).
+- **WR-04** — `docker-entrypoint.sh` waits for Postgres before `alembic upgrade` (no cold-start crash-loop). Verified: stack healthy in ~3s after rebuild.
+- **WR-09** — `pool._configure_connection` restores `autocommit=False` in a `finally`.
+- **RUF002** — ambiguous `×` → `x` in `test_cubes_bulk.py`.
+
+**Deferred to Phase 5 (LED/MQTT milestone) — MQTT is a no-publish stub in Phase 1:**
+- **CR-01** (aiomqtt `__aenter__` lifecycle leak), **CR-02** (default MQTT creds), **CR-03** (mosquitto `allow_anonymous true`). Mosquitto has no exposed host ports in v1.
+
+**Backlog (low-priority warnings/info):** WR-03, WR-05 (`:latest` pin per always-latest directive), WR-06, WR-07, WR-08, IN-01..04, and the `asyncio.DefaultEventLoopPolicy` deprecation (Python 3.16).
+
+Post-fix gates: `ruff` + `mypy --strict` + `pytest` (104) green; deployed stack re-verified end-to-end (search→highlight, 404, no-results, 6 empty cubes).
 
 ## Summary
 
