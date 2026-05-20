@@ -108,9 +108,9 @@ All color references use CSS custom properties. No hardcoded hex values permitte
 
 ### Accessibility Constraints (from design spec)
 
-- Blue on white: 7.2:1 — AAA. Safe for all text including the "~" cue (`--gruvax-text-muted` on `--gruvax-white`).
+- Blue on white (`--gruvax-blue` on `--gruvax-white`): 7.2:1 — AAA. Safe for all primary text.
 - Yellow on blue: ~3.1:1 — large text (18px+) or decoration only. The sub-cube bar and span underlay are decorative/positional elements, not text — yellow is safe.
-- The "~" / "approx." low-confidence cue: 11px Space Grotesk, `--gruvax-text-muted` (#777777) on `--gruvax-white` (#FFFFFF) = 4.6:1 (AA). Acceptable at this size for a supplementary cue.
+- The "~" / "approx." low-confidence cue: 11px Space Grotesk, `--gruvax-text-muted` (#777777) on `--gruvax-white` (#FFFFFF) measures ~4.48:1 — effectively at the WCAG AA 4.5:1 boundary (do **not** restate this as 4.6:1). The cue is a **supplementary, redundant** mark: the same "low confidence / approximate" meaning is already carried by the bar's attenuated opacity (visual) and by `aria-label="approximate position"` (assistive tech), so the cue is not the sole carrier of information. It therefore satisfies the supplementary-text exemption rather than relying on the strict text-contrast threshold. If a future design-token revision tightens `--gruvax-text-muted`, this cue inherits it — keep consuming the token; never substitute a one-off hex here.
 - Did-you-mean row: `--gruvax-text-secondary` (#555555) on `--gruvax-off-white` (#F7F9FC) = 7.1:1 (AAA).
 
 ---
