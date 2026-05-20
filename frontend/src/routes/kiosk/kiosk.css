@@ -324,6 +324,7 @@
 /* ── Shelf area ──────────────────────────────────────────────────────────── */
 
 .shelf-area {
+  position: relative; /* SpanUnderlay absolute bands anchor within this parent (D-04) */
   background: var(--gruvax-off-white);
   border-radius: var(--gruvax-radius-lg);
   padding: var(--gruvax-space-5);
@@ -366,6 +367,7 @@
 
 .cube {
   position: relative;
+  z-index: 1; /* Sit above SpanUnderlay bands (D-04 — lit-cell rule) */
   width: var(--gruvax-cell-size-xl);
   height: var(--gruvax-cell-size-xl);
   border-radius: var(--gruvax-cell-radius-xl);
@@ -452,3 +454,80 @@
 .cube[data-state="empty"] .cube__address {
   color: var(--gruvax-text-faint);
 }
+
+/* ── Sub-cube position bar (CUBE-04 / D-01) ──────────────────────────────── */
+
+/*
+ * Horizontal strip inside the lit cube showing where within the cube the record
+ * lives. Width and left are set via inline style from SubCubeBar.tsx.
+ * Opacity is driven by CSS custom property --confidence (0.0–1.0).
+ *
+ * Formula: max(0.35, 0.35 + var(--confidence) * 0.65)
+ * CSS `max()` supports custom properties.
+ */
+
+.sub-cube-bar {
+  position: absolute;
+  bottom: var(--gruvax-space-1);  /* Inset space-1 (4px) from cube bottom edge */
+  height: 8px;                     /* 2× space-1 (not a named scale token) */
+  border-radius: var(--gruvax-radius-sm);
+  background: var(--gruvax-yellow);
+  opacity: max(0.35, calc(0.35 + var(--confidence, 0.5) * 0.65));
+  pointer-events: none;
+  z-index: 1;
+}
+
+/*
+ * Singleton full-cube band (D-02).
+ * CUBE-10 literal says "tick-mark"; D-02 overrides to faint full-cube band.
+ * opacity: 0.18 — deliberately faint, reads "scan the whole cube".
+ */
+.sub-cube-bar--singleton {
+  width: 100%;
+  left: 0;
+  opacity: 0.18;
+}
+
+/* Low-confidence text cue (D-03) — appears above the bar when confidence ≤ 0.50 */
+.sub-cube-bar__cue {
+  position: absolute;
+  top: calc(-1 * var(--gruvax-space-3));  /* space-3 (12px) above bar */
+  left: var(--gruvax-space-1);            /* space-1 (4px) from bar left edge */
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-label);    /* 11px */
+  font-weight: 400;
+  line-height: var(--gruvax-leading-tight);
+  color: var(--gruvax-text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* ── Span underlay band (CUBE-03 / D-04) ────────────────────────────────── */
+
+/*
+ * Pill-shaped connector drawn behind spanned cubes (z-index 0, below .cube z-index 1).
+ * Initial opacity is 0 — GSAP animates it to 0.60 on selection-lands (D-05).
+ * Positioned absolutely within a position:relative shelf-grid wrapper.
+ */
+
+.span-underlay__band {
+  position: absolute;
+  z-index: 0;                              /* Below .cube (z-index 1) — D-04 lit-cell rule */
+  height: var(--gruvax-space-3);           /* 12px pill height */
+  background: var(--gruvax-yellow-faint);  /* rgba(255,218,0,0.12) */
+  border: 1px solid var(--gruvax-yellow-glow); /* rgba(255,218,0,0.35) */
+  border-radius: var(--gruvax-radius-pill); /* 9999px pill */
+  opacity: 0;                              /* Animated by GSAP to 0.60 */
+  pointer-events: none;
+}
+
+/* ── Will-change toggle for GSAP animation window (Pitfall 16) ───────────── */
+
+/*
+ * Applied by KioskView GSAP effect at animation start; removed on onComplete
+ * and cleanup. Never left permanently on Pi 5 compositor (would reserve layers).
+ */
+.is-animating {
+  will-change: transform, opacity;
+}
+
