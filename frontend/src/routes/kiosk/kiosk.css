@@ -444,14 +444,19 @@
 /* Address overlay — always visible */
 .cube__address {
   position: absolute;
-  top: var(--gruvax-space-1);
-  left: var(--gruvax-space-1);
+  /* Large, faint, centered watermark — visible context that the position bar
+     can overlap without a hard collision. Sits behind the bar (z-index 0). */
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: 0;
   font-family: var(--gruvax-font-display);
-  font-size: var(--gruvax-text-caption);
+  font-size: var(--gruvax-text-display-lg);
   font-weight: 700;
   letter-spacing: var(--gruvax-tracking-label);
   line-height: var(--gruvax-leading-tight);
   color: var(--gruvax-text-muted);
+  opacity: 0.22;
   pointer-events: none;
   user-select: none;
 }
@@ -469,11 +474,11 @@
 /* ── Sub-cube position bar (CUBE-04 / D-01) ──────────────────────────────── */
 
 /*
- * Horizontal strip inside the lit cube showing where within the cube the record
+ * Tall vertical band inside the cube showing where within the cube the record
  * lives. Width and left are set via inline style from SubCubeBar.tsx.
  * Opacity is driven by CSS custom property --confidence (0.0–1.0).
  *
- * Formula: max(0.35, 0.35 + var(--confidence) * 0.65)
+ * Formula: max(0.30, 0.30 + var(--confidence) * 0.30)  (subtle, ~0.30–0.60)
  * CSS `max()` supports custom properties.
  */
 
@@ -489,7 +494,9 @@
   min-width: 4px;                  /* keep a narrow high-confidence interval visible as a line */
   border-radius: var(--gruvax-radius-sm);
   background: var(--gruvax-yellow);
-  opacity: max(0.35, calc(0.35 + var(--confidence, 0.5) * 0.65));
+  /* Subtle but visible — confidence still drives it, but capped low so the bar
+     reads as a soft marker over the cube, not a heavy solid block (~0.30–0.60). */
+  opacity: max(0.30, calc(0.30 + var(--confidence, 0.5) * 0.30));
   pointer-events: none;
   z-index: 1;
 }
