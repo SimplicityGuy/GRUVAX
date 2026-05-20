@@ -1,10 +1,15 @@
-"""GET /api/units and GET /api/cubes/{unit_id}/{row}/{col} (CUBE-01).
+"""GET /api/units, GET /api/cubes (bulk), and GET /api/cubes/{unit_id}/{row}/{col}.
 
 Endpoints:
   - ``GET /api/units``:
       Returns all configured shelving units (``id``, ``display_name``,
       ``rows``, ``cols``, ``ordering``). The NxNx4 grid is driven by this
       data. N is the number of units.
+
+  - ``GET /api/cubes``:
+      Returns all cube boundary rows as ``{cubes: [{unit_id,row,col,is_empty}, …]}``.
+      Used by the kiosk SPA to render the CUBE-05 empty state for cubes flagged
+      ``is_empty=true``. Row/col are 0-based.
 
   - ``GET /api/cubes/{unit_id}/{row}/{col}``:
       Returns one cube's boundary metadata (first/last label+catalog,
@@ -49,6 +54,34 @@ ORDER BY ordering
 
     units = [dict(zip(cols_meta, row, strict=True)) for row in rows_raw]
     return {"units": units}
+
+
+@router.get("/cubes")
+async def get_cubes_bulk(
+    request: Request,
+    pool: Any = Depends(get_pool),
+) -> dict[str, Any]:
+    """Return all cube boundary rows with their empty-state flag.
+
+    Response: ``{cubes: [{unit_id, row, col, is_empty}, ...]}``
+
+    Row and col are 0-based, matching the API convention used by
+    ``/api/locate`` and ``/api/cubes/{unit_id}/{row}/{col}``.
+    The kiosk SPA uses this endpoint to render the CUBE-05 empty state
+    without making one request per cube.
+    """
+    sql = """
+SELECT unit_id, row, col, is_empty
+FROM gruvax.cube_boundaries
+ORDER BY unit_id, row, col
+"""
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql)
+        rows_raw = await cur.fetchall()
+        cols_meta = [desc[0] for desc in (cur.description or [])]
+
+    cubes = [dict(zip(cols_meta, row, strict=True)) for row in rows_raw]
+    return {"cubes": cubes}
 
 
 @router.get("/cubes/{unit_id}/{row}/{col}")

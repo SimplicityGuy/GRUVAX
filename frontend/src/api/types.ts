@@ -50,5 +50,17 @@ export interface UnitsResponse {
   units: Unit[]
 }
 
+/** One row from GET /api/cubes — includes is_empty for CUBE-05 empty state. */
+export interface CubeBoundary {
+  unit_id: number
+  row: number
+  col: number
+  is_empty: boolean
+}
+
+export interface CubesResponse {
+  cubes: CubeBoundary[]
+}
+
 /** Cube state driven by UI logic — fed into data-state attribute on each Cube cell. */
 export type CubeState = 'dim' | 'lit' | 'empty' | 'hover'

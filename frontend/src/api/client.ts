@@ -1,4 +1,4 @@
-import type { LocateResult, SearchResponse, UnitsResponse } from './types'
+import type { CubesResponse, LocateResult, SearchResponse, UnitsResponse } from './types'
 
 /**
  * Fetch wrappers for the GRUVAX backend API.
@@ -39,4 +39,12 @@ export async function fetchUnits(): Promise<UnitsResponse> {
     throw new Error(`Units fetch failed: ${res.status}`)
   }
   return res.json() as Promise<UnitsResponse>
+}
+
+export async function fetchCubes(): Promise<CubesResponse> {
+  const res = await fetch(`${BASE}/api/cubes`)
+  if (!res.ok) {
+    throw new Error(`Cubes fetch failed: ${res.status}`)
+  }
+  return res.json() as Promise<CubesResponse>
 }

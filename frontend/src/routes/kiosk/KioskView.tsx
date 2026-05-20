@@ -1,6 +1,6 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
-import { fetchUnits, searchCollection } from '../../api/client'
+import { fetchCubes, fetchUnits, searchCollection } from '../../api/client'
 import { useGruvaxStore } from '../../state/store'
 import { ResultsList } from './ResultsList'
 import { SearchBox } from './SearchBox'
@@ -31,6 +31,23 @@ export function KioskView() {
     queryFn: fetchUnits,
     staleTime: Infinity,
   })
+
+  // Fetch all cube boundaries once — used to render empty state (CUBE-05)
+  const { data: cubesData } = useQuery({
+    queryKey: ['cubes'],
+    queryFn: fetchCubes,
+    staleTime: Infinity,
+  })
+
+  // Build a Set<"unitId-row-col"> of empty cubes for O(1) lookup in ShelfGrid
+  const emptyCubes = useMemo<Set<string>>(() => {
+    if (!cubesData) return new Set()
+    return new Set(
+      cubesData.cubes
+        .filter((cb) => cb.is_empty)
+        .map((cb) => `${cb.unit_id}-${cb.row}-${cb.col}`),
+    )
+  }, [cubesData])
 
   // TanStack Query for search — fires on debouncedQuery change (SRCH-01)
   const {
@@ -121,6 +138,7 @@ export function KioskView() {
                 unit={unit}
                 shelfIndex={idx}
                 litCube={highlight.primaryCube}
+                emptyCubes={emptyCubes}
               />
             </div>
           ))}
@@ -135,6 +153,7 @@ export function KioskView() {
                     unit={{ id: idx + 1, display_name: '', rows: 4, cols: 4, ordering: idx + 1 }}
                     shelfIndex={idx}
                     litCube={highlight.primaryCube}
+                    emptyCubes={emptyCubes}
                   />
                 </div>
               ))}
