@@ -103,6 +103,14 @@
   color: var(--gruvax-text-faint);
 }
 
+/* Hide the browser's native type=search clear button — the app renders its own
+   blue clear-X (.search-box__action) and we don't want a duplicate gray one. */
+.search-box__input::-webkit-search-cancel-button,
+.search-box__input::-webkit-search-decoration {
+  -webkit-appearance: none;
+  appearance: none;
+}
+
 .search-box__action {
   flex-shrink: 0;
   margin-right: var(--gruvax-space-2);
@@ -471,13 +479,29 @@
 
 .sub-cube-bar {
   position: absolute;
-  bottom: var(--gruvax-space-1);  /* Inset space-1 (4px) from cube bottom edge */
-  height: 8px;                     /* 2× space-1 (not a named scale token) */
+  /* A record stands vertically, filling most of the bin height (a 12" record in
+     a ~13" Kallax bin ≈ 92%), so the position reads as a tall vertical line/band
+     at the estimated horizontal location — not a dot. left/width (the interval)
+     are set inline by the component; height/vertical-centering live here. */
+  top: 50%;
+  transform: translateY(-50%);
+  height: 92%;
+  min-width: 4px;                  /* keep a narrow high-confidence interval visible as a line */
   border-radius: var(--gruvax-radius-sm);
   background: var(--gruvax-yellow);
   opacity: max(0.35, calc(0.35 + var(--confidence, 0.5) * 0.65));
   pointer-events: none;
   z-index: 1;
+}
+
+/*
+ * On the lit (yellow) primary cube a yellow bar would be invisible, so the
+ * position line is drawn in IKEA blue — matching the blue address label already
+ * used on lit cubes (`.cube[data-state="lit"] .cube__address`). On dim companion
+ * cubes the bar stays yellow (good contrast on the light-blue dim fill).
+ */
+.cube[data-state="lit"] .sub-cube-bar {
+  background: var(--gruvax-blue);
 }
 
 /*
@@ -494,7 +518,7 @@
 /* Low-confidence text cue (D-03) — appears above the bar when confidence ≤ 0.50 */
 .sub-cube-bar__cue {
   position: absolute;
-  top: calc(-1 * var(--gruvax-space-3));  /* space-3 (12px) above bar */
+  top: var(--gruvax-space-1);             /* inside, near the top of the tall vertical bar */
   left: var(--gruvax-space-1);            /* space-1 (4px) from bar left edge */
   font-family: var(--gruvax-font-ui);
   font-size: var(--gruvax-text-label);    /* 11px */

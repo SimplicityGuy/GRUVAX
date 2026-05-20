@@ -1,8 +1,12 @@
 /**
- * SubCubeBar — horizontal position strip inside the primary cube.
+ * SubCubeBar — vertical position band inside the primary cube.
  *
  * Shows where within the cube the record lives, driven by sub_cube_interval
- * from /api/locate. Confidence attenuates the bar's opacity.
+ * from /api/locate. A record stands vertically and fills most of the bin
+ * height (a 12" record in a ~13" Kallax bin ≈ 92%), so the marker is a tall
+ * vertical line/band at the estimated horizontal position — `left`/`width`
+ * encode the interval; the tall height + vertical centering live in kiosk.css.
+ * Confidence attenuates the band's opacity.
  *
  * CUBE-10 / D-02 RECONCILIATION:
  *   REQUIREMENTS.md CUBE-10 literal says "tick-mark indicator". D-02 overrides
@@ -32,9 +36,10 @@ interface SubCubeBarProps {
 }
 
 /**
- * Horizontal position bar inside a cube cell.
+ * Vertical position band inside a cube cell.
  *
- * - Normal: width = (end - start) × 100%, left = start × 100%
+ * - Normal: width = (end - start) × 100%, left = start × 100% (tall band,
+ *   ~92% cube height; narrow high-confidence intervals read as a thin line)
  * - Singleton (D-02): full width at opacity 0.18 — reads "scan the whole cube"
  * - Opacity formula (normal): max(0.35, 0.35 + confidence × 0.65)
  * - "~" cue: visible only when confidence ≤ TEXT_CUE_THRESHOLD (0.50)
