@@ -132,5 +132,13 @@ def create_app() -> FastAPI:
     return app
 
 
+# Module-level ASGI app so `uvicorn gruvax.app:app` (the Dockerfile CMD and
+# standard tooling entrypoint) resolves. create_app() is side-effect-free at
+# construction — the DB pool open, v_collection probe, and boundary-cache load
+# all run in the lifespan on server startup, not at import time. Tests still call
+# create_app() directly for isolated instances.
+app = create_app()
+
+
 # Note: FastAPI dependency providers live in gruvax.api.deps to avoid
 # circular imports (app.py → api/*.py → deps.py, no back-reference to app.py).
