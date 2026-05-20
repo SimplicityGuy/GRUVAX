@@ -235,3 +235,58 @@ End-to-end stack verified:
 - /api/health HTTP 200 (db/view/mqtt all ok) ✓
 - SPA served at http://localhost:8000/ ✓
 - /api/search?q=Blue+Note returns ranked results ✓
+
+## Checkpoint Fixes
+
+Two bugs found during the human-verify checkpoint and fixed atomically.
+
+### Bug 1 — Search→cube-highlight never lit any cube (BLOCKER)
+
+**Root cause:** `ShelfGrid.tsx` compared `litCube.row === r + 1` (1-based offset) against the
+API's 0-based row/col convention. `locateResult.primary_cube: {row:0, col:0}` never equalled
+`rowApi=1`, so every cube stayed `data-state="dim"`.
+
+**Fix:**
+- Match directly on loop indices: `litCube.row === r && litCube.col === c`
+- Pass 0-based `r`/`c` as `data-row`/`data-col` on each Cube (display address label unchanged)
+- Added vitest + jsdom; `ShelfGrid.test.tsx` feeds `{unit_id:1,row:0,col:0}` and asserts the
+  matching cube has `data-state="lit"` with `data-row="0"`; covers lit > empty precedence and
+  unit-id mismatch (6 tests, all pass)
+
+**Commit:** `3e38512`
+**Files:** `frontend/src/routes/kiosk/ShelfGrid.tsx`, `frontend/src/routes/kiosk/ShelfGrid.test.tsx`,
+`frontend/src/test-setup.ts`, `frontend/vite.config.ts`, `frontend/tsconfig.app.json`,
+`frontend/package.json`, `frontend/package-lock.json`
+
+---
+
+### Bug 2 — No cube renders the empty state (CUBE-05 missing)
+
+**Root cause:** The SPA had no source of `is_empty` data — only the single-cube endpoint existed
+and it was never called per-cube. `ShelfGrid` had no `emptyCubes` prop, so `data-state="empty"`
+was never applied.
+
+**Fix:**
+- **Backend:** `GET /api/cubes` (bulk) added to `src/gruvax/api/units.py` — returns all
+  `gruvax.cube_boundaries` rows as `{unit_id, row, col, is_empty}` (0-based). Registered before
+  the single-cube path route so FastAPI resolves it correctly.
+- **Frontend types:** `CubeBoundary` + `CubesResponse` added to `api/types.ts`
+- **Frontend client:** `fetchCubes()` added to `api/client.ts`
+- **KioskView:** `useQuery(['cubes'], fetchCubes, {staleTime: Infinity})` + `useMemo` builds a
+  `Set<"unitId-row-col">` of empty keys; passed as `emptyCubes` prop to every `ShelfGrid`
+- **ShelfGrid:** accepts optional `emptyCubes` prop; renders `data-state="empty"` when flagged
+  (lit > empty > dim); CSS uses `var(--gruvax-cell-empty)` + `var(--gruvax-cell-empty-border)`
+  from design tokens — no hardcoded hex
+- **Backend tests:** 5 integration tests in `tests/integration/test_cubes_bulk.py` (count=32,
+  shape, 0-based bounds, empties flagged, no boundary detail leak)
+
+**Commit:** `09e1ba2`
+**Files:** `src/gruvax/api/units.py`, `frontend/src/api/types.ts`, `frontend/src/api/client.ts`,
+`frontend/src/routes/kiosk/KioskView.tsx`, `tests/integration/test_cubes_bulk.py`
+
+---
+
+**Post-fix verification:** `uv run pytest` 104 passed; `npm --prefix frontend run build` clean;
+`grep -rInE '#[0-9A-Fa-f]{6}' frontend/src/` → NO_HARDCODED_HEX; `docker compose build gruvax-api
+&& docker compose up -d` → healthy; `GET /api/cubes` → 32 rows, 6 empty; stack running for
+re-verification.
