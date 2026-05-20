@@ -1,0 +1,117 @@
+import { useEffect, useRef, useState } from 'react'
+import { useGruvaxStore } from '../../state/store'
+
+interface SearchBoxProps {
+  /** Called when the debounced query changes (after ~250ms idle) */
+  onDebouncedQuery: (q: string) => void
+  /** True when a request has been in flight for >300ms (SRCH-05) */
+  isLoading: boolean
+  /** True if the last API call resulted in an error */
+  hasError: boolean
+}
+
+/**
+ * Kiosk search input with:
+ *  - Debounce ~250ms before firing onDebouncedQuery (SRCH-06)
+ *  - Clear-X button (≥44×44px tap target) that empties query + clears highlight (SRCH-03)
+ *  - Loading indicator shown ONLY after >300ms in flight (3-dot pulse) (SRCH-05)
+ *  - Error flash on API failure (SRCH-02 error path)
+ *
+ * Per 01-UI-SPEC.md §Search Box Component Contract.
+ * All colors/fonts/motion from kiosk.css tokens — no hardcoded hex here.
+ */
+export function SearchBox({ onDebouncedQuery, isLoading, hasError }: SearchBoxProps) {
+  const { query, setQuery, clearSearch } = useGruvaxStore()
+  const [localValue, setLocalValue] = useState(query)
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Sync local value when store query is cleared externally (clear-X press from elsewhere)
+  useEffect(() => {
+    if (query === '') {
+      setLocalValue('')
+    }
+  }, [query])
+
+  const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = e.target.value
+    setLocalValue(val)
+    setQuery(val)
+
+    // Debounce: fire onDebouncedQuery ~250ms after last keystroke (SRCH-06)
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    debounceRef.current = setTimeout(() => {
+      onDebouncedQuery(val)
+    }, 250)
+  }
+
+  const handleClear = () => {
+    if (debounceRef.current) clearTimeout(debounceRef.current)
+    setLocalValue('')
+    clearSearch()
+    onDebouncedQuery('')
+  }
+
+  const showClearX = localValue.length > 0 && !isLoading
+  const showLoading = isLoading
+
+  const boxClass = [
+    'search-box',
+    hasError ? 'search-box--error' : '',
+  ]
+    .filter(Boolean)
+    .join(' ')
+
+  return (
+    <div className={boxClass} role="search">
+      {/* Magnifier icon — non-interactive */}
+      <svg
+        className="search-box__icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        aria-hidden="true"
+      >
+        <circle cx="11" cy="11" r="8" />
+        <line x1="21" y1="21" x2="16.65" y2="16.65" />
+      </svg>
+
+      <input
+        className="search-box__input"
+        type="search"
+        value={localValue}
+        onChange={handleChange}
+        placeholder="Type artist, title, label or catalog#"
+        aria-label="Search vinyl collection"
+        autoComplete="off"
+        autoCorrect="off"
+        spellCheck={false}
+      />
+
+      {/* Loading indicator — only after >300ms in flight (SRCH-05) */}
+      {showLoading && (
+        <div className="search-box__action" aria-label="Searching…">
+          <div className="search-box__loading" role="status">
+            <div className="search-box__dot" />
+            <div className="search-box__dot" />
+            <div className="search-box__dot" />
+          </div>
+        </div>
+      )}
+
+      {/* Clear-X button — ≥44×44px tap target (SRCH-03) */}
+      {showClearX && (
+        <button
+          type="button"
+          className="search-box__action"
+          onClick={handleClear}
+          aria-label="Clear search"
+        >
+          ×
+        </button>
+      )}
+    </div>
+  )
+}

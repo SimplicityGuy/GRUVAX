@@ -1,0 +1,406 @@
+/*
+ * Kiosk view styles — ALL color, size, radius, and transition values reference
+ * CSS custom properties from gruvax-design-tokens.css. No hardcoded hex anywhere.
+ */
+
+/* ── Page layout ─────────────────────────────────────────────────────────── */
+
+.kiosk-page {
+  min-height: 100dvh;
+  background: var(--gruvax-white);
+  font-family: var(--gruvax-font-ui);
+}
+
+/* ── Header ──────────────────────────────────────────────────────────────── */
+
+.kiosk-header {
+  height: 48px;
+  background: var(--gruvax-white);
+  border-bottom: 1px solid var(--gruvax-border);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--gruvax-space-5);
+  gap: var(--gruvax-space-3);
+}
+
+.kiosk-header__wordmark {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  color: var(--gruvax-text-primary);
+  line-height: var(--gruvax-leading-tight);
+  text-transform: uppercase;
+}
+
+/* ── Content area ────────────────────────────────────────────────────────── */
+
+.kiosk-content {
+  max-width: 960px;
+  margin: 0 auto;
+  padding: var(--gruvax-space-5) var(--gruvax-space-5) var(--gruvax-space-7);
+}
+
+/* ── Search section ──────────────────────────────────────────────────────── */
+
+.kiosk-search-section {
+  position: relative;
+  margin-bottom: var(--gruvax-space-5);
+}
+
+/* ── Search box ──────────────────────────────────────────────────────────── */
+
+.search-box {
+  position: relative;
+  display: flex;
+  align-items: center;
+  height: 56px;
+  border: 2px solid var(--gruvax-blue);
+  border-radius: var(--gruvax-radius-md);
+  background: var(--gruvax-white);
+  overflow: hidden;
+  transition: border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.search-box:focus-within {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+.search-box--error {
+  border-color: var(--gruvax-error);
+  animation: search-error-flash 400ms var(--gruvax-ease-standard);
+}
+
+@keyframes search-error-flash {
+  0%, 100% { border-color: var(--gruvax-error); }
+  50% { border-color: var(--gruvax-blue); }
+}
+
+.search-box__icon {
+  flex-shrink: 0;
+  margin-left: var(--gruvax-space-4);
+  color: var(--gruvax-blue);
+  width: 20px;
+  height: 20px;
+}
+
+.search-box__input {
+  flex: 1;
+  height: 100%;
+  padding: 0 var(--gruvax-space-4);
+  border: none;
+  outline: none;
+  background: transparent;
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-lg);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+}
+
+.search-box__input::placeholder {
+  color: var(--gruvax-text-faint);
+}
+
+.search-box__action {
+  flex-shrink: 0;
+  margin-right: var(--gruvax-space-2);
+  width: 44px;
+  height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--gruvax-text-muted);
+  font-size: 18px;
+  border-radius: var(--gruvax-radius-sm);
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.search-box__action:hover {
+  color: var(--gruvax-text-secondary);
+}
+
+/* 3-dot loading pulse */
+.search-box__loading {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.search-box__dot {
+  width: 6px;
+  height: 6px;
+  background: var(--gruvax-blue);
+  border-radius: var(--gruvax-radius-pill);
+  animation: dot-pulse 1.2s ease-in-out infinite;
+}
+
+.search-box__dot:nth-child(2) { animation-delay: 0.2s; }
+.search-box__dot:nth-child(3) { animation-delay: 0.4s; }
+
+@keyframes dot-pulse {
+  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
+  40% { transform: scale(1); opacity: 1; }
+}
+
+/* ── Results list ────────────────────────────────────────────────────────── */
+
+.results-list {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: var(--gruvax-z-overlay);
+  background: var(--gruvax-off-white);
+  border-radius: var(--gruvax-radius-md);
+  box-shadow: var(--gruvax-shadow-md);
+  overflow: hidden;
+}
+
+.results-list__scroll {
+  max-height: 384px; /* 6 × 64px rows */
+  overflow-y: auto;
+}
+
+/* ── Result row ──────────────────────────────────────────────────────────── */
+
+.result-row {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  min-height: 64px;
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  border-bottom: 1px solid var(--gruvax-border-faint);
+  cursor: pointer;
+  background: transparent;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.result-row:last-child {
+  border-bottom: none;
+}
+
+.result-row:hover {
+  background: var(--gruvax-blue-faint);
+}
+
+.result-row--selected {
+  background: var(--gruvax-blue-faint);
+  border-left: 2px solid var(--gruvax-yellow);
+  padding-left: calc(var(--gruvax-space-4) - 2px);
+}
+
+.result-row__primary {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.result-row__secondary {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gruvax-space-3);
+  margin-top: 2px;
+}
+
+.result-row__label {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.result-row__catalog {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* ── No results ──────────────────────────────────────────────────────────── */
+
+.no-results-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  padding: var(--gruvax-space-4);
+  min-height: 64px;
+}
+
+.no-results-row__icon {
+  flex-shrink: 0;
+  color: var(--gruvax-warning);
+  width: 24px;
+  height: 24px;
+}
+
+.no-results-row__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.no-results-row__heading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+}
+
+.no-results-row__body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* ── Shelf area ──────────────────────────────────────────────────────────── */
+
+.shelf-area {
+  background: var(--gruvax-off-white);
+  border-radius: var(--gruvax-radius-lg);
+  padding: var(--gruvax-space-5);
+  box-shadow: var(--gruvax-shadow-sm);
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--gruvax-space-6);
+}
+
+/* ── Shelf section (label + grid) ────────────────────────────────────────── */
+
+.shelf-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+/* ── Shelf label ─────────────────────────────────────────────────────────── */
+
+.shelf-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  line-height: var(--gruvax-leading-tight);
+  color: var(--gruvax-text-primary);
+  text-transform: uppercase;
+}
+
+/* ── Shelf grid ──────────────────────────────────────────────────────────── */
+
+.shelf-grid {
+  display: grid;
+  grid-template-columns: repeat(4, var(--gruvax-cell-size-xl));
+  grid-template-rows: repeat(4, var(--gruvax-cell-size-xl));
+  gap: var(--gruvax-cell-gap-xl);
+}
+
+/* ── Cube cell ───────────────────────────────────────────────────────────── */
+
+.cube {
+  position: relative;
+  width: var(--gruvax-cell-size-xl);
+  height: var(--gruvax-cell-size-xl);
+  border-radius: var(--gruvax-cell-radius-xl);
+  border: 1.5px solid var(--gruvax-cell-dim-border);
+  background: var(--gruvax-cell-dim);
+  box-shadow: none;
+  /* LED off transition — smooth 500ms fade */
+  transition:
+    background var(--gruvax-led-off-duration) var(--gruvax-led-off-ease),
+    border-color var(--gruvax-led-off-duration) var(--gruvax-led-off-ease),
+    box-shadow var(--gruvax-led-off-duration) var(--gruvax-led-off-ease);
+  overflow: hidden;
+}
+
+/* Lit state — spring on 300ms */
+.cube[data-state="lit"] {
+  background: var(--gruvax-cell-lit);
+  border-color: var(--gruvax-cell-lit-border);
+  box-shadow: var(--gruvax-shadow-led);
+  transition:
+    background var(--gruvax-led-on-duration) var(--gruvax-led-on-ease),
+    border-color var(--gruvax-led-on-duration) var(--gruvax-led-on-ease),
+    box-shadow var(--gruvax-led-on-duration) var(--gruvax-led-on-ease);
+  animation: led-glow-pulse var(--gruvax-duration-enter) var(--gruvax-ease-spring);
+}
+
+@keyframes led-glow-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.04); }
+}
+
+/* Dim state — normal unlit cube */
+.cube[data-state="dim"] {
+  background: var(--gruvax-cell-dim);
+  border-color: var(--gruvax-cell-dim-border);
+  box-shadow: none;
+}
+
+/* Empty state — desaturated + dashed border */
+.cube[data-state="empty"] {
+  background: var(--gruvax-cell-empty);
+  border-color: var(--gruvax-cell-empty-border);
+  border-style: dashed;
+  box-shadow: none;
+  transition:
+    background var(--gruvax-led-off-duration) var(--gruvax-led-off-ease),
+    border-color var(--gruvax-led-off-duration) var(--gruvax-led-off-ease),
+    box-shadow var(--gruvax-led-off-duration) var(--gruvax-led-off-ease);
+}
+
+/* Hover state */
+.cube[data-state="hover"],
+.cube:hover {
+  background: var(--gruvax-cell-hover);
+  border-color: var(--gruvax-border);
+  border-style: solid;
+  box-shadow: none;
+  transition:
+    background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+    border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+/* Address overlay — always visible */
+.cube__address {
+  position: absolute;
+  top: var(--gruvax-space-1);
+  left: var(--gruvax-space-1);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-caption);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  line-height: var(--gruvax-leading-tight);
+  color: var(--gruvax-text-muted);
+  pointer-events: none;
+  user-select: none;
+}
+
+/* Address overlay color on lit cell: blue on yellow */
+.cube[data-state="lit"] .cube__address {
+  color: var(--gruvax-blue);
+}
+
+/* Address overlay on empty cell: slightly dimmer */
+.cube[data-state="empty"] .cube__address {
+  color: var(--gruvax-text-faint);
+}
