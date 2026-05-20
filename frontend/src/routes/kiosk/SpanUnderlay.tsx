@@ -19,8 +19,6 @@ import type { CubeRef } from '../../api/types'
 interface SpanUnderlayProps {
   /** Sorted cubes in the label span (unit_id, row, col) — from /api/locate */
   labelSpan: CubeRef[]
-  /** The lit cube — underlay must not obscure its lit state (D-04, z-order only) */
-  primaryCube: CubeRef
   /** Cell size in px — var(--gruvax-cell-size-xl) = 80 (from gridGeometry.ts) */
   cellSize: number
   /** Cell gap in px — var(--gruvax-cell-gap-xl) = 12 (from gridGeometry.ts) */
@@ -93,7 +91,7 @@ function unitColumnOffset(unitId: number, cellSize: number, cellGap: number): nu
  *
  * No GSAP here — KioskView owns the timeline (opacity 0 → 0.60 animation).
  */
-export function SpanUnderlay({ labelSpan, primaryCube: _primaryCube, cellSize, cellGap }: SpanUnderlayProps) {
+export function SpanUnderlay({ labelSpan, cellSize, cellGap }: SpanUnderlayProps) {
   if (labelSpan.length < 2) return null
 
   const segments = groupIntoSegments(labelSpan)

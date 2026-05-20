@@ -87,6 +87,7 @@ export function KioskView() {
         setShowLoading(true)
       }, 300)
     } else {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- resets a timer-driven loading indicator when the query settles; not derivable during render
       setShowLoading(false)
     }
     return () => {
@@ -97,6 +98,7 @@ export function KioskView() {
   // Track search errors
   useEffect(() => {
     if (isError) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- transient error-flash cue driven by the query's error state; cleared by the timeout below
       setHasSearchError(true)
       // Clear error flash after 400ms (per spec)
       const t = setTimeout(() => setHasSearchError(false), 400)

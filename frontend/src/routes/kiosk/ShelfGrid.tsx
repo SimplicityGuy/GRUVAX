@@ -105,17 +105,12 @@ export function ShelfGrid({
   const unitLabelSpan = labelSpan.filter((c) => c.unit_id === unit.id)
   const hasSpan = unitLabelSpan.length > 1
 
-  // The primaryCube in this unit (for SpanUnderlay — z-order reference only)
-  const primaryCubeForUnit =
-    litCube?.unit_id === unit.id ? litCube : (unitLabelSpan[0] ?? null)
-
   return (
     <div style={{ position: 'relative' }}>
       <div className="shelf-grid">{cells}</div>
-      {hasSpan && primaryCubeForUnit != null && (
+      {hasSpan && (
         <SpanUnderlay
           labelSpan={unitLabelSpan}
-          primaryCube={primaryCubeForUnit}
           cellSize={CELL_SIZE_XL}
           cellGap={CELL_GAP_XL}
         />
