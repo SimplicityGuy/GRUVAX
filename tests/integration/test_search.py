@@ -28,10 +28,13 @@ from gruvax.app import create_app
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan."""
     app = create_app()
-    async with LifespanManager(app) as manager, AsyncClient(
-        transport=ASGITransport(app=manager.app),
-        base_url="http://test",
-    ) as ac:
+    async with (
+        LifespanManager(app) as manager,
+        AsyncClient(
+            transport=ASGITransport(app=manager.app),
+            base_url="http://test",
+        ) as ac,
+    ):
         yield ac
 
 
@@ -108,12 +111,8 @@ async def test_no_results(client) -> None:  # type: ignore[no-untyped-def]
     response = await client.get("/api/search", params={"q": "zzznomatch"})
     assert response.status_code == 200
     body = response.json()
-    assert body["items"] == [], (
-        f"Expected empty items for 'zzznomatch', got: {body}"
-    )
-    assert "did_you_mean" in body, (
-        f"Response missing 'did_you_mean' key: {body}"
-    )
+    assert body["items"] == [], f"Expected empty items for 'zzznomatch', got: {body}"
+    assert "did_you_mean" in body, f"Response missing 'did_you_mean' key: {body}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -141,36 +140,28 @@ async def test_max_length_enforced(client) -> None:  # type: ignore[no-untyped-d
     """T-01-10: q with 201 characters returns HTTP 422 (max_length=200)."""
     long_q = "a" * 201
     response = await client.get("/api/search", params={"q": long_q})
-    assert response.status_code == 422, (
-        f"Expected 422 for oversized q, got {response.status_code}"
-    )
+    assert response.status_code == 422, f"Expected 422 for oversized q, got {response.status_code}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_limit_enforced(client) -> None:  # type: ignore[no-untyped-def]
     """T-01-08: limit=999 returns HTTP 422 (le=50)."""
     response = await client.get("/api/search", params={"q": "blue note", "limit": 999})
-    assert response.status_code == 422, (
-        f"Expected 422 for limit=999, got {response.status_code}"
-    )
+    assert response.status_code == 422, f"Expected 422 for limit=999, got {response.status_code}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_limit_zero_enforced(client) -> None:  # type: ignore[no-untyped-def]
     """T-01-08: limit=0 returns HTTP 422 (ge=1)."""
     response = await client.get("/api/search", params={"q": "blue note", "limit": 0})
-    assert response.status_code == 422, (
-        f"Expected 422 for limit=0, got {response.status_code}"
-    )
+    assert response.status_code == 422, f"Expected 422 for limit=0, got {response.status_code}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_empty_q_enforced(client) -> None:  # type: ignore[no-untyped-def]
     """min_length=1: empty q returns HTTP 422."""
     response = await client.get("/api/search", params={"q": ""})
-    assert response.status_code == 422, (
-        f"Expected 422 for empty q, got {response.status_code}"
-    )
+    assert response.status_code == 422, f"Expected 422 for empty q, got {response.status_code}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -182,8 +173,15 @@ async def test_response_shape(client) -> None:  # type: ignore[no-untyped-def]
     if body["items"]:
         item = body["items"][0]
         expected_fields = {
-            "release_id", "collection_item_id", "title", "primary_artist",
-            "label", "catalog_number", "format", "year", "rank",
+            "release_id",
+            "collection_item_id",
+            "title",
+            "primary_artist",
+            "label",
+            "catalog_number",
+            "format",
+            "year",
+            "rank",
         }
         assert expected_fields.issubset(item.keys()), (
             f"Missing fields in search item: {expected_fields - item.keys()}"
@@ -207,9 +205,7 @@ async def test_did_you_mean(client) -> None:  # type: ignore[no-untyped-def]
     response = await client.get("/api/search", params={"q": "zzznomatch"})
     assert response.status_code == 200
     body = response.json()
-    assert "did_you_mean" in body, (
-        f"Response missing 'did_you_mean' key: {body}"
-    )
+    assert "did_you_mean" in body, f"Response missing 'did_you_mean' key: {body}"
     # Accept both None (pg_trgm unavailable) and a string suggestion
     dym = body["did_you_mean"]
     assert dym is None or isinstance(dym, str), (
@@ -217,9 +213,7 @@ async def test_did_you_mean(client) -> None:  # type: ignore[no-untyped-def]
     )
     # When non-null, the suggestion must differ from the input typo
     if dym is not None:
-        assert dym != "zzznomatch", (
-            f"did_you_mean returned the same as input: {dym!r}"
-        )
+        assert dym != "zzznomatch", f"did_you_mean returned the same as input: {dym!r}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -238,9 +232,7 @@ async def test_catalog_boost(client) -> None:  # type: ignore[no-untyped-def]
     response = await client.get("/api/search", params={"q": "BLP 4001"})
     assert response.status_code == 200
     body = response.json()
-    assert "did_you_mean" in body, (
-        f"Response missing 'did_you_mean' key: {body}"
-    )
+    assert "did_you_mean" in body, f"Response missing 'did_you_mean' key: {body}"
     items = body["items"]
     assert items, "Expected at least one result for 'BLP 4001'"
     # Top result must contain the catalog number BLP 4001
@@ -253,6 +245,4 @@ async def test_catalog_boost(client) -> None:  # type: ignore[no-untyped-def]
     response2 = await client.get("/api/search", params={"q": "Miles Davis"})
     assert response2.status_code == 200
     body2 = response2.json()
-    assert "did_you_mean" in body2, (
-        f"Response missing 'did_you_mean' key for artist query: {body2}"
-    )
+    assert "did_you_mean" in body2, f"Response missing 'did_you_mean' key for artist query: {body2}"

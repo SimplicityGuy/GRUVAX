@@ -18,12 +18,10 @@ from hypothesis import strategies as st
 
 from fixtures.synth_collection import make_multi_prefix, make_singleton, make_uniform_dense
 from gruvax.estimator.algorithm import locate, locate_by_index
-from gruvax.estimator.boundary_cache import BoundaryCache
-from gruvax.estimator.collection_snapshot import CollectionSnapshot
 from gruvax.estimator.normalize import parse_key
 
-
 # ── Session-scoped synth fixtures (no DB) ────────────────────────────────────
+
 
 @pytest.fixture(scope="session")
 def uniform_dense_fixtures():  # type: ignore[no-untyped-def]
@@ -44,6 +42,7 @@ def singleton_fixtures():  # type: ignore[no-untyped-def]
 
 
 # ── Invariant 1: primary_cube ∈ label_span ───────────────────────────────────
+
 
 def test_primary_cube_in_label_span(uniform_dense_fixtures) -> None:  # type: ignore[no-untyped-def]
     """primary_cube must appear in label_span when locate() returns a non-null primary_cube."""
@@ -68,6 +67,7 @@ def test_primary_cube_in_label_span(uniform_dense_fixtures) -> None:  # type: ig
 
 # ── Invariant 2: 0 ≤ start ≤ end ≤ 1 ────────────────────────────────────────
 
+
 def test_sub_cube_interval_bounds(uniform_dense_fixtures) -> None:  # type: ignore[no-untyped-def]
     """0 ≤ start ≤ end ≤ 1 for every non-null sub_cube_interval."""
     cache, snapshot, truth = uniform_dense_fixtures
@@ -84,25 +84,24 @@ def test_sub_cube_interval_bounds(uniform_dense_fixtures) -> None:  # type: igno
         )
         if result.sub_cube_interval is not None:
             si = result.sub_cube_interval
-            assert 0.0 <= si.start, f"start={si.start} < 0 for release_id={release_id}"
-            assert si.start <= si.end, f"start={si.start} > end={si.end} for release_id={release_id}"
+            assert si.start >= 0.0, f"start={si.start} < 0 for release_id={release_id}"
+            assert si.start <= si.end, (
+                f"start={si.start} > end={si.end} for release_id={release_id}"
+            )
             assert si.end <= 1.0, f"end={si.end} > 1 for release_id={release_id}"
 
 
 # ── Invariant 3: monotone position within label ───────────────────────────────
 
+
 def test_monotone_position_within_label(uniform_dense_fixtures) -> None:  # type: ignore[no-untyped-def]
     """Records sorted by parse_key(catalog_number) produce non-decreasing sub_cube_interval.start."""
     cache, snapshot, truth = uniform_dense_fixtures
     label = "UniformDense"
-    k = len(truth)
 
     # Collect (catalog_number, release_id, start) in parse_key order
     records_ordered = sorted(
-        [
-            (f"UD {release_id:03d}", release_id)
-            for release_id in truth
-        ],
+        [(f"UD {release_id:03d}", release_id) for release_id in truth],
         key=lambda x: parse_key(x[0]),
     )
 
@@ -128,9 +127,10 @@ def test_monotone_position_within_label(uniform_dense_fixtures) -> None:  # type
 
 # ── Invariant 4: cosmetic stability ──────────────────────────────────────────
 
+
 def test_cosmetic_stability_multi_prefix(multi_prefix_fixtures) -> None:  # type: ignore[no-untyped-def]
     """Separator and case variants of the same catalog number produce equal positions."""
-    cache, snapshot, truth = multi_prefix_fixtures
+    cache, snapshot, _truth = multi_prefix_fixtures
     label = "MultiPrefix"
 
     # BLP 100 and BLP-100 should produce the same locate result (parse_key is cosmetic-stable)
@@ -159,7 +159,9 @@ def test_cosmetic_stability_multi_prefix(multi_prefix_fixtures) -> None:  # type
     # All three should be covered (same parse_key) and return equivalent positions
     for result, variant in [(result_dash, "BLP-100"), (result_upper, "blp 100")]:
         if result_space.sub_cube_interval is not None and result.sub_cube_interval is not None:
-            assert abs(result_space.sub_cube_interval.start - result.sub_cube_interval.start) < 1e-9, (
+            assert (
+                abs(result_space.sub_cube_interval.start - result.sub_cube_interval.start) < 1e-9
+            ), (
                 f"Cosmetic stability violated: BLP 100 start={result_space.sub_cube_interval.start:.4f}"
                 f" != {variant!r} start={result.sub_cube_interval.start:.4f}"
             )
@@ -167,11 +169,12 @@ def test_cosmetic_stability_multi_prefix(multi_prefix_fixtures) -> None:  # type
 
 # ── Hypothesis-driven: bounds invariant across all synth records ──────────────
 
+
 @given(release_id=st.integers(min_value=1, max_value=20))
 @settings(max_examples=50, suppress_health_check=[HealthCheck.function_scoped_fixture])
 def test_hypothesis_bounds_uniform_dense(release_id: int) -> None:
     """Hypothesis: for any release_id in uniform_dense, 0 ≤ start ≤ end ≤ 1."""
-    cache, snapshot, truth = make_uniform_dense()
+    cache, snapshot, _truth = make_uniform_dense()
     label = "UniformDense"
     catalog_number = f"UD {release_id:03d}"
 

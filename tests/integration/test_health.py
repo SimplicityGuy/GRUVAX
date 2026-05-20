@@ -32,10 +32,13 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
     DB is running before the app boots.
     """
     app = create_app()
-    async with LifespanManager(app) as manager, AsyncClient(
-        transport=ASGITransport(app=manager.app),
-        base_url="http://test",
-    ) as ac:
+    async with (
+        LifespanManager(app) as manager,
+        AsyncClient(
+            transport=ASGITransport(app=manager.app),
+            base_url="http://test",
+        ) as ac,
+    ):
         yield ac, app
 
 
@@ -46,9 +49,7 @@ async def test_view_probe(client) -> None:  # type: ignore[no-untyped-def]
     response = await ac.get("/api/health")
     assert response.status_code == 200
     body = response.json()
-    assert body["discogsography_view_check"] == "ok", (
-        f"Expected view probe OK but got: {body}"
-    )
+    assert body["discogsography_view_check"] == "ok", f"Expected view probe OK but got: {body}"
     assert body["db"] == "ok"
     assert body["status"] == "ok"
 
@@ -77,9 +78,7 @@ async def test_health_keys(client) -> None:  # type: ignore[no-untyped-def]
     assert response.status_code == 200
     body = response.json()
     required_keys = {"status", "db", "discogsography_view_check", "mqtt", "started_at", "version"}
-    assert required_keys.issubset(body.keys()), (
-        f"Missing keys: {required_keys - body.keys()}"
-    )
+    assert required_keys.issubset(body.keys()), f"Missing keys: {required_keys - body.keys()}"
 
 
 @pytest.mark.asyncio(loop_scope="session")

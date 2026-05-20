@@ -11,14 +11,10 @@ in CI without a lux DB connection.
 
 from __future__ import annotations
 
-from contextlib import asynccontextmanager
-from unittest.mock import AsyncMock
-
 import psycopg.errors
 import pytest
 
 from gruvax.db.queries import DID_YOU_MEAN_THRESHOLD, did_you_mean_query, is_catalog_query
-
 
 # ── is_catalog_query truth table (D-12) ───────────────────────────────────────
 
@@ -40,9 +36,9 @@ from gruvax.db.queries import DID_YOU_MEAN_THRESHOLD, did_you_mean_query, is_cat
         ("", False),
         ("Blue Note", False),
         # Edge cases
-        ("A", False),          # prefix without digits
-        ("abc xyz", False),    # no digits at all
-        (" 42", True),         # leading space + digit (strip normalizes)
+        ("A", False),  # prefix without digits
+        ("abc xyz", False),  # no digits at all
+        (" 42", True),  # leading space + digit (strip normalizes)
     ],
 )
 def test_is_catalog_query_truth_table(q: str, expected: bool) -> None:
@@ -59,7 +55,7 @@ def _make_fake_pool_raising(exc: Exception) -> object:
     """Return a fake pool whose cursor.execute raises *exc*."""
 
     class FakeCursor:
-        async def execute(self, sql: str, params: tuple) -> None:  # noqa: ARG002
+        async def execute(self, sql: str, params: tuple) -> None:
             raise exc
 
         async def fetchone(self) -> None:
@@ -92,7 +88,7 @@ def _make_fake_pool_returning(rows: list[tuple]) -> object:
     """Return a fake pool whose cursor.fetchone returns *rows[0]* (if any)."""
 
     class FakeCursor:
-        async def execute(self, sql: str, params: tuple) -> None:  # noqa: ARG002
+        async def execute(self, sql: str, params: tuple) -> None:
             pass
 
         async def fetchone(self) -> tuple | None:
@@ -135,9 +131,7 @@ async def test_did_you_mean_graceful_degrade() -> None:
     exc = psycopg.errors.UndefinedFunction()
     fake_pool = _make_fake_pool_raising(exc)
     result = await did_you_mean_query(fake_pool, "Miles Daviss")  # type: ignore[arg-type]
-    assert result is None, (
-        f"Expected None when UndefinedFunction raised, got {result!r}"
-    )
+    assert result is None, f"Expected None when UndefinedFunction raised, got {result!r}"
 
 
 @pytest.mark.asyncio
@@ -152,9 +146,7 @@ async def test_did_you_mean_returns_top_match() -> None:
     sim = DID_YOU_MEAN_THRESHOLD + 0.25  # clearly above threshold
     fake_pool = _make_fake_pool_returning([(term, sim)])
     result = await did_you_mean_query(fake_pool, "Bleu Note")  # type: ignore[arg-type]
-    assert result == term, (
-        f"Expected {term!r}, got {result!r}"
-    )
+    assert result == term, f"Expected {term!r}, got {result!r}"
 
 
 @pytest.mark.asyncio
@@ -162,6 +154,4 @@ async def test_did_you_mean_returns_none_when_no_rows() -> None:
     """When no terms exceed the threshold, did_you_mean_query returns None."""
     fake_pool = _make_fake_pool_returning([])
     result = await did_you_mean_query(fake_pool, "zzznomatch")  # type: ignore[arg-type]
-    assert result is None, (
-        f"Expected None when no rows returned, got {result!r}"
-    )
+    assert result is None, f"Expected None when no rows returned, got {result!r}"

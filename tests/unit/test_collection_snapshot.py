@@ -14,7 +14,6 @@ import pytest
 
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
 
-
 # ── Helper ───────────────────────────────────────────────────────────────────
 
 
@@ -117,9 +116,7 @@ def test_snapshot_invalidate_empties() -> None:
     assert snapshot.get_label_records("Blue Note") == [], (
         "After invalidate(), Blue Note records must be empty"
     )
-    assert snapshot.get_label_records("ECM") == [], (
-        "After invalidate(), ECM records must be empty"
-    )
+    assert snapshot.get_label_records("ECM") == [], "After invalidate(), ECM records must be empty"
     assert snapshot.get_label_records("NONEXISTENT") == []
 
 

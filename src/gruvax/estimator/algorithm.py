@@ -38,9 +38,9 @@ from gruvax.estimator.normalize import catalog_in_range, parse_key
 __all__ = [
     "CUBE_ONLY_CONFIDENCE",
     "NO_BOUNDARY_CONFIDENCE",
-    "locate_cube_only",
-    "locate_by_index",
     "locate",
+    "locate_by_index",
+    "locate_cube_only",
 ]
 
 

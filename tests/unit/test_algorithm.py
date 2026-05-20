@@ -47,6 +47,7 @@ FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures"
 def test_locate_result_type_annotations() -> None:
     """LocateResult must have the expected fields with correct types."""
     import dataclasses
+
     fields = {f.name: f for f in dataclasses.fields(LocateResult)}
     assert "release_id" in fields
     assert "primary_cube" in fields
@@ -273,9 +274,13 @@ def test_numeric_edge_covering_blp_9_NOT_in_blp_10_20(boundary_cache: list[dict]
     # Create a synthetic cache with [BLP 10, BLP 20] range
     rows = [
         BoundaryRow(
-            unit_id=1, row=0, col=0,
-            first_label="TestLabel", first_catalog="BLP 10",
-            last_label="TestLabel", last_catalog="BLP 20",
+            unit_id=1,
+            row=0,
+            col=0,
+            first_label="TestLabel",
+            first_catalog="BLP 10",
+            last_label="TestLabel",
+            last_catalog="BLP 20",
             is_empty=False,
         )
     ]
@@ -303,18 +308,20 @@ def test_numeric_edge_blp_9_vs_blp_9_range(boundary_cache: list[dict]) -> None:
     """BLP 9 IS in range [BLP 9, BLP 9] (exact match), proving numeric-aware equality."""
     rows = [
         BoundaryRow(
-            unit_id=1, row=0, col=0,
-            first_label="TestLabel", first_catalog="BLP 9",
-            last_label="TestLabel", last_catalog="BLP 9",
+            unit_id=1,
+            row=0,
+            col=0,
+            first_label="TestLabel",
+            first_catalog="BLP 9",
+            last_label="TestLabel",
+            last_catalog="BLP 9",
             is_empty=False,
         )
     ]
     cache = BoundaryCache()
     cache._load_rows(rows)
 
-    result = locate_cube_only(
-        release_id=1, label="TestLabel", catalog_number="BLP 9", cache=cache
-    )
+    result = locate_cube_only(release_id=1, label="TestLabel", catalog_number="BLP 9", cache=cache)
     assert result.confidence == CUBE_ONLY_CONFIDENCE
 
 
@@ -336,6 +343,7 @@ async def test_cache_load_from_db(db_pool: object) -> None:  # type: ignore[type
 
 
 # ── Phase 2: locate_by_index + locate dispatcher ─────────────────────────────
+
 
 # Helper: build a CollectionSnapshot from a list of dicts (no DB).
 def _make_snapshot(records: list[dict]) -> CollectionSnapshot:
@@ -360,9 +368,13 @@ def _make_single_cube_cache(label: str, first_cat: str, last_cat: str) -> Bounda
     """Build a BoundaryCache with a single cube covering the given label + catalog range."""
     rows = [
         BoundaryRow(
-            unit_id=1, row=0, col=0,
-            first_label=label, first_catalog=first_cat,
-            last_label=label, last_catalog=last_cat,
+            unit_id=1,
+            row=0,
+            col=0,
+            first_label=label,
+            first_catalog=first_cat,
+            last_label=label,
+            last_catalog=last_cat,
             is_empty=False,
         )
     ]
@@ -393,7 +405,9 @@ def test_locate_by_index_multi_record() -> None:
         cache=cache,
         snapshot=snapshot,
     )
-    assert result.sub_cube_interval is not None, "Expected non-null SubInterval for multi-record label"
+    assert result.sub_cube_interval is not None, (
+        "Expected non-null SubInterval for multi-record label"
+    )
     si = result.sub_cube_interval
     assert 0 <= si.start <= si.end <= 1, f"SubInterval out of [0,1]: start={si.start} end={si.end}"
     assert result.confidence > CUBE_ONLY_CONFIDENCE, (
@@ -504,8 +518,7 @@ def test_monotone_within_label() -> None:
     # Build 10 records with increasing catalog numbers
     label = "MonoTest"
     records = [
-        {"release_id": i, "label": label, "catalog_number": f"MT {i:03d}"}
-        for i in range(1, 11)
+        {"release_id": i, "label": label, "catalog_number": f"MT {i:03d}"} for i in range(1, 11)
     ]
     cache = _make_single_cube_cache(label, "MT 001", "MT 010")
     snapshot = _make_snapshot(records)
@@ -525,7 +538,7 @@ def test_monotone_within_label() -> None:
     # Verify monotone non-decreasing
     for i in range(len(starts) - 1):
         assert starts[i] <= starts[i + 1], (
-            f"Monotone violated at index {i}: start[{i}]={starts[i]} > start[{i+1}]={starts[i+1]}"
+            f"Monotone violated at index {i}: start[{i}]={starts[i]} > start[{i + 1}]={starts[i + 1]}"
         )
 
 
@@ -556,7 +569,7 @@ def test_locate_benchmark(benchmark) -> None:  # type: ignore[no-untyped-def]
             for rid in release_ids
         ]
 
-    result = benchmark(run_all)
+    benchmark(run_all)
     # pytest-benchmark records total time for the batched call.
     # p95 is in milliseconds: assert the batch p95 is well under the budget.
     assert benchmark.stats["mean"] * 1000 < 50, (
@@ -582,7 +595,6 @@ def _make_golden_cache_and_snapshot(case: dict) -> tuple[BoundaryCache, Collecti
     """
     label = case["label"]
     k = case["k"]
-    idx = case["idx"]
     target_cat = case["catalog_number"]
     release_id = case["release_id"]
 
@@ -639,7 +651,10 @@ def _make_golden_cache_and_snapshot(case: dict) -> tuple[BoundaryCache, Collecti
 
     # Build cache: single cube covering first to last in sorted order
     from gruvax.estimator.normalize import parse_key as _pk
-    sorted_pairs = sorted(zip(catalog_nums, other_release_ids), key=lambda x: _pk(x[0]))
+
+    sorted_pairs = sorted(
+        zip(catalog_nums, other_release_ids, strict=True), key=lambda x: _pk(x[0])
+    )
     sorted_cats = [p[0] for p in sorted_pairs]
     sorted_ids = [p[1] for p in sorted_pairs]
 
@@ -648,15 +663,23 @@ def _make_golden_cache_and_snapshot(case: dict) -> tuple[BoundaryCache, Collecti
         mid = len(sorted_cats) // 2
         rows = [
             BoundaryRow(
-                unit_id=1, row=0, col=0,
-                first_label=label, first_catalog=sorted_cats[0],
-                last_label=label, last_catalog=sorted_cats[mid - 1],
+                unit_id=1,
+                row=0,
+                col=0,
+                first_label=label,
+                first_catalog=sorted_cats[0],
+                last_label=label,
+                last_catalog=sorted_cats[mid - 1],
                 is_empty=False,
             ),
             BoundaryRow(
-                unit_id=1, row=0, col=1,
-                first_label=label, first_catalog=sorted_cats[mid],
-                last_label=label, last_catalog=sorted_cats[-1],
+                unit_id=1,
+                row=0,
+                col=1,
+                first_label=label,
+                first_catalog=sorted_cats[mid],
+                last_label=label,
+                last_catalog=sorted_cats[-1],
                 is_empty=False,
             ),
         ]
@@ -669,7 +692,7 @@ def _make_golden_cache_and_snapshot(case: dict) -> tuple[BoundaryCache, Collecti
     snapshot = CollectionSnapshot()
     records = [
         RecordRow(release_id=rid, label=label, catalog_number=cat)
-        for cat, rid in zip(sorted_cats, sorted_ids)
+        for cat, rid in zip(sorted_cats, sorted_ids, strict=True)
     ]
     by_label = {label.casefold(): records}
     snapshot._load_snapshot(by_label)
@@ -694,9 +717,7 @@ def test_golden_cases(case: dict) -> None:
         snapshot=snapshot,
     )
 
-    assert result.sub_cube_interval is not None, (
-        f"[{case['id']}] Expected non-null SubInterval"
-    )
+    assert result.sub_cube_interval is not None, f"[{case['id']}] Expected non-null SubInterval"
     si = result.sub_cube_interval
 
     assert abs(si.start - case["expected_start"]) <= tol, (

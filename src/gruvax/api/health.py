@@ -37,9 +37,7 @@ async def get_health(request: Request) -> JSONResponse:
     db_ok: bool = getattr(request.app.state, "db_ok", False)
     view_ok: bool = getattr(request.app.state, "discogsography_view_ok", False)
     mqtt_ok: bool = getattr(request.app.state, "mqtt_ok", False)
-    started_at: datetime = getattr(
-        request.app.state, "started_at", datetime.now(UTC)
-    )
+    started_at: datetime = getattr(request.app.state, "started_at", datetime.now(UTC))
 
     db_status = "ok" if db_ok else "error"
     view_status = "ok" if view_ok else "failed"

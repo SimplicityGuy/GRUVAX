@@ -14,7 +14,7 @@ are NOT catalog numbers and must NEVER be compared via ``normalize_catalog()``.
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 if TYPE_CHECKING:
     from psycopg import AsyncConnection
@@ -52,7 +52,7 @@ class CollectionSnapshot:
         # Keyed by label.casefold() — Pitfall C: never normalize_catalog() on labels.
         self._by_label: dict[str, list[RecordRow]] = {}
 
-    async def load(self, pool: AsyncConnectionPool[AsyncConnection[object]]) -> None:  # type: ignore[type-arg]
+    async def load(self, pool: AsyncConnectionPool[AsyncConnection[object]]) -> None:
         """Load all records from ``gruvax.v_collection`` and group by label.
 
         Called once during FastAPI lifespan startup. Reads from the view defined
@@ -63,15 +63,12 @@ class CollectionSnapshot:
             pool: An open ``psycopg_pool.AsyncConnectionPool`` instance.
         """
         async with pool.connection() as conn, conn.cursor() as cur:
-            await cur.execute(
-                "SELECT release_id, label, catalog_number"
-                " FROM gruvax.v_collection"
-            )
+            await cur.execute("SELECT release_id, label, catalog_number FROM gruvax.v_collection")
             rows_raw = await cur.fetchall()
 
         by_label: dict[str, list[RecordRow]] = {}
         for row in rows_raw:
-            release_id, label, catalog_number = row
+            release_id, label, catalog_number = cast("tuple[int, str | None, str | None]", row)
             # Pitfall C: casefold label for grouping — never normalize_catalog() on labels
             key = (label or "").casefold()
             record = RecordRow(

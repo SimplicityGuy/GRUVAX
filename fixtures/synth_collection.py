@@ -20,11 +20,10 @@ All factories use the _load_rows / _load_snapshot seams — NO DB, NO async.
 
 from __future__ import annotations
 
-from typing import Callable
+from collections.abc import Callable
 
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
-
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -40,9 +39,13 @@ def _build_cache(
     """Build a BoundaryCache with a single cube covering label + catalog range."""
     rows = [
         BoundaryRow(
-            unit_id=unit_id, row=row, col=col,
-            first_label=label, first_catalog=first_cat,
-            last_label=label, last_catalog=last_cat,
+            unit_id=unit_id,
+            row=row,
+            col=col,
+            first_label=label,
+            first_catalog=first_cat,
+            last_label=label,
+            last_catalog=last_cat,
             is_empty=False,
         )
     ]
@@ -110,8 +113,14 @@ def make_sparse_gappy() -> tuple[BoundaryCache, CollectionSnapshot, dict[int, fl
     # Catalog numbers with deliberate large gaps to create uneven spacing
     # Gap structure: 1-10 (small gap), 10-50 (large gap), 50-55 (small), 55-100 (medium)
     catalogs = [
-        "SG 001", "SG 010", "SG 050", "SG 055",
-        "SG 056", "SG 057", "SG 099", "SG 100",
+        "SG 001",
+        "SG 010",
+        "SG 050",
+        "SG 055",
+        "SG 056",
+        "SG 057",
+        "SG 099",
+        "SG 100",
     ]
     cache = _build_cache(label, catalogs[0], catalogs[-1])
     snapshot = _build_snapshot(label, catalogs)
@@ -124,10 +133,7 @@ def make_sparse_gappy() -> tuple[BoundaryCache, CollectionSnapshot, dict[int, fl
 
     # Pitfall F: truth is gap-weighted (physical shelf fraction), NOT idx/(k-1).
     # release_ids are 1-indexed per _build_snapshot.
-    truth = {
-        i + 1: (nums[i] - low) / span
-        for i in range(len(nums))
-    }
+    truth = {i + 1: (nums[i] - low) / span for i in range(len(nums))}
     return cache, snapshot, truth
 
 
@@ -169,7 +175,9 @@ def make_singleton() -> tuple[BoundaryCache, CollectionSnapshot, dict[int, float
 # ── Registry ─────────────────────────────────────────────────────────────────
 
 
-def all_shapes() -> dict[str, Callable[[], tuple[BoundaryCache, CollectionSnapshot, dict[int, float]]]]:
+def all_shapes() -> dict[
+    str, Callable[[], tuple[BoundaryCache, CollectionSnapshot, dict[int, float]]]
+]:
     """Return the named factory registry.
 
     Used by:

@@ -48,10 +48,13 @@ NO_BOUNDARY_RELEASE_ID = 111
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan."""
     app = create_app()
-    async with LifespanManager(app) as manager, AsyncClient(
-        transport=ASGITransport(app=manager.app),
-        base_url="http://test",
-    ) as ac:
+    async with (
+        LifespanManager(app) as manager,
+        AsyncClient(
+            transport=ASGITransport(app=manager.app),
+            base_url="http://test",
+        ) as ac,
+    ):
         yield ac
 
 
@@ -121,12 +124,8 @@ async def test_locate_no_boundary(client) -> None:  # type: ignore[no-untyped-de
     assert body["confidence"] == 0.0, (
         f"Expected confidence=0.0 for no-boundary case, got {body['confidence']}"
     )
-    assert body["primary_cube"] is None, (
-        f"Expected primary_cube=null, got {body['primary_cube']}"
-    )
-    assert body["label_span"] == [], (
-        f"Expected label_span=[], got {body['label_span']}"
-    )
+    assert body["primary_cube"] is None, f"Expected primary_cube=null, got {body['primary_cube']}"
+    assert body["label_span"] == [], f"Expected label_span=[], got {body['label_span']}"
     assert body["sub_cube_interval"] is None
 
 
@@ -146,8 +145,13 @@ async def test_locate_response_shape(client) -> None:  # type: ignore[no-untyped
     assert response.status_code == 200
     body = response.json()
     required_keys = {
-        "release_id", "primary_cube", "label_span",
-        "sub_cube_interval", "confidence", "generated_at", "estimator_version",
+        "release_id",
+        "primary_cube",
+        "label_span",
+        "sub_cube_interval",
+        "confidence",
+        "generated_at",
+        "estimator_version",
     }
     assert required_keys.issubset(body.keys()), (
         f"Missing keys in LocateResult: {required_keys - body.keys()}"
@@ -197,7 +201,7 @@ async def test_sub_cube_interval_bounds(client) -> None:  # type: ignore[no-unty
     if si is None:
         pytest.skip("sub_cube_interval is null (snapshot may be empty in this env)")
 
-    assert 0.0 <= si["start"], f"start={si['start']} < 0"
+    assert si["start"] >= 0.0, f"start={si['start']} < 0"
     assert si["start"] <= si["end"], f"start={si['start']} > end={si['end']}"
     assert si["end"] <= 1.0, f"end={si['end']} > 1"
 
@@ -276,6 +280,7 @@ async def test_singleton_full_cube_band(client) -> None:  # type: ignore[no-unty
 
 
 # ── /api/units tests ──────────────────────────────────────────────────────────
+
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_units(client) -> None:  # type: ignore[no-untyped-def]

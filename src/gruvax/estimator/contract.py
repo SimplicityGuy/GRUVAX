@@ -69,8 +69,8 @@ class SubInterval:
     """
 
     cube: CubeRef
-    start: float          # 0..1 within cube width
-    end: float            # 0..1 within cube width
+    start: float  # 0..1 within cube width
+    end: float  # 0..1 within cube width
     crosses_boundary: bool
     next_cube: CubeRef | None = None
 
@@ -99,7 +99,5 @@ class LocateResult:
     label_span: list[CubeRef]
     sub_cube_interval: SubInterval | None
     confidence: float
-    generated_at: datetime = field(
-        default_factory=lambda: datetime.now(UTC)
-    )
+    generated_at: datetime = field(default_factory=lambda: datetime.now(UTC))
     estimator_version: str = "cube-only-v1"

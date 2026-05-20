@@ -318,7 +318,8 @@ LocateRecord = dict[str, Any]
 
 
 async def get_release_for_locate(
-    pool: AsyncConnectionPool,    release_id: int,
+    pool: AsyncConnectionPool,
+    release_id: int,
 ) -> LocateRecord | None:
     """Fetch label and catalog_number for a release_id from v_collection.
 

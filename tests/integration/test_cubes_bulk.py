@@ -23,10 +23,13 @@ from gruvax.app import create_app
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan."""
     app = create_app()
-    async with LifespanManager(app) as manager, AsyncClient(
-        transport=ASGITransport(app=manager.app),
-        base_url="http://test",
-    ) as ac:
+    async with (
+        LifespanManager(app) as manager,
+        AsyncClient(
+            transport=ASGITransport(app=manager.app),
+            base_url="http://test",
+        ) as ac,
+    ):
         yield ac
 
 
@@ -34,14 +37,10 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
 async def test_cubes_bulk_count(client) -> None:  # type: ignore[no-untyped-def]
     """GET /api/cubes returns exactly 32 rows (2 units x 4x4 grid = 32 cubes)."""
     response = await client.get("/api/cubes")
-    assert response.status_code == 200, (
-        f"Expected 200, got {response.status_code}: {response.text}"
-    )
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
     body = response.json()
     assert "cubes" in body, f"Response missing 'cubes' key: {body}"
-    assert len(body["cubes"]) == 32, (
-        f"Expected 32 cubes, got {len(body['cubes'])}"
-    )
+    assert len(body["cubes"]) == 32, f"Expected 32 cubes, got {len(body['cubes'])}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -67,12 +66,8 @@ async def test_cubes_bulk_zero_based(client) -> None:  # type: ignore[no-untyped
     assert response.status_code == 200
     body = response.json()
     for cube in body["cubes"]:
-        assert 0 <= cube["row"] <= 3, (
-            f"Expected row in 0..3, got {cube['row']} for cube {cube}"
-        )
-        assert 0 <= cube["col"] <= 3, (
-            f"Expected col in 0..3, got {cube['col']} for cube {cube}"
-        )
+        assert 0 <= cube["row"] <= 3, f"Expected row in 0..3, got {cube['row']} for cube {cube}"
+        assert 0 <= cube["col"] <= 3, f"Expected col in 0..3, got {cube['col']} for cube {cube}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -83,8 +78,7 @@ async def test_cubes_bulk_empties_flagged(client) -> None:  # type: ignore[no-un
     body = response.json()
     empty_cubes = [c for c in body["cubes"] if c["is_empty"]]
     assert empty_cubes, (
-        "Expected at least one is_empty=True cube in the seed data. "
-        f"All cubes: {body['cubes']}"
+        f"Expected at least one is_empty=True cube in the seed data. All cubes: {body['cubes']}"
     )
 
 
@@ -96,9 +90,5 @@ async def test_cubes_bulk_no_boundary_details(client) -> None:  # type: ignore[n
     body = response.json()
     for cube in body["cubes"]:
         # Boundary detail fields belong to the single-cube endpoint only
-        assert "first_label" not in cube, (
-            f"Bulk endpoint should not expose first_label: {cube}"
-        )
-        assert "last_label" not in cube, (
-            f"Bulk endpoint should not expose last_label: {cube}"
-        )
+        assert "first_label" not in cube, f"Bulk endpoint should not expose first_label: {cube}"
+        assert "last_label" not in cube, f"Bulk endpoint should not expose last_label: {cube}"

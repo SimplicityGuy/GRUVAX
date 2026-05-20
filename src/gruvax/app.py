@@ -92,6 +92,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # ── 3b. Collection snapshot (POS-03) ─────────────────────────────────────
     from gruvax.estimator.collection_snapshot import CollectionSnapshot
+
     snapshot = CollectionSnapshot()
     try:
         await snapshot.load(pool)  # type: ignore[arg-type]
