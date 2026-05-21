@@ -104,15 +104,16 @@ export function PinOverlay({ isLocked = false }: PinOverlayProps) {
 
   const handleDigit = useCallback((d: string) => {
     if (status === 'submitting' || status === 'ratelimit') return
-    setDigits((prev) => {
-      if (prev.length >= PIN_LENGTH) return prev
-      const next = [...prev, d]
-      if (next.length === PIN_LENGTH && status === 'idle') {
-        void submitPin(next.join(''))
-      }
-      return next
-    })
-  }, [status, submitPin])
+    if (digits.length >= PIN_LENGTH) return
+    const next = [...digits, d]
+    setDigits(next)
+    // Auto-submit on the 4th digit. Fired from the event handler (not a state
+    // updater — updaters must be pure and are double-invoked under StrictMode)
+    // so the login request fires exactly once.
+    if (next.length === PIN_LENGTH && status === 'idle') {
+      void submitPin(next.join(''))
+    }
+  }, [digits, status, submitPin])
 
   const handleBackspace = useCallback(() => {
     if (status === 'submitting' || status === 'ratelimit') return
