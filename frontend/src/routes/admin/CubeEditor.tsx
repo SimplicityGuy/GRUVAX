@@ -186,14 +186,14 @@ export function CubeEditor() {
     catalogLast: '',
   })
 
-  // Populated once boundary loads
+  // Populated once boundary loads — read backend field names (CR-01)
   useEffect(() => {
     if (boundary) {
       setFields({
-        labelFirst: boundary.label_first,
-        catalogFirst: boundary.catalog_first,
-        labelLast: boundary.label_last,
-        catalogLast: boundary.catalog_last,
+        labelFirst: boundary.first_label,
+        catalogFirst: boundary.first_catalog,
+        labelLast: boundary.last_label,
+        catalogLast: boundary.last_catalog,
       })
     }
   }, [boundary])
@@ -253,10 +253,11 @@ export function CubeEditor() {
           unit_id: unitId,
           row: rowNum,
           col: colNum,
-          label_first: f.labelFirst,
-          catalog_first: f.catalogFirst,
-          label_last: f.labelLast,
-          catalog_last: f.catalogLast,
+          first_label: f.labelFirst,
+          first_catalog: f.catalogFirst,
+          last_label: f.labelLast,
+          last_catalog: f.catalogLast,
+          // force is omitted here — real validation (WR-10 partial: force threaded on add-to-pending)
         },
       ])
 
@@ -326,15 +327,16 @@ export function CubeEditor() {
       return
     }
 
-    // Build the new edit
+    // Build the new edit — use backend field names (CR-01) and thread force (WR-10)
     const newEdit = {
       unit_id: unitId,
       row: rowNum,
       col: colNum,
-      label_first: fields.labelFirst,
-      catalog_first: fields.catalogFirst,
-      label_last: fields.labelLast,
-      catalog_last: fields.catalogLast,
+      first_label: fields.labelFirst,
+      first_catalog: fields.catalogFirst,
+      last_label: fields.labelLast,
+      last_catalog: fields.catalogLast,
+      force: forceFirst || forceLast,
     }
 
     // Merge into pending change-set

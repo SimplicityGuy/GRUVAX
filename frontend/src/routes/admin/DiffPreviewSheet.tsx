@@ -161,12 +161,12 @@ export function DiffPreviewSheet() {
       ) : (
         <section className="diff-detail-section" aria-label="Boundary changes">
           {diffRows.map(({ edit, validateResult }) => {
-            const hasMoves = validateResult?.movement_counts
-            const moveCounts = hasMoves ? [hasMoves] : []
-            const isEmpty = !edit.label_last && !edit.catalog_last
-            const isOverstuffed = validateResult?.movement_counts
-              ? validateResult.movement_counts.records_after >
-                (validateResult.movement_counts.records_before * 1.1 + 1)
+            // movement_counts is a list on the wire (CR-03): use [0] for the single-cube case
+            const moveCounts = validateResult?.movement_counts ?? []
+            const mc = moveCounts[0]
+            const isEmpty = !edit.last_label && !edit.last_catalog
+            const isOverstuffed = mc
+              ? mc.records_after > (mc.records_before * 1.1 + 1)
               : false
 
             return (
@@ -175,7 +175,7 @@ export function DiffPreviewSheet() {
                   {cubeAddress(edit.unit_id, edit.row, edit.col)}
                 </div>
 
-                {/* Before / After table */}
+                {/* Before / After table — field names match backend (CR-01) */}
                 <table className="diff-before-after-table" aria-label={`Changes for cube ${cubeAddress(edit.unit_id, edit.row, edit.col)}`}>
                   <thead>
                     <tr>
@@ -186,31 +186,31 @@ export function DiffPreviewSheet() {
                   <tbody>
                     <tr>
                       <td className="diff-field-label">FIRST LABEL</td>
-                      <td className="diff-field-value">{edit.label_first || '—'}</td>
+                      <td className="diff-field-value">{edit.first_label || '—'}</td>
                     </tr>
                     <tr>
                       <td className="diff-field-label">FIRST CATALOG</td>
-                      <td className="diff-field-value">{edit.catalog_first || '—'}</td>
+                      <td className="diff-field-value">{edit.first_catalog || '—'}</td>
                     </tr>
                     <tr>
                       <td className="diff-field-label">LAST LABEL</td>
-                      <td className="diff-field-value">{edit.label_last || '—'}</td>
+                      <td className="diff-field-value">{edit.last_label || '—'}</td>
                     </tr>
                     <tr>
                       <td className="diff-field-label">LAST CATALOG</td>
-                      <td className="diff-field-value">{edit.catalog_last || '—'}</td>
+                      <td className="diff-field-value">{edit.last_catalog || '—'}</td>
                     </tr>
                   </tbody>
                 </table>
 
-                {/* Record movement counts */}
-                {moveCounts.map((mc, i) => (
+                {/* Record movement counts — iterate the list (CR-03) */}
+                {moveCounts.map((moveItem, i) => (
                   <p key={i} className="diff-movement-count">
-                    Records: {mc.records_before} → {mc.records_after}
-                    {mc.records_after > mc.records_before
-                      ? ` (+${mc.records_after - mc.records_before})`
-                      : mc.records_after < mc.records_before
-                        ? ` (${mc.records_after - mc.records_before})`
+                    Records: {moveItem.records_before} → {moveItem.records_after}
+                    {moveItem.records_after > moveItem.records_before
+                      ? ` (+${moveItem.records_after - moveItem.records_before})`
+                      : moveItem.records_after < moveItem.records_before
+                        ? ` (${moveItem.records_after - moveItem.records_before})`
                         : ' (no change)'}
                   </p>
                 ))}

@@ -48,13 +48,13 @@ export function CubesGrid() {
     [data],
   )
 
-  /** All unique first-letters (uppercase) of label_first across all cubes. */
+  /** All unique first-letters (uppercase) of first_label across all cubes (CR-01). */
   const activeLetters = useMemo<Set<string>>(() => {
     if (!data) return new Set()
     const letters = new Set<string>()
     for (const cube of data.cubes) {
-      if (cube.label_first) {
-        const firstChar = cube.label_first.charAt(0).toUpperCase()
+      if (cube.first_label) {
+        const firstChar = cube.first_label.charAt(0).toUpperCase()
         if (/[A-Z]/.test(firstChar)) {
           letters.add(firstChar)
         }
@@ -103,8 +103,8 @@ export function CubesGrid() {
 
             <div className="cubes-unit-grid">
               {cubes.map((cube) => {
-                const letterAttr = cube.label_first
-                  ? cube.label_first.charAt(0).toUpperCase()
+                const letterAttr = cube.first_label
+                  ? cube.first_label.charAt(0).toUpperCase()
                   : undefined
                 const isAlphaAnchor =
                   letterAttr && activeLetters.has(letterAttr)
@@ -119,7 +119,7 @@ export function CubesGrid() {
                     type="button"
                     className={`cube-card${cube.is_empty ? ' cube-card--empty' : ''}`}
                     onClick={() => handleCubeTap(cube)}
-                    aria-label={`Cube ${cube.unit_id}-${cube.row}-${cube.col}: ${cube.label_first} to ${cube.label_last}`}
+                    aria-label={`Cube ${cube.unit_id}-${cube.row}-${cube.col}: ${cube.first_label} to ${cube.last_label}`}
                     {...isAlphaAnchor}
                   >
                     <div className="cube-card-header">
@@ -132,14 +132,14 @@ export function CubesGrid() {
                     </div>
 
                     <div className="cube-card-body">
-                      <p className="cube-card-label">{cube.label_first}</p>
-                      <p className="cube-card-catalog">{cube.catalog_first}</p>
-                      {cube.label_last !== cube.label_first && (
+                      <p className="cube-card-label">{cube.first_label}</p>
+                      <p className="cube-card-catalog">{cube.first_catalog}</p>
+                      {cube.last_label !== cube.first_label && (
                         <>
                           <p className="cube-card-label cube-card-label--last">
-                            {cube.label_last}
+                            {cube.last_label}
                           </p>
-                          <p className="cube-card-catalog">{cube.catalog_last}</p>
+                          <p className="cube-card-catalog">{cube.last_catalog}</p>
                         </>
                       )}
                     </div>
