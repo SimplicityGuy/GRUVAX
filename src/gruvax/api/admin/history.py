@@ -134,7 +134,14 @@ async def revert_change_set(
             prev_first_catalog = hist.get("prev_first_catalog")
             prev_last_label = hist.get("prev_last_label")
             prev_last_catalog = hist.get("prev_last_catalog")
-            prev_is_empty = bool(hist.get("prev_is_empty", True))
+            # WR-07: If any boundary column is NULL, coerce is_empty=True to avoid
+            # the empty_or_complete CHECK violation (prev_is_empty=False with NULLs).
+            prev_is_empty_raw = bool(hist.get("prev_is_empty", True))
+            has_complete_boundary = all([
+                prev_first_label, prev_first_catalog,
+                prev_last_label, prev_last_catalog,
+            ])
+            prev_is_empty = prev_is_empty_raw or not has_complete_boundary
 
             await write_boundary(
                 conn,
@@ -170,12 +177,11 @@ async def revert_change_set(
                 "col": col_idx,
             })
 
-    if not reverted and not skipped:
-        # This can happen if the change-set was already fully reverted or had 0 cubes
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"type": "change_set_not_found", "change_set_id": change_set_id},
-        )
+    # WR-11: Removed the dead `not reverted and not skipped` 404 branch.
+    # `fetch_change_set_rows` returned non-empty rows (otherwise we 404'd above),
+    # and the loop always appends each cube to reverted or skipped, so this branch
+    # was unreachable. Returning {reverted:[], skipped:[...]} is the meaningful
+    # signal for a fully-conflicted revert — not 404.
 
     # ── Invalidate + reload cache AFTER transaction commit (Pitfall A) ───────
     # Only reload if at least one cube was actually changed
