@@ -12,6 +12,8 @@ Functions:
                                 catalog number (D-12).
   - ``did_you_mean_query``:    async trigram-similarity suggestion when FTS
                                 returns nothing strong (D-11).
+  - ``load_settings_cache``:   load all key/value rows from gruvax.settings
+                                into a dict for in-process caching (Phase 3).
 """
 
 from __future__ import annotations
@@ -310,6 +312,38 @@ LIMIT %s
         did_you_mean = await did_you_mean_query(pool, q)
 
     return rows, took_ms, did_you_mean
+
+
+# ── Settings cache (Phase 3) ──────────────────────────────────────────────────
+
+
+async def load_settings_cache(
+    pool: AsyncConnectionPool,
+) -> dict[str, Any]:
+    """Load all rows from ``gruvax.settings`` into a key→value dict.
+
+    Called once during FastAPI lifespan startup (step 3c) and stored in
+    ``app.state.settings_cache``.  Provides nominal_capacity, idle TTL, and
+    other Phase 3 runtime config without a per-request DB round-trip.
+
+    Values are already JSONB-decoded by psycopg (numbers as int/float, strings
+    as str, etc.).  Callers should use ``int(settings_cache.get("cube.nominal_capacity",
+    95))`` to guard against a missing or malformed value.
+
+    All SQL uses ``%s`` placeholders — no f-string interpolation (T-01-07).
+
+    Args:
+        pool: Open psycopg ``AsyncConnectionPool``.
+
+    Returns:
+        Dict mapping ``key`` (str) → decoded JSONB ``value`` for every row in
+        ``gruvax.settings``.  Returns ``{}`` if the table is empty.
+    """
+    sql = "SELECT key, value FROM gruvax.settings"
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql)
+        rows = await cur.fetchall()
+    return {str(row[0]): row[1] for row in rows}
 
 
 # ── Locate query ──────────────────────────────────────────────────────────────

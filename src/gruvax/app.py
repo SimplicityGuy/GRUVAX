@@ -102,6 +102,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Proceed with empty snapshot — locate falls back to cube-only-v1.
     app.state.collection_snapshot = snapshot
 
+    # ── 3c. Settings cache (Phase 3) ─────────────────────────────────────────
+    # Loads gruvax.settings key/value rows into app.state.settings_cache so
+    # endpoints can read nominal_capacity, idle TTL, etc. without a DB hit.
+    # Mirrors the try/except + logger.error + proceed pattern of steps 3 and 3b.
+    from gruvax.db.queries import load_settings_cache
+
+    try:
+        settings_map = await load_settings_cache(pool)
+        app.state.settings_cache = settings_map
+        logger.info("Settings cache loaded (%d keys)", len(settings_map))
+    except Exception as exc:
+        logger.error("Settings cache load failed — proceeding with empty cache: %s", exc)
+        app.state.settings_cache = {}
+
     # ── 4. MQTT (non-blocking best-effort; DEP-01) ───────────────────────────
     await connect_mqtt(app)
 
