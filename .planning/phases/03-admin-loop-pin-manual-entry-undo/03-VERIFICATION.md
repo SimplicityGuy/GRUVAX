@@ -1,9 +1,10 @@
 ---
 phase: 03-admin-loop-pin-manual-entry-undo
-verified: 2026-05-20T00:00:00Z
-status: human_needed
+verified: 2026-05-21T00:00:00Z
+status: passed
 score: 5/5 must-haves verified
 overrides_applied: 0
+human_uat: passed 2026-05-21 — all 10 human-verification items confirmed via /gsd:verify-work (see 03-UAT.md); UAT findings F1–F7 fixed (03-UAT-FIXES.md), F8 deferred
 human_verification:
   - test: "Open /admin on a phone-sized viewport and on the kiosk viewport. Tap the keypad to enter the correct PIN. Confirm the PinOverlay appears, keypad dots register, entering the PIN lands on the admin shell without any system keyboard appearing on the kiosk."
     expected: "Admin shell loads with GRUVAX ADMIN wordmark, countdown pill, Lock icon, and Log out icon. No system keyboard appears."

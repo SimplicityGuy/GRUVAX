@@ -1,11 +1,13 @@
 ---
-status: partial
+status: resolved
 phase: 03-admin-loop-pin-manual-entry-undo
 source: [03-VERIFICATION.md]
 started: 2026-05-20
-updated: 2026-05-20
+updated: 2026-05-21
 total_items: 10
-passed: 0
+passed: 10
+superseded_by: 03-UAT.md
+note: All 10 items confirmed via /gsd:verify-work on 2026-05-21 (UI live + authenticated-API drive). See 03-UAT.md.
 ---
 
 # Phase 3 — Human UAT Checklist (Admin Loop)
