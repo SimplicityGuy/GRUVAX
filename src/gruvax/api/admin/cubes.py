@@ -400,6 +400,8 @@ async def validate_boundary(
 
             if not first_exists or not last_exists:
                 # Find near-misses for whichever boundary is phantom
+                # phantom_field tells the frontend which record triggered the alert (F7)
+                phantom_field = "first" if not first_exists else "last"
                 phantom_label = first_label if not first_exists else last_label
                 phantom_catalog = first_catalog if not first_exists else last_catalog
                 near_misses = await find_boundary_near_misses(
@@ -411,6 +413,7 @@ async def validate_boundary(
                     "col": edit.col,
                     "valid": False,
                     "phantom": True,
+                    "phantom_field": phantom_field,
                     "message": "No match in collection. Did you mean one of these?",
                     "near_misses": near_misses,
                     "movement_counts": [],

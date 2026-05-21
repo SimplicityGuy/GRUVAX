@@ -19,13 +19,17 @@
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useQueryClient } from '@tanstack/react-query'
-import { adminBulkSave, validateBoundary } from '../../api/adminClient'
+import { BulkSaveError, adminBulkSave, adminGetCubeBoundary, validateBoundary } from '../../api/adminClient'
 import { useAdminStore } from '../../state/adminStore'
-import type { CubeBoundaryEdit, ValidateItem } from '../../api/types'
+import type { AdminCubeBoundary, CubeBoundaryEdit, ValidateItem } from '../../api/types'
 
-/** Format cube address for display. Row and col are 0-indexed; display as 1-indexed. */
+/** Format cube address for display.
+ *
+ * Uses 0-indexed row/col to match CubesGrid and CubeEditor (F6 fix).
+ * The kiosk A1–D4 letter scheme is a separate surface — do not use it here.
+ */
 function cubeAddress(unit_id: number, row: number, col: number): string {
-  return `${unit_id}/${row + 1}/${col + 1}`
+  return `${unit_id}/${row}/${col}`
 }
 
 /** One row in the diff table. */
@@ -46,15 +50,59 @@ export function DiffPreviewSheet() {
   // Validate results fetched on mount for movement counts / warnings
   const [validateResults, setValidateResults] = useState<ValidateItem[]>([])
   const [isValidating, setIsValidating] = useState(false)
+  // True when the dry-run found any invalid cubes (order or phantom errors)
+  const [hasValidationErrors, setHasValidationErrors] = useState(false)
+  const [validateErrorMessage, setValidateErrorMessage] = useState<string | null>(null)
 
-  // Fetch validation data once on mount (dry-run — no DB write)
+  // Before-state for each edited cube (keyed by "unit_id-row-col")
+  const [beforeBoundaries, setBeforeBoundaries] = useState<Map<string, AdminCubeBoundary>>(
+    new Map(),
+  )
+
+  // Fetch validation + current boundaries once on mount (dry-run — no DB write)
   useEffect(() => {
     if (!pendingChangeSet || pendingChangeSet.edits.length === 0) return
     setIsValidating(true)
-    void validateBoundary(pendingChangeSet.edits).then((res) => {
-      setValidateResults(res.results)
-      setIsValidating(false)
-    }).catch(() => {
+
+    const editsSnap = pendingChangeSet.edits
+
+    // Run validate + per-cube boundary fetches in parallel
+    const validatePromise = validateBoundary(editsSnap)
+    const boundaryPromises = editsSnap.map((edit) =>
+      adminGetCubeBoundary(edit.unit_id, edit.row, edit.col).then((b) => ({
+        key: `${edit.unit_id}-${edit.row}-${edit.col}`,
+        boundary: b,
+      })).catch(() => null)
+    )
+
+    void Promise.all([validatePromise, Promise.all(boundaryPromises)]).then(
+      ([validateRes, boundaryResults]) => {
+        setValidateResults(validateRes.results)
+        // Surface any validation errors so the COMMIT button can be disabled/warned
+        const invalid = validateRes.results.filter((r) => !r.valid)
+        if (invalid.length > 0) {
+          setHasValidationErrors(true)
+          const firstError = invalid[0]
+          setValidateErrorMessage(
+            firstError.message ?? firstError.error ?? 'One or more cubes have validation errors.',
+          )
+        } else {
+          setHasValidationErrors(false)
+          setValidateErrorMessage(null)
+        }
+
+        // Populate before-state map
+        const map = new Map<string, AdminCubeBoundary>()
+        for (const result of boundaryResults) {
+          if (result) {
+            map.set(result.key, result.boundary)
+          }
+        }
+        setBeforeBoundaries(map)
+        setIsValidating(false)
+      },
+    ).catch(() => {
+      // Failure of validate or any boundary fetch — do not block commit
       setIsValidating(false)
     })
     // Only run on mount — pendingChangeSet identity does not change during preview
@@ -100,8 +148,14 @@ export function DiffPreviewSheet() {
       setTimeout(() => {
         void navigate('/admin/cubes')
       }, 2000)
-    } catch {
-      setCommitError('Could not save — check your connection and try again.')
+    } catch (err) {
+      if (err instanceof BulkSaveError && err.serverMessage) {
+        // Structured server error: boundary_order_error or phantom_boundary
+        setCommitError(err.serverMessage)
+      } else {
+        // Network error or unexpected failure
+        setCommitError('Could not save — check your connection and try again.')
+      }
     } finally {
       setIsCommitting(false)
     }
@@ -144,7 +198,7 @@ export function DiffPreviewSheet() {
                       <div
                         key={`${r}-${c}`}
                         className={`diff-mini-cell${changed ? ' diff-mini-cell--changed' : ''}`}
-                        aria-label={changed ? `Cube ${uid}/${r + 1}/${c + 1} — changed` : undefined}
+                        aria-label={changed ? `Cube ${uid}/${r}/${c} — changed` : undefined}
                       />
                     )
                   })
@@ -169,6 +223,10 @@ export function DiffPreviewSheet() {
               ? mc.records_after > (mc.records_before * 1.1 + 1)
               : false
 
+            // Before-state: fetched from GET /boundary on mount (F5)
+            const beforeKey = `${edit.unit_id}-${edit.row}-${edit.col}`
+            const before = beforeBoundaries.get(beforeKey)
+
             return (
               <div key={`${edit.unit_id}-${edit.row}-${edit.col}`} className="diff-cube-card">
                 <div className="diff-cube-address">
@@ -180,24 +238,29 @@ export function DiffPreviewSheet() {
                   <thead>
                     <tr>
                       <th className="diff-col-label">FIELD</th>
+                      <th className="diff-col-label">BEFORE</th>
                       <th className="diff-col-label">AFTER</th>
                     </tr>
                   </thead>
                   <tbody>
                     <tr>
                       <td className="diff-field-label">FIRST LABEL</td>
+                      <td className="diff-field-value diff-field-before">{before?.first_label || '—'}</td>
                       <td className="diff-field-value">{edit.first_label || '—'}</td>
                     </tr>
                     <tr>
                       <td className="diff-field-label">FIRST CATALOG</td>
+                      <td className="diff-field-value diff-field-before">{before?.first_catalog || '—'}</td>
                       <td className="diff-field-value">{edit.first_catalog || '—'}</td>
                     </tr>
                     <tr>
                       <td className="diff-field-label">LAST LABEL</td>
+                      <td className="diff-field-value diff-field-before">{before?.last_label || '—'}</td>
                       <td className="diff-field-value">{edit.last_label || '—'}</td>
                     </tr>
                     <tr>
                       <td className="diff-field-label">LAST CATALOG</td>
+                      <td className="diff-field-value diff-field-before">{before?.last_catalog || '—'}</td>
                       <td className="diff-field-value">{edit.last_catalog || '—'}</td>
                     </tr>
                   </tbody>
@@ -245,6 +308,12 @@ export function DiffPreviewSheet() {
           </div>
         ) : (
           <>
+            {validateErrorMessage && (
+              <div className="diff-validate-error" role="alert">
+                <span aria-hidden="true">!</span>
+                {validateErrorMessage} Fix the issue in the editor before committing.
+              </div>
+            )}
             {commitError && (
               <p className="diff-commit-error" role="alert">
                 {commitError}
@@ -254,7 +323,7 @@ export function DiffPreviewSheet() {
               type="button"
               className="editor-btn-primary"
               onClick={() => void handleCommit()}
-              disabled={isCommitting || isValidating}
+              disabled={isCommitting || isValidating || hasValidationErrors}
               aria-busy={isCommitting}
             >
               {isCommitting ? 'COMMITTING...' : 'COMMIT CHANGE SET'}

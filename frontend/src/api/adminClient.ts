@@ -253,6 +253,9 @@ export async function getCatalogsForLabel(label: string): Promise<CatalogOption[
  * replays the cached response instead of writing a second change-set.
  * Generate a UUID per commit attempt with `crypto.randomUUID()`, persist it
  * alongside the pendingChangeSet so retries reuse the same key.
+ *
+ * On 400, throws ``BulkSaveError`` carrying the server's ``message`` and
+ * ``type`` fields so callers can surface structured error text to the user.
  */
 export async function adminBulkSave(
   updates: CubeBoundaryEdit[],
@@ -264,7 +267,17 @@ export async function adminBulkSave(
     body: JSON.stringify({ updates }),
   })
   if (!res.ok) {
-    throw new Error(`Bulk save failed: ${res.status}`)
+    // Attempt to parse structured error body (boundary_order_error / phantom_boundary)
+    let errorMessage: string | undefined
+    let errorType: string | undefined
+    try {
+      const body = await res.json() as Record<string, unknown>
+      if (typeof body.message === 'string') errorMessage = body.message
+      if (typeof body.type === 'string') errorType = body.type
+    } catch {
+      // Non-JSON body — fall through to generic message
+    }
+    throw new BulkSaveError(res.status, errorType, errorMessage)
   }
   return res.json() as Promise<CommitResponse>
 }
@@ -316,5 +329,26 @@ export class RateLimitError extends Error {
     super(`Rate limited — retry after ${retryAfterSeconds}s`)
     this.name = 'RateLimitError'
     this.retryAfterSeconds = retryAfterSeconds
+  }
+}
+
+/**
+ * Thrown by ``adminBulkSave`` on a non-200 response.
+ *
+ * ``errorType``    mirrors the server's ``type`` field (e.g. ``boundary_order_error``,
+ *                  ``phantom_boundary``).  ``undefined`` for non-400 HTTP errors.
+ * ``serverMessage`` mirrors the server's ``message`` field.  ``undefined`` when the
+ *                  body was not JSON or contained no ``message`` key.
+ */
+export class BulkSaveError extends Error {
+  readonly status: number
+  readonly errorType: string | undefined
+  readonly serverMessage: string | undefined
+  constructor(status: number, errorType?: string, serverMessage?: string) {
+    super(serverMessage ?? `Bulk save failed: ${status}`)
+    this.name = 'BulkSaveError'
+    this.status = status
+    this.errorType = errorType
+    this.serverMessage = serverMessage
   }
 }

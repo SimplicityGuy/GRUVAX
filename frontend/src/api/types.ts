@@ -182,8 +182,12 @@ export interface ValidateItem {
   comparator_error?: string
   /** Present when valid === false due to boundary_order_error. */
   error?: string
+  /** Human-readable message from the server (boundary_order_error / phantom_boundary). */
+  message?: string
   /** True when the value is not in v_collection (phantom). */
   phantom?: boolean
+  /** Which boundary record triggered the phantom: "first" or "last" (F7). */
+  phantom_field?: 'first' | 'last'
   /** Near-miss candidates from pg_trgm (only when phantom === true). */
   near_misses?: NearMiss[]
   /** movement_counts is a LIST (one item per cube) from the backend (CR-03). */

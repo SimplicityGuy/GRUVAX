@@ -264,11 +264,12 @@ export function CubeEditor() {
       const warnings: PhantomWarning[] = []
       for (const item of result.results) {
         if (item.phantom) {
-          // Determine which field triggered the phantom (heuristic: check first then last)
+          // Use server-provided phantom_field to render alert under the correct record (F7)
+          const which: 'first' | 'last' = item.phantom_field ?? 'first'
           warnings.push({
-            field: 'first',
-            label: f.labelFirst,
-            catalog: f.catalogFirst,
+            field: which,
+            label: which === 'first' ? f.labelFirst : f.labelLast,
+            catalog: which === 'first' ? f.catalogFirst : f.catalogLast,
             nearMisses: item.near_misses ?? [],
           })
         }
