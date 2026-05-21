@@ -11,7 +11,7 @@
  * label_first starts with the chosen letter.
  */
 
-import { useMemo, useRef } from 'react'
+import { useMemo, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { adminGetCubes } from '../../api/adminClient'
@@ -36,6 +36,7 @@ function groupByUnit(cubes: AdminCube[]): Map<number, AdminCube[]> {
 export function CubesGrid() {
   const navigate = useNavigate()
   const containerRef = useRef<HTMLDivElement>(null)
+  const [activeLetter, setActiveLetter] = useState<string | null>(null)
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'cubes'],
@@ -71,6 +72,7 @@ export function CubesGrid() {
     )
     if (target) {
       target.scrollIntoView({ behavior: 'smooth', block: 'start' })
+      setActiveLetter(letter)
     }
   }
 
@@ -153,7 +155,7 @@ export function CubesGrid() {
         ))}
       </div>
 
-      <AlphaRail activeLetters={activeLetters} onLetterTap={handleLetterTap} />
+      <AlphaRail activeLetters={activeLetters} onLetterTap={handleLetterTap} activeLetter={activeLetter} />
     </div>
   )
 }
