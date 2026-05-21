@@ -46,6 +46,11 @@ services:
       context: .
       dockerfile: Dockerfile
     image: gruvax-api:local
+    env_file:
+      # Loads SESSION_SECRET (and any other secrets not listed below).
+      # Explicit environment: entries below override values from .env.
+      - path: .env
+        required: false
     environment:
       # Default: the bundled gruvax-dev-pg service (same compose network).
       # Override GRUVAX_DB_HOST (e.g. to the shared discogsography Postgres on lux)
