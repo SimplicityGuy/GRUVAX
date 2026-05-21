@@ -31,6 +31,7 @@
 | `frontend/src/api/client.ts` | service | request-response | `frontend/src/api/client.ts` (self — extend) | exact |
 | `frontend/src/api/adminClient.ts` | service | request-response | `frontend/src/api/client.ts` | exact |
 | `frontend/src/api/types.ts` | model | — | `frontend/src/api/types.ts` (self — extend) | exact |
+| `frontend/src/api/cubeTypes.ts` | model | — | `frontend/src/api/types.ts` (NEW sibling — plan 03 only) | exact |
 | `frontend/src/routes/admin/Login.tsx` | component | request-response | `frontend/src/routes/kiosk/KioskView.tsx` | role-match |
 | `frontend/src/routes/admin/AdminShell.tsx` | component | event-driven | `frontend/src/routes/kiosk/KioskView.tsx` | role-match |
 | `frontend/src/routes/admin/CubesGrid.tsx` | component | request-response | `frontend/src/routes/kiosk/ShelfGrid.tsx` | exact |
@@ -709,6 +710,8 @@ gruvax-set-pin = "scripts.set_pin:main"
 
 **Analog:** `frontend/src/state/store.ts` (self)
 
+**Owned by plan 02.** The admin slice (`isLoggedIn`, `setAdminLoggedIn`, `setAdminLoggedOut`, `pendingChangeSet`, `setPendingChangeSet`) is created in plan 02. Plan 03 only READS `isLoggedIn` (for the D-16 shortcut) and must NOT modify this file. Plan 04 reuses the same slice + `ChangeSet`/`CubeBoundaryEdit` types.
+
 **Existing store extension pattern** (lines 1–92) — add `admin` slice alongside existing slices. Follow the `set((s) => {...})` functional-update pattern (lines 59–77):
 
 ```typescript
@@ -748,9 +751,11 @@ setAdminLoggedOut: () =>
 
 **Analog:** `frontend/src/api/client.ts` (self)
 
-**Existing fetch wrapper pattern** (lines 12–50) — add `fetchCubeContents()` following the exact same shape (async function, URLSearchParams, `res.ok` check, typed return):
+**Existing fetch wrapper pattern** (lines 12–50) — add `fetchCubeContents()` following the exact same shape (async function, URLSearchParams, `res.ok` check, typed return). Import its return type from the NEW `./cubeTypes` module (plan 03 owns that file), NOT from `./types`:
 ```typescript
 // Copy fetch pattern from lines 12–22:
+import type { CubeContentsResponse } from './cubeTypes'
+
 export async function fetchCubeContents(
   unitId: number, row: number, col: number,
 ): Promise<CubeContentsResponse> {
@@ -838,9 +843,13 @@ export async function adminBulkSave(
 
 **Analog:** `frontend/src/api/types.ts` (self)
 
-**Existing interface pattern** (lines 9–82) — add new admin + cube-contents interfaces following the same `export interface` + field-per-line style:
+**Ownership / split note (IMPORTANT — read before adding interfaces):**
+- `frontend/src/api/types.ts` is the SHARED admin types file, owned by **plans 02 and 04**. The admin types below (`CubeBoundaryEdit`, `ChangeSetHistoryItem`, `NearMiss`, `ValidateResponse`, `MovementCount`, `MidpointSuggestion`, `RevertResponse`, `CommitResponse`) live here.
+- The cube-CONTENTS types — `SampleRecord` and `CubeContentsResponse` — do **NOT** live in `types.ts`. Plan 03 deliberately moved them to a dedicated `frontend/src/api/cubeTypes.ts` to keep zero file-ownership overlap between plan 03 (Wave 3, kiosk) and plans 02/04 (which own `types.ts`). **An 03-04 executor must NOT re-add `SampleRecord` or `CubeContentsResponse` to `types.ts`** — if a plan-04 file needs them, import from `./cubeTypes`. (They are shown below struck-through-by-comment only to document where they used to be conceptually.)
+
+**Existing interface pattern** (lines 9–82) — add new admin interfaces following the same `export interface` + field-per-line style:
 ```typescript
-// Add after existing CubesResponse (line 78):
+// Add after existing CubesResponse (line 78) — ADMIN types (owned by plans 02/04):
 
 export interface CubeBoundaryEdit {
   unit_id: number
@@ -854,25 +863,9 @@ export interface CubeBoundaryEdit {
   force?: boolean    // phantom override
 }
 
-export interface SampleRecord {
-  release_id: number
-  label: string
-  catalog_number: string
-}
-
-export interface CubeContentsResponse {
-  unit_id: number
-  row: number
-  col: number
-  first_label: string | null
-  first_catalog: string | null
-  last_label: string | null
-  last_catalog: string | null
-  is_empty: boolean
-  total_count: number
-  fill_level: number   // 0.0+ ; > 1.0 means overstuffed
-  sample_records: SampleRecord[]
-}
+// NOTE: SampleRecord and CubeContentsResponse are NOT here.
+// They live in frontend/src/api/cubeTypes.ts (owned by plan 03).
+// Do NOT duplicate them in this file.
 
 export interface ChangeSetHistoryItem {
   change_set_id: string
@@ -900,6 +893,37 @@ export interface MovementCount {
   records_before: number
   records_after: number
   delta: number
+}
+```
+
+---
+
+### `frontend/src/api/cubeTypes.ts` (model, — ; NEW — plan 03 only)
+
+**Analog:** `frontend/src/api/types.ts` (sibling model module)
+
+**Why a separate file:** Plan 03 (kiosk reveal) and plans 02/04 (admin) run in overlapping waves and both want to add interfaces to the API types layer. To preserve exclusive file ownership (no two same/adjacent-wave plans editing one file), the cube-contents types are isolated here. `client.ts`'s `fetchCubeContents` imports `CubeContentsResponse` from this module.
+
+**Contents** (same `export interface` per-line style as `types.ts`):
+```typescript
+export interface SampleRecord {
+  release_id: number
+  label: string
+  catalog_number: string
+}
+
+export interface CubeContentsResponse {
+  unit_id: number
+  row: number
+  col: number
+  first_label: string | null
+  first_catalog: string | null
+  last_label: string | null
+  last_catalog: string | null
+  is_empty: boolean
+  total_count: number
+  fill_level: number   // 0.0+ ; > 1.0 means overstuffed
+  sample_records: SampleRecord[]
 }
 ```
 
@@ -936,6 +960,8 @@ export function FillBar({ fillLevel, heightPx = 4 }: FillBarProps) {
   )
 }
 ```
+
+**Note:** plan 03 owns `frontend/src/routes/kiosk/FillBar.tsx`; plan 04 owns `frontend/src/routes/admin/FillBar.tsx`. These are two separate files in different directories — no conflict — but they should mirror the same token-color rules above.
 
 ---
 
@@ -1018,7 +1044,7 @@ const handleWrongPin = () => {
 
 ---
 
-### `frontend/src/routes/admin/CubeContentsPanel.tsx` (component, request-response)
+### `frontend/src/routes/kiosk/CubeContentsPanel.tsx` (component, request-response)
 
 **Analog:** `frontend/src/routes/kiosk/ResultsList.tsx` (list rendering + open/dismiss state)
 
@@ -1032,7 +1058,7 @@ const { data } = useQuery({
 })
 ```
 
-**Admin shortcut button** (D-16) — show "EDIT THIS CUBE" link-button only when `useGruvaxStore(s => s.isLoggedIn)` is true.
+**Admin shortcut button** (D-16) — show "EDIT THIS CUBE" link-button only when `useGruvaxStore(s => s.isLoggedIn)` is true. This selector comes from the plan-02 admin store slice; plan 03 reads it but does not define it (this is why plan 03 depends on plan 02).
 
 ---
 
@@ -1224,7 +1250,7 @@ Per `CLAUDE.md` and UI-SPEC: **never hardcode hex values**. All colors via `var(
 ### TanStack Query + Zustand Pattern (frontend)
 
 **Source:** `frontend/src/routes/kiosk/KioskView.tsx` lines 46–80
-**Apply to:** All admin route components (`CubesGrid.tsx`, `CubeEditor.tsx`, `HistoryView.tsx`, `Settings.tsx`, `CubeContentsPanel.tsx`)
+**Apply to:** All admin route components (`CubesGrid.tsx`, `CubeEditor.tsx`, `HistoryView.tsx`, `Settings.tsx`) and the kiosk `CubeContentsPanel.tsx`
 
 ```typescript
 // Copy useQuery pattern from KioskView.tsx lines 46-57:
@@ -1267,3 +1293,4 @@ For these three, implement using the design-token + CSS Modules + React pattern 
 **Analog search scope:** `src/gruvax/`, `frontend/src/`, `migrations/`, `tests/`
 **Files scanned:** 22 Python source files, 19 TypeScript/TSX files, 4 migration files, 13 test files
 **Pattern extraction date:** 2026-05-20
+</content>
