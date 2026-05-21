@@ -13,19 +13,15 @@ Security notes:
   - CSRF cookie: NOT HttpOnly (SPA must read it to echo as X-CSRF-Token).
 
 Rate-limiting implementation note:
-  SlowAPI's ``@limiter.limit()`` decorator stores a ``_rate_limiting_complete`` flag
-  on ``request.state`` to prevent double-checking when both middleware and decorator
-  are used together.  When the app is tested via ``asgi-lifespan`` + httpx
-  ``ASGITransport``, the ASGI scope's ``state`` dict is shared across requests in
-  that process — so the flag leaks from request N to request N+1, causing the
-  counter to stop accumulating after the first call.
+  The rate limit is enforced using the public ``limits`` library (slowapi's own
+  dependency) directly, via ``FixedWindowRateLimiter.hit()``.  This avoids any
+  dependency on slowapi private attributes (``._limiter``, ``._key_prefix``,
+  ``wrappers.Limit``), making the brute-force guard stable across slowapi upgrades.
 
-  Fix: enforce the rate limit inline using ``limits`` directly.  This is a plain
-  ``limits.strategies.FixedWindowRateLimiter.hit()`` call — no SlowAPI state flags,
-  no decorator wrapper.  The limiter singleton's ``_storage`` and ``_limiter``
-  attributes are reused so that the counter is shared correctly across requests.
-  A ``RateLimitExceeded`` is raised on breach so the exception handler registered in
-  ``app.py`` still produces the standard 429 response.
+  The limiter singleton's ``MemoryStorage`` and ``FixedWindowRateLimiter`` live in
+  ``limiter.py`` so the counter is shared correctly across all requests in the same
+  process.  On limit breach, ``HTTPException(429)`` is raised directly — no slowapi
+  exception handler needed for this path.
 """
 
 from __future__ import annotations
@@ -34,12 +30,8 @@ import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
-from limits import parse as parse_limit
-from slowapi.errors import RateLimitExceeded
-from slowapi.util import get_remote_address
-from slowapi.wrappers import Limit
 
-from gruvax.api.admin.limiter import limiter
+from gruvax.api.admin.limiter import _LOGIN_RATE, _rate_limiter
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.auth.sessions import (
     clear_session_cookies,
@@ -52,46 +44,31 @@ logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["admin-auth"])
 
-# Rate-limit spec: 5 login attempts per 5-minute window per IP (T-03-04, D-03a).
-# Parsed once at module load so the limit item is not re-parsed on every request.
-_LOGIN_LIMIT_STRING = "5/5minutes"
-_LOGIN_LIMIT_ITEM = parse_limit(_LOGIN_LIMIT_STRING)
-
 
 def _check_login_rate_limit(request: Request) -> None:
     """Enforce the login rate limit inline (see module docstring for rationale).
 
-    Raises ``RateLimitExceeded`` (→ 429) when the caller has exceeded
-    5 attempts in the last 5 minutes.  Uses the SlowAPI limiter singleton's
-    underlying ``limits`` strategy so the counter is shared correctly across
-    all requests in the same process.
+    Raises ``HTTPException(429)`` when the caller has exceeded 5 attempts in the
+    last 5 minutes.  Uses the shared ``FixedWindowRateLimiter`` singleton from
+    ``limiter.py`` so the counter is shared across all requests in the same process.
 
-    Also sets ``request.state.view_rate_limit`` which the SlowAPI exception
-    handler reads to inject ``X-RateLimit-*`` response headers.
+    Rate-limit key: direct socket peer IP (``request.client.host``).  This is
+    correct for GRUVAX's single-host home-LAN deployment with NO reverse proxy.
+    If a proxy is introduced, configure trusted X-Forwarded-For / ProxyHeaders
+    handling so the limit keys on the real client IP rather than the proxy.
     """
-    key = get_remote_address(request)
-    scope = "/api/admin/login"
-    args = [key, scope]
-    if limiter._key_prefix:
-        args = [limiter._key_prefix, *args]
-    # Build a minimal Limit wrapper so RateLimitExceeded has the expected shape
-    # for the exception handler registered in app.py and _inject_headers works.
-    wrapped = Limit(
-        _LOGIN_LIMIT_ITEM,
-        key_func=lambda r: key,
-        scope=None,
-        per_method=False,
-        methods=None,
-        error_message=None,
-        exempt_when=None,
-        cost=1,
-        override_defaults=True,
-    )
-    # view_rate_limit must be set before hit() so it's available whether the limit
-    # is exceeded or not (header injection reads it on successful responses too).
-    request.state.view_rate_limit = (_LOGIN_LIMIT_ITEM, args)
-    if not limiter._limiter.hit(_LOGIN_LIMIT_ITEM, *args):
-        raise RateLimitExceeded(wrapped)
+    # Direct socket peer IP — correct for no-proxy single-host home-LAN deployment.
+    # See module docstring and limiter.py for proxy-awareness caveat (WR-05).
+    client_ip: str = request.client.host if request.client else "unknown"
+    allowed = _rate_limiter.hit(_LOGIN_RATE, "login", client_ip)
+    if not allowed:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail={
+                "type": "rate_limited",
+                "message": "Too many login attempts. Try again later.",
+            },
+        )
 
 
 @router.post("/login")

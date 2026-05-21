@@ -1,19 +1,38 @@
-"""Shared SlowAPI limiter instance for GRUVAX admin endpoints.
+"""Login rate-limiter singleton for GRUVAX admin endpoints.
 
-The limiter must be a singleton so that:
-  1. ``@limiter.limit()`` decorators in ``login.py`` register limits on
-     this instance's ``_route_limits`` dict.
-  2. ``app.state.limiter`` (set in ``app.py``) points to this same instance
-     so ``SlowAPIMiddleware`` enforces those limits correctly.
+The limiter is built on the public ``limits`` library (slowapi's own dependency)
+so it does NOT depend on any slowapi private attributes.  This makes the
+brute-force guard stable across slowapi upgrades.
 
-Import this module instead of creating a new ``Limiter()`` in each file.
+Exposed names
+-------------
+limiter : MemoryStorage
+    The shared in-process storage backend.  Tests call ``limiter.reset()`` to
+    clear the counter between runs.
+
+_rate_limiter : FixedWindowRateLimiter
+    The strategy object.  ``login.py`` calls
+    ``_rate_limiter.hit(_LOGIN_RATE, "login", client_ip)`` to enforce the limit.
+
+_LOGIN_RATE : RateLimitItem
+    Parsed rate-limit spec: 5 attempts per 5-minute window.
 """
 
 from __future__ import annotations
 
-from slowapi import Limiter
-from slowapi.util import get_remote_address
+from limits import parse as parse_limit
+from limits.storage import MemoryStorage
+from limits.strategies import FixedWindowRateLimiter
 
-# Singleton limiter — used by both @limiter.limit() decorators and
-# assigned to app.state.limiter in create_app().
-limiter = Limiter(key_func=get_remote_address)
+# Shared in-process storage — ``limiter.reset()`` used by tests to clear state.
+# Rate-limit key is the direct socket peer IP (``request.client.host``), which
+# is correct for GRUVAX's single-host home-LAN deployment with NO reverse proxy.
+# If a proxy is introduced, configure trusted X-Forwarded-For / ProxyHeaders
+# handling so the limit keys on the real client IP rather than the proxy.
+limiter: MemoryStorage = MemoryStorage()
+
+# Fixed-window strategy — 5 login attempts per 5-minute window per IP.
+_rate_limiter: FixedWindowRateLimiter = FixedWindowRateLimiter(limiter)
+
+# Parsed once at module load so the limit item is not re-parsed on every request.
+_LOGIN_RATE = parse_limit("5/5minutes")

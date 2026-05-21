@@ -165,30 +165,6 @@ def create_app() -> FastAPI:
         lifespan=lifespan,
     )
 
-    # ── SlowAPI rate-limiting (Phase 3: login rate limit, T-03-04) ──────────────
-    # The @limiter.limit() decorator on login.py handles rate-limit enforcement
-    # directly — it calls _check_request_limit(in_middleware=False) which reads
-    # from _route_limits and correctly accumulates the per-IP counter.
-    #
-    # SlowAPIMiddleware (BaseHTTPMiddleware) is intentionally NOT added here.
-    # BaseHTTPMiddleware stores _rate_limiting_complete on request.state and in
-    # certain ASGI transport configurations (including httpx ASGITransport used in
-    # tests) this state leaks across requests, causing the rate-limit counter to
-    # stop accumulating after the first request.  The decorator-only pattern is the
-    # correct approach for per-route limits; the middleware is only needed for
-    # global/application-level limits which we don't use.
-    #
-    # app.state.limiter must still be set so the RateLimitExceeded exception
-    # handler has access to header-injection helpers and so that any future
-    # application-level limits can be added without changing this block.
-    from slowapi import _rate_limit_exceeded_handler
-    from slowapi.errors import RateLimitExceeded
-
-    from gruvax.api.admin.limiter import limiter as admin_limiter
-
-    app.state.limiter = admin_limiter
-    app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
-
     # ── Register /api/* routers FIRST (Pitfall 3: StaticFiles catch-all order) ──
     # Import here (not at module level) to avoid circular imports:
     # app.py → api/*.py → deps.py → (no back-reference to app.py)
