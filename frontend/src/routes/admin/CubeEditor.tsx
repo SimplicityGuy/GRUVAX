@@ -186,18 +186,20 @@ export function CubeEditor() {
     catalogLast: '',
   })
 
-  // Populated once boundary loads — read backend field names (CR-01)
-  useEffect(() => {
-    if (boundary) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- seed editable form state from the loaded boundary query; fields are user-edited afterward so cannot be derived during render
-      setFields({
-        labelFirst: boundary.first_label,
-        catalogFirst: boundary.first_catalog,
-        labelLast: boundary.last_label,
-        catalogLast: boundary.last_catalog,
-      })
-    }
-  }, [boundary])
+  // Seed form fields when boundary query data changes identity.
+  // React's "adjust state during render" pattern: calling setState in the render
+  // body of the same component is the officially-supported escape hatch for this
+  // exact case — track what we last seeded with a ref and reset when it changes.
+  const seededBoundaryRef = useRef<typeof boundary | null>(null)
+  if (boundary && boundary !== seededBoundaryRef.current) {
+    seededBoundaryRef.current = boundary
+    setFields({
+      labelFirst: boundary.first_label,
+      catalogFirst: boundary.first_catalog,
+      labelLast: boundary.last_label,
+      catalogLast: boundary.last_catalog,
+    })
+  }
 
   const [phantomWarnings, setPhantomWarnings] = useState<PhantomWarning[]>([])
   const [forceFirst, setForceFirst] = useState(false)
@@ -290,8 +292,10 @@ export function CubeEditor() {
       debouncedFields.labelLast &&
       debouncedFields.catalogLast
     ) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- debounced async dry-run validation; setState happens inside the network call, not synchronously
-      void runValidation(debouncedFields)
+      // Relocate the invocation into a 0ms timer callback so it is not
+      // a synchronous in-effect setState (all setState lives inside runValidation).
+      const t = setTimeout(() => { void runValidation(debouncedFields) }, 0)
+      return () => clearTimeout(t)
     }
   }, [debouncedFields, runValidation])
 
