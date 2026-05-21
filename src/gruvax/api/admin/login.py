@@ -116,8 +116,24 @@ async def login(
     # PIN never logged — always log "redacted" (Pitfall 12, T-03-06)
     logger.info("Login attempt from %s pin_attempt=redacted", request.client)
 
-    body = await request.json()
+    # WR-04: Wrap JSON decode to return 400 on malformed body (prevents 500)
+    try:
+        body = await request.json()
+    except Exception as exc:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"type": "invalid_request", "message": "Request body must be valid JSON"},
+        ) from exc
+
     pin: str = str(body.get("pin", ""))
+
+    # WR-04: Reject non-4-digit PINs before any DB/hash work — uniform 401
+    # to avoid an oracle (same response for wrong PIN and malformed PIN).
+    if not pin.isdigit() or len(pin) != 4:
+        raise HTTPException(
+            status_code=status.HTTP_401_UNAUTHORIZED,
+            detail={"type": "invalid_pin"},
+        )
 
     # Fetch the stored PIN hash from gruvax.settings
     async with pool.connection() as conn, conn.cursor() as cur:
