@@ -163,9 +163,10 @@ def create_app() -> FastAPI:
     # app.state.limiter must still be set so the RateLimitExceeded exception
     # handler has access to header-injection helpers and so that any future
     # application-level limits can be added without changing this block.
-    from gruvax.api.admin.limiter import limiter as admin_limiter
     from slowapi import _rate_limit_exceeded_handler
     from slowapi.errors import RateLimitExceeded
+
+    from gruvax.api.admin.limiter import limiter as admin_limiter
 
     app.state.limiter = admin_limiter
     app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)  # type: ignore[arg-type]
