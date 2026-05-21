@@ -435,12 +435,16 @@
 }
 
 .fill-bar-fill {
-  background: var(--gruvax-yellow);
+  background: var(--gruvax-blue-light);
   border-radius: var(--gruvax-radius-pill);
   transition: width var(--gruvax-duration-base) var(--gruvax-ease-standard);
 }
 
-.fill-bar-fill--warn {
+.fill-bar-fill--near {
+  background: var(--gruvax-yellow);
+}
+
+.fill-bar-fill--over {
   background: var(--gruvax-error);
 }
 
@@ -490,6 +494,12 @@
 
 .alpha-rail-btn--inactive {
   opacity: 0.25;
+}
+
+.alpha-rail-btn--active {
+  background: var(--gruvax-blue);
+  color: var(--gruvax-white);
+  border-radius: var(--gruvax-radius-md);
 }
 
 /* ── CubesGrid ───────────────────────────────────────────────────────────── */
@@ -589,14 +599,15 @@
 
 .cube-card-empty-badge {
   font-family: var(--gruvax-font-display);
-  font-size: 10px;
+  font-size: var(--gruvax-text-label, 11px);
   font-weight: 700;
   letter-spacing: 0.1em;
   color: var(--gruvax-text-muted);
   text-transform: uppercase;
   background: var(--gruvax-border-light);
   border-radius: var(--gruvax-radius-pill);
-  padding: 2px 6px;
+  /* spacing-exception: 2px vertical pad — below --gruvax-space-1 (4px) for pill density (UI-REVIEW §Pillar 5) */
+  padding: 2px var(--gruvax-space-2);
 }
 
 .cube-card-body {
@@ -620,9 +631,12 @@
 }
 
 .cube-card-label--last {
-  color: var(--gruvax-text-secondary);
+  font-family: var(--gruvax-font-ui);
   font-size: var(--gruvax-text-body-sm, 14px);
-  font-weight: 700;
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  letter-spacing: normal;
+  text-transform: none;
 }
 
 .cube-card-catalog {
@@ -961,6 +975,38 @@
   cursor: not-allowed;
 }
 
+/* UI-SPEC §D reserved-accent #5 — "SUGGEST MIDPOINT" inline text action */
+.editor-btn-link {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: none;
+  padding: var(--gruvax-space-1) 0;
+  min-height: 44px;
+  cursor: pointer;
+  text-decoration: none;
+  touch-action: manipulation;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.editor-btn-link:hover:not(:disabled) {
+  text-decoration: underline;
+}
+
+.editor-btn-link:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.editor-btn-link:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 .editor-save-success {
   font-family: var(--gruvax-font-ui);
   font-size: var(--gruvax-text-body-sm, 14px);
@@ -1061,7 +1107,7 @@
 
 .diff-mini-grid {
   display: grid;
-  gap: 4px;
+  gap: var(--gruvax-space-1);
 }
 
 .diff-mini-cell {
@@ -1169,6 +1215,20 @@
 }
 
 .diff-warning--overstuffed {
+  background: color-mix(in srgb, var(--gruvax-error) 10%, transparent);
+  color: var(--gruvax-error);
+  border: 1px solid color-mix(in srgb, var(--gruvax-error) 30%, transparent);
+}
+
+/* Commit-blocking validation error (UI-REVIEW finding #2) */
+.diff-validate-error {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-2) var(--gruvax-space-3);
+  border-radius: var(--gruvax-radius-md);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
   background: color-mix(in srgb, var(--gruvax-error) 10%, transparent);
   color: var(--gruvax-error);
   border: 1px solid color-mix(in srgb, var(--gruvax-error) 30%, transparent);
@@ -1382,14 +1442,15 @@
 
 .history-source-badge {
   font-family: var(--gruvax-font-display);
-  font-size: 10px;
+  font-size: var(--gruvax-text-label, 11px);
   font-weight: 700;
   letter-spacing: 0.1em;
   text-transform: uppercase;
   background: var(--gruvax-off-white);
   border: 1px solid var(--gruvax-border-light);
   border-radius: var(--gruvax-radius-pill);
-  padding: 2px 6px;
+  /* spacing-exception: 2px vertical pad — below --gruvax-space-1 (4px) for pill density (UI-REVIEW §Pillar 5) */
+  padding: 2px var(--gruvax-space-2);
   color: var(--gruvax-text-muted);
 }
 
@@ -1403,14 +1464,15 @@
 
 .history-reverted-pill {
   font-family: var(--gruvax-font-display);
-  font-size: 11px;
+  font-size: var(--gruvax-text-label, 11px);
   font-weight: 700;
   letter-spacing: var(--gruvax-tracking-display, 0.14em);
   text-transform: uppercase;
   color: var(--gruvax-error);
   border: 1px solid var(--gruvax-error);
   border-radius: var(--gruvax-radius-pill);
-  padding: 2px 8px;
+  /* spacing-exception: 2px vertical pad — below --gruvax-space-1 (4px) for pill density (UI-REVIEW §Pillar 5) */
+  padding: 2px var(--gruvax-space-2);
 }
 
 .history-card-right {
