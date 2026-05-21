@@ -128,8 +128,13 @@ export async function getAdminSettings(): Promise<AdminSettings> {
   return res.json() as Promise<AdminSettings>
 }
 
-/** PUT /api/admin/settings — updates whitelisted settings keys. */
-export async function putAdminSettings(payload: AdminSettingsPut): Promise<AdminSettings> {
+/** PUT /api/admin/settings — updates whitelisted settings keys.
+ *
+ * The backend returns ``{updated: string[]}`` (list of DB key names updated),
+ * not a full AdminSettings object. Return type is relaxed to Partial<AdminSettings>
+ * to let the caller handle missing fields gracefully (WR-01).
+ */
+export async function putAdminSettings(payload: AdminSettingsPut): Promise<Partial<AdminSettings>> {
   const res = await adminFetch('/api/admin/settings', {
     method: 'PUT',
     body: JSON.stringify(payload),
@@ -137,7 +142,7 @@ export async function putAdminSettings(payload: AdminSettingsPut): Promise<Admin
   if (!res.ok) {
     throw new Error(`Settings update failed: ${res.status}`)
   }
-  return res.json() as Promise<AdminSettings>
+  return res.json() as Promise<Partial<AdminSettings>>
 }
 
 /** POST /api/admin/settings/pin — change PIN (requires current PIN). */
@@ -184,13 +189,15 @@ export async function adminGetCubeBoundary(
 /**
  * POST /api/admin/cubes/validate — dry-run boundary validation (always HTTP 200).
  * Never writes to the database.
+ *
+ * The backend ValidateRequest model uses key `updates` (CR-02).
  */
 export async function validateBoundary(
   edits: CubeBoundaryEdit[],
 ): Promise<ValidateResponse> {
   const res = await adminFetch('/api/admin/cubes/validate', {
     method: 'POST',
-    body: JSON.stringify({ edits }),
+    body: JSON.stringify({ updates: edits }),
   })
   if (!res.ok) {
     throw new Error(`Validate failed: ${res.status}`)
