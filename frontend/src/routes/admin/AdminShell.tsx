@@ -116,6 +116,14 @@ export function AdminShell() {
           >
             SETTINGS
           </NavLink>
+          <NavLink
+            to="/admin/cubes"
+            className={({ isActive }) =>
+              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
+            }
+          >
+            CUBES
+          </NavLink>
         </nav>
 
         <div className="admin-topbar-actions">

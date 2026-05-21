@@ -14,11 +14,18 @@
  */
 
 import type {
+  AdminCubeBoundary,
+  AdminCubesResponse,
   AdminSession,
   AdminSettings,
   AdminSettingsPut,
+  CatalogOption,
   ChangePinPayload,
+  CubeBoundaryEdit,
+  LabelOption,
   LoginResponse,
+  SuggestResponse,
+  ValidateResponse,
 } from './types'
 
 const BASE = ''
@@ -142,6 +149,89 @@ export async function changePin(payload: ChangePinPayload): Promise<void> {
   if (!res.ok) {
     throw new Error(`Change PIN failed: ${res.status}`)
   }
+}
+
+// ── Admin cubes (plan 03-04) ──────────────────────────────────────────────────
+
+/** GET /api/admin/cubes — returns all cubes with boundary + fill_level. */
+export async function adminGetCubes(): Promise<AdminCubesResponse> {
+  const res = await adminFetch('/api/admin/cubes')
+  if (!res.ok) {
+    throw new Error(`Failed to fetch admin cubes: ${res.status}`)
+  }
+  return res.json() as Promise<AdminCubesResponse>
+}
+
+/** GET /api/admin/cubes/{unit_id}/{row}/{col}/boundary — returns one cube boundary. */
+export async function adminGetCubeBoundary(
+  unitId: number,
+  row: number,
+  col: number,
+): Promise<AdminCubeBoundary> {
+  const res = await adminFetch(`/api/admin/cubes/${unitId}/${row}/${col}/boundary`)
+  if (res.status === 404) {
+    throw new Error(`Cube ${unitId}/${row}/${col} not found`)
+  }
+  if (!res.ok) {
+    throw new Error(`Failed to fetch cube boundary: ${res.status}`)
+  }
+  return res.json() as Promise<AdminCubeBoundary>
+}
+
+/**
+ * POST /api/admin/cubes/validate — dry-run boundary validation (always HTTP 200).
+ * Never writes to the database.
+ */
+export async function validateBoundary(
+  edits: CubeBoundaryEdit[],
+): Promise<ValidateResponse> {
+  const res = await adminFetch('/api/admin/cubes/validate', {
+    method: 'POST',
+    body: JSON.stringify({ edits }),
+  })
+  if (!res.ok) {
+    throw new Error(`Validate failed: ${res.status}`)
+  }
+  return res.json() as Promise<ValidateResponse>
+}
+
+/**
+ * POST /api/admin/cubes/suggest — get index-space midpoint suggestion
+ * for the cube after (unit_id, row, col).
+ */
+export async function suggestMidpoint(
+  unitId: number,
+  row: number,
+  col: number,
+): Promise<SuggestResponse> {
+  const res = await adminFetch('/api/admin/cubes/suggest', {
+    method: 'POST',
+    body: JSON.stringify({ unit_id: unitId, row, col }),
+  })
+  if (!res.ok) {
+    throw new Error(`Suggest failed: ${res.status}`)
+  }
+  return res.json() as Promise<SuggestResponse>
+}
+
+/** GET /api/admin/labels — distinct labels from v_collection. */
+export async function getDistinctLabels(): Promise<LabelOption[]> {
+  const res = await adminFetch('/api/admin/labels')
+  if (!res.ok) {
+    throw new Error(`Failed to fetch labels: ${res.status}`)
+  }
+  return res.json() as Promise<LabelOption[]>
+}
+
+/** GET /api/admin/labels/{label}/catalogs — catalog numbers for a specific label. */
+export async function getCatalogsForLabel(label: string): Promise<CatalogOption[]> {
+  const res = await adminFetch(
+    `/api/admin/labels/${encodeURIComponent(label)}/catalogs`,
+  )
+  if (!res.ok) {
+    throw new Error(`Failed to fetch catalogs for label: ${res.status}`)
+  }
+  return res.json() as Promise<CatalogOption[]>
 }
 
 // ── Error types ───────────────────────────────────────────────────────────────

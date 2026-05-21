@@ -384,3 +384,172 @@ LIMIT 1
 
     cols = ["release_id", "label", "catalog_number"]
     return dict(zip(cols, row, strict=True))
+
+
+# ── Admin boundary queries (Phase 3) ─────────────────────────────────────────
+
+# Trigram threshold for boundary near-miss suggestions (D-07, ADMN-06).
+# Slightly above DID_YOU_MEAN_THRESHOLD (0.35) — boundary validation is more
+# context-specific and benefits from a tighter threshold.
+# Configurable in gruvax.settings as boundary.near_miss_threshold (future).
+BOUNDARY_TRGM_THRESHOLD: float = 0.40
+
+
+async def find_boundary_near_misses(
+    pool: AsyncConnectionPool,
+    label: str,
+    catalog: str,
+    limit: int = 5,
+) -> list[dict[str, Any]]:
+    """Return trigram near-misses for a phantom (label, catalog) pair.
+
+    Queries ``gruvax.v_collection`` for the top ``limit`` rows whose label
+    and/or catalog_number has similarity above ``BOUNDARY_TRGM_THRESHOLD`` to
+    the provided inputs.  Uses a combined similarity score (average of label and
+    catalog similarities) for ranking.
+
+    Graceful degradation (Pitfall E — mirrors ``did_you_mean_query``):
+    if ``similarity()`` is undefined (pg_trgm not installed), catches
+    ``psycopg.errors.UndefinedFunction`` and returns [] so the caller still
+    receives a valid response.
+
+    All user input goes through ``%s`` placeholders — never f-string
+    interpolation (T-01-07, T-03-16).
+
+    Args:
+        pool:    Open psycopg ``AsyncConnectionPool``.
+        label:   Label from the proposed boundary value.
+        catalog: Catalog number from the proposed boundary value.
+        limit:   Maximum number of near-miss suggestions to return.
+
+    Returns:
+        List of dicts with keys ``label``, ``catalog_number``, ``similarity``.
+        Empty list if pg_trgm is unavailable or no matches found.
+    """
+    sql = """
+SELECT label, catalog_number,
+       (similarity(lower(label), lower(%s)) * 0.5
+        + similarity(lower(catalog_number), lower(%s)) * 0.5) AS sim
+FROM gruvax.v_collection
+WHERE similarity(lower(label), lower(%s)) > %s
+   OR similarity(lower(catalog_number), lower(%s)) > %s
+ORDER BY sim DESC
+LIMIT %s
+"""
+    try:
+        async with pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                sql,
+                (
+                    label, catalog,        # combined score params
+                    label, BOUNDARY_TRGM_THRESHOLD,   # label WHERE
+                    catalog, BOUNDARY_TRGM_THRESHOLD, # catalog WHERE
+                    limit,
+                ),
+            )
+            rows = await cur.fetchall()
+        return [
+            {
+                "label": str(row[0]),
+                "catalog_number": str(row[1]),
+                "similarity": float(row[2]),
+            }
+            for row in rows
+        ]
+    except psycopg.errors.UndefinedFunction:
+        # pg_trgm not installed — degrade gracefully (Pitfall E)
+        return []
+
+
+async def get_distinct_labels(pool: AsyncConnectionPool) -> list[str]:
+    """Return all distinct labels present in gruvax.v_collection, sorted.
+
+    Used by the admin cubes editor autocomplete to populate the label picker
+    (D-06).  Source is exclusively v_collection (Pitfall 5 — never reads
+    raw discogsography tables).
+
+    All SQL uses %s placeholders (T-03-16).
+
+    Args:
+        pool: Open psycopg ``AsyncConnectionPool``.
+
+    Returns:
+        Sorted list of distinct label strings.
+    """
+    sql = """
+SELECT DISTINCT label
+FROM gruvax.v_collection
+WHERE label IS NOT NULL
+ORDER BY label
+"""
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql)
+        rows = await cur.fetchall()
+    return [str(row[0]) for row in rows]
+
+
+async def get_catalogs_for_label(
+    pool: AsyncConnectionPool,
+    label: str,
+) -> list[dict[str, Any]]:
+    """Return all release_id + catalog_number for records with the given label.
+
+    Used by the admin cubes editor autocomplete to populate the catalog# picker
+    after a label has been selected (two-step dependent autocomplete, D-06).
+    The label comparison is case-insensitive via lower().
+
+    Source is exclusively v_collection (Pitfall 5).
+    All SQL uses %s placeholders (T-03-16).
+
+    Args:
+        pool:  Open psycopg ``AsyncConnectionPool``.
+        label: Label to filter by (matched case-insensitively).
+
+    Returns:
+        List of dicts with keys ``release_id`` (int) and ``catalog_number`` (str),
+        ordered by catalog_number.
+    """
+    sql = """
+SELECT release_id, catalog_number
+FROM gruvax.v_collection
+WHERE lower(label) = lower(%s)
+ORDER BY catalog_number
+"""
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql, (label,))
+        rows = await cur.fetchall()
+    return [{"release_id": int(row[0]), "catalog_number": str(row[1])} for row in rows]
+
+
+async def cube_exact_match(
+    pool: AsyncConnectionPool,
+    label: str,
+    catalog: str,
+) -> bool:
+    """Return True if an exact (label, catalog_number) pair exists in v_collection.
+
+    Case-insensitive label match (lower(label) = lower(%s)); exact catalog_number match.
+    Used by the admin validate endpoint to detect phantom boundary values (D-07).
+
+    Source is exclusively v_collection (Pitfall 5).
+    All SQL uses %s placeholders (T-03-16).
+
+    Args:
+        pool:    Open psycopg ``AsyncConnectionPool``.
+        label:   Label to check.
+        catalog: Catalog number to check.
+
+    Returns:
+        True if a record with this (label, catalog) pair exists in v_collection.
+    """
+    sql = """
+SELECT 1
+FROM gruvax.v_collection
+WHERE lower(label) = lower(%s)
+  AND catalog_number = %s
+LIMIT 1
+"""
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql, (label, catalog))
+        row = await cur.fetchone()
+    return row is not None

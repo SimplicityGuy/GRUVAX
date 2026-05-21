@@ -1,6 +1,8 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { AdminShell } from './routes/admin/AdminShell'
+import { CubeEditor } from './routes/admin/CubeEditor'
+import { CubesGrid } from './routes/admin/CubesGrid'
 import { Settings } from './routes/admin/Settings'
 import { KioskView } from './routes/kiosk/KioskView'
 
@@ -32,6 +34,8 @@ function App() {
           <Route path="/admin" element={<AdminShell />}>
             <Route index element={<Settings />} />
             <Route path="settings" element={<Settings />} />
+            <Route path="cubes" element={<CubesGrid />} />
+            <Route path="cubes/:unit/:row/:col" element={<CubeEditor />} />
           </Route>
         </Routes>
       </BrowserRouter>

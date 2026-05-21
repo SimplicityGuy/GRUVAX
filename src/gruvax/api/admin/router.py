@@ -21,10 +21,12 @@ def create_admin_router() -> APIRouter:
         An ``APIRouter`` with prefix ``/admin`` that includes login and
         settings sub-routers.
     """
+    from gruvax.api.admin.cubes import router as cubes_router
     from gruvax.api.admin.login import router as login_router
     from gruvax.api.admin.settings import router as settings_router
 
     router = APIRouter(prefix="/admin", tags=["admin"])
     router.include_router(login_router)
+    router.include_router(cubes_router)
     router.include_router(settings_router)
     return router
