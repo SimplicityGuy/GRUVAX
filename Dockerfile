@@ -12,7 +12,7 @@
 #   FastAPI StaticFiles serves the SPA at / (mounted after all /api routers).
 
 # ── Stage 1: frontend build ───────────────────────────────────────────────────
-FROM node:22-slim AS frontend-builder
+FROM node:26-slim AS frontend-builder
 
 WORKDIR /frontend-build
 
