@@ -36,7 +36,7 @@ export function AdminShell() {
     useAdminStore()
 
   const [isLocked, setIsLocked] = useState(false)
-  const [nowMs, setNowMs] = useState(Date.now())
+  const [nowMs, setNowMs] = useState(() => Date.now())
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
@@ -65,6 +65,7 @@ export function AdminShell() {
 
   useEffect(() => {
     if (!isLoggedIn) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- async server session poll; setState happens in promise resolution, not synchronously
     void pollSession()
     pollRef.current = setInterval(() => { void pollSession() }, POLL_INTERVAL_MS)
     return () => {
@@ -77,6 +78,7 @@ export function AdminShell() {
     if (!isLoggedIn || sessionExpiresAt === 0) return
     if (nowMs >= sessionExpiresAt) {
       setAdminLoggedOut()
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- timer-driven idle expiry; forces re-auth when the per-second tick crosses sessionExpiresAt
       setIsLocked(false)
     }
   }, [nowMs, isLoggedIn, sessionExpiresAt, setAdminLoggedOut])
