@@ -436,7 +436,7 @@ export function CubeEditor() {
             <div className="phantom-chip" role="alert">
               <span className="phantom-chip-icon" aria-hidden="true">!</span>
               <span className="phantom-chip-text">
-                Not in collection — verify label/catalog.
+                No match in collection. Did you mean one of these?
               </span>
               {phantomWarnings
                 .filter((w) => w.field === 'first')
@@ -516,7 +516,7 @@ export function CubeEditor() {
             <div className="phantom-chip" role="alert">
               <span className="phantom-chip-icon" aria-hidden="true">!</span>
               <span className="phantom-chip-text">
-                Not in collection — verify label/catalog.
+                No match in collection. Did you mean one of these?
               </span>
               {phantomWarnings
                 .filter((w) => w.field === 'last')
@@ -558,7 +558,7 @@ export function CubeEditor() {
         <div className="editor-suggest-row">
           <button
             type="button"
-            className="editor-btn-secondary"
+            className="editor-btn-link"
             onClick={() => void handleSuggestMidpoint()}
             disabled={isSuggestLoading}
           >

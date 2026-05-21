@@ -10,6 +10,8 @@
  * Props:
  *   activeLetters — Set of letters that have at least one cube.
  *   onLetterTap   — Callback with the tapped letter (uppercase).
+ *   activeLetter  — The letter most recently jumped to; highlighted with
+ *                   --gruvax-blue background + --gruvax-white text (UI-SPEC §D).
  */
 
 const ALPHABET = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('')
@@ -19,9 +21,11 @@ interface AlphaRailProps {
   activeLetters: Set<string>
   /** Called with the tapped letter (uppercase). */
   onLetterTap: (letter: string) => void
+  /** The letter most recently jumped to; rendered with the active-indicator style. */
+  activeLetter?: string | null
 }
 
-export function AlphaRail({ activeLetters, onLetterTap }: AlphaRailProps) {
+export function AlphaRail({ activeLetters, onLetterTap, activeLetter }: AlphaRailProps) {
   return (
     <nav
       className="alpha-rail"
@@ -29,14 +33,23 @@ export function AlphaRail({ activeLetters, onLetterTap }: AlphaRailProps) {
     >
       {ALPHABET.map((letter) => {
         const hasMatch = activeLetters.has(letter)
+        const isActive = letter === activeLetter
+        const cls = [
+          'alpha-rail-btn',
+          !hasMatch ? 'alpha-rail-btn--inactive' : '',
+          isActive ? 'alpha-rail-btn--active' : '',
+        ]
+          .filter(Boolean)
+          .join(' ')
         return (
           <button
             key={letter}
             type="button"
-            className={`alpha-rail-btn${hasMatch ? '' : ' alpha-rail-btn--inactive'}`}
+            className={cls}
             onClick={() => onLetterTap(letter)}
             aria-label={`Jump to labels starting with ${letter}`}
             aria-disabled={!hasMatch}
+            aria-current={isActive ? 'true' : undefined}
           >
             {letter}
           </button>

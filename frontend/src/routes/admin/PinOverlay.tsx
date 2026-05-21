@@ -164,7 +164,7 @@ export function PinOverlay({ isLocked = false }: PinOverlayProps) {
 
         {errorMsg && !isRateLimit && (
           <p className="pin-error" role="alert">
-            {isError ? 'Incorrect PIN' : errorMsg}
+            {isError ? 'Incorrect PIN. Try again.' : errorMsg}
           </p>
         )}
 
