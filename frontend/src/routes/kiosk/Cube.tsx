@@ -1,4 +1,5 @@
-import type { CubeState, SubInterval } from '../../api/types'
+import type { CubeRef, CubeState, SubInterval } from '../../api/types'
+import { FillBar } from './FillBar'
 import { SubCubeBar } from './SubCubeBar'
 
 interface CubeProps {
@@ -22,6 +23,17 @@ interface CubeProps {
    * Renders a SubCubeBar from 0 to interval.end × 100% on the left edge. (CUBE-04)
    */
   isCompanionBar?: boolean
+  /**
+   * Fill level 0.0–1.0+ from the collection snapshot (CUBE-07, D-13).
+   * When provided and > 0, renders a FillBar at the bottom edge of the cell.
+   * 0 or undefined → no bar rendered (is_empty / unknown cubes).
+   */
+  fillLevel?: number
+  /**
+   * Called when the user taps this cube (CUBE-09, D-14).
+   * Passes back a CubeRef so KioskView can open the contents panel.
+   */
+  onTap?: (cube: CubeRef) => void
 }
 
 /**
@@ -37,7 +49,18 @@ interface CubeProps {
  * Phase 2: When subInterval is present and this is the primary (lit) cube or
  * the companion cube for a crosses_boundary interval, renders SubCubeBar inside.
  */
-export function Cube({ unitId, row, col, state, address, subInterval, confidence = 0, isCompanionBar = false }: CubeProps) {
+export function Cube({
+  unitId,
+  row,
+  col,
+  state,
+  address,
+  subInterval,
+  confidence = 0,
+  isCompanionBar = false,
+  fillLevel,
+  onTap,
+}: CubeProps) {
   // Determine whether to render a SubCubeBar in this cube
   const isPrimary = state === 'lit' && subInterval != null
   const isCompanion = isCompanionBar && subInterval != null && subInterval.crosses_boundary
@@ -56,6 +79,10 @@ export function Cube({ unitId, row, col, state, address, subInterval, confidence
 
   const isSingleton = barInterval != null && barInterval.start === 0 && barInterval.end === 1
 
+  const handleClick = onTap
+    ? () => onTap({ unit_id: unitId, row, col })
+    : undefined
+
   return (
     <div
       className="cube"
@@ -64,6 +91,8 @@ export function Cube({ unitId, row, col, state, address, subInterval, confidence
       data-row={row}
       data-col={col}
       aria-label={`Cube ${address}`}
+      onClick={handleClick}
+      style={onTap ? { cursor: 'pointer' } : undefined}
     >
       <span className="cube__address">{address}</span>
       {shouldRenderBar && barInterval != null && (
@@ -72,6 +101,10 @@ export function Cube({ unitId, row, col, state, address, subInterval, confidence
           confidence={confidence}
           isSingleton={isSingleton}
         />
+      )}
+      {/* Fill-level bar at the bottom edge (CUBE-07, D-13) — only when fill > 0 */}
+      {fillLevel != null && fillLevel > 0 && (
+        <FillBar fillLevel={fillLevel} heightPx={4} />
       )}
     </div>
   )

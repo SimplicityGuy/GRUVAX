@@ -66,18 +66,25 @@ ORDER BY ordering
 async def get_cubes_bulk(
     request: Request,
     pool: Any = Depends(get_pool),
+    cache: BoundaryCache = Depends(get_boundary_cache),
+    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
 ) -> dict[str, Any]:
-    """Return all cube boundary rows with their empty-state flag.
+    """Return all cube boundary rows with their empty-state flag and fill level.
 
-    Response: ``{cubes: [{unit_id, row, col, is_empty}, ...]}``
+    Response: ``{cubes: [{unit_id, row, col, is_empty, fill_level}, ...]}``
 
     Row and col are 0-based, matching the API convention used by
     ``/api/locate`` and ``/api/cubes/{unit_id}/{row}/{col}``.
-    The kiosk SPA uses this endpoint to render the CUBE-05 empty state
-    without making one request per cube.
+    The kiosk SPA uses this endpoint to render:
+      - CUBE-05 empty state for cubes flagged ``is_empty=true``
+      - CUBE-07 fill bars (fill_level 0.0-1.0+) from the in-memory snapshot
+
+    ``fill_level`` is computed from the in-memory snapshot (no extra DB calls
+    during compute, D-13 / T-03-12). The full boundary fields (first_label etc.)
+    are also fetched so they can be used to build BoundaryRow objects for compute.
     """
     sql = """
-SELECT unit_id, row, col, is_empty
+SELECT unit_id, row, col, first_label, first_catalog, last_label, last_catalog, is_empty
 FROM gruvax.cube_boundaries
 ORDER BY unit_id, row, col
 """
@@ -86,7 +93,33 @@ ORDER BY unit_id, row, col
         rows_raw = await cur.fetchall()
         cols_meta = [desc[0] for desc in (cur.description or [])]
 
-    cubes = [dict(zip(cols_meta, row, strict=True)) for row in rows_raw]
+    nominal_capacity: int = int(
+        getattr(request.app.state, "settings_cache", {}).get("cube.nominal_capacity", 95)
+    )
+
+    cubes = []
+    for raw in rows_raw:
+        row_dict = dict(zip(cols_meta, raw, strict=True))
+        boundary = BoundaryRow(
+            unit_id=row_dict["unit_id"],
+            row=row_dict["row"],
+            col=row_dict["col"],
+            first_label=row_dict["first_label"],
+            first_catalog=row_dict["first_catalog"],
+            last_label=row_dict["last_label"],
+            last_catalog=row_dict["last_catalog"],
+            is_empty=row_dict["is_empty"],
+        )
+        records_in_range = get_records_in_boundary(boundary, snapshot)
+        fill_level = len(records_in_range) / max(nominal_capacity, 1)
+        cubes.append({
+            "unit_id": row_dict["unit_id"],
+            "row": row_dict["row"],
+            "col": row_dict["col"],
+            "is_empty": row_dict["is_empty"],
+            "fill_level": fill_level,
+        })
+
     return {"cubes": cubes}
 
 

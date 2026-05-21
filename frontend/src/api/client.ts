@@ -1,3 +1,4 @@
+import type { CubeContentsResponse, CubesWithFillResponse } from './cubeTypes'
 import type { CubesResponse, LocateResult, SearchResponse, UnitsResponse } from './types'
 
 /**
@@ -47,4 +48,39 @@ export async function fetchCubes(): Promise<CubesResponse> {
     throw new Error(`Cubes fetch failed: ${res.status}`)
   }
   return res.json() as Promise<CubesResponse>
+}
+
+/**
+ * Fetch all cube boundaries including fill_level from the in-memory snapshot.
+ *
+ * Returns the same shape as fetchCubes() but with fill_level added per cube
+ * (CUBE-07 — used to render fill bars on the kiosk grid).
+ */
+export async function fetchCubesWithFill(): Promise<CubesWithFillResponse> {
+  const res = await fetch(`${BASE}/api/cubes`)
+  if (!res.ok) {
+    throw new Error(`Cubes fetch failed: ${res.status}`)
+  }
+  return res.json() as Promise<CubesWithFillResponse>
+}
+
+/**
+ * Fetch one cube's boundary metadata + fill level + sampled records.
+ *
+ * Public endpoint — no auth required (D-15). Used by CubeContentsPanel
+ * to show the reverse-lookup side panel on cube tap (CUBE-09, D-14).
+ *
+ * Throws Error('cube_not_found') on 404 (nonexistent cube).
+ */
+export async function fetchCubeContents(
+  unitId: number,
+  row: number,
+  col: number,
+): Promise<CubeContentsResponse> {
+  const res = await fetch(`${BASE}/api/cubes/${unitId}/${row}/${col}`)
+  if (!res.ok) {
+    if (res.status === 404) throw new Error('cube_not_found')
+    throw new Error(`Cube contents fetch failed: ${res.status}`)
+  }
+  return res.json() as Promise<CubeContentsResponse>
 }

@@ -1,8 +1,10 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import gsap from 'gsap'
-import { fetchCubes, fetchUnits, searchCollection } from '../../api/client'
+import { fetchCubesWithFill, fetchUnits, searchCollection } from '../../api/client'
+import type { CubeRef } from '../../api/types'
 import { useGruvaxStore } from '../../state/store'
+import { CubeContentsPanel } from './CubeContentsPanel'
 import { ResultsList } from './ResultsList'
 import { SearchBox } from './SearchBox'
 import { ShelfGrid } from './ShelfGrid'
@@ -25,6 +27,8 @@ export function KioskView() {
   const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch, setQuery } =
     useGruvaxStore()
   const [debouncedQuery, setDebouncedQuery] = useState('')
+  // Cube-tap state for the contents panel (CUBE-09, D-14)
+  const [tappedCube, setTappedCube] = useState<CubeRef | null>(null)
   // The query whose results the user explicitly dismissed (by selecting a row).
   // The dropdown is derived as open when there is a query that hasn't been
   // dismissed — so it reopens automatically on the next keystroke (new query)
@@ -49,10 +53,10 @@ export function KioskView() {
     staleTime: Infinity,
   })
 
-  // Fetch all cube boundaries once — used to render empty state (CUBE-05)
+  // Fetch all cube boundaries once — used to render empty state (CUBE-05) + fill bars (CUBE-07)
   const { data: cubesData } = useQuery({
     queryKey: ['cubes'],
-    queryFn: fetchCubes,
+    queryFn: fetchCubesWithFill,
     staleTime: Infinity,
   })
 
@@ -63,6 +67,16 @@ export function KioskView() {
       cubesData.cubes
         .filter((cb) => cb.is_empty)
         .map((cb) => `${cb.unit_id}-${cb.row}-${cb.col}`),
+    )
+  }, [cubesData])
+
+  // Build a Map<"unitId-row-col", fillLevel> for FillBar rendering in ShelfGrid (CUBE-07)
+  const fillLevels = useMemo<Map<string, number>>(() => {
+    if (!cubesData) return new Map()
+    return new Map(
+      cubesData.cubes
+        .filter((cb) => !cb.is_empty && cb.fill_level > 0)
+        .map((cb) => [`${cb.unit_id}-${cb.row}-${cb.col}`, cb.fill_level]),
     )
   }, [cubesData])
 
@@ -292,6 +306,8 @@ export function KioskView() {
                 labelSpan={labelSpan}
                 subCubeInterval={subCubeInterval}
                 confidence={confidence}
+                fillLevels={fillLevels}
+                onCubeTap={setTappedCube}
               />
             </div>
           ))}
@@ -310,6 +326,8 @@ export function KioskView() {
                     labelSpan={labelSpan}
                     subCubeInterval={subCubeInterval}
                     confidence={confidence}
+                    fillLevels={fillLevels}
+                    onCubeTap={setTappedCube}
                   />
                 </div>
               ))}
@@ -317,6 +335,12 @@ export function KioskView() {
           )}
         </div>
       </main>
+
+      {/* Cube-contents panel (CUBE-09, D-14) — bottom sheet, slides up on cube tap */}
+      <CubeContentsPanel
+        cube={tappedCube}
+        onDismiss={() => setTappedCube(null)}
+      />
     </div>
   )
 }

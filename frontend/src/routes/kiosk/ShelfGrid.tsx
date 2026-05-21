@@ -23,6 +23,17 @@ interface ShelfGridProps {
   subCubeInterval?: SubInterval | null
   /** Position confidence 0.0–1.0 — passed to SubCubeBar for opacity (D-01) */
   confidence?: number
+  /**
+   * Fill level per cube, keyed "unitId-row-col" (0-based).
+   * When present, FillBar renders at the bottom of each cube cell (CUBE-07, D-13).
+   * Cubes not in the map render no fill bar.
+   */
+  fillLevels?: Map<string, number>
+  /**
+   * Called when the user taps a cube (CUBE-09, D-14).
+   * KioskView uses this to open the CubeContentsPanel for the tapped cube.
+   */
+  onCubeTap?: (cube: CubeRef) => void
 }
 
 /**
@@ -50,6 +61,8 @@ export function ShelfGrid({
   labelSpan = [],
   subCubeInterval = null,
   confidence = 0,
+  fillLevels,
+  onCubeTap,
 }: ShelfGridProps) {
   const ROW_LETTERS = 'ABCDEFGH'
   const baseRowOffset = shelfIndex * 4
@@ -85,6 +98,9 @@ export function ShelfGrid({
         subCubeInterval.next_cube.row === r &&
         subCubeInterval.next_cube.col === c
 
+      const cubeKey = `${unit.id}-${r}-${c}`
+      const cubeFillLevel = fillLevels?.get(cubeKey)
+
       cells.push(
         <Cube
           key={address}
@@ -96,6 +112,8 @@ export function ShelfGrid({
           subInterval={isLit || isCompanion ? subCubeInterval : null}
           confidence={isLit || isCompanion ? confidence : 0}
           isCompanionBar={isCompanion}
+          fillLevel={cubeFillLevel}
+          onTap={onCubeTap}
         />,
       )
     }
