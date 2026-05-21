@@ -1,9 +1,24 @@
 ---
-status: in_progress
+status: resolved
 phase: 03-admin-loop-pin-manual-entry-undo
 source: hands-on UAT (2026-05-21)
 app_under_test: local uvicorn :8001 against dev Postgres (152 collection rows, 32 cube boundaries, 41 history)
+resolution: F1–F7 fixed and verified (live + full test suite); F8 deferred (overlaps WR-03). See 03-UAT-FIXES.md.
 ---
+
+## Resolution (2026-05-21)
+
+F1–F7 are fixed, committed, and verified — F1/F2/F3 live, F4/F5/F6/F7 live in the corrected
+diff-preview + editor and via the full backend suite (EXIT 0), ruff/mypy clean, frontend build
+clean. Fix details in `03-UAT-FIXES.md`. F8 (deep-link re-prompt) deferred — overlaps the
+already-deferred WR-03 session-rehydration; re-entering the PIN continues the same server session.
+
+**Process note (not a product bug):** the backend integration tests run against the *dev*
+Postgres and overwrite `gruvax.settings.auth.pin_hash` + create many `admin_sessions`/
+`boundary_history` rows (448 sessions / 41 history seen). After any `uv run pytest`, the admin
+PIN is no longer the dev value — re-run `gruvax-set-pin` before manual UAT. Consider a dedicated
+test DB / transactional rollback fixture in a future hardening pass.
+
 
 # Phase 3 — Hands-on UAT Findings
 
