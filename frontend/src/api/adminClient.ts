@@ -21,9 +21,12 @@ import type {
   AdminSettingsPut,
   CatalogOption,
   ChangePinPayload,
+  CommitResponse,
   CubeBoundaryEdit,
+  HistoryResponse,
   LabelOption,
   LoginResponse,
+  RevertResponse,
   SuggestResponse,
   ValidateResponse,
 } from './types'
@@ -232,6 +235,59 @@ export async function getCatalogsForLabel(label: string): Promise<CatalogOption[
     throw new Error(`Failed to fetch catalogs for label: ${res.status}`)
   }
   return res.json() as Promise<CatalogOption[]>
+}
+
+// ── Change-set commit + history (plan 03-05) ──────────────────────────────────
+
+/**
+ * POST /api/admin/cubes/bulk — atomic change-set commit.
+ *
+ * Sends the Idempotency-Key header so a double-tap on a flaky connection
+ * replays the cached response instead of writing a second change-set.
+ * Generate a UUID per commit attempt with `crypto.randomUUID()`, persist it
+ * alongside the pendingChangeSet so retries reuse the same key.
+ */
+export async function adminBulkSave(
+  updates: CubeBoundaryEdit[],
+  idempotencyKey: string,
+): Promise<CommitResponse> {
+  const res = await adminFetch('/api/admin/cubes/bulk', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ updates }),
+  })
+  if (!res.ok) {
+    throw new Error(`Bulk save failed: ${res.status}`)
+  }
+  return res.json() as Promise<CommitResponse>
+}
+
+/** GET /api/admin/history — returns change-sets newest-first. */
+export async function getHistory(): Promise<HistoryResponse> {
+  const res = await adminFetch('/api/admin/history')
+  if (!res.ok) {
+    throw new Error(`History fetch failed: ${res.status}`)
+  }
+  return res.json() as Promise<HistoryResponse>
+}
+
+/**
+ * POST /api/admin/history/{change_set_id}/revert — conflict-aware revert.
+ *
+ * Writes an inverse change-set (source='revert') that is itself undoable.
+ * Cubes modified by a newer change-set are skipped and reported.
+ */
+export async function revertChangeSet(changeSetId: string): Promise<RevertResponse> {
+  const res = await adminFetch(`/api/admin/history/${changeSetId}/revert`, {
+    method: 'POST',
+  })
+  if (res.status === 404) {
+    throw new Error('change_set_not_found')
+  }
+  if (!res.ok) {
+    throw new Error(`Revert failed: ${res.status}`)
+  }
+  return res.json() as Promise<RevertResponse>
 }
 
 // ── Error types ───────────────────────────────────────────────────────────────

@@ -573,11 +573,11 @@ export function CubeEditor() {
           </p>
         )}
 
-        {/* Add to pending */}
+        {/* Add to pending change-set */}
         <div className="editor-actions">
           <button
             type="button"
-            className="editor-btn-primary"
+            className="editor-btn-secondary"
             onClick={handleAddToPending}
             disabled={isValidating}
           >
@@ -596,13 +596,20 @@ export function CubeEditor() {
           </p>
         )}
 
-        {/* Pending change-set summary */}
+        {/* Pending change-set summary + preview */}
         {pendingChangeSet && pendingChangeSet.edits.length > 0 && (
           <div className="editor-pending-summary">
             <span className="editor-pending-count">
               {pendingChangeSet.edits.length} pending edit
               {pendingChangeSet.edits.length !== 1 ? 's' : ''}
             </span>
+            <button
+              type="button"
+              className="editor-btn-primary"
+              onClick={() => void navigate('/admin/preview')}
+            >
+              PREVIEW CHANGES
+            </button>
           </div>
         )}
       </div>
