@@ -229,3 +229,38 @@ export interface CatalogOption {
   release_id: number
   catalog_number: string
 }
+
+// ── Change-set commit + history types (plan 03-05) ───────────────────────────
+
+/** Response from POST /api/admin/cubes/bulk. */
+export interface CommitResponse {
+  change_set_id: string
+  applied: number
+}
+
+/** One entry in the GET /api/admin/history response. */
+export interface ChangeSetHistoryItem {
+  change_set_id: string
+  source: 'manual' | 'bulk' | 'revert'
+  changed_at: string   // ISO-8601 timestamp
+  cube_count: number
+}
+
+/** Response from GET /api/admin/history. */
+export interface HistoryResponse {
+  history: ChangeSetHistoryItem[]
+}
+
+/** One reverted/skipped cube in a RevertResponse. */
+export interface RevertedCube {
+  unit_id: number
+  row: number
+  col: number
+}
+
+/** Response from POST /api/admin/history/{change_set_id}/revert. */
+export interface RevertResponse {
+  change_set_id: string   // the new inverse change-set UUID
+  reverted: RevertedCube[]
+  skipped: RevertedCube[]
+}

@@ -3,6 +3,8 @@ import { BrowserRouter, Route, Routes } from 'react-router'
 import { AdminShell } from './routes/admin/AdminShell'
 import { CubeEditor } from './routes/admin/CubeEditor'
 import { CubesGrid } from './routes/admin/CubesGrid'
+import { DiffPreviewSheet } from './routes/admin/DiffPreviewSheet'
+import { HistoryView } from './routes/admin/HistoryView'
 import { Settings } from './routes/admin/Settings'
 import { KioskView } from './routes/kiosk/KioskView'
 
@@ -36,6 +38,8 @@ function App() {
             <Route path="settings" element={<Settings />} />
             <Route path="cubes" element={<CubesGrid />} />
             <Route path="cubes/:unit/:row/:col" element={<CubeEditor />} />
+            <Route path="preview" element={<DiffPreviewSheet />} />
+            <Route path="history" element={<HistoryView />} />
           </Route>
         </Routes>
       </BrowserRouter>

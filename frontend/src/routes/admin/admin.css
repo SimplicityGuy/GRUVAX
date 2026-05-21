@@ -993,3 +993,577 @@
   text-transform: uppercase;
   color: var(--gruvax-text-primary);
 }
+
+/* ── DiffPreviewSheet ────────────────────────────────────────────────────────── */
+
+.diff-sheet {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-5);
+  max-width: 520px;
+  margin: 0 auto;
+  padding: var(--gruvax-space-4);
+}
+
+.diff-sheet-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+}
+
+.diff-sheet-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg, 36px);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.diff-sheet-subheading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+}
+
+.diff-sheet-validating {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+  font-style: italic;
+}
+
+/* Mini Kallax grid (UI-SPEC §E: changed cubes ringed in --gruvax-blue) */
+
+.diff-mini-grid-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.diff-mini-unit {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+}
+
+.diff-mini-unit-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  color: var(--gruvax-text-muted);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+}
+
+.diff-mini-grid {
+  display: grid;
+  gap: 4px;
+}
+
+.diff-mini-cell {
+  width: 40px;
+  height: 40px;
+  border-radius: var(--gruvax-radius-sm);
+  background: var(--gruvax-border-light);
+  border: 2px solid transparent;
+  transition: border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+              background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.diff-mini-cell--changed {
+  background: color-mix(in srgb, var(--gruvax-blue) 12%, transparent);
+  border-color: var(--gruvax-blue);
+}
+
+/* Per-cube detail cards */
+
+.diff-detail-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-4);
+}
+
+.diff-cube-card {
+  background: var(--gruvax-white);
+  border-radius: var(--gruvax-radius-lg);
+  box-shadow: var(--gruvax-shadow-sm);
+  border: 1px solid var(--gruvax-border-light);
+  padding: var(--gruvax-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.diff-cube-address {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono, 14px);
+  font-weight: 500;
+  color: var(--gruvax-blue);
+}
+
+.diff-before-after-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono, 14px);
+}
+
+.diff-col-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  padding: var(--gruvax-space-1) var(--gruvax-space-2) var(--gruvax-space-1) 0;
+  text-align: left;
+  border-bottom: 1px solid var(--gruvax-border-light);
+}
+
+.diff-field-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  padding: var(--gruvax-space-1) var(--gruvax-space-2) var(--gruvax-space-1) 0;
+  white-space: nowrap;
+}
+
+.diff-field-value {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono, 14px);
+  color: var(--gruvax-text-primary);
+  padding: var(--gruvax-space-1) 0;
+  word-break: break-all;
+}
+
+.diff-movement-count {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-secondary);
+  margin: 0;
+}
+
+/* Warnings (empty-after / overstuffed) */
+
+.diff-warning {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-2) var(--gruvax-space-3);
+  border-radius: var(--gruvax-radius-md);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+}
+
+.diff-warning--empty {
+  background: color-mix(in srgb, var(--gruvax-warning) 12%, transparent);
+  color: var(--gruvax-warning);
+  border: 1px solid color-mix(in srgb, var(--gruvax-warning) 35%, transparent);
+}
+
+.diff-warning--overstuffed {
+  background: color-mix(in srgb, var(--gruvax-error) 10%, transparent);
+  color: var(--gruvax-error);
+  border: 1px solid color-mix(in srgb, var(--gruvax-error) 30%, transparent);
+}
+
+/* Actions */
+
+.diff-sheet-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.diff-commit-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-error);
+  margin: 0;
+}
+
+.diff-back-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--gruvax-space-2) 0;
+  touch-action: manipulation;
+  width: 100%;
+  text-align: center;
+}
+
+.diff-back-btn:hover:not(:disabled) {
+  color: var(--gruvax-text-primary);
+}
+
+.diff-back-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.diff-back-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* Committed success state */
+
+.diff-committed-state {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  padding: var(--gruvax-space-4);
+  background: color-mix(in srgb, var(--gruvax-success) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gruvax-success) 30%, transparent);
+  border-radius: var(--gruvax-radius-lg);
+}
+
+.diff-committed-check {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg, 36px);
+  font-weight: 900;
+  color: var(--gruvax-success);
+}
+
+.diff-committed-text {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-success);
+}
+
+/* Empty state */
+
+.diff-sheet-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-4);
+  padding: var(--gruvax-space-7) var(--gruvax-space-5);
+  text-align: center;
+}
+
+.diff-sheet-empty-text {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+}
+
+/* ── HistoryView ─────────────────────────────────────────────────────────────── */
+
+.history-view {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-5);
+  max-width: 600px;
+  margin: 0 auto;
+  padding: var(--gruvax-space-4);
+}
+
+.history-header {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+}
+
+.history-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg, 36px);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.history-subheading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+}
+
+.history-loading,
+.history-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+  margin: var(--gruvax-space-6) auto;
+  text-align: center;
+}
+
+.history-error {
+  color: var(--gruvax-error);
+}
+
+/* Empty state */
+
+.history-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  padding: var(--gruvax-space-7);
+  text-align: center;
+}
+
+.history-empty-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg, 36px);
+  font-weight: 900;
+  color: var(--gruvax-text-muted);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.history-empty-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+}
+
+/* Change-set cards */
+
+.history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.history-card {
+  background: var(--gruvax-white);
+  border-radius: var(--gruvax-radius-lg);
+  box-shadow: var(--gruvax-shadow-sm);
+  border: 1px solid var(--gruvax-border-light);
+  padding: var(--gruvax-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.history-card-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gruvax-space-3);
+  flex-wrap: wrap;
+}
+
+.history-card-meta {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  flex-wrap: wrap;
+}
+
+.history-change-set-id {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono, 14px);
+  color: var(--gruvax-text-muted);
+}
+
+.history-source-badge {
+  font-family: var(--gruvax-font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  background: var(--gruvax-off-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-pill);
+  padding: 2px 6px;
+  color: var(--gruvax-text-muted);
+}
+
+.history-source-badge[data-source="revert"] {
+  background: color-mix(in srgb, var(--gruvax-warning) 12%, transparent);
+  border-color: color-mix(in srgb, var(--gruvax-warning) 30%, transparent);
+  color: var(--gruvax-warning);
+}
+
+/* REVERTED pill (UI-SPEC §F) */
+
+.history-reverted-pill {
+  font-family: var(--gruvax-font-display);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-error);
+  border: 1px solid var(--gruvax-error);
+  border-radius: var(--gruvax-radius-pill);
+  padding: 2px 8px;
+}
+
+.history-card-right {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--gruvax-space-1);
+}
+
+.history-timestamp {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono-sm, 11px);
+  color: var(--gruvax-text-muted);
+}
+
+.history-cube-count {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-secondary);
+}
+
+/* Conflict report banner (after partial revert) */
+
+.history-conflict-banner {
+  background: color-mix(in srgb, var(--gruvax-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gruvax-warning) 35%, transparent);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-warning);
+}
+
+.history-revert-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-error);
+  margin: 0;
+}
+
+/* Revert action */
+
+.history-card-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+}
+
+.history-revert-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-error);
+  background: transparent;
+  border: 1px solid var(--gruvax-error);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 44px;
+  cursor: pointer;
+  width: fit-content;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.history-revert-btn:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--gruvax-error) 10%, transparent);
+}
+
+.history-revert-btn:focus-visible {
+  outline: 2px solid var(--gruvax-error);
+  outline-offset: 2px;
+}
+
+.history-revert-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Destructive confirm dialog */
+
+.history-confirm-row {
+  background: color-mix(in srgb, var(--gruvax-error) 6%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gruvax-error) 25%, transparent);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.history-confirm-copy {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-primary);
+  margin: 0;
+}
+
+.history-confirm-buttons {
+  display: flex;
+  gap: var(--gruvax-space-2);
+  flex-wrap: wrap;
+}
+
+.history-confirm-revert-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-white);
+  background: var(--gruvax-error);
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 44px;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.history-confirm-revert-btn:hover {
+  background: color-mix(in srgb, var(--gruvax-error) 80%, black);
+}
+
+.history-confirm-revert-btn:focus-visible {
+  outline: 2px solid var(--gruvax-error);
+  outline-offset: 2px;
+}
+
+.history-confirm-cancel-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  background: transparent;
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 44px;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.history-confirm-cancel-btn:hover {
+  background: var(--gruvax-off-white);
+}
+
+.history-confirm-cancel-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
