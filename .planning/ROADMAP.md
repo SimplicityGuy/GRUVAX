@@ -120,22 +120,20 @@ Plans:
 
 **UI hint:** yes
 
-### Phase 4: Realtime + Offline Resilience
+### Phase 4: Realtime Live Updates
 
-**Goal:** Admin edits propagate to the kiosk live without a refresh; the kiosk handles connectivity loss gracefully; the per-session recently-pulled list, privacy floors, and the visible "Reset kiosk" button complete the multi-device + privacy story.
+**Goal:** As a kiosk visitor, I want to see the shelf map update live as the owner re-files records, so that I can always trust the kiosk reflects the current shelf layout without refreshing.
 **Mode:** mvp
 **Depends on:** Phase 1 (boundary cache), Phase 3 (admin writes that trigger invalidation)
-**Requirements:** ADMN-11, RTM-01, RTM-02, RTM-03, RTM-04, OFF-01, OFF-02, OFF-03, OFF-04, SRCH-09, PRIV-01, PRIV-02, PRIV-03, PRIV-04
+**Requirements:** ADMN-11, RTM-01, RTM-02, RTM-03, RTM-04
 **Success Criteria** (what must be TRUE):
 
   1. While the kiosk is open, an admin edit on mobile causes the affected cube(s) to re-render on the kiosk within ~500 ms over the LAN; the affected cube range shows a subtle "boundaries updating" indicator while the admin is mid-edit (SSE `admin_editing` event) and clears on commit.
   2. The SSE channel handles two simultaneous searches (kiosk and mobile) without server-side serialization, admin edits show optimistic UI updates with rollback on server error, and the SSE endpoint holds no DB connection (Pitfall 10) and ships with `X-Accel-Buffering: no` + 15s ping (Pitfall 8).
-  3. When the backend is unreachable, the kiosk shows an offline banner within ~5 seconds (detected via SSE close + periodic health-check fallback), disables the search input with explanatory placeholder text, and reconnects on exponential backoff (1s → 2s → 5s → 10s → 30s cap); first successful request after reconnection shows a brief success indicator.
-  4. The kiosk maintains a per-session recently-pulled list shown to the user that lives only in session storage (never persisted server-side), and a visible "Reset kiosk" button — no PIN required — clears the local session state.
-  5. Server-side, search queries are never persisted as text+timestamp; only aggregate per-record selection counters exist (`gruvax.search_counters`), and admin-visible search stats are aggregate-only with no per-session/per-visitor breakdown.
 
 **Plans:** TBD
 **UI hint:** yes
+**SPIDR note:** Split from original "Realtime + Offline Resilience" on the Paths axis (2026-05-21). Happy path (realtime) is this phase; deferred slices: Offline Resilience (OFF-01..04) and Privacy + Recently-Pulled (SRCH-09, PRIV-01..04).
 
 ### Phase 5: LED Contract over MQTT (Hardware Stubbed)
 
