@@ -131,7 +131,21 @@ Plans:
   1. While the kiosk is open, an admin edit on mobile causes the affected cube(s) to re-render on the kiosk within ~500 ms over the LAN; the affected cube range shows a subtle "boundaries updating" indicator while the admin is mid-edit (SSE `admin_editing` event) and clears on commit.
   2. The SSE channel handles two simultaneous searches (kiosk and mobile) without server-side serialization, admin edits show optimistic UI updates with rollback on server error, and the SSE endpoint holds no DB connection (Pitfall 10) and ships with `X-Accel-Buffering: no` + 15s ping (Pitfall 8).
 
-**Plans:** TBD
+**Plans:** 4 plans (3 waves)
+Plans:
+**Wave 1**
+
+- [ ] 04-01-PLAN.md — Realtime spine: in-process EventBus + GET /api/events SSE (no DB dep) + bus.publish at the cubes.py post-commit seam + kiosk EventSource consumer + connectivity/shimmer Zustand slice + Wave-0 backend tests (ADMN-11, RTM-01, RTM-02)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 04-02-PLAN.md — Highlight-follows-record: boundary_changed re-locates the active selection → re-glow via existing animationToken/GSAP (RTM-01 / D-05, D-06)
+- [ ] 04-03-PLAN.md — admin_editing heartbeat endpoint (session+CSRF) + optimistic admin edits with rollback + RollbackToast (RTM-03, RTM-04 backend)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 04-04-PLAN.md — Kiosk shimmer rendering: Cube shimmerActive + ShelfGrid pass-through + opacity-only .cube-shimmer-overlay + 60s TTL sweeper (RTM-04 kiosk)
+
 **UI hint:** yes
 **SPIDR note:** Split from original "Realtime + Offline Resilience" on the Paths axis (2026-05-21). Happy path (realtime) is this phase; deferred slices: Offline Resilience (OFF-01..04) and Privacy + Recently-Pulled (SRCH-09, PRIV-01..04).
 
