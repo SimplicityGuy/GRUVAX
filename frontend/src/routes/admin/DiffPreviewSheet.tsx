@@ -62,22 +62,25 @@ export function DiffPreviewSheet() {
   // Fetch validation + current boundaries once on mount (dry-run — no DB write)
   useEffect(() => {
     if (!pendingChangeSet || pendingChangeSet.edits.length === 0) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- on-mount async validate+fetch; loading flag set before the network round-trip
-    setIsValidating(true)
 
     const editsSnap = pendingChangeSet.edits
 
-    // Run validate + per-cube boundary fetches in parallel
-    const validatePromise = validateBoundary(editsSnap)
-    const boundaryPromises = editsSnap.map((edit) =>
-      adminGetCubeBoundary(edit.unit_id, edit.row, edit.col).then((b) => ({
-        key: `${edit.unit_id}-${edit.row}-${edit.col}`,
-        boundary: b,
-      })).catch(() => null)
-    )
+    // Extract effect body into a local async function so setIsValidating(true)
+    // runs inside the async function body (not as a synchronous in-effect setState).
+    async function runMountValidation() {
+      setIsValidating(true)
 
-    void Promise.all([validatePromise, Promise.all(boundaryPromises)]).then(
-      ([validateRes, boundaryResults]) => {
+      // Run validate + per-cube boundary fetches in parallel
+      const validatePromise = validateBoundary(editsSnap)
+      const boundaryPromises = editsSnap.map((edit) =>
+        adminGetCubeBoundary(edit.unit_id, edit.row, edit.col).then((b) => ({
+          key: `${edit.unit_id}-${edit.row}-${edit.col}`,
+          boundary: b,
+        })).catch(() => null)
+      )
+
+      try {
+        const [validateRes, boundaryResults] = await Promise.all([validatePromise, Promise.all(boundaryPromises)])
         setValidateResults(validateRes.results)
         // Surface any validation errors so the COMMIT button can be disabled/warned
         const invalid = validateRes.results.filter((r) => !r.valid)
@@ -100,12 +103,14 @@ export function DiffPreviewSheet() {
           }
         }
         setBeforeBoundaries(map)
+      } catch {
+        // Failure of validate or any boundary fetch — do not block commit
+      } finally {
         setIsValidating(false)
-      },
-    ).catch(() => {
-      // Failure of validate or any boundary fetch — do not block commit
-      setIsValidating(false)
-    })
+      }
+    }
+
+    void runMountValidation()
     // Only run on mount — pendingChangeSet identity does not change during preview
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])

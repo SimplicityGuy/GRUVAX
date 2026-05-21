@@ -81,14 +81,6 @@ export function PinOverlay({ isLocked = false }: PinOverlayProps) {
     }
   }, [setAdminLoggedIn])
 
-  // Auto-submit on 4th digit
-  useEffect(() => {
-    if (digits.length === PIN_LENGTH && status === 'idle') {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- async PIN submission; setState happens inside the adminLogin promise, not synchronously
-      void submitPin(digits.join(''))
-    }
-  }, [digits, status, submitPin])
-
   // Countdown for rate-limit retry
   useEffect(() => {
     if (status === 'ratelimit' && retrySeconds > 0) {
@@ -112,8 +104,15 @@ export function PinOverlay({ isLocked = false }: PinOverlayProps) {
 
   const handleDigit = useCallback((d: string) => {
     if (status === 'submitting' || status === 'ratelimit') return
-    setDigits((prev) => (prev.length < PIN_LENGTH ? [...prev, d] : prev))
-  }, [status])
+    setDigits((prev) => {
+      if (prev.length >= PIN_LENGTH) return prev
+      const next = [...prev, d]
+      if (next.length === PIN_LENGTH && status === 'idle') {
+        void submitPin(next.join(''))
+      }
+      return next
+    })
+  }, [status, submitPin])
 
   const handleBackspace = useCallback(() => {
     if (status === 'submitting' || status === 'ratelimit') return
