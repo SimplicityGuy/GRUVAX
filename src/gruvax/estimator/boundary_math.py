@@ -34,13 +34,13 @@ if TYPE_CHECKING:
     from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
 
 
-def count_records_in_boundary(
+def get_records_in_boundary(
     boundary: BoundaryRow,
     snapshot: CollectionSnapshot,
-) -> int:
-    """Count records whose (label, catalog#) falls within the boundary's range.
+) -> list[RecordRow]:
+    """Return all records whose (label, catalog#) falls within the boundary's range.
 
-    Returns 0 for is_empty boundaries or boundaries with no first_label.
+    Returns [] for is_empty boundaries or boundaries with no first_label.
 
     Multi-label semantics (Open Question 4 / RESEARCH.md §Pattern 8):
       - Records of the FIRST label: catalog_number >= first_catalog (parse_key)
@@ -58,10 +58,11 @@ def count_records_in_boundary(
         snapshot: CollectionSnapshot loaded from v_collection.
 
     Returns:
-        Integer count of records in the boundary's range. Never negative.
+        List of RecordRow in the boundary's range. Empty list if is_empty or no
+        first_label. Order reflects snapshot insertion order within each label group.
     """
     if boundary.is_empty or boundary.first_label is None:
-        return 0
+        return []
 
     first_label_cf = (boundary.first_label or "").casefold()
     last_label_cf = (boundary.last_label or "").casefold()
@@ -71,45 +72,61 @@ def count_records_in_boundary(
     # Same-label boundary: simple catalog range check
     if first_label_cf == last_label_cf:
         records = snapshot.get_label_records(boundary.first_label)
-        return sum(
-            1
+        return [
+            r
             for r in records
             if catalog_in_range(r.catalog_number, first_catalog, last_catalog)
-        )
+        ]
 
-    # Multi-label boundary: iterate union of labels in range
-    # Build the set of all relevant labels from the snapshot
-    count = 0
+    # Multi-label boundary: collect records across all labels in range
+    result: list[RecordRow] = []
     for label_key, label_records in snapshot._by_label.items():
         if not label_records:
             continue
 
-        # Use the stored label from any record (casefold preserved by snapshot load)
         sample_label_cf = label_key  # already casefolded in snapshot
 
         if sample_label_cf < first_label_cf or sample_label_cf > last_label_cf:
-            # Label is outside the boundary's label range — skip
             continue
 
         if sample_label_cf == first_label_cf:
             # First label: only records with catalog >= first_catalog
-            count += sum(
-                1
+            result.extend(
+                r
                 for r in label_records
                 if parse_key(r.catalog_number) >= parse_key(first_catalog)
             )
         elif sample_label_cf == last_label_cf:
             # Last label: only records with catalog <= last_catalog
-            count += sum(
-                1
+            result.extend(
+                r
                 for r in label_records
                 if parse_key(r.catalog_number) <= parse_key(last_catalog)
             )
         else:
             # Middle label: fully included
-            count += len(label_records)
+            result.extend(label_records)
 
-    return count
+    return result
+
+
+def count_records_in_boundary(
+    boundary: BoundaryRow,
+    snapshot: CollectionSnapshot,
+) -> int:
+    """Count records whose (label, catalog#) falls within the boundary's range.
+
+    Delegates to ``get_records_in_boundary`` so count and sample share one pass.
+    Returns 0 for is_empty boundaries or boundaries with no first_label.
+
+    Args:
+        boundary: BoundaryRow from BoundaryCache.
+        snapshot: CollectionSnapshot loaded from v_collection.
+
+    Returns:
+        Integer count of records in the boundary's range. Never negative.
+    """
+    return len(get_records_in_boundary(boundary, snapshot))
 
 
 def sample_records(
