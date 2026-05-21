@@ -6,6 +6,7 @@ app factory and the routers that depend on app.state.
 
 from __future__ import annotations
 
+import secrets
 from datetime import UTC, datetime, timedelta
 from typing import Any
 
@@ -115,11 +116,13 @@ async def require_admin(
             detail="Not authenticated",
         )
 
-    # CSRF double-submit: mutating methods must echo the gruvax_csrf cookie value
+    # CSRF double-submit: mutating methods must echo the gruvax_csrf cookie value.
+    # IN-01: Use secrets.compare_digest for constant-time comparison to prevent
+    # timing-oracle attacks (even if negligible on a home LAN, it's one line).
     if request.method in ("POST", "PUT", "PATCH", "DELETE"):
         csrf_header = request.headers.get("X-CSRF-Token", "")
         csrf_cookie = request.cookies.get(CSRF_COOKIE, "")
-        if not csrf_header or csrf_header != csrf_cookie:
+        if not csrf_header or not secrets.compare_digest(csrf_header, csrf_cookie):
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="CSRF check failed",

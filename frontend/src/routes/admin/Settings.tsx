@@ -26,12 +26,12 @@ export function Settings() {
   const [pinStatus, setPinStatus] = useState<SaveStatus>('idle')
   const [pinError, setPinError] = useState('')
 
-  // Load current settings on mount
+  // Load current settings on mount — use backend key names (WR-01)
   useEffect(() => {
     getAdminSettings()
       .then((s) => {
-        setCapacity(s.nominal_capacity)
-        setIdleMin(Math.round(s.idle_ttl_seconds / 60))
+        setCapacity(s.cube_nominal_capacity)
+        setIdleMin(Math.round(s.session_idle_ttl_seconds / 60))
       })
       .catch(() => {/* proceed with defaults */})
   }, [])
@@ -41,11 +41,12 @@ export function Settings() {
     setSettingsError('')
     try {
       const updated = await putAdminSettings({
-        nominal_capacity: capacity,
-        idle_ttl_seconds: idleMin * 60,
+        cube_nominal_capacity: capacity,
+        session_idle_ttl_seconds: idleMin * 60,
       })
-      setCapacity(updated.nominal_capacity)
-      setIdleMin(Math.round(updated.idle_ttl_seconds / 60))
+      // PUT returns {updated: [...]} not a settings object; re-fetch to confirm
+      setCapacity(updated.cube_nominal_capacity ?? capacity)
+      setIdleMin(Math.round((updated.session_idle_ttl_seconds ?? idleMin * 60) / 60))
       setSettingsStatus('saved')
       setTimeout(() => setSettingsStatus('idle'), 2000)
     } catch {

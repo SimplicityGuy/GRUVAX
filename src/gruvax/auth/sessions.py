@@ -192,13 +192,32 @@ async def revoke_all_sessions_except(
     await conn.commit()
 
 
-def clear_session_cookies(response: Response) -> None:
+def clear_session_cookies(response: Response, secure: bool = False) -> None:
     """Clear both session cookies (set them as expired).
 
     Called by the logout handler after revoking the session row.
 
+    The delete_cookie attributes MUST match the set_cookie attributes exactly
+    (path, httponly, secure, samesite) so browsers remove the cookie (CR-04).
+    The ``secure`` parameter must match what was used in create_session — pass
+    ``True`` in production HTTPS environments.
+
     Args:
         response: FastAPI ``Response`` to modify.
+        secure:   Whether the cookies were set with Secure=True (default False
+                  for home-LAN HTTP). Set to True in production HTTPS.
     """
-    response.delete_cookie(SESSION_COOKIE, samesite="strict")
-    response.delete_cookie(CSRF_COOKIE, samesite="strict")
+    response.delete_cookie(
+        SESSION_COOKIE,
+        path="/",
+        httponly=True,
+        samesite="strict",
+        secure=secure,
+    )
+    response.delete_cookie(
+        CSRF_COOKIE,
+        path="/",
+        httponly=False,
+        samesite="strict",
+        secure=secure,
+    )

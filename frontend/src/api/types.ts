@@ -95,16 +95,23 @@ export interface AdminSession {
   hard_cap_at: string  // ISO-8601 UTC
 }
 
-/** Response from GET /api/admin/settings — nominal capacity + idle TTL. */
+/** Response from GET /api/admin/settings — nominal capacity + idle TTL.
+ *
+ * Key names match the backend response (WR-01):
+ * cube_nominal_capacity / session_idle_ttl_seconds.
+ */
 export interface AdminSettings {
-  nominal_capacity: number
-  idle_ttl_seconds: number
+  cube_nominal_capacity: number
+  session_idle_ttl_seconds: number
 }
 
-/** Payload for PUT /api/admin/settings. */
+/** Payload for PUT /api/admin/settings.
+ *
+ * Key names match what the backend update_settings handler recognises (WR-01).
+ */
 export interface AdminSettingsPut {
-  nominal_capacity?: number
-  idle_ttl_seconds?: number
+  cube_nominal_capacity?: number
+  session_idle_ttl_seconds?: number
 }
 
 /** Payload for POST /api/admin/settings/pin — change PIN. */
@@ -117,15 +124,20 @@ export interface ChangePinPayload {
  * One boundary edit in a pending change-set.
  * Stored in localStorage via Zustand persist — shape is declared now so
  * plans 04 and 05 can reuse it without re-deciding.
+ *
+ * Field names match the backend Pydantic model (BoundaryEdit) and DB columns:
+ * first_label / first_catalog / last_label / last_catalog (CR-01).
  */
 export interface CubeBoundaryEdit {
   unit_id: number
   row: number
   col: number
-  label_first: string
-  catalog_first: string
-  label_last: string
-  catalog_last: string
+  first_label: string
+  first_catalog: string
+  last_label: string
+  last_catalog: string
+  is_empty?: boolean
+  force?: boolean
 }
 
 /**
@@ -155,6 +167,9 @@ export interface MovementCount {
   col: number
   records_before: number
   records_after: number
+  delta: number
+  fill_level_before: number
+  fill_level_after: number
 }
 
 /** One item in the validate endpoint results array. */
@@ -165,11 +180,14 @@ export interface ValidateItem {
   valid: boolean
   /** Present when valid === false due to comparator (POS-01). */
   comparator_error?: string
+  /** Present when valid === false due to boundary_order_error. */
+  error?: string
   /** True when the value is not in v_collection (phantom). */
   phantom?: boolean
   /** Near-miss candidates from pg_trgm (only when phantom === true). */
   near_misses?: NearMiss[]
-  movement_counts?: MovementCount
+  /** movement_counts is a LIST (one item per cube) from the backend (CR-03). */
+  movement_counts?: MovementCount[]
 }
 
 /** Response from POST /api/admin/cubes/validate (dry-run — always HTTP 200). */
@@ -195,10 +213,10 @@ export interface AdminCube {
   unit_id: number
   row: number
   col: number
-  label_first: string
-  catalog_first: string
-  label_last: string
-  catalog_last: string
+  first_label: string
+  first_catalog: string
+  last_label: string
+  last_catalog: string
   is_empty: boolean
   fill_level: number     // 0.0–1.0 fraction of nominal capacity
 }
@@ -213,10 +231,10 @@ export interface AdminCubeBoundary {
   unit_id: number
   row: number
   col: number
-  label_first: string
-  catalog_first: string
-  label_last: string
-  catalog_last: string
+  first_label: string
+  first_catalog: string
+  last_label: string
+  last_catalog: string
 }
 
 /** Label option from GET /api/admin/labels. */
