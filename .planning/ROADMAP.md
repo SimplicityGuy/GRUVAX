@@ -15,7 +15,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 
 - [x] **Phase 1: First Search → Cube Highlight** - End-to-end Core Value: typed query lights the right cube on the touchscreen, backed by parser, view, fixture-seeded boundaries, and a cube-only estimator. (completed 2026-05-20)
 - [x] **Phase 2: Real Position Estimation** - Sub-cube interval bar, label-span multi-cube highlight, §4.1 index-based estimator with A/B harness; the kiosk now answers "where exactly". (completed 2026-05-20)
-- [ ] **Phase 3: Admin Loop (PIN + Manual Entry + Undo)** - Owner can sign in (mobile or kiosk-with-in-app-keypad), enter boundaries, preview diffs, and undo mistakes — boundaries become a living artifact, not a fixture.
+- [x] **Phase 3: Admin Loop (PIN + Manual Entry + Undo)** - Owner can sign in (mobile or kiosk-with-in-app-keypad), enter boundaries, preview diffs, and undo mistakes — boundaries become a living artifact, not a fixture. (completed 2026-05-21)
 - [ ] **Phase 4: Realtime + Offline Resilience** - Admin edits reach the kiosk live via SSE; kiosk gracefully degrades on connectivity loss; privacy floors and recently-pulled land here.
 - [ ] **Phase 5: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness.
 - [ ] **Phase 6: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable.
@@ -99,7 +99,7 @@ Plans:
   4. Each cube shows a fill-level indicator derived from its boundary range; tapping a cube on the kiosk reveals a side panel listing the cube's first/last boundary records and a representative subset (reverse lookup via `/api/cubes/{u}/{r}/{c}`).
   5. The admin "Suggest midpoint" affordance walks the collection-index space (NOT catalog-number space — Pitfall 22) to propose a midpoint catalog# between two adjacent populated cubes; the suggestion is editable, never auto-applied.
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 **Wave 1**
 
@@ -116,7 +116,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 03-05-PLAN.md — Diff preview + atomic change-set commit + boundary_history + conflict-aware undo
+- [x] 03-05-PLAN.md — Diff preview + atomic change-set commit + boundary_history + conflict-aware undo
 
 **UI hint:** yes
 
@@ -192,7 +192,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. First Search → Cube Highlight | 4/4 | Complete   | 2026-05-20 |
 | 2. Real Position Estimation | 4/4 | Complete   | 2026-05-20 |
-| 3. Admin Loop (PIN + Manual Entry + Undo) | 4/5 | In Progress|  |
+| 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
 | 4. Realtime + Offline Resilience | 0/? | Not started | - |
 | 5. LED Contract over MQTT (Hardware Stubbed) | 0/? | Not started | - |
 | 6. Wizards + Import/Export | 0/? | Not started | - |
