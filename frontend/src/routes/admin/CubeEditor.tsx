@@ -186,18 +186,21 @@ export function CubeEditor() {
     catalogLast: '',
   })
 
-  // Populated once boundary loads — read backend field names (CR-01)
-  useEffect(() => {
-    if (boundary) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- seed editable form state from the loaded boundary query; fields are user-edited afterward so cannot be derived during render
-      setFields({
-        labelFirst: boundary.first_label,
-        catalogFirst: boundary.first_catalog,
-        labelLast: boundary.last_label,
-        catalogLast: boundary.last_catalog,
-      })
-    }
-  }, [boundary])
+  // Track which boundary object we last seeded from so we can re-seed when the
+  // cube changes. Storing in state (not a ref) lets us compare during render
+  // without violating react-hooks/refs. When boundary identity changes, update
+  // both seededBoundary and fields in the same render — React batches these and
+  // re-renders once with the new values (adjust-state-during-render pattern).
+  const [seededBoundary, setSeededBoundary] = useState<typeof boundary | null>(null)
+  if (boundary && boundary !== seededBoundary) {
+    setSeededBoundary(boundary)
+    setFields({
+      labelFirst: boundary.first_label,
+      catalogFirst: boundary.first_catalog,
+      labelLast: boundary.last_label,
+      catalogLast: boundary.last_catalog,
+    })
+  }
 
   const [phantomWarnings, setPhantomWarnings] = useState<PhantomWarning[]>([])
   const [forceFirst, setForceFirst] = useState(false)
@@ -290,8 +293,10 @@ export function CubeEditor() {
       debouncedFields.labelLast &&
       debouncedFields.catalogLast
     ) {
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- debounced async dry-run validation; setState happens inside the network call, not synchronously
-      void runValidation(debouncedFields)
+      // Relocate the invocation into a 0ms timer callback so it is not
+      // a synchronous in-effect setState (all setState lives inside runValidation).
+      const t = setTimeout(() => { void runValidation(debouncedFields) }, 0)
+      return () => clearTimeout(t)
     }
   }, [debouncedFields, runValidation])
 
