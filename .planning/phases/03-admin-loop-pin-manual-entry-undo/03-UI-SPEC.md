@@ -71,27 +71,46 @@ address overlay) are unchanged from Phases 1–2.
 
 ### Admin surfaces — new roles
 
+Phase 3 admin surfaces use exactly **4 font sizes**: 36px, 16px, 14px, 11px.
+The 36px display size carries both page-level section headings (weight 900) and
+keypad digits (weight 900) — they are differentiated by context, not by size.
+All sub-headings, form labels, and body text collapse onto 16px and are
+differentiated by font family and weight, not by an extra size step. This keeps
+the type scale within the 4-size budget while preserving a clear
+display → body → helper → micro hierarchy.
+
 | Role                     | Font             | Size token                     | Weight | Line-height token              | Source              |
 |--------------------------|------------------|-------------------------------|--------|-------------------------------|---------------------|
-| Admin section heading    | Barlow Condensed | `--gruvax-text-display-md` 24px | 900  | `--gruvax-leading-tight` 1.1  | design-language.md  |
+| Admin section heading    | Barlow Condensed | `--gruvax-text-display-lg` 36px | 900  | `--gruvax-leading-tight` 1.1  | design-language.md  |
+| Keypad digit labels      | Barlow Condensed | `--gruvax-text-display-lg` 36px | 900  | `--gruvax-leading-tight` 1.1  | design-language.md  |
 | Admin card sub-heading   | Barlow Condensed | `--gruvax-text-display-sm` 16px | 700  | `--gruvax-leading-tight` 1.1  | design-language.md  |
-| Form body / instructions | Space Grotesk    | `--gruvax-text-body` 16px       | 400  | `--gruvax-leading-normal` 1.5 | design-language.md  |
 | Form label (ALL CAPS)    | Barlow Condensed | `--gruvax-text-display-sm` 16px | 700  | `--gruvax-leading-tight` 1.1  | design-language.md  |
+| Diff before/after label  | Barlow Condensed | `--gruvax-text-display-sm` 16px | 700  | `--gruvax-leading-tight` 1.1  | design-language.md  |
+| Form body / instructions | Space Grotesk    | `--gruvax-text-body` 16px       | 400  | `--gruvax-leading-normal` 1.5 | design-language.md  |
+| Catalog number input     | DM Mono          | `--gruvax-text-mono-lg` 16px    | 500  | `--gruvax-leading-normal` 1.5 | design-language.md  |
+| PIN digit display (mask) | DM Mono          | `--gruvax-text-mono-lg` 16px    | 500  | `--gruvax-leading-tight` 1.1  | design-language.md  |
 | Form helper / hint       | Space Grotesk    | `--gruvax-text-body-sm` 14px    | 400  | `--gruvax-leading-normal` 1.5 | design-language.md  |
 | Validation error message | Space Grotesk    | `--gruvax-text-body-sm` 14px    | 400  | `--gruvax-leading-normal` 1.5 | design-language.md  |
-| Catalog number input     | DM Mono          | `--gruvax-text-mono-lg` 16px    | 500  | `--gruvax-leading-normal` 1.5 | design-language.md  |
 | Catalog number displayed | DM Mono          | `--gruvax-text-mono` 14px       | 400  | `--gruvax-leading-normal` 1.5 | design-language.md  |
 | Record count / fill %    | DM Mono          | `--gruvax-text-mono` 14px       | 400  | `--gruvax-leading-tight` 1.1  | design-language.md  |
-| PIN digit display (mask) | DM Mono          | `--gruvax-text-mono-lg` 16px    | 500  | `--gruvax-leading-tight` 1.1  | design-language.md  |
-| Keypad digit labels      | Barlow Condensed | `--gruvax-text-display-lg` 36px | 900  | `--gruvax-leading-tight` 1.1  | design-language.md  |
 | Session countdown        | DM Mono          | `--gruvax-text-mono` 14px       | 500  | `--gruvax-leading-tight` 1.1  | default             |
-| Change-set timestamp     | DM Mono          | `--gruvax-text-mono-sm` 11px    | 400  | `--gruvax-leading-normal` 1.5 | design-language.md  |
-| Diff before/after label  | Barlow Condensed | `--gruvax-text-display-sm` 16px | 700  | `--gruvax-leading-tight` 1.1  | design-language.md  |
 | Diff boundary values     | DM Mono          | `--gruvax-text-mono` 14px       | 400  | `--gruvax-leading-normal` 1.5 | design-language.md  |
+| Change-set timestamp     | DM Mono          | `--gruvax-text-mono-sm` 11px    | 400  | `--gruvax-leading-normal` 1.5 | design-language.md  |
+| Fill % micro-label       | DM Mono          | `--gruvax-text-mono-sm` 11px    | 400  | `--gruvax-leading-tight` 1.1  | design-language.md  |
+| Midpoint caption         | Space Grotesk    | `--gruvax-text-label` 11px      | 400  | `--gruvax-leading-tight` 1.1  | design-language.md  |
+
+**Declared size set (4 total):** 36px, 16px, 14px, 11px.
+
+**Weights in use (2 per family):** Barlow Condensed 700 + 900; Space Grotesk 400 +
+500; DM Mono 400 + 500.
 
 **Rules:**
 - ALL CAPS labels (section headings, form field labels, keypad labels, button labels)
-  use Barlow Condensed 700, `letter-spacing: var(--gruvax-tracking-label)` (0.14em).
+  use Barlow Condensed 700/900, `letter-spacing: var(--gruvax-tracking-label)` (0.14em).
+- Section headings and keypad digits share the 36px size; they are distinguished by
+  context (page heading vs. keypad cell), not by a separate size token.
+- Sub-headings and form labels are 16px Barlow Condensed 700; body is 16px Space
+  Grotesk 400 — distinguished by font family + weight, not by a separate size.
 - Instructions and helper text are sentence case, Space Grotesk 400.
 - Catalog numbers, bin positions, record counts, and change-set IDs always use DM Mono.
 - Never use Barlow Condensed for body copy or multi-line instructions.
@@ -142,7 +161,7 @@ interactive color for every clickable thing:
 **Accessibility constraint (from design-language.md):**
 - Blue on white: 7.2:1 (AAA — safe for body text).
 - Yellow on blue / blue on yellow: 3.1:1 — large text (18px+) or decoration only.
-  The keypad digit labels (36px Barlow Condensed 900) and section headings (24px) on
+  The keypad digit labels (36px Barlow Condensed 900) and section headings (36px) on
   the blue admin header bar are the only yellow-on-blue uses. Never use yellow-on-blue
   for 16px or smaller text.
 - Error red on white: verify meets 4.5:1 in implementation.
@@ -167,7 +186,7 @@ Each component lives in `frontend/src/routes/admin/`.
 | Scrim                      | `--gruvax-blue-darker` at 95% opacity; covers full viewport                              |
 | Card                       | `--gruvax-white` background, `border-radius: var(--gruvax-radius-xl)` (16px), `box-shadow: var(--gruvax-shadow-lg)`, centered, max-width 320px on mobile / 360px on kiosk |
 | Logo / wordmark            | GRUVAX icon mark (`gruvax-logo-icon.svg`), 48px wide, centered above card               |
-| Heading                    | "ENTER PIN" — Barlow Condensed 900, 24px, `--gruvax-blue`, ALL CAPS, `--gruvax-tracking-display`, centered |
+| Heading                    | "ENTER PIN" — Barlow Condensed 900, 36px, `--gruvax-blue`, ALL CAPS, `--gruvax-tracking-display`, centered |
 | PIN display row            | 4 dot indicators (filled = entered digit, empty = pending), DM Mono 16px 500, centered, gap `--gruvax-space-2` |
 | PIN dot: entered           | Filled circle 12px, `--gruvax-blue` fill                                                 |
 | PIN dot: pending           | Hollow circle 12px, `--gruvax-border-light` stroke                                       |
@@ -177,11 +196,11 @@ Each component lives in `frontend/src/routes/admin/`.
 | Key background             | `--gruvax-off-white`, border `1px solid var(--gruvax-border-light)`                     |
 | Key digit                  | Barlow Condensed 900, 36px, `--gruvax-text-primary`                                     |
 | Key pressed state          | `--gruvax-blue-light` background, transition `var(--gruvax-duration-fast)`              |
-| Backspace key              | Lucide `Delete` icon 24px, `--gruvax-text-muted`                                        |
+| Backspace key              | Lucide `Delete` icon 24px, `--gruvax-text-muted`; `aria-label="Delete digit"`           |
 | * key                      | Not used in v1 — renders as disabled placeholder (opacity 0.2)                          |
 | Error state (wrong PIN)    | PIN dots flash red (`--gruvax-error`) for 400ms then reset; shake animation (translateX ±6px, 3 cycles, 300ms total) |
 | Rate-limit state (429)     | Dots hidden; "Too many attempts. Try again in {N}s." message — Space Grotesk 14px 400, `--gruvax-error`, centered below keypad |
-| ARIA                       | `role="dialog"`, `aria-labelledby` pointing to heading, `aria-modal="true"`, each key `type="button"` with `aria-label="N"` |
+| ARIA                       | `role="dialog"`, `aria-labelledby` pointing to heading, `aria-modal="true"`, each digit key `type="button"` with `aria-label="N"` (e.g. `aria-label="5"`) |
 
 ---
 
@@ -192,9 +211,9 @@ Each component lives in `frontend/src/routes/admin/`.
 | Top bar height             | 48px, `--gruvax-blue` background                                                         |
 | Wordmark                   | "GRUVAX ADMIN" — Barlow Condensed 900, `--gruvax-text-display-sm` (16px), `--gruvax-white`, `--gruvax-tracking-display`, uppercase |
 | Nav tabs (mobile)          | Dashboard / Editor / History — Space Grotesk 400 14px `--gruvax-white`; active tab has `border-bottom: 2px solid var(--gruvax-yellow)` |
-| Lock button                | Lucide `Lock` icon 20px `--gruvax-white`; tap re-shows PIN overlay without ending session (D-03c) |
-| Logout button              | Lucide `LogOut` icon 20px `--gruvax-white`; manual logout from any screen (ADMN-08)      |
-| Session countdown pill     | Positioned top-right, `--gruvax-space-4` inset; DM Mono 500 14px; normal: `--gruvax-text-muted`; last 60 s: `--gruvax-warning`; pill background `--gruvax-off-white`, `border-radius: var(--gruvax-radius-pill)`, padding `--gruvax-space-1` × `--gruvax-space-2` |
+| Lock button                | Icon-only button. Lucide `Lock` icon 20px `--gruvax-white`; tap re-shows PIN overlay without ending session (D-03c). Accessible name required: `aria-label="Lock screen"`, `type="button"`; focus ring 2px `--gruvax-yellow` |
+| Logout button              | Icon-only button. Lucide `LogOut` icon 20px `--gruvax-white`; manual logout from any screen (ADMN-08). Accessible name required: `aria-label="Log out"`, `type="button"`; focus ring 2px `--gruvax-yellow` |
+| Session countdown pill     | Positioned top-right, `--gruvax-space-4` inset; DM Mono 500 14px; normal: `--gruvax-text-muted`; last 60 s: `--gruvax-warning`; pill background `--gruvax-off-white`, `border-radius: var(--gruvax-radius-pill)`, padding `--gruvax-space-1` × `--gruvax-space-2`; `aria-live="polite"` so the last-60s state is announced |
 | Countdown text format      | "9:59" (mm:ss) — DM Mono 500 14px                                                        |
 | Hard-cap warning           | When hard cap < 5 min remaining, show inline banner: "Session ends soon — activity cannot extend it." Space Grotesk 14px, `--gruvax-warning` background tint |
 
@@ -226,7 +245,7 @@ Mobile-first card layout. On kiosk uses same component with tap-to-pick lists (D
 
 ```
 ┌──────────────────────────────────────┐
-│  CUBE B2                             │  ← section heading (Barlow Condensed 900 24px)
+│  CUBE B2                             │  ← section heading (Barlow Condensed 900 36px)
 │  [mini cube position card]           │  ← compact 40px single cube preview + fill bar
 ├──────────────────────────────────────┤
 │  FIRST RECORD                        │  ← form label (ALL CAPS, Barlow 700 16px)
@@ -265,14 +284,14 @@ Displayed as a bottom sheet (mobile) or full-width panel (tablet/kiosk) before c
 
 | Element                       | Specification                                                                                  |
 |-------------------------------|-----------------------------------------------------------------------------------------------|
-| Sheet header                  | "REVIEW CHANGES" — Barlow Condensed 900 24px `--gruvax-blue`, ALL CAPS                       |
+| Sheet header                  | "REVIEW CHANGES" — Barlow Condensed 900 36px `--gruvax-blue`, ALL CAPS                       |
 | Mini Kallax grid              | Compact 40px cells; changed cubes highlighted with `2px solid var(--gruvax-blue)` ring + `--gruvax-blue-faint` fill; unchanged cubes dim |
-| Before/after table            | Per changed cube: cube address (DM Mono 14px), then "BEFORE" / "AFTER" labels (Barlow 700 13px `--gruvax-text-muted` ALL CAPS), then boundary values (DM Mono 14px) |
+| Before/after table            | Per changed cube: cube address (DM Mono 14px), then "BEFORE" / "AFTER" labels (Barlow 700 16px `--gruvax-text-muted` ALL CAPS), then boundary values (DM Mono 14px) |
 | Record-movement counts        | Below each changed cube: "12 records move from B1 → B2" — Space Grotesk 14px `--gruvax-text-secondary`; "B3 becomes empty" — Space Grotesk 14px `--gruvax-warning` |
 | Empty-after warning           | Yellow warning icon + "This cube will become empty." — Space Grotesk 14px `--gruvax-warning` |
 | Overstuffed warning           | Red warning icon + "B2 will exceed capacity ({N} records vs {cap} nominal)." — Space Grotesk 14px `--gruvax-error` |
 | CTA: Commit                   | "COMMIT CHANGE SET" — primary button, `--gruvax-blue` background, `--gruvax-white` text, Barlow Condensed 900 16px, min-height 48px full-width |
-| Action: Cancel                | "CANCEL" — text-only secondary, Space Grotesk 400 14px `--gruvax-text-muted`; returns to editor |
+| Action: Back to editor        | "BACK TO EDITOR" — text-only secondary, Barlow Condensed 700 16px `--gruvax-text-muted`, ALL CAPS; returns to the per-cube editor without committing |
 | Committed state               | Button replaced by checkmark icon + "Saved — change set {UUID short}" — Space Grotesk 14px `--gruvax-success`; fades after 2 s |
 
 ---
@@ -297,10 +316,10 @@ Phase 3 scope: Change PIN + nominal cube capacity + idle-timeout duration (D-18 
 
 | Element                       | Specification                                                                                  |
 |-------------------------------|-----------------------------------------------------------------------------------------------|
-| Change PIN section            | "CHANGE PIN" heading (Barlow 900 24px); current PIN field + new PIN (4 digits, DM Mono input); "SAVE NEW PIN" primary button |
+| Change PIN section            | "CHANGE PIN" heading (Barlow 900 36px); current PIN field + new PIN (4 digits, DM Mono input); "SAVE NEW PIN" primary button |
 | Current PIN confirmation      | Required before save; same 4-dot masking as login overlay                                    |
-| Nominal capacity field        | Number input (integer ≥ 1), default 95; DM Mono 16px; label "NOMINAL CAPACITY (RECORDS PER CUBE)" Barlow 700 14px ALL CAPS; hint "Used for fill-level gauge. Typical Kallax holds 90–100 LPs." Space Grotesk 14px `--gruvax-text-muted` |
-| Idle timeout field            | Number input (minutes, 5–30 range, default 10); label "SESSION IDLE TIMEOUT (MINUTES)"; hint "Uncommitted edits are preserved — PIN is re-required after timeout." |
+| Nominal capacity field        | Number input (integer ≥ 1), default 95; DM Mono 16px; label "NOMINAL CAPACITY (RECORDS PER CUBE)" Barlow 700 16px ALL CAPS; hint "Used for fill-level gauge. Typical Kallax holds 90–100 LPs." Space Grotesk 14px `--gruvax-text-muted` |
+| Idle timeout field            | Number input (minutes, 5–30 range, default 10); label "SESSION IDLE TIMEOUT (MINUTES)" Barlow 700 16px ALL CAPS; hint "Uncommitted edits are preserved — PIN is re-required after timeout." Space Grotesk 14px `--gruvax-text-muted` |
 
 ---
 
@@ -314,9 +333,9 @@ Triggered by any cube tap on the public kiosk view (no admin session required, D
 | Panel max-height              | 60vh; scrollable inner content                                                                |
 | Panel background              | `--gruvax-white`, `border-radius: var(--gruvax-radius-xl) var(--gruvax-radius-xl) 0 0`, `box-shadow: var(--gruvax-shadow-lg)` |
 | Drag handle                   | Centered pill 40×4px, `--gruvax-border-light` fill, `border-radius: var(--gruvax-radius-pill)`, top `--gruvax-space-2` |
-| Panel heading                 | Cube address "CUBE B2" — Barlow Condensed 900 24px `--gruvax-blue` ALL CAPS                  |
+| Panel heading                 | Cube address "CUBE B2" — Barlow Condensed 900 36px `--gruvax-blue` ALL CAPS                  |
 | Fill-level row                | "94 RECORDS · 99% FULL" — DM Mono 400 14px `--gruvax-text-secondary`; fill bar (same as admin grid, height 6px) |
-| First record                  | "FIRST: [label] [catalog#]" — label "FIRST" Barlow 700 13px `--gruvax-text-muted` ALL CAPS; value DM Mono 14px `--gruvax-text-secondary` |
+| First record                  | "FIRST: [label] [catalog#]" — label "FIRST" Barlow 700 16px `--gruvax-text-muted` ALL CAPS; value DM Mono 14px `--gruvax-text-secondary` |
 | Last record                   | Same pattern as first record                                                                  |
 | Sample records                | List of ~7 evenly-sampled records (D-14); each row: DM Mono 14px catalog# + Space Grotesk 14px title; min 44px row height; alternating `--gruvax-white` / `--gruvax-off-white` |
 | Empty cube state              | "No records assigned to this cube yet." — Space Grotesk 400 16px `--gruvax-text-muted`, centered; if admin is logged in: "EDIT THIS CUBE" link-button (Barlow 700 14px `--gruvax-blue`) navigates to editor (D-16) |
@@ -413,6 +432,7 @@ All labels in ALL CAPS (Barlow Condensed). All instructions and messages in sent
 | Screen                | Button label          | Notes                                |
 |-----------------------|-----------------------|--------------------------------------|
 | Diff preview          | COMMIT CHANGE SET     | Barlow 900 16px, primary blue button |
+| Diff preview (back)   | BACK TO EDITOR        | Barlow 700 16px, secondary; returns to per-cube editor without committing |
 | Single-cube editor    | PREVIEW CHANGES       | Loads diff preview before any write  |
 | Settings / Change PIN | SAVE NEW PIN          | —                                    |
 | History / Revert      | REVERT                | Destructive; see confirmation below  |
@@ -443,10 +463,10 @@ All labels in ALL CAPS (Barlow Condensed). All instructions and messages in sent
 
 ### Destructive action confirmations
 
-| Action                | Trigger               | Confirmation copy                                                                   | Button                  |
-|-----------------------|-----------------------|-------------------------------------------------------------------------------------|-------------------------|
-| Revert change set     | Tap "REVERT" in History | Revert this change set? This will restore the previous boundary values as a new, undoable change. | REVERT / Cancel    |
-| Use phantom value     | Tap "USE ANYWAY"      | This value was not found in the collection. Save it anyway?                         | SAVE ANYWAY / Cancel    |
+| Action                | Trigger               | Confirmation copy                                                                   | Buttons                  |
+|-----------------------|-----------------------|-------------------------------------------------------------------------------------|--------------------------|
+| Revert change set     | Tap "REVERT" in History | Revert this change set? This will restore the previous boundary values as a new, undoable change. | REVERT / KEEP CHANGES |
+| Use phantom value     | Tap "USE ANYWAY"      | This value was not found in the collection. Save it anyway?                         | SAVE ANYWAY / PICK A SUGGESTION |
 | Logout                | Tap logout icon       | No confirmation — immediate logout (ADMN-08). Unsaved edits in pendingChangeSet are preserved. | — |
 | Change PIN            | Tap SAVE NEW PIN      | No confirmation — PIN change also revokes all other sessions. Inform via helper text on the form. | — |
 
