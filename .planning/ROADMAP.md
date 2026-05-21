@@ -99,7 +99,7 @@ Plans:
   4. Each cube shows a fill-level indicator derived from its boundary range; tapping a cube on the kiosk reveals a side panel listing the cube's first/last boundary records and a representative subset (reverse lookup via `/api/cubes/{u}/{r}/{c}`).
   5. The admin "Suggest midpoint" affordance walks the collection-index space (NOT catalog-number space — Pitfall 22) to propose a midpoint catalog# between two adjacent populated cubes; the suggestion is editable, never auto-applied.
 
-**Plans:** 1/5 plans executed
+**Plans:** 2/5 plans executed
 Plans:
 **Wave 1**
 
@@ -107,7 +107,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 03-02-PLAN.md — PIN auth slice: Argon2id login/session/CSRF + require_admin + set-pin CLI + /admin shell, keypad, Settings/Change-PIN
+- [x] 03-02-PLAN.md — PIN auth slice: Argon2id login/session/CSRF + require_admin + set-pin CLI + /admin shell, keypad, Settings/Change-PIN
 - [ ] 03-03-PLAN.md — Kiosk reveal slice (public): fill-level bars (CUBE-07) + tap-to-reveal cube contents panel (CUBE-09)
 
 **Wave 3** *(blocked on Wave 2)*
@@ -192,7 +192,7 @@ Plans:
 |-------|----------------|--------|-----------|
 | 1. First Search → Cube Highlight | 4/4 | Complete   | 2026-05-20 |
 | 2. Real Position Estimation | 4/4 | Complete   | 2026-05-20 |
-| 3. Admin Loop (PIN + Manual Entry + Undo) | 1/5 | In Progress|  |
+| 3. Admin Loop (PIN + Manual Entry + Undo) | 2/5 | In Progress|  |
 | 4. Realtime + Offline Resilience | 0/? | Not started | - |
 | 5. LED Contract over MQTT (Hardware Stubbed) | 0/? | Not started | - |
 | 6. Wizards + Import/Export | 0/? | Not started | - |
