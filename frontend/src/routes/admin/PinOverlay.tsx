@@ -42,39 +42,10 @@ export function PinOverlay({ isLocked = false }: PinOverlayProps) {
 
   const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Auto-submit on 4th digit
-  useEffect(() => {
-    if (digits.length === PIN_LENGTH && status === 'idle') {
-      void submitPin(digits.join(''))
-    }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [digits])
-
-  // Countdown for rate-limit retry
-  useEffect(() => {
-    if (status === 'ratelimit' && retrySeconds > 0) {
-      retryTimerRef.current = setInterval(() => {
-        setRetrySeconds((s) => {
-          if (s <= 1) {
-            clearInterval(retryTimerRef.current!)
-            setStatus('idle')
-            setDigits([])
-            setErrorMsg('')
-            return 0
-          }
-          return s - 1
-        })
-      }, 1000)
-    }
-    return () => {
-      if (retryTimerRef.current) clearInterval(retryTimerRef.current)
-    }
-  }, [status, retrySeconds])
-
   const submitPin = useCallback(async (pin: string) => {
     setStatus('submitting')
     try {
-      const { csrf_token: csrfToken, message: _ } = await adminLogin(pin)
+      const { csrf_token: csrfToken } = await adminLogin(pin)
       // On success, fetch session times then call setAdminLoggedIn.
       // adminGetSession() requires the session cookie which is now set.
       // For simplicity, derive expires_at from the idle TTL default (10 min).
@@ -109,6 +80,35 @@ export function PinOverlay({ isLocked = false }: PinOverlayProps) {
       }
     }
   }, [setAdminLoggedIn])
+
+  // Auto-submit on 4th digit
+  useEffect(() => {
+    if (digits.length === PIN_LENGTH && status === 'idle') {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- async PIN submission; setState happens inside the adminLogin promise, not synchronously
+      void submitPin(digits.join(''))
+    }
+  }, [digits, status, submitPin])
+
+  // Countdown for rate-limit retry
+  useEffect(() => {
+    if (status === 'ratelimit' && retrySeconds > 0) {
+      retryTimerRef.current = setInterval(() => {
+        setRetrySeconds((s) => {
+          if (s <= 1) {
+            clearInterval(retryTimerRef.current!)
+            setStatus('idle')
+            setDigits([])
+            setErrorMsg('')
+            return 0
+          }
+          return s - 1
+        })
+      }, 1000)
+    }
+    return () => {
+      if (retryTimerRef.current) clearInterval(retryTimerRef.current)
+    }
+  }, [status, retrySeconds])
 
   const handleDigit = useCallback((d: string) => {
     if (status === 'submitting' || status === 'ratelimit') return

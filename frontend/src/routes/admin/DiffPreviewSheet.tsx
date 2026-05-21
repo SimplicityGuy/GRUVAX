@@ -62,6 +62,7 @@ export function DiffPreviewSheet() {
   // Fetch validation + current boundaries once on mount (dry-run — no DB write)
   useEffect(() => {
     if (!pendingChangeSet || pendingChangeSet.edits.length === 0) return
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- on-mount async validate+fetch; loading flag set before the network round-trip
     setIsValidating(true)
 
     const editsSnap = pendingChangeSet.edits

@@ -189,6 +189,7 @@ export function CubeEditor() {
   // Populated once boundary loads — read backend field names (CR-01)
   useEffect(() => {
     if (boundary) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- seed editable form state from the loaded boundary query; fields are user-edited afterward so cannot be derived during render
       setFields({
         labelFirst: boundary.first_label,
         catalogFirst: boundary.first_catalog,
@@ -289,6 +290,7 @@ export function CubeEditor() {
       debouncedFields.labelLast &&
       debouncedFields.catalogLast
     ) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- debounced async dry-run validation; setState happens inside the network call, not synchronously
       void runValidation(debouncedFields)
     }
   }, [debouncedFields, runValidation])
