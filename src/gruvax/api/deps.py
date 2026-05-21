@@ -6,7 +6,7 @@ app factory and the routers that depend on app.state.
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import Depends, HTTPException, Request, status
@@ -141,7 +141,7 @@ async def require_admin(
         )
 
     _, expires_at, hard_expires_at, revoked_at = row
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
 
     if revoked_at is not None:
         raise HTTPException(

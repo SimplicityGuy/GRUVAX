@@ -42,8 +42,6 @@ from slowapi.wrappers import Limit
 from gruvax.api.admin.limiter import limiter
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.auth.sessions import (
-    CSRF_COOKIE,
-    SESSION_COOKIE,
     clear_session_cookies,
     create_session,
     get_session_id,
@@ -74,13 +72,13 @@ def _check_login_rate_limit(request: Request) -> None:
     key = get_remote_address(request)
     scope = "/api/admin/login"
     args = [key, scope]
-    if limiter._key_prefix:  # type: ignore[attr-defined]  # noqa: SLF001
-        args = [limiter._key_prefix] + args  # type: ignore[attr-defined]  # noqa: SLF001
+    if limiter._key_prefix:
+        args = [limiter._key_prefix, *args]
     # Build a minimal Limit wrapper so RateLimitExceeded has the expected shape
     # for the exception handler registered in app.py and _inject_headers works.
     wrapped = Limit(
         _LOGIN_LIMIT_ITEM,
-        key_func=lambda r: key,  # noqa: ARG005
+        key_func=lambda r: key,
         scope=None,
         per_method=False,
         methods=None,
@@ -92,7 +90,7 @@ def _check_login_rate_limit(request: Request) -> None:
     # view_rate_limit must be set before hit() so it's available whether the limit
     # is exceeded or not (header injection reads it on successful responses too).
     request.state.view_rate_limit = (_LOGIN_LIMIT_ITEM, args)
-    if not limiter._limiter.hit(_LOGIN_LIMIT_ITEM, *args):  # type: ignore[attr-defined]  # noqa: SLF001
+    if not limiter._limiter.hit(_LOGIN_LIMIT_ITEM, *args):
         raise RateLimitExceeded(wrapped)
 
 
@@ -159,12 +157,8 @@ async def login(
             settings.SESSION_TTL_SECONDS,
         )
 
-    # Re-fetch session times from DB for the response body
-    session_id = await get_session_id(request, settings.SESSION_SECRET)
-    # session_id may be None here because the cookie is on the RESPONSE not the
-    # request yet — read from the response cookie instead
-    # Alternatively: return the times we computed in create_session directly.
-    # For simplicity, return the CSRF token and let the client poll /session.
+    # Return the CSRF token; let the client poll /session for expiry times.
+    # session_id would be None here — cookie is on the RESPONSE not the request.
     return {
         "csrf_token": csrf_token,
         "message": "Login successful",

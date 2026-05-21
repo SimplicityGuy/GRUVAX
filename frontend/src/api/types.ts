@@ -80,3 +80,60 @@ export interface CubesResponse {
 
 /** Cube state driven by UI logic — fed into data-state attribute on each Cube cell. */
 export type CubeState = 'dim' | 'lit' | 'empty' | 'hover'
+
+// ── Admin API types ────────────────────────────────────────────────────────
+
+/** Response from POST /api/admin/login — includes CSRF token for double-submit. */
+export interface LoginResponse {
+  csrf_token: string
+  message: string
+}
+
+/** Response from GET /api/admin/session — session expiry times. */
+export interface AdminSession {
+  expires_at: string   // ISO-8601 UTC
+  hard_cap_at: string  // ISO-8601 UTC
+}
+
+/** Response from GET /api/admin/settings — nominal capacity + idle TTL. */
+export interface AdminSettings {
+  nominal_capacity: number
+  idle_ttl_seconds: number
+}
+
+/** Payload for PUT /api/admin/settings. */
+export interface AdminSettingsPut {
+  nominal_capacity?: number
+  idle_ttl_seconds?: number
+}
+
+/** Payload for POST /api/admin/settings/pin — change PIN. */
+export interface ChangePinPayload {
+  current_pin: string
+  new_pin: string
+}
+
+/**
+ * One boundary edit in a pending change-set.
+ * Stored in localStorage via Zustand persist — shape is declared now so
+ * plans 04 and 05 can reuse it without re-deciding.
+ */
+export interface CubeBoundaryEdit {
+  unit_id: number
+  row: number
+  col: number
+  label_first: string
+  catalog_first: string
+  label_last: string
+  catalog_last: string
+}
+
+/**
+ * A pending change-set: the collection of boundary edits accumulated before commit.
+ * Persisted to localStorage so a session timeout / reload preserves in-progress work.
+ */
+export interface ChangeSet {
+  id: string              // client-generated UUID
+  created_at: string      // ISO-8601 when the change-set was started
+  edits: CubeBoundaryEdit[]
+}

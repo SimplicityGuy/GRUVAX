@@ -19,7 +19,7 @@ from __future__ import annotations
 
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 from typing import Any
 
 from fastapi import Response
@@ -56,7 +56,7 @@ def is_session_valid(
     """
     if revoked_at is not None:
         return False
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     return now <= expires_at and now <= hard_expires_at
 
 
@@ -89,7 +89,7 @@ async def create_session(
         The CSRF token string (also set as the ``gruvax_csrf`` cookie value).
     """
     session_id = str(uuid.uuid4())
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     expires_at = now + timedelta(seconds=idle_ttl_seconds)
     hard_expires_at = now + timedelta(seconds=hard_cap_seconds)
 
@@ -161,7 +161,7 @@ async def revoke_session(conn: Any, session_id: str) -> None:
         conn:       Open psycopg connection (caller owns lifecycle).
         session_id: The UUID of the session to revoke.
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     await conn.execute(
         "UPDATE gruvax.admin_sessions SET revoked_at = %s WHERE id = %s",
         (now, session_id),
@@ -182,7 +182,7 @@ async def revoke_all_sessions_except(
         conn:               Open psycopg connection (caller owns lifecycle).
         current_session_id: The session ID to preserve (the one that changed the PIN).
     """
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     await conn.execute(
         "UPDATE gruvax.admin_sessions"
         " SET revoked_at = %s"

@@ -1,0 +1,426 @@
+/**
+ * Admin UI styles — GRUVAX Phase 3.
+ *
+ * All colors are var(--gruvax-*) tokens from gruvax-design-tokens.css.
+ * No hex values are permitted in this file.
+ * Typography uses the three-font system:
+ *   Barlow Condensed — display, headings, labels, keypad digits, ALL CAPS
+ *   Space Grotesk    — body, instructions, hints, form copy
+ *   DM Mono          — catalog numbers, countdown, PIN dots, data values
+ */
+
+/* ── z-index layer ────────────────────────────────────────────────────────── */
+:root {
+  --gruvax-z-admin: 50;
+}
+
+/* ── PIN Overlay ──────────────────────────────────────────────────────────── */
+
+.pin-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gruvax-z-admin);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--gruvax-blue-darker) 95%, transparent);
+}
+
+.pin-card {
+  background: var(--gruvax-white);
+  border-radius: var(--gruvax-radius-xl);
+  box-shadow: var(--gruvax-shadow-lg);
+  padding: var(--gruvax-space-6);
+  width: min(320px, 90vw);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-4);
+}
+
+@media (min-width: 768px) {
+  .pin-card {
+    width: 360px;
+  }
+}
+
+/* Shake animation for wrong PIN */
+@keyframes pin-shake {
+  0%, 100% { transform: translateX(0); }
+  20%       { transform: translateX(-6px); }
+  40%       { transform: translateX(6px); }
+  60%       { transform: translateX(-6px); }
+  80%       { transform: translateX(6px); }
+}
+
+.pin-card--shake {
+  animation: pin-shake 350ms var(--gruvax-ease-standard);
+}
+
+.pin-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.pin-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  margin: 0;
+  text-align: center;
+}
+
+/* PIN dots row */
+.pin-dots {
+  display: flex;
+  gap: var(--gruvax-space-2);
+  align-items: center;
+  justify-content: center;
+}
+
+.pin-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  border: 2px solid var(--gruvax-border-light);
+  background: transparent;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+              border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.pin-dot--filled {
+  background: var(--gruvax-blue);
+  border-color: var(--gruvax-blue);
+}
+
+.pin-dot--error {
+  background: var(--gruvax-error);
+  border-color: var(--gruvax-error);
+}
+
+.pin-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-error);
+  margin: 0;
+  text-align: center;
+}
+
+.pin-ratelimit {
+  padding: var(--gruvax-space-3);
+}
+
+/* ── Numeric Keypad ──────────────────────────────────────────────────────── */
+
+.keypad {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  width: 100%;
+}
+
+.keypad-row {
+  display: flex;
+  gap: var(--gruvax-space-2);
+  justify-content: center;
+}
+
+.keypad-key {
+  flex: 1;
+  min-width: 80px;
+  min-height: 56px;
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg, 36px);
+  font-weight: 900;
+  color: var(--gruvax-text-primary);
+  background: var(--gruvax-off-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+@media (min-width: 768px) {
+  .keypad-key {
+    min-height: 64px;
+  }
+}
+
+.keypad-key:active:not(:disabled) {
+  background: var(--gruvax-blue-light);
+}
+
+.keypad-key:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.keypad-key:disabled {
+  cursor: not-allowed;
+  opacity: 0.5;
+}
+
+.keypad-key--placeholder {
+  opacity: 0.2;
+  cursor: default;
+}
+
+.keypad-key--action {
+  color: var(--gruvax-text-muted);
+}
+
+/* ── Admin Shell ─────────────────────────────────────────────────────────── */
+
+.admin-shell {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+  background: var(--gruvax-off-white);
+}
+
+.admin-topbar {
+  height: 48px;
+  background: var(--gruvax-blue);
+  display: flex;
+  align-items: center;
+  padding: 0 var(--gruvax-space-4);
+  gap: var(--gruvax-space-4);
+  position: sticky;
+  top: 0;
+  z-index: 10;
+}
+
+.admin-topbar-brand {
+  flex: 0 0 auto;
+}
+
+.admin-topbar-wordmark {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 900;
+  color: var(--gruvax-white);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+}
+
+.admin-topbar-nav {
+  flex: 1;
+  display: flex;
+  gap: var(--gruvax-space-4);
+}
+
+.admin-nav-tab {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-white);
+  text-decoration: none;
+  padding: var(--gruvax-space-1) 0;
+  border-bottom: 2px solid transparent;
+  transition: border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.admin-nav-tab--active,
+.admin-nav-tab:hover {
+  border-bottom-color: var(--gruvax-yellow);
+}
+
+.admin-topbar-actions {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+}
+
+/* Session countdown pill */
+.admin-countdown {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono, 14px);
+  font-weight: 500;
+  color: var(--gruvax-text-muted);
+  background: var(--gruvax-off-white);
+  border-radius: var(--gruvax-radius-pill);
+  padding: var(--gruvax-space-1) var(--gruvax-space-2);
+  min-width: 3.5ch;
+  text-align: center;
+  transition: color var(--gruvax-duration-base) var(--gruvax-ease-standard);
+}
+
+.admin-countdown--warning {
+  color: var(--gruvax-warning);
+}
+
+/* Lock / Logout icon buttons */
+.admin-icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: transparent;
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  cursor: pointer;
+  color: var(--gruvax-white);
+  padding: 0;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.admin-icon-btn:hover {
+  background: color-mix(in srgb, var(--gruvax-white) 15%, transparent);
+}
+
+.admin-icon-btn:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+/* Hard-cap warning banner */
+.admin-hardcap-banner {
+  background: color-mix(in srgb, var(--gruvax-warning) 15%, transparent);
+  color: var(--gruvax-warning);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  text-align: center;
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+}
+
+.admin-content {
+  flex: 1;
+  padding: var(--gruvax-space-5);
+  max-width: 600px;
+  margin: 0 auto;
+  width: 100%;
+}
+
+/* ── Settings page ───────────────────────────────────────────────────────── */
+
+.settings-page {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-7);
+}
+
+.settings-section {
+  background: var(--gruvax-white);
+  border-radius: var(--gruvax-radius-lg);
+  box-shadow: var(--gruvax-shadow-sm);
+  padding: var(--gruvax-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-4);
+}
+
+.settings-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg, 36px);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.settings-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+}
+
+.settings-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  color: var(--gruvax-text-primary);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+}
+
+.settings-pin-input,
+.settings-number-input {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono-lg, 16px);
+  font-weight: 500;
+  color: var(--gruvax-text-primary);
+  background: var(--gruvax-off-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.settings-pin-input:focus,
+.settings-number-input:focus {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+  border-color: var(--gruvax-blue);
+}
+
+.settings-number-input {
+  max-width: 120px;
+}
+
+.settings-hint {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+}
+
+.settings-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-error);
+  margin: 0;
+}
+
+.settings-success {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-success);
+  margin: 0;
+}
+
+.settings-btn-primary {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-white);
+  background: var(--gruvax-blue);
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-5);
+  min-height: 48px;
+  cursor: pointer;
+  width: 100%;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.settings-btn-primary:hover:not(:disabled) {
+  background: var(--gruvax-blue-dark);
+}
+
+.settings-btn-primary:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.settings-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}

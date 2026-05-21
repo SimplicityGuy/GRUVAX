@@ -15,7 +15,7 @@ def create_admin_router() -> APIRouter:
     """Return the combined ``/admin`` router.
 
     Imports sub-routers inside the function body (not at module level) to
-    mirror the circular-import guard from ``app.py`` lines 139–148.
+    mirror the circular-import guard from ``app.py`` lines 139-148.
 
     Returns:
         An ``APIRouter`` with prefix ``/admin`` that includes login and
