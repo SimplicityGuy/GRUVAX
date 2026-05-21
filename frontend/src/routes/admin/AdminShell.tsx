@@ -40,13 +40,28 @@ export function AdminShell() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // ── Tick every second for countdown ──────────────────────────────────────
+  // Refs to avoid stale closures inside the long-lived tick interval
+  const isLoggedInRef = useRef(isLoggedIn)
+  const sessionExpiresAtRef = useRef(sessionExpiresAt)
+  isLoggedInRef.current = isLoggedIn
+  sessionExpiresAtRef.current = sessionExpiresAt
+
+  // ── Tick every second for countdown + expiry check ───────────────────────
+  // The expiry check is collapsed into this interval so the setState calls
+  // live inside a timer callback (not a synchronous in-effect setState).
   useEffect(() => {
-    tickRef.current = setInterval(() => setNowMs(Date.now()), 1000)
+    tickRef.current = setInterval(() => {
+      const t = Date.now()
+      setNowMs(t)
+      if (isLoggedInRef.current && sessionExpiresAtRef.current > 0 && t >= sessionExpiresAtRef.current) {
+        setAdminLoggedOut()
+        setIsLocked(false)
+      }
+    }, 1000)
     return () => {
       if (tickRef.current) clearInterval(tickRef.current)
     }
-  }, [])
+  }, [setAdminLoggedOut])
 
   // ── Poll /api/admin/session to keep sliding window in sync ───────────────
   const pollSession = useCallback(async () => {
@@ -65,23 +80,15 @@ export function AdminShell() {
 
   useEffect(() => {
     if (!isLoggedIn) return
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- async server session poll; setState happens in promise resolution, not synchronously
-    void pollSession()
+    // Defer the immediate poll into a 0ms timer callback so setState inside
+    // pollSession is not called synchronously in the effect body.
+    const immediateId = setTimeout(() => { void pollSession() }, 0)
     pollRef.current = setInterval(() => { void pollSession() }, POLL_INTERVAL_MS)
     return () => {
+      clearTimeout(immediateId)
       if (pollRef.current) clearInterval(pollRef.current)
     }
   }, [isLoggedIn, pollSession])
-
-  // ── Idle expiry check ─────────────────────────────────────────────────────
-  useEffect(() => {
-    if (!isLoggedIn || sessionExpiresAt === 0) return
-    if (nowMs >= sessionExpiresAt) {
-      setAdminLoggedOut()
-      // eslint-disable-next-line react-hooks/set-state-in-effect -- timer-driven idle expiry; forces re-auth when the per-second tick crosses sessionExpiresAt
-      setIsLocked(false)
-    }
-  }, [nowMs, isLoggedIn, sessionExpiresAt, setAdminLoggedOut])
 
   const handleLogout = useCallback(async () => {
     await adminLogout().catch(() => {/* ignore network errors on logout */})
