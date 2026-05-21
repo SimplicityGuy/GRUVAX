@@ -30,6 +30,16 @@ class Settings(BaseSettings):
     MQTT_USERNAME: str = "gruvax"
     MQTT_PASSWORD: str = "gruvax"
 
+    # ── Admin auth (Phase 3) ──────────────────────────────────────────────────
+    # SESSION_SECRET has no default — a missing value crashes at startup rather
+    # than silently using an insecure shared default (mirrors DATABASE_URL pattern,
+    # T-03-01 mitigation).
+    # Generate with: python -c "import secrets; print(secrets.token_urlsafe(32))"
+    SESSION_SECRET: str
+
+    # Sliding idle TTL for admin sessions in seconds (D-04, default 10 min).
+    SESSION_TTL_SECONDS: int = 600
+
     # ── Logging ───────────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
 

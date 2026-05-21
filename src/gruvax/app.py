@@ -28,6 +28,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 from starlette.types import Scope
 
@@ -46,10 +47,27 @@ class SpaStaticFiles(StaticFiles):
     those are safely cacheable; only the HTML entry document must not be cached.
     ``StaticFiles(html=True)`` only enables SPA fallback routing — it does NOT
     set any cache-control header, so this subclass adds it explicitly.
+
+    It also serves ``index.html`` for unmatched extensionless paths so that
+    client-side routes (``/admin``, ``/admin/cubes``, ``/admin/cubes/:u/:r/:c``)
+    deep-link and survive a browser refresh. Starlette's ``html=True`` only
+    serves ``index.html`` for *directory* requests, so a direct GET to a route
+    path 404s without this fallback (ADMN-01: mobile-first admin access).
+    Real missing assets (paths with a file extension, e.g. ``foo.js``) still
+    return 404 so broken asset references stay visible.
     """
 
     async def get_response(self, path: str, scope: Scope) -> Response:
-        response = await super().get_response(path, scope)
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            # Starlette's StaticFiles raises 404 for missing paths. Serve the SPA
+            # entry for unmatched extensionless routes so client-side routing works;
+            # re-raise for real missing assets (paths with a file extension).
+            if exc.status_code == 404 and "." not in path.rsplit("/", 1)[-1]:
+                response = await super().get_response("index.html", scope)
+            else:
+                raise
         if response.headers.get("content-type", "").startswith("text/html"):
             response.headers["Cache-Control"] = "no-store"
         return response
@@ -102,6 +120,20 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Proceed with empty snapshot — locate falls back to cube-only-v1.
     app.state.collection_snapshot = snapshot
 
+    # ── 3c. Settings cache (Phase 3) ─────────────────────────────────────────
+    # Loads gruvax.settings key/value rows into app.state.settings_cache so
+    # endpoints can read nominal_capacity, idle TTL, etc. without a DB hit.
+    # Mirrors the try/except + logger.error + proceed pattern of steps 3 and 3b.
+    from gruvax.db.queries import load_settings_cache
+
+    try:
+        settings_map = await load_settings_cache(pool)
+        app.state.settings_cache = settings_map
+        logger.info("Settings cache loaded (%d keys)", len(settings_map))
+    except Exception as exc:
+        logger.error("Settings cache load failed — proceeding with empty cache: %s", exc)
+        app.state.settings_cache = {}
+
     # ── 4. MQTT (non-blocking best-effort; DEP-01) ───────────────────────────
     await connect_mqtt(app)
 
@@ -145,6 +177,11 @@ def create_app() -> FastAPI:
     app.include_router(search_router, prefix="/api")
     app.include_router(locate_router, prefix="/api")
     app.include_router(units_router, prefix="/api")
+
+    # ── Admin router (Phase 3) — BEFORE StaticFiles mount (Pitfall 3) ──────────
+    from gruvax.api.admin.router import create_admin_router
+
+    app.include_router(create_admin_router(), prefix="/api")
 
     # ── StaticFiles SPA mount LAST ───────────────────────────────────────────
     # Plan 04 (React SPA) builds the frontend and copies the dist/ into static/.

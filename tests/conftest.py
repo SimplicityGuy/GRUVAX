@@ -5,6 +5,10 @@ Provides:
                          test Postgres instance (reads DATABASE_URL from env).
   - ``boundary_cache`` — the parsed contents of ``fixtures/boundaries.yaml``
                          as a list of dicts, for unit tests that don't need DB.
+  - ``admin_session``  — module-scoped fixture that seeds a test PIN hash and
+                         posts to ``/api/admin/login``, returning session cookies
+                         and CSRF token.  Depends on Plan 02 implementing
+                         ``gruvax.auth.pin.hash_pin`` and the login endpoint.
 
 Integration tests that need a live DB should use ``db_pool``; unit tests
 should use ``boundary_cache`` or plain Python fixtures.
@@ -13,6 +17,7 @@ should use ``boundary_cache`` or plain Python fixtures.
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from typing import Any
 
@@ -56,6 +61,63 @@ async def db_pool():  # type: ignore[no-untyped-def]
     await pool.open()
     yield pool
     await pool.close()
+
+
+# ── admin session fixture (Phase 3) ──────────────────────────────────────────
+
+
+@pytest_asyncio.fixture(scope="module")
+async def admin_session(client: Any) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+    """Module-scoped fixture that seeds a test PIN and logs in.
+
+    Requires ``client`` fixture (LifespanManager + AsyncClient, see integration
+    tests) to be passed in; conftest declares the fixture but each integration
+    test module provides its own ``client`` fixture because scope must match.
+
+    Seeding steps:
+    1.  Ensure SESSION_SECRET is set in the environment so Settings() doesn't
+        crash at boot (real value from .env; tests set a fallback if absent).
+    2.  Hash the test PIN "0000" and upsert into gruvax.settings.auth.pin_hash.
+        Uses a low Argon2 time_cost=1 for speed in tests (A-3 assumption).
+    3.  POST /api/admin/login with PIN "0000".
+    4.  Return {"cookies": response.cookies, "csrf_token": <gruvax_csrf value>}.
+
+    NOTE: hash_pin import is provided by Plan 02 (gruvax.auth.pin module).
+    Until Plan 02 lands, this fixture itself goes RED, which is expected.
+    """
+    # Ensure SESSION_SECRET is set for this test process (fallback for CI)
+    if not os.environ.get("SESSION_SECRET"):
+        os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
+
+    # Seed auth.pin_hash for the test PIN "0000" at low cost for speed
+    # The hash_pin import comes from Plan 02 — RED until then
+    from gruvax.auth.pin import hash_pin  # noqa: PLC0415
+
+    # Use time_cost=1 for test speed (Argon2id default is time_cost=2)
+    # passlib CryptContext allows overriding rounds via hash(pin, rounds=N) for
+    # bcrypt; Argon2 uses time_cost. We rely on the default context here since
+    # passlib's Argon2 verify is still fast enough at default params for a few tests.
+    test_pin_hash = hash_pin("0000")
+
+    # Upsert the test PIN hash into gruvax.settings
+    pool = client.app.state.db_pool  # type: ignore[attr-defined]
+    async with pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
+            " VALUES ('auth.pin_hash', %s, 'Test PIN hash seeded by conftest', now())"
+            " ON CONFLICT (key) DO UPDATE"
+            "  SET value = EXCLUDED.value, updated_at = now()",
+            (f'"{test_pin_hash}"',),
+        )
+        await conn.commit()
+
+    # Log in with the test PIN
+    res = await client.post("/api/admin/login", json={"pin": "0000"})
+    assert res.status_code == 200, (
+        f"admin_session fixture: login failed with status {res.status_code}: {res.text}"
+    )
+    csrf = res.cookies.get("gruvax_csrf") or res.json().get("csrf_token")
+    return {"cookies": res.cookies, "csrf_token": csrf}
 
 
 # ── boundary fixture ─────────────────────────────────────────────────────────

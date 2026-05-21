@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "Phase 2 shipped — PR #4"
-last_updated: "2026-05-20T22:15:28.543Z"
+status: executing
+last_updated: "2026-05-21T20:54:06.205Z"
 progress:
   total_phases: 7
-  completed_phases: 1
-  total_plans: 8
+  completed_phases: 2
+  total_plans: 13
   completed_plans: 8
-  percent: 14
+  percent: 29
 ---
 
 # State: GRUVAX
@@ -20,7 +20,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 3 — admin loop (pin + manual entry + undo)
+**Current Focus:** Phase 03 — Admin Loop (PIN + Manual Entry + Undo)
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -28,12 +28,12 @@ progress:
 
 ## Current Position
 
-Phase: 02 (Real Position Estimation) — COMPLETE
-Plan: 4 of 4
+Phase: 03 (Admin Loop (PIN + Manual Entry + Undo)) — EXECUTING
+Plan: 1 of 5
 
 - **Phase:** 3
 - **Plan:** Not started
-- **Status:** Phase 2 shipped — PR #4
+- **Status:** Executing Phase 03
 - **Progress:** [██████████] 100% (Phase 02)
 
 ```
@@ -125,13 +125,16 @@ None.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260521-jb3 | Replace eslint set-state-in-effect suppressions with real refactors in admin UI | 2026-05-21 | 9c26bbf | [260521-jb3-replace-eslint-set-state-in-effect-suppr](./quick/260521-jb3-replace-eslint-set-state-in-effect-suppr/) |
+| 260521-g3o | Fix all 8 eslint errors in the frontend admin UI | 2026-05-21 | b093e9f | [260521-g3o-fix-all-8-eslint-errors-in-the-frontend-](./quick/260521-g3o-fix-all-8-eslint-errors-in-the-frontend-/) |
+| 260521-fn0 | Fix all 8 findings from the Phase 3 UI audit in the frontend admin UI | 2026-05-21 | b47c097 | [260521-fn0-fix-all-8-findings-from-the-phase-3-ui-a](./quick/260521-fn0-fix-all-8-findings-from-the-phase-3-ui-a/) |
 | 260519-p8t | Add design-language assets and rewrite README in discogsography pattern | 2026-05-20 | b786b47 | [260519-p8t-add-design-language-assets-and-rewrite-r](./quick/260519-p8t-add-design-language-assets-and-rewrite-r/) |
 | fast | Add `*.swp` (Vim swap files) to .gitignore | 2026-05-19 | 23d94d3 | — (fast, inline) |
 
 ## Session Continuity
 
-**Last touched:** 2026-05-20 (Phase 02 Plan 04 — POS-06 A/B harness; §4.1 proven >= §4.8 on all synthetic shapes)
-**Next action:** Phase 02 complete — run `/gsd:plan-phase 3` or `/gsd:verify-work 2` next.
+**Last touched:** 2026-05-20 (Phase 03 context gathered — admin loop decisions D-01..D-18 captured in 03-CONTEXT.md)
+**Next action:** Phase 03 context ready — run `/gsd:plan-phase 3` (or `/gsd:ui-phase 3` first; this phase is UI-heavy). Resume file: `.planning/phases/03-admin-loop-pin-manual-entry-undo/03-CONTEXT.md`.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*

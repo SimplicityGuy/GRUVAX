@@ -565,3 +565,252 @@
   will-change: transform, opacity;
 }
 
+/* ── Fill-level bar (CUBE-07 / UI-SPEC §I) ───────────────────────────────── */
+
+/*
+ * Horizontal fill bar at the bottom edge of a cube cell (kiosk main grid: 4px).
+ * Color is set inline by FillBar.tsx using CSS tokens — never hardcoded hex.
+ * Width is set inline: min(fillLevel, 1.0) × 100%.
+ *
+ * Positioned absolute at the bottom of the cube, spanning full cell width
+ * with matching bottom-radius so it sits inside the cell border.
+ *
+ * Fill-level animation: width from 0 → computed on page load (400ms decelerate).
+ */
+.fill-bar {
+  position: absolute;
+  bottom: 0;
+  left: 0;
+  border-radius: 0 0 var(--gruvax-cell-radius-xl) var(--gruvax-cell-radius-xl);
+  transition: width 400ms var(--gruvax-ease-decelerate);
+  pointer-events: none;
+  z-index: 2; /* above sub-cube bar but below address overlay z-index context */
+}
+
+/* Overstuffed cube: error color ring around cell border (UI-SPEC §I) */
+.cube.is-overstuffed {
+  box-shadow: 0 0 0 1px var(--gruvax-error);
+}
+
+/* ── Cube contents side panel (CUBE-09 / UI-SPEC §H) ────────────────────── */
+
+/*
+ * Bottom-sheet panel that slides up when a cube is tapped.
+ * Scrim covers the shelf area so tapping outside dismisses the panel.
+ * Panel: white, rounded top corners, drop shadow, max 60vh, scrollable.
+ *
+ * Entry: 300ms var(--gruvax-ease-decelerate)
+ * Exit:  250ms var(--gruvax-ease-accelerate)
+ */
+
+.cube-panel-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gruvax-z-overlay);
+  background: transparent;
+}
+
+.cube-panel {
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  z-index: calc(var(--gruvax-z-overlay) + 1);
+  background: var(--gruvax-white);
+  border-radius: var(--gruvax-radius-xl) var(--gruvax-radius-xl) 0 0;
+  box-shadow: var(--gruvax-shadow-lg);
+  max-height: 60vh;
+  display: flex;
+  flex-direction: column;
+  animation: panel-slide-up 300ms var(--gruvax-ease-decelerate) both;
+}
+
+@keyframes panel-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+/* Drag handle — centered pill at the top of the panel */
+.cube-panel__handle {
+  width: 40px;
+  height: 4px;
+  background: var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-pill);
+  margin: var(--gruvax-space-2) auto 0;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.cube-panel__content {
+  overflow-y: auto;
+  padding: var(--gruvax-space-4) var(--gruvax-space-5) var(--gruvax-space-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+/* "CUBE B2" heading */
+.cube-panel__heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  color: var(--gruvax-blue);
+  text-transform: uppercase;
+  line-height: var(--gruvax-leading-tight);
+  margin: 0;
+}
+
+/* "94 RECORDS · 99% FULL" */
+.cube-panel__fill-row {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-tight);
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+/* Fill bar track inside the panel (6px, per UI-SPEC §H) */
+.cube-panel__fill-bar-track {
+  height: 6px;
+  background: var(--gruvax-border-faint);
+  border-radius: var(--gruvax-radius-pill);
+  overflow: hidden;
+}
+
+.cube-panel__fill-bar {
+  height: 100%;
+  border-radius: var(--gruvax-radius-pill);
+  transition: width 400ms var(--gruvax-ease-decelerate);
+}
+
+/* FIRST / LAST boundary rows */
+.cube-panel__boundary-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gruvax-space-3);
+}
+
+.cube-panel__boundary-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  color: var(--gruvax-text-muted);
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  flex-shrink: 0;
+  line-height: var(--gruvax-leading-tight);
+}
+
+.cube-panel__boundary-value {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* Sample records list */
+.cube-panel__sample-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--gruvax-border-faint);
+}
+
+.cube-panel__sample-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  min-height: 44px;
+  padding: var(--gruvax-space-2) 0;
+  background: var(--gruvax-white);
+  border-bottom: 1px solid var(--gruvax-border-faint);
+}
+
+.cube-panel__sample-row--alt {
+  background: var(--gruvax-off-white);
+}
+
+.cube-panel__sample-catalog {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.cube-panel__sample-label {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* Empty-state copy */
+.cube-panel__empty {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+  padding: var(--gruvax-space-4) 0;
+}
+
+.cube-panel__empty-heading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0;
+}
+
+.cube-panel__empty-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0;
+}
+
+/* D-16: "EDIT THIS CUBE" admin link (only visible when logged in) */
+.cube-panel__edit-link {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  text-decoration: none;
+  line-height: var(--gruvax-leading-tight);
+  align-self: flex-start;
+}
+
+.cube-panel__edit-link:hover {
+  text-decoration: underline;
+}
+
+/* Loading / error states */
+.cube-panel__loading,
+.cube-panel__error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0;
+}
+
+.cube-panel__error {
+  color: var(--gruvax-error);
+}
+

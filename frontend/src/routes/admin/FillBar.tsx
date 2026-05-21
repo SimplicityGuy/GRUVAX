@@ -1,0 +1,67 @@
+/**
+ * FillBar — compact horizontal fill indicator for admin cube cards.
+ *
+ * Shows what fraction of a cube's nominal capacity is used.
+ * Token-driven colors only — no hardcoded hex.
+ *
+ * Design:
+ *   - A thin bar (default 3 px height) inside a track.
+ *   - Fill color: three-tier spec (UI-SPEC §C and §I):
+ *       1–79%  → var(--gruvax-blue-light)  (.fill-bar-fill default)
+ *       80–100% → var(--gruvax-yellow)      (.fill-bar-fill--near)
+ *       >100%  → var(--gruvax-error)        (.fill-bar-fill--over)
+ *   - Empty (fill_level === 0): track only, no bar rendered.
+ *   - Full (fill_level > 1.0): clamped to 100% width.
+ */
+
+import type { CSSProperties } from 'react'
+
+interface FillBarProps {
+  /** Fraction 0.0–1.0+ of nominal capacity (may exceed 1 if over-full). */
+  fillLevel: number
+  /** Height of the bar in pixels. Default: 3. */
+  heightPx?: number
+  /** Optional CSS class added to the track element. */
+  className?: string
+}
+
+export function FillBar({ fillLevel, heightPx = 3, className }: FillBarProps) {
+  const clampedFill = Math.min(1, Math.max(0, fillLevel))
+
+  // Three-tier fill color — classes defined in admin.css, no inline color.
+  const fillClass =
+    fillLevel > 1.0
+      ? 'fill-bar-fill fill-bar-fill--over'
+      : fillLevel >= 0.8
+        ? 'fill-bar-fill fill-bar-fill--near'
+        : 'fill-bar-fill'
+
+  const trackStyle: CSSProperties = {
+    height: `${heightPx}px`,
+  }
+
+  const barStyle: CSSProperties = {
+    width: `${clampedFill * 100}%`,
+    height: '100%',
+    // Color via CSS class toggling; the actual var() values live in admin.css
+  }
+
+  return (
+    <div
+      className={`fill-bar-track${className ? ` ${className}` : ''}`}
+      style={trackStyle}
+      role="meter"
+      aria-valuenow={Math.round(fillLevel * 100)}
+      aria-valuemin={0}
+      aria-valuemax={100}
+      aria-label={`Fill level ${Math.round(fillLevel * 100)}%`}
+    >
+      {clampedFill > 0 && (
+        <div
+          className={fillClass}
+          style={barStyle}
+        />
+      )}
+    </div>
+  )
+}
