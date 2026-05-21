@@ -18,6 +18,8 @@ Analog: tests/integration/test_search.py (LifespanManager + AsyncClient pattern)
 
 from __future__ import annotations
 
+import os
+
 import pytest
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
@@ -25,10 +27,44 @@ from httpx import ASGITransport, AsyncClient
 
 from gruvax.app import create_app
 
+# Test PIN used throughout this module — must match the seeded hash below.
+_TEST_PIN = "0000"
+
+
+@pytest.fixture(autouse=True)
+def reset_login_rate_limit() -> None:  # type: ignore[return]
+    """Reset the login rate-limit counter before each test.
+
+    The login endpoint uses a module-level singleton ``FixedWindowRateLimiter``
+    backed by ``MemoryStorage``.  Tests in this module share the same process
+    and the same in-memory counter.  ``test_rate_limit`` intentionally exhausts
+    the 5-attempt window; without a reset, all subsequent tests that POST to
+    ``/api/admin/login`` would receive 429 and skip instead of running.
+
+    ``limiter.reset()`` clears the entire in-memory storage — safe here because
+    integration tests run sequentially and the limiter is local to this process.
+    """
+    from gruvax.api.admin.limiter import limiter  # noqa: PLC0415
+
+    limiter.reset()
+
 
 @pytest_asyncio.fixture(scope="module")
 async def client(db_pool):  # type: ignore[no-untyped-def]
-    """Module-scoped async test client with full ASGI lifespan."""
+    """Module-scoped async test client with full ASGI lifespan.
+
+    Seeds the test PIN hash ("0000") into gruvax.settings after the app starts
+    (using the app's own DB pool from lifespan state) so that all login tests
+    in this module work against a known PIN.
+    """
+    # Ensure SESSION_SECRET is set for this test process
+    if not os.environ.get("SESSION_SECRET"):
+        os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
+
+    from gruvax.auth.pin import hash_pin  # noqa: PLC0415
+
+    test_hash = hash_pin(_TEST_PIN)
+
     app = create_app()
     async with (
         LifespanManager(app) as manager,
@@ -37,6 +73,17 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
             base_url="http://test",
         ) as ac,
     ):
+        # Seed the test PIN hash using the app's own pool (started by lifespan)
+        pool = app.state.db_pool
+        async with pool.connection() as conn:
+            await conn.execute(
+                "INSERT INTO gruvax.settings (key, value, description, updated_at)"
+                " VALUES ('auth.pin_hash', %s::jsonb, 'Test PIN seeded by test_admin_auth', now())"
+                " ON CONFLICT (key) DO UPDATE"
+                "  SET value = EXCLUDED.value, updated_at = now()",
+                (f'"{test_hash}"',),
+            )
+            await conn.commit()
         yield ac
 
 

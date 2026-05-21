@@ -12,6 +12,7 @@ dependencies = [
     "alembic>=1.18.4",
     "asgi-lifespan>=2.1.0",
     "fastapi>=0.136.1",
+    "itsdangerous>=2.2",
     "passlib[argon2]>=1.7.4",
     "psycopg[binary,pool]>=3.2",
     "pydantic>=2.13.4",
@@ -25,6 +26,7 @@ dependencies = [
 
 [project.scripts]
 gruvax = "gruvax:main"
+gruvax-set-pin = "scripts.set_pin:main"
 
 [build-system]
 requires = ["uv_build>=0.11.15,<0.12.0"]
