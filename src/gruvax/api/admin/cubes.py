@@ -430,7 +430,8 @@ async def validate_boundary(
             "movement_counts": movement_counts,
         })
 
-    all_valid = all(r.get("valid", False) for r in results)
+    # WR-09: Use bool(results) so an empty updates list is not vacuously "valid"
+    all_valid = bool(results) and all(r.get("valid", False) for r in results)
     return JSONResponse(
         status_code=200,
         content={
