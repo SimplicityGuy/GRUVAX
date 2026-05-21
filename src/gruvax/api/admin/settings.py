@@ -88,6 +88,17 @@ async def update_settings(
         await conn.commit()
 
     logger.info("Admin settings updated: %s", updated)
+
+    # WR-02: Refresh the in-process settings cache so fill-level computations
+    # and other cache consumers pick up the new values without a restart.
+    from gruvax.db.queries import load_settings_cache
+
+    try:
+        request.app.state.settings_cache = await load_settings_cache(pool)
+    except Exception as exc:
+        logger.warning("Settings cache refresh failed after PUT /settings: %s", exc)
+        # Non-fatal — the DB write succeeded; the cache will be stale until restart.
+
     return {"updated": updated}
 
 
