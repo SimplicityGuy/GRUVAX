@@ -1,4 +1,4 @@
-"""Admin cube boundary endpoints — read, dry-run validate, and suggest-midpoint.
+"""Admin cube boundary endpoints — read, dry-run validate, suggest-midpoint, and bulk write.
 
 Endpoints:
   - ``GET /admin/cubes``:
@@ -88,6 +88,17 @@ class SuggestRequest(BaseModel):
     unit_id: int
     row: int
     col: int
+
+
+class BulkWriteRequest(BaseModel):
+    """Body for POST /admin/cubes/bulk — atomic multi-cube commit (D-10).
+
+    All updates share a single change_set_id in boundary_history.
+    The Idempotency-Key header must be provided by the caller;
+    a replay with the same key returns the cached response without re-writing.
+    """
+
+    updates: list[BoundaryEdit]
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -603,3 +614,151 @@ def _find_next_populated_cube(
             }
 
     return None
+
+
+@router.post("/cubes/bulk")
+async def bulk_write_cubes(
+    request: Request,
+    body: BulkWriteRequest,
+    pool: Any = Depends(get_pool),
+    cache: BoundaryCache = Depends(get_boundary_cache),
+    _admin: dict[str, Any] = Depends(require_admin),
+) -> JSONResponse:
+    """Atomic bulk commit of all pending cube boundary edits (D-10, ADMN-09).
+
+    All updates are validated (comparator + phantom check) before ANY write.
+    Writes all cubes in a single DB transaction sharing one change_set_id.
+    AFTER the transaction commits, invalidates + reloads the boundary cache
+    (Pitfall A — cache.invalidate() is NEVER called inside the transaction).
+
+    Idempotency-Key header (D-10, Pitfall 7):
+      - If the key was seen before, returns the cached response immediately.
+      - If new, stores the key + response inside the transaction.
+      - Old keys (>24h) are pruned on each bulk (Pitfall E).
+
+    Security:
+      - require_admin enforces session cookie + CSRF (T-03-18).
+      - All SQL uses %s placeholders (T-03-24).
+      - A failed transaction NEVER empties the live cache (T-03-22).
+
+    Returns:
+      ``{change_set_id: str, applied: int}``
+    """
+    import uuid as _uuid
+
+    from gruvax.api.admin.validation import validate_boundary_order
+    from gruvax.db.queries import (
+        check_idempotency,
+        cleanup_idempotency,
+        cube_exact_match,
+        fetch_current_boundary,
+        find_boundary_near_misses,
+        store_idempotency,
+        write_boundary,
+        write_history_row,
+    )
+
+    # ── Idempotency short-circuit (Pitfall 7) ────────────────────────────────
+    idempotency_key = request.headers.get("Idempotency-Key")
+    if idempotency_key:
+        cached = await check_idempotency(pool, idempotency_key)
+        if cached is not None:
+            return JSONResponse(content=cached)
+
+    # ── Validate ALL cubes before any write (Pitfall 11 / T-03-19) ──────────
+    for edit in body.updates:
+        if edit.is_empty:
+            continue
+        first_label = edit.first_label or ""
+        first_catalog = edit.first_catalog or ""
+        last_label = edit.last_label or ""
+        last_catalog = edit.last_catalog or ""
+
+        # POS-01 comparator (always, even force=True)
+        if not validate_boundary_order(first_label, first_catalog, last_label, last_catalog):
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "type": "boundary_order_error",
+                    "message": "First record comes after last record. Check the order.",
+                    "unit_id": edit.unit_id,
+                    "row": edit.row,
+                    "col": edit.col,
+                },
+            )
+
+        # Phantom check (skipped when force=True)
+        if not edit.force:
+            first_exists = await cube_exact_match(pool, first_label, first_catalog)
+            if first_label == last_label and first_catalog == last_catalog:
+                last_exists = first_exists
+            else:
+                last_exists = await cube_exact_match(pool, last_label, last_catalog)
+
+            if not first_exists or not last_exists:
+                phantom_label = first_label if not first_exists else last_label
+                phantom_catalog = first_catalog if not first_exists else last_catalog
+                near_misses = await find_boundary_near_misses(pool, phantom_label, phantom_catalog)
+                return JSONResponse(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    content={
+                        "type": "phantom_boundary",
+                        "phantom": True,
+                        "message": "No match in collection. Did you mean one of these?",
+                        "near_misses": near_misses,
+                        "unit_id": edit.unit_id,
+                        "row": edit.row,
+                        "col": edit.col,
+                    },
+                )
+
+    # ── Single atomic transaction: write boundary + history for all cubes ────
+    change_set_id = str(_uuid.uuid4())
+    response_body: dict[str, Any] = {
+        "change_set_id": change_set_id,
+        "applied": len(body.updates),
+    }
+
+    async with pool.connection() as conn, conn.transaction():
+        for edit in body.updates:
+            # Capture prev_* before overwriting (history audit)
+            prev = await fetch_current_boundary(conn, edit.unit_id, edit.row, edit.col)
+
+            # Write new boundary values
+            new_first_label = edit.first_label if not edit.is_empty else None
+            new_first_catalog = edit.first_catalog if not edit.is_empty else None
+            new_last_label = edit.last_label if not edit.is_empty else None
+            new_last_catalog = edit.last_catalog if not edit.is_empty else None
+
+            await write_boundary(
+                conn,
+                edit.unit_id, edit.row, edit.col,
+                new_first_label, new_first_catalog,
+                new_last_label, new_last_catalog,
+                edit.is_empty,
+            )
+
+            # Append to boundary_history with shared change_set_id
+            await write_history_row(
+                conn,
+                change_set_id,
+                edit.unit_id, edit.row, edit.col,
+                prev,
+                new_first_label, new_first_catalog,
+                new_last_label, new_last_catalog,
+                edit.is_empty,
+                source="bulk",
+            )
+
+        # Store idempotency key inside transaction (atomic with writes)
+        if idempotency_key:
+            await store_idempotency(conn, idempotency_key, response_body)
+
+        # Prune old idempotency keys (Pitfall E)
+        await cleanup_idempotency(conn)
+
+    # ── Invalidate + reload cache AFTER transaction commit (Pitfall A) ───────
+    cache.invalidate()
+    await cache.load(pool)
+
+    return JSONResponse(content=response_body)

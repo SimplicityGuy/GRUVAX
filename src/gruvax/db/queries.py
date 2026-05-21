@@ -521,6 +521,325 @@ ORDER BY catalog_number
     return [{"release_id": int(row[0]), "catalog_number": str(row[1])} for row in rows]
 
 
+# ── Admin bulk-write + history + idempotency queries (Phase 3 Plan 05) ────────
+
+
+async def fetch_current_boundary(
+    conn: Any,
+    unit_id: int,
+    row: int,
+    col: int,
+) -> dict[str, Any] | None:
+    """Read the current boundary row for a cube using an existing connection.
+
+    Used inside a transaction (atomic bulk write) to capture prev_* values
+    before overwriting with new ones.  All SQL uses %s placeholders (T-03-24).
+
+    Args:
+        conn:    Open psycopg async connection (inside a transaction).
+        unit_id: Cube unit ID.
+        row:     Cube row index.
+        col:     Cube column index.
+
+    Returns:
+        Dict with boundary fields or None if the cube does not exist.
+    """
+    sql = """
+SELECT unit_id, row, col, first_label, first_catalog,
+       last_label, last_catalog, is_empty
+FROM gruvax.cube_boundaries
+WHERE unit_id = %s AND row = %s AND col = %s
+"""
+    async with conn.cursor() as cur:
+        await cur.execute(sql, (unit_id, row, col))
+        row_raw = await cur.fetchone()
+        if row_raw is None:
+            return None
+        cols_meta = [desc[0] for desc in (cur.description or [])]
+        return dict(zip(cols_meta, row_raw, strict=True))
+
+
+async def write_boundary(
+    conn: Any,
+    unit_id: int,
+    row: int,
+    col: int,
+    first_label: str | None,
+    first_catalog: str | None,
+    last_label: str | None,
+    last_catalog: str | None,
+    is_empty: bool,
+) -> None:
+    """Update a cube's boundary values using an existing connection.
+
+    Used inside a transaction — the caller is responsible for commit.
+    All SQL uses %s placeholders (T-03-24, zero f-string interpolation).
+
+    Args:
+        conn:          Open psycopg async connection (inside a transaction).
+        unit_id:       Cube unit ID.
+        row:           Cube row index.
+        col:           Cube column index.
+        first_label:   New first boundary label.
+        first_catalog: New first boundary catalog number.
+        last_label:    New last boundary label.
+        last_catalog:  New last boundary catalog number.
+        is_empty:      Whether the cube is empty.
+    """
+    sql = """
+UPDATE gruvax.cube_boundaries
+SET first_label = %s, first_catalog = %s,
+    last_label = %s, last_catalog = %s,
+    is_empty = %s
+WHERE unit_id = %s AND row = %s AND col = %s
+"""
+    await conn.execute(
+        sql,
+        (first_label, first_catalog, last_label, last_catalog, is_empty, unit_id, row, col),
+    )
+
+
+async def write_history_row(
+    conn: Any,
+    change_set_id: str,
+    unit_id: int,
+    row: int,
+    col: int,
+    prev: dict[str, Any] | None,
+    new_first_label: str | None,
+    new_first_catalog: str | None,
+    new_last_label: str | None,
+    new_last_catalog: str | None,
+    new_is_empty: bool,
+    source: str,
+) -> None:
+    """Append one row to boundary_history for a single cube change.
+
+    source must be 'manual', 'bulk', or 'revert' (DB CHECK constraint).
+    prev is None for cubes that had no prior boundary entry.
+    All SQL uses %s placeholders (T-03-24).
+
+    Args:
+        conn:          Open psycopg async connection (inside a transaction).
+        change_set_id: UUID shared across all cubes in one atomic commit.
+        unit_id:       Cube unit ID.
+        row:           Cube row index.
+        col:           Cube column index.
+        prev:          Dict with prev_* fields from fetch_current_boundary.
+        new_*:         The new boundary values being written.
+        source:        'manual', 'bulk', or 'revert'.
+    """
+    sql = """
+INSERT INTO gruvax.boundary_history (
+    change_set_id, unit_id, row, col,
+    prev_first_label, prev_first_catalog, prev_last_label, prev_last_catalog, prev_is_empty,
+    new_first_label, new_first_catalog, new_last_label, new_last_catalog, new_is_empty,
+    source
+) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+"""
+    prev_first_label = prev.get("first_label") if prev else None
+    prev_first_catalog = prev.get("first_catalog") if prev else None
+    prev_last_label = prev.get("last_label") if prev else None
+    prev_last_catalog = prev.get("last_catalog") if prev else None
+    prev_is_empty = bool(prev.get("is_empty", True)) if prev else True
+
+    await conn.execute(
+        sql,
+        (
+            change_set_id, unit_id, row, col,
+            prev_first_label, prev_first_catalog, prev_last_label, prev_last_catalog, prev_is_empty,
+            new_first_label, new_first_catalog, new_last_label, new_last_catalog, new_is_empty,
+            source,
+        ),
+    )
+
+
+async def check_idempotency(
+    pool: AsyncConnectionPool,
+    key: str,
+) -> dict[str, Any] | None:
+    """Check whether an idempotency key has been seen before.
+
+    Returns the cached response_json dict if the key exists, else None.
+    All SQL uses %s placeholders (T-03-24).
+
+    Args:
+        pool: Open psycopg AsyncConnectionPool.
+        key:  The Idempotency-Key header value.
+
+    Returns:
+        The cached response_json as a dict, or None if not seen before.
+    """
+    sql = "SELECT response_json FROM gruvax.idempotency_keys WHERE key = %s"
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql, (key,))
+        row = await cur.fetchone()
+    if row is None:
+        return None
+    cached: dict[str, Any] = row[0]
+    return cached
+
+
+async def store_idempotency(
+    conn: Any,
+    key: str,
+    response: dict[str, Any],
+) -> None:
+    """Store an idempotency key with its response payload.
+
+    Called inside the bulk-write transaction so the key is committed
+    atomically with the boundary writes (Pitfall 7).
+    All SQL uses %s placeholders (T-03-24).
+
+    Args:
+        conn:     Open psycopg async connection (inside a transaction).
+        key:      The Idempotency-Key header value.
+        response: The JSON-serializable response body to cache.
+    """
+    sql = """
+INSERT INTO gruvax.idempotency_keys (key, response_json)
+VALUES (%s, %s)
+ON CONFLICT (key) DO NOTHING
+"""
+    import json
+    await conn.execute(sql, (key, json.dumps(response)))
+
+
+async def cleanup_idempotency(conn: Any) -> None:
+    """Delete idempotency_keys rows older than 24 hours (Pitfall E).
+
+    Called inside the bulk-write transaction so cleanup is bundled with
+    each bulk commit — no separate cron job needed.
+    All SQL uses %s placeholders (T-03-24).
+
+    Args:
+        conn: Open psycopg async connection (inside a transaction).
+    """
+    sql = """
+DELETE FROM gruvax.idempotency_keys
+WHERE created_at < now() - INTERVAL '24 hours'
+"""
+    await conn.execute(sql)
+
+
+async def list_change_sets(
+    pool: AsyncConnectionPool,
+) -> list[dict[str, Any]]:
+    """Return change-sets from boundary_history grouped by change_set_id.
+
+    Returns newest-first ordered by the MAX changed_at per change-set.
+    Includes source, cube_count, and the representative changed_at timestamp.
+    All SQL uses %s placeholders (T-03-24).
+
+    Args:
+        pool: Open psycopg AsyncConnectionPool.
+
+    Returns:
+        List of dicts with keys change_set_id, source, changed_at, cube_count.
+    """
+    sql = """
+SELECT
+    change_set_id::text AS change_set_id,
+    source,
+    MAX(changed_at) AS changed_at,
+    COUNT(*) AS cube_count
+FROM gruvax.boundary_history
+GROUP BY change_set_id, source
+ORDER BY MAX(changed_at) DESC
+LIMIT 100
+"""
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql)
+        rows_raw = await cur.fetchall()
+        cols_meta = [desc[0] for desc in (cur.description or [])]
+    result: list[dict[str, Any]] = []
+    for r in rows_raw:
+        row_dict = dict(zip(cols_meta, r, strict=True))
+        # Serialize datetime to ISO string for JSON
+        if hasattr(row_dict.get("changed_at"), "isoformat"):
+            row_dict["changed_at"] = row_dict["changed_at"].isoformat()
+        result.append(row_dict)
+    return result
+
+
+async def fetch_change_set_rows(
+    pool: AsyncConnectionPool,
+    change_set_id: str,
+) -> list[dict[str, Any]]:
+    """Return all boundary_history rows for a given change_set_id.
+
+    Used by the revert handler to know which cubes to restore.
+    All SQL uses %s placeholders (T-03-24).
+
+    Args:
+        pool:          Open psycopg AsyncConnectionPool.
+        change_set_id: UUID of the change-set to fetch.
+
+    Returns:
+        List of dicts with full history row fields.
+    """
+    sql = """
+SELECT
+    id, change_set_id::text AS change_set_id,
+    unit_id, row, col,
+    prev_first_label, prev_first_catalog, prev_last_label, prev_last_catalog, prev_is_empty,
+    new_first_label, new_first_catalog, new_last_label, new_last_catalog, new_is_empty,
+    changed_by, changed_at, source
+FROM gruvax.boundary_history
+WHERE change_set_id = %s::uuid
+ORDER BY id
+"""
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql, (change_set_id,))
+        rows_raw = await cur.fetchall()
+        cols_meta = [desc[0] for desc in (cur.description or [])]
+    result: list[dict[str, Any]] = []
+    for r in rows_raw:
+        row_dict = dict(zip(cols_meta, r, strict=True))
+        if hasattr(row_dict.get("changed_at"), "isoformat"):
+            row_dict["changed_at"] = row_dict["changed_at"].isoformat()
+        result.append(row_dict)
+    return result
+
+
+async def has_newer_changes(
+    conn: Any,
+    unit_id: int,
+    row: int,
+    col: int,
+    original_changed_at: Any,
+) -> bool:
+    """Return True if a newer boundary_history row exists for this cube.
+
+    Used by the revert handler to detect conflicts (D-12, Pitfall D).
+    A conflict means a newer change-set has modified this cube since the
+    change-set being reverted was written — reverting it would silently
+    clobber the newer edit.
+
+    All SQL uses %s placeholders (T-03-24).
+
+    Args:
+        conn:               Open psycopg async connection (inside a transaction).
+        unit_id:            Cube unit ID.
+        row:                Cube row index.
+        col:                Cube column index.
+        original_changed_at: The changed_at timestamp of the history row being reverted.
+
+    Returns:
+        True if a newer boundary_history row exists for this (unit, row, col).
+    """
+    sql = """
+SELECT 1 FROM gruvax.boundary_history
+WHERE unit_id = %s AND row = %s AND col = %s
+  AND changed_at > %s
+LIMIT 1
+"""
+    async with conn.cursor() as cur:
+        await cur.execute(sql, (unit_id, row, col, original_changed_at))
+        row_raw = await cur.fetchone()
+    return row_raw is not None
+
+
 async def cube_exact_match(
     pool: AsyncConnectionPool,
     label: str,
