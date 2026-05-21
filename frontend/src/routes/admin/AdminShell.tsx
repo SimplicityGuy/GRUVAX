@@ -40,11 +40,14 @@ export function AdminShell() {
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  // Refs to avoid stale closures inside the long-lived tick interval
+  // Refs to hold latest values for reading inside the long-lived tick interval
+  // without stale closures. Synced via effects (not render-time assignment) to
+  // satisfy the react-hooks/refs rule.
   const isLoggedInRef = useRef(isLoggedIn)
   const sessionExpiresAtRef = useRef(sessionExpiresAt)
-  isLoggedInRef.current = isLoggedIn
-  sessionExpiresAtRef.current = sessionExpiresAt
+  // Sync ref values in layout effects so the tick interval always reads current
+  useEffect(() => { isLoggedInRef.current = isLoggedIn }, [isLoggedIn])
+  useEffect(() => { sessionExpiresAtRef.current = sessionExpiresAt }, [sessionExpiresAt])
 
   // ── Tick every second for countdown + expiry check ───────────────────────
   // The expiry check is collapsed into this interval so the setState calls

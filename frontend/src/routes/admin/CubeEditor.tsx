@@ -186,13 +186,14 @@ export function CubeEditor() {
     catalogLast: '',
   })
 
-  // Seed form fields when boundary query data changes identity.
-  // React's "adjust state during render" pattern: calling setState in the render
-  // body of the same component is the officially-supported escape hatch for this
-  // exact case — track what we last seeded with a ref and reset when it changes.
-  const seededBoundaryRef = useRef<typeof boundary | null>(null)
-  if (boundary && boundary !== seededBoundaryRef.current) {
-    seededBoundaryRef.current = boundary
+  // Track which boundary object we last seeded from so we can re-seed when the
+  // cube changes. Storing in state (not a ref) lets us compare during render
+  // without violating react-hooks/refs. When boundary identity changes, update
+  // both seededBoundary and fields in the same render — React batches these and
+  // re-renders once with the new values (adjust-state-during-render pattern).
+  const [seededBoundary, setSeededBoundary] = useState<typeof boundary | null>(null)
+  if (boundary && boundary !== seededBoundary) {
+    setSeededBoundary(boundary)
     setFields({
       labelFirst: boundary.first_label,
       catalogFirst: boundary.first_catalog,
