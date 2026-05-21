@@ -21,6 +21,18 @@ created: 2026-05-21
 > pure logic with no visible UI this phase. The offline banner (OFF-01..04) is explicitly
 > deferred to the next SPIDR slice.
 
+## Visual Hierarchy / Focal Point
+
+When multiple surfaces are active at once, prioritize attention in this order:
+
+1. **Primary — re-glow spring-on at the new cube** (Surface 2). This is the moment that proves the
+   kiosk reflects the current layout; it owns the lit-yellow LED accent and the spring-on motion.
+2. **Secondary — rollback toast, bottom-center** (Surface 3). Admin-device only; it interrupts only
+   on a save failure and never appears on the public kiosk.
+3. **Tertiary — ambient shimmer on non-lit neighbor cubes** (Surface 1). Deliberately quiet,
+   peripheral awareness only; it must never compete with a lit/selected cell (never recolor a lit
+   cell) and yields visual priority to the re-glow.
+
 ---
 
 ## Design System
