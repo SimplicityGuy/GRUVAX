@@ -28,6 +28,7 @@ from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from starlette.exceptions import HTTPException as StarletteHTTPException
 from starlette.responses import Response
 from starlette.types import Scope
 
@@ -46,10 +47,27 @@ class SpaStaticFiles(StaticFiles):
     those are safely cacheable; only the HTML entry document must not be cached.
     ``StaticFiles(html=True)`` only enables SPA fallback routing — it does NOT
     set any cache-control header, so this subclass adds it explicitly.
+
+    It also serves ``index.html`` for unmatched extensionless paths so that
+    client-side routes (``/admin``, ``/admin/cubes``, ``/admin/cubes/:u/:r/:c``)
+    deep-link and survive a browser refresh. Starlette's ``html=True`` only
+    serves ``index.html`` for *directory* requests, so a direct GET to a route
+    path 404s without this fallback (ADMN-01: mobile-first admin access).
+    Real missing assets (paths with a file extension, e.g. ``foo.js``) still
+    return 404 so broken asset references stay visible.
     """
 
     async def get_response(self, path: str, scope: Scope) -> Response:
-        response = await super().get_response(path, scope)
+        try:
+            response = await super().get_response(path, scope)
+        except StarletteHTTPException as exc:
+            # Starlette's StaticFiles raises 404 for missing paths. Serve the SPA
+            # entry for unmatched extensionless routes so client-side routing works;
+            # re-raise for real missing assets (paths with a file extension).
+            if exc.status_code == 404 and "." not in path.rsplit("/", 1)[-1]:
+                response = await super().get_response("index.html", scope)
+            else:
+                raise
         if response.headers.get("content-type", "").startswith("text/html"):
             response.headers["Cache-Control"] = "no-store"
         return response
