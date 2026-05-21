@@ -188,5 +188,101 @@ npx vitest run                 → 6 passed (1 test file)
 
 ---
 
+---
+
+## Security Follow-up Fixes (WR-06 + WR-05)
+
+_Applied: 2026-05-21 — separate commit from the UAT F2–F7 batch above._
+
+### WR-06: Login rate-limiter rebuilt on public `limits` API (no more slowapi private internals)
+
+**Files modified:**
+- `src/gruvax/api/admin/limiter.py`
+- `src/gruvax/api/admin/login.py`
+- `src/gruvax/app.py`
+- `pyproject.toml`
+
+**Commit:** `9f6e70b`
+
+**Problem:** `_check_login_rate_limit()` in `login.py` reached into slowapi private
+attributes — `limiter._key_prefix`, `limiter._limiter.hit(...)` — and imported
+`slowapi.wrappers.Limit` to construct a wrapper used only for header injection.
+Any slowapi upgrade could silently disable the brute-force guard.
+
+**Fix:**
+
+- **`limiter.py`** — replaced `slowapi.Limiter(key_func=get_remote_address)` with:
+  - `limiter: MemoryStorage` — the shared in-process storage; `limiter.reset()` is called
+    by the test fixture to clear state between tests.
+  - `_rate_limiter: FixedWindowRateLimiter(limiter)` — the rate-limit strategy.
+  - `_LOGIN_RATE = parse("5/5minutes")` — the parsed rate spec.
+
+- **`login.py`** — `_check_login_rate_limit()` now:
+  - Imports `_rate_limiter` and `_LOGIN_RATE` from `limiter.py` (public names).
+  - Derives client IP via `request.client.host` (falls back to `"unknown"` if
+    `request.client` is `None`).
+  - Calls `_rate_limiter.hit(_LOGIN_RATE, "login", client_ip)`.
+  - Raises `HTTPException(status_code=429, detail={"type": "rate_limited", "message": ...})`
+    on breach — no slowapi exception handler required.
+  - All slowapi imports (`RateLimitExceeded`, `get_remote_address`, `Limit`) removed.
+
+- **`app.py`** — removed the entire slowapi wiring block:
+  `from slowapi import _rate_limit_exceeded_handler`, `from slowapi.errors import RateLimitExceeded`,
+  `app.state.limiter = admin_limiter`, and `app.add_exception_handler(...)`.
+  The 429 is now a plain `HTTPException` that FastAPI handles natively.
+
+- **`pyproject.toml`** — removed `slowapi>=0.1.9`; added `limits>=5.8` as a direct
+  dependency (it was previously only transitive through slowapi).
+
+**slowapi completely removed:** `grep -rn "slowapi" src/ pyproject.toml` returns only
+prose comments — zero imports of any slowapi symbol anywhere in the codebase.
+
+---
+
+### WR-05: Rate-limit key proxy-awareness documented at derivation site
+
+**Files modified (comments only):**
+- `src/gruvax/api/admin/limiter.py`
+- `src/gruvax/api/admin/login.py`
+
+**Commit:** `9f6e70b` (same commit as WR-06)
+
+**Problem:** The rate-limit key used the direct socket peer IP without any comment
+explaining this assumption or its implication if a reverse proxy is added.
+
+**Fix:** Added explicit comments at both the module level in `limiter.py` and at the
+IP-derivation site in `login.py` (`_check_login_rate_limit()`):
+
+> Rate-limit key is the direct socket peer IP (`request.client.host`), correct for
+> GRUVAX's single-host home-LAN deployment with NO reverse proxy. If a proxy is
+> introduced, configure trusted X-Forwarded-For / ProxyHeaders handling so the
+> limit keys on the real client IP rather than the proxy.
+
+No behavior change.
+
+---
+
+### Verification (WR-06 + WR-05)
+
+```
+uv run pytest tests/integration/test_admin_auth.py tests/unit/test_pin.py \
+    tests/unit/test_sessions.py -q
+
+16 passed, 7 warnings in 1.25s
+```
+
+The `test_rate_limit` test (6th login attempt → 429) passes, confirming the
+`HTTPException(429)` path is exercised. The `reset_login_rate_limit` autouse
+fixture calls `limiter.reset()` successfully against the new `MemoryStorage` singleton.
+
+```
+uv run ruff check src/gruvax   → All checks passed!
+uv run mypy src/gruvax         → Success: no issues found in 36 source files
+uv run python -c "import gruvax.app; print('OK')"  → OK
+grep -rn "slowapi" src/ pyproject.toml  → only prose comments, no imports
+```
+
+---
+
 _Fixed: 2026-05-21_
 _Fixer: Claude (gsd-code-fixer)_
