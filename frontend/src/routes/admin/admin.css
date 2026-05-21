@@ -424,3 +424,572 @@
   opacity: 0.6;
   cursor: not-allowed;
 }
+
+/* ── FillBar ─────────────────────────────────────────────────────────────── */
+
+.fill-bar-track {
+  width: 100%;
+  background: var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-pill);
+  overflow: hidden;
+}
+
+.fill-bar-fill {
+  background: var(--gruvax-yellow);
+  border-radius: var(--gruvax-radius-pill);
+  transition: width var(--gruvax-duration-base) var(--gruvax-ease-standard);
+}
+
+.fill-bar-fill--warn {
+  background: var(--gruvax-error);
+}
+
+/* ── AlphaRail ───────────────────────────────────────────────────────────── */
+
+.alpha-rail {
+  display: flex;
+  flex-direction: column;
+  width: 32px;
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+  max-height: 100vh;
+  overflow-y: auto;
+  padding: var(--gruvax-space-1) 0;
+}
+
+.alpha-rail-btn {
+  width: 32px;
+  min-height: 44px;
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  touch-action: manipulation;
+  -webkit-tap-highlight-color: transparent;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+              background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.alpha-rail-btn:hover {
+  background: color-mix(in srgb, var(--gruvax-blue) 10%, transparent);
+}
+
+.alpha-rail-btn:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+.alpha-rail-btn--inactive {
+  opacity: 0.25;
+}
+
+/* ── CubesGrid ───────────────────────────────────────────────────────────── */
+
+.cubes-grid-outer {
+  display: flex;
+  gap: var(--gruvax-space-2);
+  height: calc(100vh - 48px); /* full viewport minus topbar */
+  overflow: hidden;
+}
+
+.cubes-grid-scroll {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--gruvax-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-6);
+}
+
+.cubes-grid-loading,
+.cubes-grid-error {
+  padding: var(--gruvax-space-6);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+}
+
+.cubes-grid-error {
+  color: var(--gruvax-error);
+}
+
+.cubes-unit-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.cubes-unit-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg, 36px);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.cubes-unit-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(140px, 1fr));
+  gap: var(--gruvax-space-3);
+}
+
+.cube-card {
+  background: var(--gruvax-white);
+  border-radius: var(--gruvax-radius-lg);
+  box-shadow: var(--gruvax-shadow-sm);
+  border: 1px solid var(--gruvax-border-light);
+  padding: var(--gruvax-space-3);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  cursor: pointer;
+  text-align: left;
+  transition: box-shadow var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+              border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.cube-card:hover {
+  box-shadow: var(--gruvax-shadow-md);
+  border-color: var(--gruvax-blue);
+}
+
+.cube-card:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.cube-card--empty {
+  opacity: 0.55;
+}
+
+.cube-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gruvax-space-1);
+}
+
+.cube-card-ref {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono, 14px);
+  color: var(--gruvax-text-muted);
+}
+
+.cube-card-empty-badge {
+  font-family: var(--gruvax-font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.1em;
+  color: var(--gruvax-text-muted);
+  text-transform: uppercase;
+  background: var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-pill);
+  padding: 2px 6px;
+}
+
+.cube-card-body {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+}
+
+.cube-card-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.cube-card-label--last {
+  color: var(--gruvax-text-secondary);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  font-weight: 700;
+}
+
+.cube-card-catalog {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono, 14px);
+  color: var(--gruvax-text-secondary);
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── CubeEditor ──────────────────────────────────────────────────────────── */
+
+.cube-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-5);
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--gruvax-space-4);
+}
+
+.cube-editor-loading {
+  padding: var(--gruvax-space-6);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+}
+
+.cube-editor-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-4);
+}
+
+.cube-editor-back {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.cube-editor-back:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.cube-editor-title {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg, 36px);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.cube-editor-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-5);
+}
+
+.editor-boundary-section {
+  background: var(--gruvax-white);
+  border-radius: var(--gruvax-radius-lg);
+  box-shadow: var(--gruvax-shadow-sm);
+  padding: var(--gruvax-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.editor-boundary-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+/* Autocomplete */
+.autocomplete-wrapper {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+}
+
+.editor-field-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  color: var(--gruvax-text-primary);
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+}
+
+.editor-field-input {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono-lg, 16px);
+  font-weight: 500;
+  color: var(--gruvax-text-primary);
+  background: var(--gruvax-off-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.editor-field-input:focus {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+  border-color: var(--gruvax-blue);
+}
+
+.editor-field-input:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}
+
+.autocomplete-listbox {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  z-index: 20;
+  background: var(--gruvax-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  box-shadow: var(--gruvax-shadow-md);
+  list-style: none;
+  margin: var(--gruvax-space-1) 0 0;
+  padding: var(--gruvax-space-1);
+  max-height: 220px;
+  overflow-y: auto;
+}
+
+.autocomplete-option {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono, 14px);
+  color: var(--gruvax-text-primary);
+  padding: var(--gruvax-space-2) var(--gruvax-space-3);
+  border-radius: var(--gruvax-radius-sm);
+  cursor: pointer;
+}
+
+.autocomplete-option:hover,
+.autocomplete-option--selected {
+  background: var(--gruvax-blue-light);
+  color: var(--gruvax-blue);
+}
+
+/* Phantom warning chips */
+.phantom-chip {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-3);
+  background: color-mix(in srgb, var(--gruvax-warning) 12%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gruvax-warning) 40%, transparent);
+  border-radius: var(--gruvax-radius-md);
+}
+
+.phantom-chip-icon {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 900;
+  color: var(--gruvax-warning);
+}
+
+.phantom-chip-text {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-primary);
+  flex: 1;
+}
+
+.near-miss-chip {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono, 14px);
+  color: var(--gruvax-blue);
+  background: var(--gruvax-blue-light);
+  border: 1px solid color-mix(in srgb, var(--gruvax-blue) 30%, transparent);
+  border-radius: var(--gruvax-radius-pill);
+  padding: var(--gruvax-space-1) var(--gruvax-space-3);
+  cursor: pointer;
+  touch-action: manipulation;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.near-miss-chip:hover {
+  background: color-mix(in srgb, var(--gruvax-blue) 20%, transparent);
+}
+
+.near-miss-chip:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.phantom-force-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-warning);
+  background: transparent;
+  border: 1px solid var(--gruvax-warning);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-1) var(--gruvax-space-3);
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.phantom-force-btn:hover {
+  background: color-mix(in srgb, var(--gruvax-warning) 12%, transparent);
+}
+
+.phantom-force-btn:focus-visible {
+  outline: 2px solid var(--gruvax-warning);
+  outline-offset: 2px;
+}
+
+.phantom-forced-note {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+  font-style: italic;
+}
+
+/* Suggest midpoint row */
+.editor-suggest-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  flex-wrap: wrap;
+}
+
+.editor-suggest-hint {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+}
+
+.editor-status-validating {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+  font-style: italic;
+}
+
+/* Editor action buttons */
+.editor-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+}
+
+.editor-btn-primary {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-white);
+  background: var(--gruvax-blue);
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-5);
+  min-height: 48px;
+  cursor: pointer;
+  width: 100%;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.editor-btn-primary:hover:not(:disabled) {
+  background: var(--gruvax-blue-dark);
+}
+
+.editor-btn-primary:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.editor-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.editor-btn-secondary {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: 1px solid var(--gruvax-blue);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 44px;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.editor-btn-secondary:hover:not(:disabled) {
+  background: var(--gruvax-blue-light);
+}
+
+.editor-btn-secondary:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.editor-btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.editor-save-success {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-success);
+  margin: 0;
+}
+
+.editor-save-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-error);
+  margin: 0;
+}
+
+.editor-pending-summary {
+  background: color-mix(in srgb, var(--gruvax-yellow) 20%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gruvax-yellow) 50%, transparent);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.editor-pending-count {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-text-primary);
+}

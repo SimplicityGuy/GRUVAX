@@ -137,3 +137,95 @@ export interface ChangeSet {
   created_at: string      // ISO-8601 when the change-set was started
   edits: CubeBoundaryEdit[]
 }
+
+// ── Admin cubes editor types (plan 03-04) ────────────────────────────────────
+
+/** A near-miss record from pg_trgm similarity on phantom label/catalog. */
+export interface NearMiss {
+  release_id: number
+  label: string
+  catalog_number: string
+  score: number
+}
+
+/** Movement estimate for a boundary validate/save response. */
+export interface MovementCount {
+  unit_id: number
+  row: number
+  col: number
+  records_before: number
+  records_after: number
+}
+
+/** One item in the validate endpoint results array. */
+export interface ValidateItem {
+  unit_id: number
+  row: number
+  col: number
+  valid: boolean
+  /** Present when valid === false due to comparator (POS-01). */
+  comparator_error?: string
+  /** True when the value is not in v_collection (phantom). */
+  phantom?: boolean
+  /** Near-miss candidates from pg_trgm (only when phantom === true). */
+  near_misses?: NearMiss[]
+  movement_counts?: MovementCount
+}
+
+/** Response from POST /api/admin/cubes/validate (dry-run — always HTTP 200). */
+export interface ValidateResponse {
+  valid: boolean
+  results: ValidateItem[]
+}
+
+/** A midpoint suggestion from POST /api/admin/cubes/suggest. */
+export interface MidpointSuggestion {
+  release_id: number
+  label: string
+  catalog_number: string
+}
+
+/** Response from POST /api/admin/cubes/suggest. */
+export interface SuggestResponse {
+  suggestion: MidpointSuggestion | null
+}
+
+/** One cube row from GET /api/admin/cubes. */
+export interface AdminCube {
+  unit_id: number
+  row: number
+  col: number
+  label_first: string
+  catalog_first: string
+  label_last: string
+  catalog_last: string
+  is_empty: boolean
+  fill_level: number     // 0.0–1.0 fraction of nominal capacity
+}
+
+/** Response from GET /api/admin/cubes. */
+export interface AdminCubesResponse {
+  cubes: AdminCube[]
+}
+
+/** Response from GET /api/admin/cubes/{u}/{r}/{c}/boundary. */
+export interface AdminCubeBoundary {
+  unit_id: number
+  row: number
+  col: number
+  label_first: string
+  catalog_first: string
+  label_last: string
+  catalog_last: string
+}
+
+/** Label option from GET /api/admin/labels. */
+export interface LabelOption {
+  label: string
+}
+
+/** Catalog option from GET /api/admin/labels/{label}/catalogs. */
+export interface CatalogOption {
+  release_id: number
+  catalog_number: string
+}
