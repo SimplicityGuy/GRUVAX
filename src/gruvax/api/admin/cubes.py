@@ -39,10 +39,17 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from gruvax.api.deps import get_boundary_cache, get_collection_snapshot, get_pool, require_admin
+from gruvax.api.deps import (
+    get_boundary_cache,
+    get_collection_snapshot,
+    get_event_bus,
+    get_pool,
+    require_admin,
+)
 from gruvax.estimator.boundary_cache import BoundaryCache
 from gruvax.estimator.boundary_math import count_records_in_boundary, suggest_midpoint
 from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.events.bus import EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +223,7 @@ async def put_cube_boundary(
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
+    bus: EventBus = Depends(get_event_bus),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Validate and (when valid) update a cube boundary.
@@ -320,6 +328,14 @@ RETURNING unit_id, row, col, first_label, first_catalog, last_label, last_catalo
     # Invalidate + reload the boundary cache after commit (Pitfall A)
     cache.invalidate()
     await cache.load(pool)
+
+    # Phase 4: fan-out boundary_changed AFTER cache reloads (Pitfall A ordering)
+    import uuid as _uuid
+
+    await bus.publish("boundary_changed", {
+        "cube_ids": [{"unit": unit_id, "row": row, "col": col}],
+        "change_set_id": str(_uuid.uuid4()),
+    })
 
     return JSONResponse(
         status_code=200,
@@ -626,6 +642,7 @@ async def bulk_write_cubes(
     body: BulkWriteRequest,
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
+    bus: EventBus = Depends(get_event_bus),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Atomic bulk commit of all pending cube boundary edits (D-10, ADMN-09).
@@ -764,5 +781,11 @@ async def bulk_write_cubes(
     # ── Invalidate + reload cache AFTER transaction commit (Pitfall A) ───────
     cache.invalidate()
     await cache.load(pool)
+
+    # Phase 4: fan-out boundary_changed AFTER cache reloads (Pitfall A ordering)
+    await bus.publish("boundary_changed", {
+        "cube_ids": [{"unit": e.unit_id, "row": e.row, "col": e.col} for e in body.updates],
+        "change_set_id": response_body["change_set_id"],
+    })
 
     return JSONResponse(content=response_body)

@@ -5,6 +5,24 @@ interface HighlightState {
   primaryCube: CubeRef | null
 }
 
+/** Identifies a Kallax cube by its shelf coordinates. */
+export interface ShimmerCube {
+  unit: number
+  row: number
+  col: number
+}
+
+/**
+ * SSE connectivity state (Phase 4 / D-10).
+ * bannerVisible is a stub for the deferred Offline-Banner slice (Plan 04);
+ * set false always this phase.
+ */
+interface ConnectivityState {
+  sseConnected: boolean
+  lastSeenAt: number
+  bannerVisible: false
+}
+
 interface GruvaxStore {
   /** Current search query string */
   query: string
@@ -43,6 +61,41 @@ interface GruvaxStore {
 
   /** Clear the search field and all highlight state */
   clearSearch: () => void
+
+  // ── Phase 4: SSE connectivity + shimmer (D-10, D-03) ────────────────────
+
+  /** SSE connectivity state — set by EventSource onopen / onerror / server_shutdown */
+  connectivity: ConnectivityState
+
+  /**
+   * Set SSE connected state (D-10).
+   * When connecting (connected=true), stamps lastSeenAt=Date.now().
+   */
+  setSseConnected: (connected: boolean) => void
+
+  /**
+   * Cubes currently in shimmer state (admin is editing them — Phase 4 admin_editing event).
+   * Cleared by boundary_changed (D-03: primary on-commit clear) or after shimmerExpiresAt TTL.
+   */
+  shimmerCubes: ShimmerCube[]
+
+  /**
+   * Epoch ms at which all shimmer cubes expire (Date.now() + 60_000).
+   * Consumed by the idle-shimmer sweep in Plan 04 (D-03 60s safety).
+   */
+  shimmerExpiresAt: number
+
+  /**
+   * Start shimmer for the given cubes (admin_editing event, editing=true).
+   * Stamps shimmerExpiresAt = Date.now() + 60_000 (D-03 TTL).
+   */
+  setShimmerCubes: (cubes: ShimmerCube[]) => void
+
+  /**
+   * Clear shimmer for the given cubes (boundary_changed or admin_editing editing=false).
+   * D-03: primary on-commit clear — removes only the matching unit-row-col keys.
+   */
+  clearShimmerCubes: (cubes: ShimmerCube[]) => void
 }
 
 export const useGruvaxStore = create<GruvaxStore>((set) => ({
@@ -88,5 +141,39 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
       subCubeInterval: null,
       confidence: 0,
       animationToken: 0,
+    }),
+
+  // ── Phase 4: SSE connectivity + shimmer ─────────────────────────────────
+
+  connectivity: { sseConnected: false, lastSeenAt: 0, bannerVisible: false },
+
+  setSseConnected: (connected) =>
+    set((s) => ({
+      connectivity: {
+        ...s.connectivity,
+        sseConnected: connected,
+        // Stamp lastSeenAt only when transitioning to connected (D-10)
+        lastSeenAt: connected ? Date.now() : s.connectivity.lastSeenAt,
+      },
+    })),
+
+  shimmerCubes: [],
+  shimmerExpiresAt: 0,
+
+  setShimmerCubes: (cubes) =>
+    set({
+      shimmerCubes: cubes,
+      // D-03 TTL: shimmer expires in 60s even if no boundary_changed arrives
+      shimmerExpiresAt: Date.now() + 60_000,
+    }),
+
+  clearShimmerCubes: (cubes) =>
+    set((s) => {
+      const keysToRemove = new Set(cubes.map((c) => `${c.unit}:${c.row}:${c.col}`))
+      return {
+        shimmerCubes: s.shimmerCubes.filter(
+          (c) => !keysToRemove.has(`${c.unit}:${c.row}:${c.col}`),
+        ),
+      }
     }),
 }))
