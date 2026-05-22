@@ -1,0 +1,556 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sketch 001 — Bin Segment Strip · GRUVAX</title>
+<link rel="stylesheet" href="../themes/default.css" />
+<style>
+  body { padding-top: 52px; }
+
+  /* ── Variant tab bar ── */
+  #variant-nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+    background: var(--gruvax-white);
+    border-bottom: 1.5px solid var(--gruvax-border-light);
+    padding: 8px 12px; display: flex; gap: 6px; align-items: center;
+    box-shadow: var(--gruvax-shadow-sm);
+  }
+  #variant-nav .brand {
+    font-family: var(--gruvax-font-display); font-weight: 900;
+    color: var(--gruvax-blue); letter-spacing: var(--gruvax-tracking-display);
+    font-size: 18px; margin-right: 6px;
+  }
+  .variant-tab {
+    font-family: var(--gruvax-font-ui); font-size: 12px; font-weight: 500;
+    border: 1.5px solid var(--gruvax-border-light); background: var(--gruvax-white);
+    color: var(--gruvax-text-secondary); padding: 6px 10px;
+    border-radius: var(--gruvax-radius-pill); cursor: pointer;
+    transition: all var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  }
+  .variant-tab:hover { border-color: var(--gruvax-blue); color: var(--gruvax-blue); }
+  .variant-tab.active {
+    background: var(--gruvax-blue); color: var(--gruvax-white); border-color: var(--gruvax-blue);
+  }
+
+  /* ── Device frame (mobile-first) ── */
+  #frame {
+    max-width: 390px; margin: 18px auto; padding: 0 0 40px;
+    transition: max-width var(--gruvax-duration-base) var(--gruvax-ease-standard);
+  }
+  .variant { display: none; }
+  .variant.active { display: block; }
+
+  .screen { padding: 16px; }
+
+  /* ── Shared header: shelf locator ── */
+  .loc-head { display: flex; align-items: center; gap: 14px; margin-bottom: 14px; }
+  .mini-kallax {
+    display: grid; grid-template-columns: repeat(4, 14px);
+    grid-template-rows: repeat(4, 14px); gap: 3px; flex: none;
+    padding: 6px; background: var(--gruvax-white);
+    border: 1.5px solid var(--gruvax-blue); border-radius: var(--gruvax-radius-sm);
+  }
+  .mini-cell { background: var(--gruvax-cell-dim); border: 1px solid var(--gruvax-cell-dim-border); border-radius: 2px; }
+  .mini-cell.lit { background: var(--gruvax-cell-lit); border-color: var(--gruvax-cell-lit-border); box-shadow: var(--gruvax-shadow-led); }
+  .loc-title .gx-label { font-size: 13px; color: var(--gruvax-text-muted); display: block; }
+  .loc-title h1 {
+    font-family: var(--gruvax-font-display); font-weight: 900; color: var(--gruvax-blue);
+    font-size: 30px; margin: 2px 0 0; letter-spacing: var(--gruvax-tracking-display);
+  }
+  .sum-note { font-family: var(--gruvax-font-ui); font-size: 11px; color: var(--gruvax-text-muted); margin: -6px 0 14px; }
+  .sum-note b { color: var(--gruvax-success); font-family: var(--gruvax-font-mono); }
+
+  /* ── Variant A & C: horizontal strip ── */
+  .strip-wrap { position: relative; margin: 8px 0 4px; user-select: none; touch-action: none; }
+  .strip {
+    position: relative; display: flex; width: 100%; height: 88px;
+    border-radius: var(--gruvax-radius-md); overflow: hidden; border: 1.5px solid var(--gruvax-blue);
+  }
+  .seg {
+    position: relative; display: flex; flex-direction: column; justify-content: center;
+    padding: 8px 10px; overflow: hidden; min-width: 0;
+    transition: width var(--gruvax-duration-fast) linear;
+  }
+  .seg .seg-name {
+    font-family: var(--gruvax-font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: var(--gruvax-tracking-label); font-size: 13px; line-height: 1.05;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .seg .seg-pct { font-family: var(--gruvax-font-mono); font-size: 15px; font-weight: 500; margin-top: 3px; }
+  .seg.overridden::before {
+    content: ""; position: absolute; top: 0; left: 0; right: 0; height: 5px;
+    background: var(--gruvax-yellow); box-shadow: var(--gruvax-shadow-led);
+  }
+  .seg.continues::after { content: "↪"; position: absolute; right: 4px; bottom: 4px; font-size: 13px; color: var(--gruvax-yellow); }
+  .seg.continues {
+    -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 14px), transparent 100%);
+            mask-image: linear-gradient(90deg, #000 calc(100% - 14px), transparent 100%);
+  }
+
+  /* drag handles */
+  .handle {
+    position: absolute; top: 0; bottom: 0; width: 26px; transform: translateX(-50%);
+    z-index: 5; cursor: ew-resize; display: flex; align-items: center; justify-content: center; touch-action: none;
+  }
+  .handle .grip {
+    width: 6px; height: 46px; border-radius: var(--gruvax-radius-pill);
+    background: var(--gruvax-white); border: 1.5px solid var(--gruvax-blue); box-shadow: var(--gruvax-shadow-md);
+    transition: background var(--gruvax-duration-fast), transform var(--gruvax-duration-fast);
+  }
+  .handle:hover .grip, .handle.dragging .grip {
+    background: var(--gruvax-yellow); border-color: var(--gruvax-yellow-dark);
+    box-shadow: var(--gruvax-shadow-led); transform: scaleY(1.08);
+  }
+
+  .continue-cap {
+    font-family: var(--gruvax-font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: var(--gruvax-tracking-label); font-size: 10px; color: var(--gruvax-blue);
+    text-align: right; margin-top: 6px; min-height: 14px;
+  }
+  .continue-cap .gx-mono { color: var(--gruvax-text-muted); }
+
+  /* ── Segment legend (on white — contrast-safe) ── */
+  .legend { margin-top: 16px; display: flex; flex-direction: column; gap: 8px; }
+  .leg-row {
+    display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    background: var(--gruvax-white); border: 1.5px solid var(--gruvax-border-light); border-radius: var(--gruvax-radius-md);
+  }
+  .leg-swatch { width: 14px; height: 28px; border-radius: 3px; flex: none; }
+  .leg-main { flex: 1; min-width: 0; }
+  .leg-main .nm { font-family: var(--gruvax-font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: var(--gruvax-tracking-label); color: var(--gruvax-blue); font-size: 14px; }
+  .leg-main .rng { font-family: var(--gruvax-font-mono); font-size: 11px; color: var(--gruvax-text-muted); margin-top: 2px; }
+  .leg-pct { font-family: var(--gruvax-font-mono); font-size: 18px; font-weight: 500; color: var(--gruvax-blue); text-align: right; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 5px; font-family: var(--gruvax-font-ui);
+    font-size: 10px; font-weight: 500; padding: 3px 7px; border-radius: var(--gruvax-radius-pill);
+    margin-top: 3px; white-space: nowrap;
+  }
+  .chip.set { background: var(--gruvax-yellow-faint); color: var(--gruvax-blue-dark); border: 1px solid var(--gruvax-yellow-dark); }
+  .chip.auto { background: var(--gruvax-blue-faint); color: var(--gruvax-text-muted); border: 1px solid var(--gruvax-border-light); }
+  .chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+  .chip.set .dot { background: var(--gruvax-yellow); }
+  .chip.auto .dot { background: var(--gruvax-text-faint); }
+  .reset-link {
+    background: none; border: none; color: var(--gruvax-blue); font-family: var(--gruvax-font-ui);
+    font-size: 11px; cursor: pointer; padding: 2px 0; margin-top: 4px; text-decoration: underline; display: block;
+  }
+  .reset-link:hover { color: var(--gruvax-blue-dark); }
+
+  /* ── Variant B: vertical stack ── */
+  .stack {
+    position: relative; display: flex; flex-direction: column; width: 100%; height: 380px;
+    border: 1.5px solid var(--gruvax-blue); border-radius: var(--gruvax-radius-md);
+    overflow: hidden; user-select: none; touch-action: none;
+  }
+  .vseg { position: relative; display: flex; align-items: center; gap: 10px; padding: 0 14px; overflow: hidden;
+    transition: height var(--gruvax-duration-fast) linear; }
+  .vseg .vsw { width: 5px; align-self: stretch; flex: none; }
+  .vseg .vname { font-family: var(--gruvax-font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: var(--gruvax-tracking-label); font-size: 15px; }
+  .vseg .vrng { font-family: var(--gruvax-font-mono); font-size: 11px; opacity: .85; }
+  .vseg .vpct { margin-left: auto; font-family: var(--gruvax-font-mono); font-size: 20px; font-weight: 500; }
+  .vseg.overridden { box-shadow: inset 4px 0 0 var(--gruvax-yellow); }
+  .vhandle {
+    position: absolute; left: 0; right: 0; height: 26px; transform: translateY(-50%); z-index: 5;
+    cursor: ns-resize; display: flex; align-items: center; justify-content: center; touch-action: none;
+  }
+  .vhandle .vgrip { height: 6px; width: 46px; border-radius: var(--gruvax-radius-pill);
+    background: var(--gruvax-white); border: 1.5px solid var(--gruvax-blue); box-shadow: var(--gruvax-shadow-md);
+    transition: all var(--gruvax-duration-fast); }
+  .vhandle:hover .vgrip, .vhandle.dragging .vgrip {
+    background: var(--gruvax-yellow); border-color: var(--gruvax-yellow-dark); box-shadow: var(--gruvax-shadow-led); transform: scaleX(1.08); }
+  .vcontinue { position: absolute; bottom: 4px; right: 10px; font-family: var(--gruvax-font-display);
+    font-weight: 700; text-transform: uppercase; letter-spacing: var(--gruvax-tracking-label); font-size: 10px; }
+
+  /* ── Variant C: numeric inputs ── */
+  .num-list { margin-top: 16px; display: flex; flex-direction: column; gap: 10px; }
+  .num-row { display: flex; align-items: center; gap: 10px; padding: 10px 12px;
+    background: var(--gruvax-white); border: 1.5px solid var(--gruvax-border-light); border-radius: var(--gruvax-radius-md); }
+  .num-row .nm { font-family: var(--gruvax-font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: var(--gruvax-tracking-label); color: var(--gruvax-blue); font-size: 14px; flex: 1; }
+  .num-row .nm .strad { color: var(--gruvax-yellow-dark); }
+  .stepper { display: flex; align-items: center; border: 1.5px solid var(--gruvax-blue); border-radius: var(--gruvax-radius-md); overflow: hidden; }
+  .stepper button { width: 30px; height: 34px; border: none; background: var(--gruvax-blue-faint);
+    color: var(--gruvax-blue); font-size: 18px; cursor: pointer; font-family: var(--gruvax-font-ui); }
+  .stepper button:hover { background: var(--gruvax-blue); color: var(--gruvax-white); }
+  .stepper input { width: 52px; height: 34px; border: none; text-align: center;
+    font-family: var(--gruvax-font-mono); font-size: 16px; color: var(--gruvax-blue); background: var(--gruvax-white); }
+  .stepper input:focus { outline: 2px solid var(--gruvax-yellow); outline-offset: -2px; }
+  .num-row.overridden .stepper { border-color: var(--gruvax-yellow-dark); box-shadow: var(--gruvax-shadow-led); }
+
+  /* ── Footer actions ── */
+  .actions { display: flex; gap: 10px; margin-top: 20px; }
+  .actions .gx-btn { flex: 1; }
+  .toast {
+    position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+    background: var(--gruvax-blue-darker); color: var(--gruvax-white); font-family: var(--gruvax-font-ui);
+    font-size: 13px; padding: 10px 18px; border-radius: var(--gruvax-radius-pill);
+    box-shadow: var(--gruvax-shadow-lg); opacity: 0; pointer-events: none;
+    transition: all var(--gruvax-duration-base) var(--gruvax-ease-spring); z-index: 9999;
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast b { color: var(--gruvax-yellow); }
+
+  .hint { font-family: var(--gruvax-font-ui); font-size: 11px; color: var(--gruvax-text-muted);
+    text-align: center; margin-top: 10px; font-style: italic; }
+
+  /* ── Sketch toolbar ── */
+  #sketch-tools {
+    position: fixed; bottom: 12px; right: 12px; z-index: 9999; font-family: system-ui;
+    font-size: 12px; background: rgba(0,0,0,0.78); color: white; padding: 8px 10px;
+    border-radius: 8px; opacity: 0.4; transition: opacity .2s; display: flex; gap: 6px; align-items: center;
+  }
+  #sketch-tools:hover { opacity: 1; }
+  #sketch-tools button { background: #333; color: #fff; border: 1px solid #555; border-radius: 5px; padding: 4px 8px; cursor: pointer; font-size: 11px; }
+  #sketch-tools button.on { background: var(--gruvax-blue); border-color: var(--gruvax-blue); }
+</style>
+</head>
+<body>
+
+<div id="variant-nav">
+  <span class="brand">GRUVAX</span>
+  <button class="variant-tab active" data-v="a" onclick="showVariant('a', this)">A · Strip + drag ★</button>
+  <button class="variant-tab" data-v="b" onclick="showVariant('b', this)">B · Vertical stack</button>
+  <button class="variant-tab" data-v="c" onclick="showVariant('c', this)">C · Strip + numbers</button>
+</div>
+
+<div id="frame">
+
+  <!-- ════════════ VARIANT A ════════════ -->
+  <section id="variant-a" class="variant active">
+    <div class="screen">
+      <div class="loc-head">
+        <div class="mini-kallax" id="mk-a"></div>
+        <div class="loc-title"><span class="gx-label">Shelf A · editing</span><h1>BIN 1</h1></div>
+      </div>
+      <div class="sum-note">3 labels share this bin · widths always total <b>100%</b></div>
+      <div class="strip-wrap" id="stripwrap-a"><div class="strip" id="strip-a"></div></div>
+      <div class="continue-cap" id="cap-a"></div>
+      <div class="hint">Drag a yellow handle to set a physical-width override</div>
+      <div class="legend" id="legend-a"></div>
+      <div class="actions">
+        <button class="gx-btn gx-btn--ghost" onclick="resetAll()">↺ Reset to computed</button>
+        <button class="gx-btn" onclick="fakeSave()">Save overrides</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ VARIANT B ════════════ -->
+  <section id="variant-b" class="variant">
+    <div class="screen">
+      <div class="loc-head">
+        <div class="mini-kallax" id="mk-b"></div>
+        <div class="loc-title"><span class="gx-label">Shelf A · editing</span><h1>BIN 1</h1></div>
+      </div>
+      <div class="sum-note">Stacked top→bottom in shelf order · total <b>100%</b></div>
+      <div class="stack" id="stack-b"></div>
+      <div class="hint">Drag a handle between bands · thumb-friendly on a phone</div>
+      <div class="legend" id="legend-b"></div>
+      <div class="actions">
+        <button class="gx-btn gx-btn--ghost" onclick="resetAll()">↺ Reset to computed</button>
+        <button class="gx-btn" onclick="fakeSave()">Save overrides</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ════════════ VARIANT C ════════════ -->
+  <section id="variant-c" class="variant">
+    <div class="screen">
+      <div class="loc-head">
+        <div class="mini-kallax" id="mk-c"></div>
+        <div class="loc-title"><span class="gx-label">Shelf A · editing</span><h1>BIN 1</h1></div>
+      </div>
+      <div class="sum-note">Type exact percentages · the rest re-balance to <b>100%</b></div>
+      <div class="strip-wrap"><div class="strip" id="strip-c" style="height:54px;"></div></div>
+      <div class="continue-cap" id="cap-c"></div>
+      <div class="num-list" id="numlist-c"></div>
+      <div class="actions">
+        <button class="gx-btn gx-btn--ghost" onclick="resetAll()">↺ Reset to computed</button>
+        <button class="gx-btn" onclick="fakeSave()">Save overrides</button>
+      </div>
+    </div>
+  </section>
+
+</div>
+
+<div class="toast" id="toast"></div>
+
+<div id="sketch-tools">
+  <span style="opacity:.7">view</span>
+  <button onclick="setVP(390,this)" class="on">phone</button>
+  <button onclick="setVP(768,this)">tablet</button>
+  <button onclick="setVP(1100,this)">desktop</button>
+</div>
+
+<script>
+  // ── tiny DOM builder (no innerHTML; XSS-safe by construction) ──
+  function el(tag, props, ...kids) {
+    const e = document.createElement(tag);
+    if (props) for (const k in props) {
+      const v = props[k];
+      if (v == null) continue;
+      if (k === 'class') e.className = v;
+      else if (k === 'style') e.style.cssText = v;
+      else if (k === 'value') e.value = v;
+      else if (k.slice(0, 2) === 'on' && typeof v === 'function') e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v);
+    }
+    for (const c of kids) {
+      if (c == null || c === false) continue;
+      e.append(c.nodeType ? c : document.createTextNode(String(c)));
+    }
+    return e;
+  }
+  const $ = id => document.getElementById(id);
+
+  // ── Shared bin state (real-ish jazz labels, DM-Mono catalog ranges) ──
+  // computed = count-derived fraction from v_collection rows.
+  // frac = effective fraction (override when it differs from computed).
+  const PALETTE = [
+    { bg: 'var(--gruvax-blue)',        fg: '#fff' },
+    { bg: 'var(--gruvax-blue-light)',  fg: 'var(--gruvax-blue-dark)' },
+    { bg: 'var(--gruvax-blue-dark)',   fg: '#fff' },
+    { bg: 'var(--gruvax-blue-darker)', fg: '#fff' },
+  ];
+  const state = {
+    segments: [
+      { name: 'BLUE NOTE', first: 'BLP 1568', last: 'BLP 4015', computed: 46, frac: 45, continues: false },
+      { name: 'ECM',       first: 'ECM 1064', last: 'ECM 1071', computed: 11, frac: 12, continues: false },
+      { name: 'IMPULSE!',  first: 'AS 6',     last: 'AS 77',    computed: 43, frac: 43, continues: true  },
+    ]
+  };
+  const MIN = 5;
+  const isOverridden = s => Math.abs(s.frac - s.computed) > 0.5;
+  const rnd = n => Math.round(n);
+
+  function buildMiniKallax(id) {
+    const root = $(id);
+    root.replaceChildren();
+    for (let i = 0; i < 16; i++) root.append(el('div', { class: 'mini-cell' + (i === 0 ? ' lit' : '') }));
+  }
+
+  // ── Variant A + C: horizontal strip ──
+  function renderStrip(stripId, withHandles) {
+    const strip = $(stripId);
+    strip.replaceChildren();
+    const wrap = strip.parentElement;
+    wrap.querySelectorAll('.handle').forEach(h => h.remove());
+
+    state.segments.forEach((s, i) => {
+      const pal = PALETTE[i % PALETTE.length];
+      const showName = s.frac >= 16;
+      const seg = el('div',
+        { class: 'seg' + (isOverridden(s) ? ' overridden' : '') + (s.continues ? ' continues' : ''),
+          style: `width:${s.frac}%;background:${pal.bg};color:${pal.fg}` },
+        showName ? el('span', { class: 'seg-name' }, s.name) : null,
+        el('span', { class: 'seg-pct' }, rnd(s.frac) + '%'));
+      strip.append(seg);
+    });
+
+    if (withHandles) {
+      let cum = 0;
+      for (let i = 0; i < state.segments.length - 1; i++) {
+        cum += state.segments[i].frac;
+        const h = el('div', { class: 'handle', style: `left:${cum}%` }, el('div', { class: 'grip' }));
+        attachDragH(h, i, strip);
+        wrap.append(h);
+      }
+    }
+  }
+
+  function attachDragH(handle, idx, strip) {
+    handle.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      handle.classList.add('dragging');
+      handle.setPointerCapture(e.pointerId);
+      const rect = strip.getBoundingClientRect();
+      const left = state.segments.slice(0, idx).reduce((a, s) => a + s.frac, 0);
+      const right = left + state.segments[idx].frac + state.segments[idx + 1].frac;
+      const move = ev => {
+        let pos = ((ev.clientX - rect.left) / rect.width) * 100;
+        pos = Math.max(left + MIN, Math.min(right - MIN, pos));
+        state.segments[idx].frac = pos - left;
+        state.segments[idx + 1].frac = right - pos;
+        renderAll();
+      };
+      const up = () => {
+        handle.classList.remove('dragging');
+        try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    });
+  }
+
+  // ── Variant B: vertical stack ──
+  function renderStack() {
+    const stack = $('stack-b');
+    stack.replaceChildren();
+    state.segments.forEach((s, i) => {
+      const pal = PALETTE[i % PALETTE.length];
+      const v = el('div',
+        { class: 'vseg' + (isOverridden(s) ? ' overridden' : ''),
+          style: `height:${s.frac}%;background:${pal.bg};color:${pal.fg}` },
+        el('div', { class: 'vsw', style: `background:var(--gruvax-yellow);opacity:${isOverridden(s) ? 1 : 0}` }),
+        el('div', null,
+          el('div', { class: 'vname' }, s.name),
+          el('div', { class: 'vrng' }, `${s.first} → ${s.last}`)),
+        el('div', { class: 'vpct' }, rnd(s.frac) + '%'),
+        s.continues ? el('div', { class: 'vcontinue' }, '↪ continues in bin 2') : null);
+      stack.append(v);
+    });
+    let cum = 0;
+    for (let i = 0; i < state.segments.length - 1; i++) {
+      cum += state.segments[i].frac;
+      const h = el('div', { class: 'vhandle', style: `top:${cum}%` }, el('div', { class: 'vgrip' }));
+      attachDragV(h, i, stack);
+      stack.append(h);
+    }
+  }
+
+  function attachDragV(handle, idx, stack) {
+    handle.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      handle.classList.add('dragging');
+      handle.setPointerCapture(e.pointerId);
+      const rect = stack.getBoundingClientRect();
+      const top = state.segments.slice(0, idx).reduce((a, s) => a + s.frac, 0);
+      const bottom = top + state.segments[idx].frac + state.segments[idx + 1].frac;
+      const move = ev => {
+        let pos = ((ev.clientY - rect.top) / rect.height) * 100;
+        pos = Math.max(top + MIN, Math.min(bottom - MIN, pos));
+        state.segments[idx].frac = pos - top;
+        state.segments[idx + 1].frac = bottom - pos;
+        renderAll();
+      };
+      const up = () => {
+        handle.classList.remove('dragging');
+        try { handle.releasePointerCapture(e.pointerId); } catch (_) {}
+        document.removeEventListener('pointermove', move);
+        document.removeEventListener('pointerup', up);
+      };
+      document.addEventListener('pointermove', move);
+      document.addEventListener('pointerup', up);
+    });
+  }
+
+  // ── Variant C: numeric inputs (re-balance the others proportionally) ──
+  function renderNumList() {
+    const list = $('numlist-c');
+    list.replaceChildren();
+    state.segments.forEach((s, i) => {
+      const pal = PALETTE[i % PALETTE.length];
+      const nm = el('span', { class: 'nm' }, s.name + ' ');
+      if (s.continues) nm.append(el('span', { class: 'strad', title: 'continues in next bin' }, '↪'));
+      const input = el('input', { class: 'gx-mono', value: String(rnd(s.frac)), 'data-i': String(i),
+        onchange: e => setNum(i, e.target.value) });
+      const row = el('div', { class: 'num-row' + (isOverridden(s) ? ' overridden' : '') },
+        el('span', { class: 'leg-swatch', style: `background:${pal.bg}` }),
+        nm,
+        el('div', { class: 'stepper' },
+          el('button', { onclick: () => bump(i, -1) }, '−'),
+          input,
+          el('button', { onclick: () => bump(i, 1) }, '+')));
+      list.append(row);
+    });
+  }
+  function bump(i, d) { setNum(i, rnd(state.segments[i].frac) + d); }
+  function setNum(i, val) {
+    const n = state.segments.length;
+    let v = Math.max(MIN, Math.min(100 - MIN * (n - 1), parseFloat(val) || 0));
+    const others = state.segments.filter((_, j) => j !== i);
+    const otherSum = others.reduce((a, s) => a + s.frac, 0);
+    const remain = 100 - v;
+    state.segments.forEach((s, j) => {
+      if (j === i) s.frac = v;
+      else s.frac = otherSum > 0 ? (s.frac / otherSum) * remain : remain / others.length;
+    });
+    renderAll();
+  }
+
+  // ── Shared legend (contrast-safe, on white) ──
+  function renderLegend(id) {
+    const root = $(id);
+    if (!root) return;
+    root.replaceChildren();
+    state.segments.forEach((s, i) => {
+      const pal = PALETTE[i % PALETTE.length];
+      const ov = isOverridden(s);
+      const nm = el('div', { class: 'nm' }, s.name + ' ');
+      if (s.continues) nm.append(el('span', { style: 'color:var(--gruvax-yellow-dark)', title: 'continues in next bin' }, '↪'));
+      const rng = el('div', { class: 'rng' }, `${s.first} → ${s.last}` + (s.continues ? '  ·  spans into BIN 2' : ''));
+      const main = el('div', { class: 'leg-main' }, nm, rng);
+      if (ov) {
+        main.append(
+          el('span', { class: 'chip set' }, el('span', { class: 'dot' }), `OVERRIDE ${rnd(s.frac)}% · auto was ${s.computed}%`),
+          el('button', { class: 'reset-link', onclick: () => resetOne(i) }, `reset to ${s.computed}%`));
+      } else {
+        main.append(el('span', { class: 'chip auto' }, el('span', { class: 'dot' }), `AUTO · ${s.computed}% from row counts`));
+      }
+      const pct = el('div', { class: 'leg-pct' }, String(rnd(s.frac)), el('span', { style: 'font-size:11px' }, '%'));
+      root.append(el('div', { class: 'leg-row' }, el('span', { class: 'leg-swatch', style: `background:${pal.bg}` }), main, pct));
+    });
+  }
+
+  function renderCaption(id) {
+    const root = $(id);
+    if (!root) return;
+    root.replaceChildren();
+    const cont = state.segments.find(s => s.continues);
+    if (cont) root.append('↪ ' + cont.name + ' continues in ', el('span', { class: 'gx-mono' }, 'BIN 2'));
+  }
+
+  // ── Orchestrate ──
+  function renderAll() {
+    renderStrip('strip-a', true);
+    renderStack();
+    renderStrip('strip-c', false);
+    renderNumList();
+    renderLegend('legend-a');
+    renderLegend('legend-b');
+    renderCaption('cap-a');
+    renderCaption('cap-c');
+  }
+  function resetOne(i) { state.segments[i].frac = state.segments[i].computed; renderAll(); }
+  function resetAll() { state.segments.forEach(s => s.frac = s.computed); renderAll(); flash('Reset to computed widths', false); }
+  function fakeSave() {
+    const n = state.segments.filter(isOverridden).length;
+    flash(n ? `Saved · ${n} override${n > 1 ? 's' : ''} written` : 'Saved · all widths auto-computed', n > 0);
+  }
+
+  // ── UI plumbing ──
+  function showVariant(v, btn) {
+    document.querySelectorAll('.variant').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.variant-tab').forEach(t => t.classList.remove('active'));
+    $('variant-' + v).classList.add('active');
+    btn.classList.add('active');
+    renderAll();
+  }
+  function setVP(w, btn) {
+    $('frame').style.maxWidth = w + 'px';
+    document.querySelectorAll('#sketch-tools button').forEach(b => b.classList.remove('on'));
+    btn.classList.add('on');
+    renderAll();
+  }
+  let toastT;
+  function flash(msg, hot) {
+    const t = $('toast');
+    t.replaceChildren();
+    if (hot) {
+      const m = msg.match(/^(Saved · )(\d+ overrides? written)$/);
+      if (m) { t.append(m[1], el('b', null, m[2])); } else { t.append(msg); }
+    } else { t.append(msg); }
+    t.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1900);
+  }
+
+  // ── Init ──
+  ['mk-a', 'mk-b', 'mk-c'].forEach(buildMiniKallax);
+  renderAll();
+</script>
+</body>
+</html>
