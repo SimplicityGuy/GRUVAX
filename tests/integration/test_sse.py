@@ -131,12 +131,35 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
     Protocol:
       1. Open an SSE reader task on GET /api/events.
       2. Wait ~50ms for the SSE connection to establish.
-      3. Record t0, then issue PUT /api/admin/cubes/1/0/0/boundary.
+      3. Record t0, then issue PUT /api/admin/cubes/1/0/0/boundary (force=True).
       4. Assert boundary_changed appears in the stream within 0.5s of t0.
+      5. Restore the original fixture boundary so other tests are unaffected.
+
+    Uses force=True to skip the phantom check (synthetic values won't be in
+    v_collection).  Restores cube 1/0/0 to its boundaries.yaml fixture values
+    after the test to avoid contaminating test_locate.py and others.
     """
     auth = await _login(live_server)
     if not auth:
         pytest.skip("Admin login not implemented — skipping SSE latency test")
+
+    # Fixture boundary for cube 1/0/0 (boundaries.yaml row 0, col 0)
+    ORIGINAL_BOUNDARY = {
+        "first_label": "Blue Note",
+        "first_catalog": "BLP 4001",
+        "last_label": "Blue Note",
+        "last_catalog": "BLP 4020",
+        "is_empty": False,
+        "force": True,
+    }
+    TEST_BOUNDARY = {
+        "first_label": "ZZ Test",
+        "first_catalog": "ZZT 0001",
+        "last_label": "ZZ Test",
+        "last_catalog": "ZZT 0002",
+        "is_empty": False,
+        "force": True,
+    }
 
     received = asyncio.Event()
 
@@ -159,14 +182,7 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
     async with httpx.AsyncClient(base_url=live_server) as ac:
         await ac.put(
             "/api/admin/cubes/1/0/0/boundary",
-            json={
-                "first_label": "A",
-                "first_catalog": "A001",
-                "last_label": "B",
-                "last_catalog": "B001",
-                "is_empty": False,
-                "force": True,
-            },
+            json=TEST_BOUNDARY,
             cookies=auth["cookies"],
             headers={"X-CSRF-Token": auth["csrf_token"]},
         )
@@ -175,10 +191,28 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
         await asyncio.wait_for(received.wait(), timeout=0.5)
     except TimeoutError:
         sse_task.cancel()
+        # Attempt restore before failing
+        async with httpx.AsyncClient(base_url=live_server) as ac:
+            await ac.put(
+                "/api/admin/cubes/1/0/0/boundary",
+                json=ORIGINAL_BOUNDARY,
+                cookies=auth["cookies"],
+                headers={"X-CSRF-Token": auth["csrf_token"]},
+            )
         pytest.fail("boundary_changed not received within 500ms — ADMN-11 gate FAILED")
 
     latency = time.perf_counter() - t0
     sse_task.cancel()
+
+    # Restore original fixture boundary so other tests (e.g. test_locate.py) are unaffected
+    async with httpx.AsyncClient(base_url=live_server) as ac:
+        await ac.put(
+            "/api/admin/cubes/1/0/0/boundary",
+            json=ORIGINAL_BOUNDARY,
+            cookies=auth["cookies"],
+            headers={"X-CSRF-Token": auth["csrf_token"]},
+        )
+
     assert latency < 0.5, f"boundary_changed latency {latency:.3f}s exceeded 500ms budget"
 
 

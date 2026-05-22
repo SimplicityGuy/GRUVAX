@@ -64,7 +64,7 @@ def test_sse_no_pool_dep() -> None:
     Binds D-09 (SSE endpoint holds no DB connection) and Pitfall 10
     (pool exhaustion under concurrent SSE + search).
     """
-    from gruvax.api.events import stream_events  # noqa: PLC0415
+    from gruvax.api.events import stream_events
 
     sig = inspect.signature(stream_events)
     param_names = list(sig.parameters.keys())
