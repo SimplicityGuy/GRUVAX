@@ -16,7 +16,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 - [x] **Phase 1: First Search → Cube Highlight** - End-to-end Core Value: typed query lights the right cube on the touchscreen, backed by parser, view, fixture-seeded boundaries, and a cube-only estimator. (completed 2026-05-20)
 - [x] **Phase 2: Real Position Estimation** - Sub-cube interval bar, label-span multi-cube highlight, §4.1 index-based estimator with A/B harness; the kiosk now answers "where exactly". (completed 2026-05-20)
 - [x] **Phase 3: Admin Loop (PIN + Manual Entry + Undo)** - Owner can sign in (mobile or kiosk-with-in-app-keypad), enter boundaries, preview diffs, and undo mistakes — boundaries become a living artifact, not a fixture. (completed 2026-05-21)
-- [ ] **Phase 4: Realtime + Offline Resilience** - Admin edits reach the kiosk live via SSE; kiosk gracefully degrades on connectivity loss; privacy floors and recently-pulled land here.
+- [x] **Phase 4: Realtime + Offline Resilience** - Admin edits reach the kiosk live via SSE; kiosk gracefully degrades on connectivity loss; privacy floors and recently-pulled land here. (completed 2026-05-22)
 - [ ] **Phase 5: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness.
 - [ ] **Phase 6: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable.
 - [ ] **Phase 7: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof.
@@ -131,7 +131,7 @@ Plans:
   1. While the kiosk is open, an admin edit on mobile causes the affected cube(s) to re-render on the kiosk within ~500 ms over the LAN; the affected cube range shows a subtle "boundaries updating" indicator while the admin is mid-edit (SSE `admin_editing` event) and clears on commit.
   2. The SSE channel handles two simultaneous searches (kiosk and mobile) without server-side serialization, admin edits show optimistic UI updates with rollback on server error, and the SSE endpoint holds no DB connection (Pitfall 10) and ships with `X-Accel-Buffering: no` + 15s ping (Pitfall 8).
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 **Wave 1**
 
@@ -144,7 +144,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 04-04-PLAN.md — Kiosk shimmer rendering: Cube shimmerActive + ShelfGrid pass-through + opacity-only .cube-shimmer-overlay + 60s TTL sweeper (RTM-04 kiosk)
+- [x] 04-04-PLAN.md — Kiosk shimmer rendering: Cube shimmerActive + ShelfGrid pass-through + opacity-only .cube-shimmer-overlay + 60s TTL sweeper (RTM-04 kiosk)
 
 **UI hint:** yes
 **SPIDR note:** Split from original "Realtime + Offline Resilience" on the Paths axis (2026-05-21). Happy path (realtime) is this phase; deferred slices: Offline Resilience (OFF-01..04) and Privacy + Recently-Pulled (SRCH-09, PRIV-01..04).
@@ -205,7 +205,7 @@ Plans:
 | 1. First Search → Cube Highlight | 4/4 | Complete   | 2026-05-20 |
 | 2. Real Position Estimation | 4/4 | Complete   | 2026-05-20 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
-| 4. Realtime + Offline Resilience | 3/4 | In Progress|  |
+| 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. LED Contract over MQTT (Hardware Stubbed) | 0/? | Not started | - |
 | 6. Wizards + Import/Export | 0/? | Not started | - |
 | 7. Observability + Deployment Hardening | 0/? | Not started | - |
