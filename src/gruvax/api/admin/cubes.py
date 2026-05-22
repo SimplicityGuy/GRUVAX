@@ -325,17 +325,20 @@ RETURNING unit_id, row, col, first_label, first_catalog, last_label, last_catalo
             detail={"type": "cube_not_found", "unit_id": unit_id, "row": row, "col": col},
         )
 
-    # Invalidate + reload the boundary cache after commit (Pitfall A)
-    cache.invalidate()
-    await cache.load(pool)
-
-    # Phase 4: fan-out boundary_changed AFTER cache reloads (Pitfall A ordering)
+    # Invalidate + reload the boundary cache after commit (Pitfall A).
+    # CR review CR-01: the DB write is already committed, so the kiosk MUST learn
+    # of it via SSE even if the in-process cache reload fails transiently. Publish
+    # in `finally` so a cache.load() error never strands subscribers on stale data.
     import uuid as _uuid
 
-    await bus.publish("boundary_changed", {
-        "cube_ids": [{"unit": unit_id, "row": row, "col": col}],
-        "change_set_id": str(_uuid.uuid4()),
-    })
+    cache.invalidate()
+    try:
+        await cache.load(pool)
+    finally:
+        await bus.publish("boundary_changed", {
+            "cube_ids": [{"unit": unit_id, "row": row, "col": col}],
+            "change_set_id": str(_uuid.uuid4()),
+        })
 
     return JSONResponse(
         status_code=200,
@@ -779,13 +782,15 @@ async def bulk_write_cubes(
         await cleanup_idempotency(conn)
 
     # ── Invalidate + reload cache AFTER transaction commit (Pitfall A) ───────
+    # CR review CR-01: publish in `finally` so a transient cache.load() failure
+    # never strands SSE subscribers on stale data (the bulk write already committed).
     cache.invalidate()
-    await cache.load(pool)
-
-    # Phase 4: fan-out boundary_changed AFTER cache reloads (Pitfall A ordering)
-    await bus.publish("boundary_changed", {
-        "cube_ids": [{"unit": e.unit_id, "row": e.row, "col": e.col} for e in body.updates],
-        "change_set_id": response_body["change_set_id"],
-    })
+    try:
+        await cache.load(pool)
+    finally:
+        await bus.publish("boundary_changed", {
+            "cube_ids": [{"unit": e.unit_id, "row": e.row, "col": e.col} for e in body.updates],
+            "change_set_id": response_body["change_set_id"],
+        })
 
     return JSONResponse(content=response_body)

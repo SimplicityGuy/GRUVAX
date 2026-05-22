@@ -17,7 +17,7 @@
  * Admin-surface only — this component must NEVER appear in KioskView.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import './admin.css'
 
 /** Inline Lucide AlertTriangle SVG — avoids adding a runtime dependency
@@ -53,9 +53,14 @@ interface RollbackToastProps {
 
 export function RollbackToast({ message, onDismiss }: RollbackToastProps) {
   const [isExiting, setIsExiting] = useState(false)
+  // Guard against double-dismiss (CR review WR-06): the 4000ms auto-dismiss timer
+  // and a user tap can both fire handleDismiss, which would call onDismiss twice.
+  const dismissed = useRef(false)
 
   /** Kick off the exit animation, then call onDismiss after it completes. */
   function handleDismiss() {
+    if (dismissed.current) return
+    dismissed.current = true
     setIsExiting(true)
     // toast-exit animation is 150ms (--gruvax-duration-fast); wait for it to finish.
     setTimeout(onDismiss, 150)

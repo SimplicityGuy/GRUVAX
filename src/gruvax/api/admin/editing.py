@@ -18,7 +18,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 from gruvax.api.deps import get_event_bus, require_admin
 from gruvax.events.bus import EventBus
@@ -26,6 +26,17 @@ from gruvax.events.bus import EventBus
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["admin-editing"])
+
+
+class CubeId(BaseModel):
+    """A single cube address. Typed so the heartbeat can't smuggle arbitrary keys
+    (CR review WR-03): ``list[dict[str, int]]`` accepted ``{"unit_42": 0}``."""
+
+    model_config = {"extra": "forbid"}
+
+    unit: int
+    row: int
+    col: int
 
 
 class EditingPayload(BaseModel):
@@ -36,7 +47,9 @@ class EditingPayload(BaseModel):
       editing=False — editor closed / commit completed (kiosk clears shimmer)
     """
 
-    cube_ids: list[dict[str, int]]  # [{unit, row, col}]
+    # max_length caps a malformed/abusive heartbeat (CR review WR-03); a real
+    # change-set never touches more than a handful of cubes at once.
+    cube_ids: list[CubeId] = Field(max_length=64)
     editing: bool  # True = editor open; False = closed / committed
 
 
