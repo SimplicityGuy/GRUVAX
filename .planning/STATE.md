@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-22T17:00:25.581Z"
+last_updated: "2026-05-22T18:26:59.593Z"
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 22
-  completed_plans: 17
+  completed_plans: 18
   percent: 50
 ---
 
@@ -28,12 +28,12 @@ progress:
 
 ## Current Position
 
-Phase: 05 (segment-aware-position-precision) — EXECUTION PAUSED (re-plan pending)
-Plan: 05-01 complete & merged; 05-02..05-05 to be re-planned
+Phase: 05 (segment-aware-position-precision) — RE-PLANNED, ready to execute from Wave 2
+Plan: 05-01 complete & merged; 05-02..05-05 re-planned with full orphan coverage
 
 - **Phase:** 5
-- **Plan:** 05-01 done (merged to main); Waves 2–5 blocked pending re-plan
-- **Status:** Paused after Wave 1 — phase under-scoped the BoundaryRow contract change (see 05-REPLAN-NOTES.md)
+- **Plan:** 05-01 done (merged to main); Waves 2–5 re-planned (two-tier green-gate model)
+- **Status:** Ready to execute (resume at Wave 2 / 05-02)
 - **Progress:** Phase 05: 1/5 plans complete
 
 ```
@@ -139,8 +139,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-22 (Phase 05 Wave 1 executed + merged; execute-phase paused — orphan-consumer scoping gap found by post-merge gate)
-**Next action:** Re-plan Phase 5 Waves 2–5 — run `/gsd:plan-phase 5`. **Keep 05-01 (done/merged); do not revert.** The re-plan MUST scope every `last_label`/`last_catalog` consumer per `.planning/phases/05-segment-aware-position-precision/05-REPLAN-NOTES.md` (orphans: `api/units.py`, `db/seed_boundaries.py`, `db/queries.py`, `boundary_cache.py:100` mypy, and ~11 existing test files) so each wave leaves `just test`/`just typecheck` green.
+**Last touched:** 2026-05-22 (Phase 05 re-planned — Waves 2–5 rewritten with full orphan coverage; plan-checker PASSED, requirements 8/8 + decisions 9/9 covered)
+**Next action:** Execute Phase 5 from Wave 2 — `/clear` then `/gsd:execute-phase 5` (it skips the completed 05-01 via its SUMMARY and resumes at 05-02). Plans use a two-tier green-gate model: Waves 2–3 scoped gates (typecheck green, no new failures), Wave 4 (05-04) is the authoritative full-suite green gate, Wave 5 (05-05) is the frontend phase-exit gate + human-verify checkpoint. Orphan/decision rationale: `05-REPLAN-NOTES.md`.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
