@@ -3,7 +3,7 @@
 **Created:** 2026-05-19
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 **Granularity:** standard (8 phases)
-**Requirements covered:** 73 / 73 v1 (100%) + new Phase 5 (SEG-*) requirements pending authoring
+**Requirements covered:** 81 / 81 v1 (100%)
 
 ## Core Value (north star for every phase)
 
@@ -156,7 +156,7 @@ Plans:
 **Mode:** mvp
 **Depends on:** Phase 1 (boundary cache, `v_collection`), Phase 2 (POS-01 parser/comparator, §4.1 estimator it supersedes, `run_all_algorithms.py` A/B harness), Phase 3 (admin auth + boundary editor)
 **Sequencing:** Lands **before** the LED phase — LED sub-span precision (now Phase 6) depends on this segment model.
-**Requirements:** TBD — new `SEG-*` category to author in REQUIREMENTS.md before planning (design rationale: `.planning/notes/segment-aware-boundaries.md`).
+**Requirements:** SEG-01, SEG-02, SEG-03, SEG-04, SEG-05, SEG-06, SEG-07, SEG-08 (design rationale: `.planning/notes/segment-aware-boundaries.md`).
 **Success Criteria** (what must be TRUE):
 
   1. A boundary is stored as a set of **cut points** (first record per bin); given the globally-ordered `v_collection`, the system derives each bin's ordered per-label segments (label, first/last record) with **zero additional manual input**, and re-derives automatically as the collection grows.
@@ -251,11 +251,11 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
 | 2 | CUBE (3,4,8,10), POS (3,5,6), SRCH (7,8) | 9 |
 | 3 | ADMN (1,2,3,6,7,8,9,12), CUBE (7,9) | 10 |
 | 4 | ADMN (11), RTM (1–4), OFF (1–4), SRCH (9), PRIV (1–4) | 14 |
-| 5 | SEG (*) — new category, pending authoring | TBD |
+| 5 | SEG (1–8) | 8 |
 | 6 | LED (1–10), DEP (3) | 11 |
 | 7 | ADMN (4,5,10), BAK (1,2) | 5 |
 | 8 | OBS (1–7), DEP (4,5) | 9 |
-| **Total** | | **73 + SEG (TBD)** |
+| **Total** | | **81** |
 
 ---
 *Roadmap created: 2026-05-19 from PROJECT.md, REQUIREMENTS.md, and research/{SUMMARY,STACK,ARCHITECTURE,PITFALLS,INTERPOLATION}.md*

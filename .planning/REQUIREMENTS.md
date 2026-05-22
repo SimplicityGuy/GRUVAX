@@ -5,7 +5,7 @@
 
 ## v1 Requirements
 
-73 requirements. Table-stakes items are baseline expectations from FEATURES.md; differentiator items are the ones explicitly accepted into v1 during scoping.
+81 requirements (73 original v1 + 8 `SEG-*` added 2026-05-21 for the new Phase 5, Segment-Aware Position Precision). Table-stakes items are baseline expectations from FEATURES.md; differentiator items are the ones explicitly accepted into v1 during scoping.
 
 ### Search & Lookup
 
@@ -40,6 +40,22 @@
 - [x] **POS-04**: The boundary cache loads at process startup and invalidates on `boundary_changed` events
 - [x] **POS-05**: v1 ships two estimator implementations behind the same contract: an index-based interpolator (INTERPOLATION.md §4.1) as primary and a cube-only fallback (§4.8) for timeouts/low-confidence cases
 - [x] **POS-06**: A developer A/B harness runs candidate algorithms against the local CSV (gitignored) and emits per-distribution-shape error metrics
+
+### Segment-Aware Boundaries
+
+A bin holds an *ordered list of per-label segments*. The owner maintains only **cut points**
+(the first record of each bin) plus optional **physical-width overrides**; everything else is
+derived from the globally-ordered `gruvax.v_collection`. Supersedes the one-span-per-cube model
+and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-boundaries.md`.)
+
+- [ ] **SEG-01**: Boundaries are stored as ordered **cut points** (the first record of each bin) plus optional per-label physical-width overrides; the legacy one-span-per-cube representation is migrated to this model via an Alembic migration that round-trips clean
+- [ ] **SEG-02**: Given the globally-ordered `gruvax.v_collection`, the system derives each bin's ordered per-label segments (label, first/last owned record) from the cut points with **zero additional manual input**, and re-derives automatically when the collection changes
+- [ ] **SEG-03**: Per-segment record counts and bin-fractions are computed by **row-counting `v_collection`** across each segment's catalog range (never catalog-number arithmetic), correctly including duplicate owned copies and variant releases (e.g. `AS 78` 2nd copy, `AS 78-r` remix)
+- [ ] **SEG-04**: An optional admin-set **physical-width override** per label-segment takes precedence over the count-derived fraction; segment widths within a bin always total 100%
+- [ ] **SEG-05**: The **label-contiguity invariant** is enforced — a label occupies one contiguous global run spanning at most adjacent bins; the boundary-save validator rejects any cut-point set that would scatter a label across non-adjacent bins
+- [ ] **SEG-06**: `GET /api/locate` returns a sub-cube interval produced by **two-level interpolation** (resolve bin+segment → offset by the fractions of preceding labels in the bin → interpolate by row-rank within the segment) behind the unchanged `LocateResult` contract; a label straddling a cut resolves to the correct bin without special-casing
+- [ ] **SEG-07**: The segment-aware estimator is proven to **meet-or-beat §4.1** on the real (gitignored) CSV and the synthetic CI dataset via the extended `run_all_algorithms.py` A/B harness (per-distribution-shape error metrics) before it becomes the v1 default; `estimator_version` reflects the change
+- [ ] **SEG-08**: Admin can **view, edit, and add cut points** (adding a cut splits a bin and renumbers subsequent bins) and set per-label **width overrides**; saves are parser-validated, flow through the existing diff-preview + change-set undo path, and keep `/api/locate` at p95 ≤ 50 ms (CPU-only, no DB on the hot path)
 
 ### Admin / Data Management
 
@@ -222,28 +238,36 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | POS-04 | Phase 1 — First Search → Cube Highlight | Complete |
 | POS-05 | Phase 2 — Real Position Estimation | Complete |
 | POS-06 | Phase 2 — Real Position Estimation | Complete |
+| SEG-01 | Phase 5 — Segment-Aware Position Precision | Pending |
+| SEG-02 | Phase 5 — Segment-Aware Position Precision | Pending |
+| SEG-03 | Phase 5 — Segment-Aware Position Precision | Pending |
+| SEG-04 | Phase 5 — Segment-Aware Position Precision | Pending |
+| SEG-05 | Phase 5 — Segment-Aware Position Precision | Pending |
+| SEG-06 | Phase 5 — Segment-Aware Position Precision | Pending |
+| SEG-07 | Phase 5 — Segment-Aware Position Precision | Pending |
+| SEG-08 | Phase 5 — Segment-Aware Position Precision | Pending |
 | ADMN-01 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-02 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-03 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
-| ADMN-04 | Phase 6 — Wizards + Import/Export | Pending |
-| ADMN-05 | Phase 6 — Wizards + Import/Export | Pending |
+| ADMN-04 | Phase 7 — Wizards + Import/Export | Pending |
+| ADMN-05 | Phase 7 — Wizards + Import/Export | Pending |
 | ADMN-06 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-08 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
-| ADMN-10 | Phase 6 — Wizards + Import/Export | Pending |
+| ADMN-10 | Phase 7 — Wizards + Import/Export | Pending |
 | ADMN-11 | Phase 4 — Realtime + Offline Resilience | Complete |
 | ADMN-12 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
-| LED-01 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-02 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-03 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-04 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-05 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-06 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-07 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-08 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-09 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-10 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-01 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-02 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-04 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-05 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-06 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-07 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-08 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-09 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-10 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | RTM-01 | Phase 4 — Realtime + Offline Resilience | Complete |
 | RTM-02 | Phase 4 — Realtime + Offline Resilience | Complete |
 | RTM-03 | Phase 4 — Realtime + Offline Resilience | Complete |
@@ -252,30 +276,30 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | OFF-02 | Phase 4 — Realtime + Offline Resilience | Pending |
 | OFF-03 | Phase 4 — Realtime + Offline Resilience | Pending |
 | OFF-04 | Phase 4 — Realtime + Offline Resilience | Pending |
-| OBS-01 | Phase 7 — Observability + Deployment Hardening | Pending |
-| OBS-02 | Phase 7 — Observability + Deployment Hardening | Pending |
-| OBS-03 | Phase 7 — Observability + Deployment Hardening | Pending |
-| OBS-04 | Phase 7 — Observability + Deployment Hardening | Pending |
-| OBS-05 | Phase 7 — Observability + Deployment Hardening | Pending |
-| OBS-06 | Phase 7 — Observability + Deployment Hardening | Pending |
-| OBS-07 | Phase 7 — Observability + Deployment Hardening | Pending |
+| OBS-01 | Phase 8 — Observability + Deployment Hardening | Pending |
+| OBS-02 | Phase 8 — Observability + Deployment Hardening | Pending |
+| OBS-03 | Phase 8 — Observability + Deployment Hardening | Pending |
+| OBS-04 | Phase 8 — Observability + Deployment Hardening | Pending |
+| OBS-05 | Phase 8 — Observability + Deployment Hardening | Pending |
+| OBS-06 | Phase 8 — Observability + Deployment Hardening | Pending |
+| OBS-07 | Phase 8 — Observability + Deployment Hardening | Pending |
 | PRIV-01 | Phase 4 — Realtime + Offline Resilience | Pending |
 | PRIV-02 | Phase 4 — Realtime + Offline Resilience | Pending |
 | PRIV-03 | Phase 4 — Realtime + Offline Resilience | Pending |
 | PRIV-04 | Phase 4 — Realtime + Offline Resilience | Pending |
-| BAK-01 | Phase 6 — Wizards + Import/Export | Pending |
-| BAK-02 | Phase 6 — Wizards + Import/Export | Pending |
+| BAK-01 | Phase 7 — Wizards + Import/Export | Pending |
+| BAK-02 | Phase 7 — Wizards + Import/Export | Pending |
 | DEP-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-02 | Phase 1 — First Search → Cube Highlight | Complete |
-| DEP-03 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| DEP-04 | Phase 7 — Observability + Deployment Hardening | Pending |
-| DEP-05 | Phase 7 — Observability + Deployment Hardening | Pending |
+| DEP-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| DEP-04 | Phase 8 — Observability + Deployment Hardening | Pending |
+| DEP-05 | Phase 8 — Observability + Deployment Hardening | Pending |
 
 **Coverage:**
-- v1 requirements: 73 total
-- Mapped to phases: 73 (100%)
+- v1 requirements: 81 total (73 original + 8 SEG)
+- Mapped to phases: 81 (100%)
 - Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-19*
-*Last updated: 2026-05-19 after roadmap creation (traceability populated)*
+*Last updated: 2026-05-21 — added SEG-01..08 (Phase 5, Segment-Aware Position Precision); corrected traceability phase numbers after the Phase 5 insert renumbered LED→6, Wizards→7, Observability→8*
