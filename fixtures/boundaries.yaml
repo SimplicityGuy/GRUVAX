@@ -1,5 +1,11 @@
 # Synthetic cube boundary fixture for GRUVAX development and CI.
 #
+# Phase 5 update: last_label and last_catalog removed from all cubes.
+# These were the "last" span fields in the old one-span-per-cube model.
+# In the cut-point model (SEG-01 / D-05), each cube stores only its
+# first_label / first_catalog (the cut point); the "last" is derived
+# from the next cube's cut point by SegmentCache.
+#
 # 2 units × 4×4 = 32 cubes total.
 # Labels reference names present in fixtures/synth_collection.sql so that
 # v_collection resolves correctly (decision D-05).
@@ -22,8 +28,6 @@ units:
         col: 0
         first_label: "Blue Note"
         first_catalog: "BLP 4001"
-        last_label: "Blue Note"
-        last_catalog: "BLP 4020"
         is_empty: false
 
       # Row 0, col 1 — Blue Note BST series (multi-prefix same label)
@@ -31,8 +35,6 @@ units:
         col: 1
         first_label: "Blue Note"
         first_catalog: "BST 84001"
-        last_label: "Blue Note"
-        last_catalog: "BST 84010"
         is_empty: false
 
       # Row 0, col 2 — ECM series
@@ -40,8 +42,6 @@ units:
         col: 2
         first_label: "ECM"
         first_catalog: "ECM 1001"
-        last_label: "ECM"
-        last_catalog: "ECM 1015"
         is_empty: false
 
       # Row 0, col 3 — KC mixed-separator series
@@ -49,8 +49,6 @@ units:
         col: 3
         first_label: "KC"
         first_catalog: "KC 32731"
-        last_label: "KC"
-        last_catalog: "KC-32742"
         is_empty: false
 
       # Row 1, col 0 — Prestige pure-numeric catalog
@@ -58,8 +56,6 @@ units:
         col: 0
         first_label: "Prestige"
         first_catalog: "32731"
-        last_label: "Prestige"
-        last_catalog: "32740"
         is_empty: false
 
       # Row 1, col 1 — Verve multi-value catalog
@@ -67,8 +63,6 @@ units:
         col: 1
         first_label: "Verve"
         first_catalog: "BLP-100, BST-200"
-        last_label: "Verve"
-        last_catalog: "V6-8241"
         is_empty: false
 
       # Row 1, col 2 — Unknown placeholder catalog
@@ -76,8 +70,6 @@ units:
         col: 2
         first_label: "Unknown"
         first_catalog: "none"
-        last_label: "Unknown"
-        last_catalog: "none"
         is_empty: false
 
       # Row 1, col 3 — Milestone
@@ -85,8 +77,6 @@ units:
         col: 3
         first_label: "Milestone"
         first_catalog: "MSP 9001"
-        last_label: "Milestone"
-        last_catalog: "MSP 9008"
         is_empty: false
 
       # Row 2 — Island / Reprise / Asylum (singleton-heavy)
@@ -94,24 +84,18 @@ units:
         col: 0
         first_label: "Island"
         first_catalog: "ILPS 9105"
-        last_label: "Island"
-        last_catalog: "ILPS 9184"
         is_empty: false
 
       - row: 2
         col: 1
         first_label: "Reprise"
         first_catalog: "MS 2032"
-        last_label: "Reprise"
-        last_catalog: "RS 6383"
         is_empty: false
 
       - row: 2
         col: 2
         first_label: "Asylum"
         first_catalog: "SD 5007"
-        last_label: "Asylum"
-        last_catalog: "SD 5070-2"
         is_empty: false
 
       # Row 2, col 3 — intentionally empty (exercises CUBE-05)
@@ -119,8 +103,6 @@ units:
         col: 3
         first_label: null
         first_catalog: null
-        last_label: null
-        last_catalog: null
         is_empty: true
 
       # Row 3 — Columbia / Tamla / Epic / Impulse / Riverside
@@ -128,24 +110,18 @@ units:
         col: 0
         first_label: "Columbia"
         first_catalog: "C2S 841"
-        last_label: "Columbia"
-        last_catalog: "PC 33235"
         is_empty: false
 
       - row: 3
         col: 1
         first_label: "Tamla"
         first_catalog: "T310"
-        last_label: "Tamla"
-        last_catalog: "T329V1"
         is_empty: false
 
       - row: 3
         col: 2
         first_label: "Impulse"
         first_catalog: "A-21"
-        last_label: "Impulse"
-        last_catalog: "AS-9191-2"
         is_empty: false
 
       # Row 3, col 3 — intentionally empty (exercises CUBE-05)
@@ -153,8 +129,6 @@ units:
         col: 3
         first_label: null
         first_catalog: null
-        last_label: null
-        last_catalog: null
         is_empty: true
 
   - unit_id: 2
@@ -168,32 +142,24 @@ units:
         col: 0
         first_label: "Riverside"
         first_catalog: "RLP 12-226"
-        last_label: "Riverside"
-        last_catalog: "RLP 399"
         is_empty: false
 
       - row: 0
         col: 1
         first_label: "Atlantic"
         first_catalog: "ATL 40031"
-        last_label: "Atlantic"
-        last_catalog: "SD 1416"
         is_empty: false
 
       - row: 0
         col: 2
         first_label: "Warner Bros"
         first_catalog: "BS 2633"
-        last_label: "Warner Bros"
-        last_catalog: "WS 1835"
         is_empty: false
 
       - row: 0
         col: 3
         first_label: "Apple"
         first_catalog: "PCS 7088"
-        last_label: "Parlophone"
-        last_catalog: "NODATA 007"
         is_empty: false
 
       # Row 1 — Capitol / UA / Creole / Saturn
@@ -201,32 +167,24 @@ units:
         col: 0
         first_label: "Capitol"
         first_catalog: "ST 2458"
-        last_label: "Capitol"
-        last_catalog: "ST 2458"
         is_empty: false
 
       - row: 1
         col: 1
         first_label: "UA"
         first_catalog: "UAS 29211"
-        last_label: "UA"
-        last_catalog: "UAS 29505"
         is_empty: false
 
       - row: 1
         col: 2
         first_label: "Creole"
         first_catalog: "CRLP 501"
-        last_label: "Creole"
-        last_catalog: "CRLP 503"
         is_empty: false
 
       - row: 1
         col: 3
         first_label: "Saturn"
         first_catalog: "SR-9956-2-LP"
-        last_label: "ESP"
-        last_catalog: "ESP 1014"
         is_empty: false
 
       # Row 2 — SteepleChase (sparse label with large gaps) / Epic / Paisley Park
@@ -234,24 +192,18 @@ units:
         col: 0
         first_label: "SteepleChase"
         first_catalog: "SCS 1001"
-        last_label: "SteepleChase"
-        last_catalog: "SCS 1262"
         is_empty: false
 
       - row: 2
         col: 1
         first_label: "Epic"
         first_catalog: "EPC 83468"
-        last_label: "Epic"
-        last_catalog: "EPC 85930"
         is_empty: false
 
       - row: 2
         col: 2
         first_label: "Paisley Park"
         first_catalog: "25110-1"
-        last_label: "Paisley Park"
-        last_catalog: "925577-1"
         is_empty: false
 
       # Row 2, col 3 — intentionally empty
@@ -259,8 +211,6 @@ units:
         col: 3
         first_label: null
         first_catalog: null
-        last_label: null
-        last_catalog: null
         is_empty: true
 
       # Row 3 — Swan Song / remaining singletons
@@ -268,8 +218,6 @@ units:
         col: 0
         first_label: "Swan Song"
         first_catalog: "SSK 89400"
-        last_label: "Swan Song"
-        last_catalog: "SSK 89400"
         is_empty: false
 
       # Row 3, col 1-3 — intentionally empty (not yet assigned)
@@ -277,22 +225,16 @@ units:
         col: 1
         first_label: null
         first_catalog: null
-        last_label: null
-        last_catalog: null
         is_empty: true
 
       - row: 3
         col: 2
         first_label: null
         first_catalog: null
-        last_label: null
-        last_catalog: null
         is_empty: true
 
       - row: 3
         col: 3
         first_label: null
         first_catalog: null
-        last_label: null
-        last_catalog: null
         is_empty: true

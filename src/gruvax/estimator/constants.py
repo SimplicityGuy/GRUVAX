@@ -1,12 +1,16 @@
-"""Phase 2 estimator constants for the GRUVAX position estimator.
+"""Phase 2 + Phase 5 estimator constants for the GRUVAX position estimator.
 
 Threshold and band-width constants used by the §4.1 index-based estimator and
 the UI layer (02-UI-SPEC.md §Threshold constants).
 
+Phase 5 addition:
+  SEGMENT_ESTIMATOR_VERSION — version string for the segment-aware two-level estimator
+
 Exported symbols:
-  TEXT_CUE_THRESHOLD     — confidence below which the UI shows '~' low-confidence cue
-  POSITION_HALF_WIDTH    — half-width of the rendered sub-cube band for non-singletons
-  compute_confidence     — returns calibrated confidence from label record count k
+  TEXT_CUE_THRESHOLD         — confidence below which the UI shows '~' low-confidence cue
+  POSITION_HALF_WIDTH        — half-width of the rendered sub-cube band for non-singletons
+  SEGMENT_ESTIMATOR_VERSION  — "segment-v1" (SEG-07); bumped when estimator algorithm changes
+  compute_confidence         — returns calibrated confidence from label record count k
 
 D-01 / Pitfall 21: Sub-cube bars are NEVER zero-width. Non-singletons use
 ±POSITION_HALF_WIDTH; singletons return start=0.0, end=1.0 (full-cube band, D-02).
@@ -17,6 +21,15 @@ from __future__ import annotations
 from gruvax.estimator.contract import CUBE_ONLY_CONFIDENCE
 
 # ── Threshold constants ────────────────────────────────────────────────────────
+
+# Phase 5: segment-aware estimator version string (SEG-07)
+SEGMENT_ESTIMATOR_VERSION: str = "segment-v1"
+"""Version string for the segment-aware two-level interpolation estimator (Phase 5).
+
+Bumped to "segment-v1" when §4.1 index-based estimator is retired and replaced
+by the segment-aware two-level interpolation. This string is emitted in every
+LocateResult.estimator_version from the new locate_by_segment() path (SEG-07).
+"""
 
 TEXT_CUE_THRESHOLD: float = 0.50
 """Confidence threshold below which the UI renders a '~' low-confidence cue (D-03).
