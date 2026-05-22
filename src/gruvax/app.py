@@ -134,12 +134,29 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.error("Settings cache load failed — proceeding with empty cache: %s", exc)
         app.state.settings_cache = {}
 
+    # ── 3d. Event bus (Phase 4) ──────────────────────────────────────────────
+    from gruvax.events.bus import EventBus
+
+    event_bus = EventBus()
+    app.state.event_bus = event_bus
+    try:
+        await event_bus.publish("server_hello", {"version": "0.1.0"})
+        logger.info("EventBus ready; server_hello published")
+    except Exception as exc:
+        logger.error("EventBus server_hello publish failed: %s", exc)
+
     # ── 4. MQTT (non-blocking best-effort; DEP-01) ───────────────────────────
     await connect_mqtt(app)
 
     yield  # ── App serves requests here ──────────────────────────────────────
 
     # ── Teardown ─────────────────────────────────────────────────────────────
+    # Publish server_shutdown before closing (clients will reconnect)
+    import contextlib
+
+    with contextlib.suppress(Exception):
+        await event_bus.publish("server_shutdown", {})
+
     await disconnect_mqtt(app)
     await pool.close()
     logger.info("GRUVAX API shutdown complete")
