@@ -1,0 +1,51 @@
+/*
+ * GRUVAX sketch theme — consumes the canonical design tokens.
+ * Single source of truth: design/gruvax-design-tokens.css (Nordic Grid).
+ * Never hardcode hex in sketches — reference --gruvax-* vars from here.
+ */
+@import url('../../../design/gruvax-design-tokens.css');
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--gruvax-off-white);
+  color: var(--gruvax-text-secondary);
+  font-family: var(--gruvax-font-ui);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Sketch-local helpers (layout only, all color from tokens) ── */
+
+.gx-label {
+  font-family: var(--gruvax-font-display);
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: var(--gruvax-tracking-label);
+  color: var(--gruvax-text-primary);
+}
+.gx-mono {
+  font-family: var(--gruvax-font-mono);
+  font-variant-numeric: tabular-nums;
+}
+.gx-card {
+  background: var(--gruvax-white);
+  border: 1.5px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-lg);
+  box-shadow: var(--gruvax-shadow-sm);
+}
+.gx-btn {
+  font-family: var(--gruvax-font-ui);
+  font-weight: 500;
+  border-radius: var(--gruvax-radius-md);
+  border: 1.5px solid var(--gruvax-blue);
+  background: var(--gruvax-blue);
+  color: var(--gruvax-white);
+  padding: 10px 16px;
+  cursor: pointer;
+  transition: all var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+.gx-btn:hover { background: var(--gruvax-blue-dark); border-color: var(--gruvax-blue-dark); }
+.gx-btn--ghost { background: transparent; color: var(--gruvax-blue); }
+.gx-btn--ghost:hover { background: var(--gruvax-blue-faint); }

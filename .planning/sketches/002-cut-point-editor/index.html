@@ -1,0 +1,412 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sketch 002 — Cut-Point Editor · GRUVAX</title>
+<link rel="stylesheet" href="../themes/default.css" />
+<style>
+  body { padding-top: 52px; }
+
+  #variant-nav {
+    position: fixed; top: 0; left: 0; right: 0; z-index: 9998;
+    background: var(--gruvax-white); border-bottom: 1.5px solid var(--gruvax-border-light);
+    padding: 8px 12px; display: flex; gap: 6px; align-items: center; box-shadow: var(--gruvax-shadow-sm);
+  }
+  #variant-nav .brand { font-family: var(--gruvax-font-display); font-weight: 900; color: var(--gruvax-blue);
+    letter-spacing: var(--gruvax-tracking-display); font-size: 18px; margin-right: 6px; }
+  .variant-tab { font-family: var(--gruvax-font-ui); font-size: 12px; font-weight: 500;
+    border: 1.5px solid var(--gruvax-border-light); background: var(--gruvax-white); color: var(--gruvax-text-secondary);
+    padding: 6px 10px; border-radius: var(--gruvax-radius-pill); cursor: pointer;
+    transition: all var(--gruvax-duration-fast) var(--gruvax-ease-standard); }
+  .variant-tab:hover { border-color: var(--gruvax-blue); color: var(--gruvax-blue); }
+  .variant-tab.active { background: var(--gruvax-blue); color: var(--gruvax-white); border-color: var(--gruvax-blue); }
+
+  #frame { max-width: 390px; margin: 18px auto; padding: 0 0 40px;
+    transition: max-width var(--gruvax-duration-base) var(--gruvax-ease-standard); }
+  .variant { display: none; } .variant.active { display: block; }
+  .screen { padding: 16px; }
+
+  .scr-head { margin-bottom: 14px; }
+  .scr-head .gx-label { font-size: 12px; color: var(--gruvax-text-muted); }
+  .scr-head h1 { font-family: var(--gruvax-font-display); font-weight: 900; color: var(--gruvax-blue);
+    font-size: 28px; margin: 2px 0 0; letter-spacing: var(--gruvax-tracking-display); }
+  .scr-sub { font-family: var(--gruvax-font-ui); font-size: 11px; color: var(--gruvax-text-muted); margin-top: 4px; }
+
+  /* ── bin label mini-strip (echoes sketch 001) ── */
+  .ministrip { display: flex; height: 22px; border-radius: var(--gruvax-radius-sm); overflow: hidden;
+    border: 1px solid var(--gruvax-border-light); margin-top: 8px; }
+  .ministrip .ms { display: flex; align-items: center; justify-content: center; min-width: 0; overflow: hidden;
+    font-family: var(--gruvax-font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; font-size: 9px; white-space: nowrap; }
+  .ministrip .ms.cont { -webkit-mask-image: linear-gradient(90deg,#000 calc(100% - 10px),transparent);
+    mask-image: linear-gradient(90deg,#000 calc(100% - 10px),transparent); }
+
+  /* ── Variant A: bin list + insert ── */
+  .bincard { background: var(--gruvax-white); border: 1.5px solid var(--gruvax-border-light);
+    border-radius: var(--gruvax-radius-md); padding: 12px 14px; }
+  .bincard.isnew { border-color: var(--gruvax-yellow-dark); box-shadow: var(--gruvax-shadow-led); }
+  .bincard .top { display: flex; align-items: center; gap: 10px; }
+  .binno { font-family: var(--gruvax-font-display); font-weight: 900; color: var(--gruvax-white);
+    background: var(--gruvax-blue); border-radius: var(--gruvax-radius-sm); width: 38px; height: 38px;
+    display: flex; align-items: center; justify-content: center; font-size: 18px; flex: none; }
+  .bincard.isnew .binno { background: var(--gruvax-yellow); color: var(--gruvax-blue-darker); }
+  .cutinfo { flex: 1; min-width: 0; }
+  .cutinfo .k { font-family: var(--gruvax-font-ui); font-size: 10px; color: var(--gruvax-text-muted);
+    text-transform: uppercase; letter-spacing: .08em; }
+  .cutinfo .v { display: flex; align-items: baseline; gap: 7px; margin-top: 1px; }
+  .cutinfo .v .lab { font-family: var(--gruvax-font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: var(--gruvax-tracking-label); color: var(--gruvax-blue); font-size: 14px; }
+  .cutinfo .v .rec { font-family: var(--gruvax-font-mono); font-size: 13px; color: var(--gruvax-text-secondary); }
+  .editbtn { background: var(--gruvax-blue-faint); border: 1.5px solid var(--gruvax-border-light);
+    color: var(--gruvax-blue); border-radius: var(--gruvax-radius-sm); width: 34px; height: 34px; cursor: pointer;
+    font-size: 15px; flex: none; transition: all var(--gruvax-duration-fast); }
+  .editbtn:hover { background: var(--gruvax-blue); color: var(--gruvax-white); }
+  .badge-new { font-family: var(--gruvax-font-ui); font-size: 9px; font-weight: 700; background: var(--gruvax-yellow);
+    color: var(--gruvax-blue-darker); padding: 2px 6px; border-radius: var(--gruvax-radius-pill); letter-spacing: .06em; }
+
+  .insert { display: flex; align-items: center; gap: 8px; padding: 5px 0; }
+  .insert .line { flex: 1; height: 1.5px; background: var(--gruvax-border-light); }
+  .insert button { background: var(--gruvax-white); border: 1.5px dashed var(--gruvax-border-light);
+    color: var(--gruvax-text-muted); border-radius: var(--gruvax-radius-pill); padding: 3px 11px; cursor: pointer;
+    font-family: var(--gruvax-font-ui); font-size: 11px; transition: all var(--gruvax-duration-fast); }
+  .insert button:hover { border-color: var(--gruvax-blue); color: var(--gruvax-blue);
+    border-style: solid; background: var(--gruvax-blue-faint); }
+
+  /* ── Variant B: record spine ── */
+  .spine { position: relative; border-left: 2px solid var(--gruvax-border-light); margin-left: 8px; }
+  .rec-row { position: relative; padding: 7px 0 7px 18px; display: flex; align-items: center; gap: 8px; }
+  .rec-row::before { content: ""; position: absolute; left: -5px; top: 50%; width: 8px; height: 8px;
+    border-radius: 50%; background: var(--gruvax-blue-light); transform: translateY(-50%); }
+  .rec-row .rc { font-family: var(--gruvax-font-mono); font-size: 12px; color: var(--gruvax-text-secondary); }
+  .rec-row .rl { font-family: var(--gruvax-font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: .08em; font-size: 10px; color: var(--gruvax-text-muted); }
+  .cutline { position: relative; margin: 2px 0 2px -10px; display: flex; align-items: center; gap: 8px;
+    background: var(--gruvax-blue); color: var(--gruvax-white); border-radius: var(--gruvax-radius-sm);
+    padding: 5px 10px; cursor: grab; box-shadow: var(--gruvax-shadow-sm); }
+  .cutline.dragging { cursor: grabbing; background: var(--gruvax-yellow); color: var(--gruvax-blue-darker);
+    box-shadow: var(--gruvax-shadow-led); }
+  .cutline .cn { font-family: var(--gruvax-font-display); font-weight: 900; font-size: 13px; }
+  .cutline .cr { font-family: var(--gruvax-font-mono); font-size: 11px; opacity: .9; margin-left: auto; }
+  .cutline .grip { font-size: 14px; opacity: .8; }
+  .gap-add { margin: -2px 0 -2px 24px; }
+  .gap-add button { background: none; border: 1.5px dashed var(--gruvax-border-light); color: var(--gruvax-text-faint);
+    border-radius: var(--gruvax-radius-pill); font-size: 10px; padding: 1px 9px; cursor: pointer;
+    font-family: var(--gruvax-font-ui); transition: all var(--gruvax-duration-fast); }
+  .gap-add button:hover { border-color: var(--gruvax-blue); color: var(--gruvax-blue); border-style: solid; }
+
+  /* ── Variant C: cut table ── */
+  .cuttable { width: 100%; border-collapse: collapse; background: var(--gruvax-white);
+    border: 1.5px solid var(--gruvax-border-light); border-radius: var(--gruvax-radius-md); overflow: hidden; }
+  .cuttable th { font-family: var(--gruvax-font-ui); font-size: 10px; text-transform: uppercase; letter-spacing: .08em;
+    color: var(--gruvax-text-muted); text-align: left; padding: 8px 10px; background: var(--gruvax-off-white);
+    border-bottom: 1.5px solid var(--gruvax-border-light); }
+  .cuttable td { padding: 9px 10px; border-bottom: 1px solid var(--gruvax-border-faint); vertical-align: middle; }
+  .cuttable tr:last-child td { border-bottom: none; }
+  .cuttable tr.isnew td { background: var(--gruvax-yellow-faint); }
+  .cuttable .tb { font-family: var(--gruvax-font-display); font-weight: 900; color: var(--gruvax-blue); font-size: 16px; }
+  .cuttable .tr-rec { font-family: var(--gruvax-font-mono); font-size: 13px; color: var(--gruvax-text-secondary); }
+  .cuttable .tr-lab { font-family: var(--gruvax-font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: var(--gruvax-tracking-label); color: var(--gruvax-blue); font-size: 12px; }
+  .cuttable .editbtn { width: 28px; height: 28px; font-size: 13px; }
+
+  .addcut-row { margin-top: 12px; }
+  .addcut-row .gx-btn { width: 100%; display: flex; align-items: center; justify-content: center; gap: 8px; }
+
+  /* ── shared record picker overlay ── */
+  .overlay { position: fixed; inset: 0; background: rgba(0,40,85,.55); z-index: 9990; display: none;
+    align-items: flex-end; justify-content: center; }
+  .overlay.open { display: flex; }
+  .sheet { background: var(--gruvax-white); width: 100%; max-width: 422px; border-radius: var(--gruvax-radius-xl) var(--gruvax-radius-xl) 0 0;
+    padding: 16px; box-shadow: var(--gruvax-shadow-lg); animation: slideup var(--gruvax-duration-base) var(--gruvax-ease-decelerate); }
+  @keyframes slideup { from { transform: translateY(40px); opacity: 0; } to { transform: translateY(0); opacity: 1; } }
+  .sheet h3 { font-family: var(--gruvax-font-display); font-weight: 900; color: var(--gruvax-blue); margin: 0 0 4px;
+    font-size: 20px; letter-spacing: var(--gruvax-tracking-display); }
+  .sheet .sub { font-family: var(--gruvax-font-ui); font-size: 12px; color: var(--gruvax-text-muted); margin-bottom: 12px; }
+  .searchbox { width: 100%; padding: 11px 13px; border: 2px solid var(--gruvax-blue); border-radius: var(--gruvax-radius-md);
+    font-family: var(--gruvax-font-mono); font-size: 15px; color: var(--gruvax-blue); }
+  .searchbox:focus { outline: none; box-shadow: 0 0 0 3px var(--gruvax-yellow); }
+  .candidates { margin-top: 10px; max-height: 230px; overflow-y: auto; display: flex; flex-direction: column; gap: 4px; }
+  .cand { display: flex; align-items: center; gap: 10px; padding: 9px 11px; border-radius: var(--gruvax-radius-sm);
+    cursor: pointer; border: 1.5px solid transparent; transition: all var(--gruvax-duration-fast); }
+  .cand:hover { background: var(--gruvax-blue-faint); border-color: var(--gruvax-blue); }
+  .cand .clab { font-family: var(--gruvax-font-display); font-weight: 700; text-transform: uppercase;
+    letter-spacing: var(--gruvax-tracking-label); color: var(--gruvax-blue); font-size: 12px; min-width: 78px; }
+  .cand .crec { font-family: var(--gruvax-font-mono); font-size: 13px; color: var(--gruvax-text-secondary); }
+  .cand .cdup { font-family: var(--gruvax-font-ui); font-size: 9px; color: var(--gruvax-text-muted);
+    background: var(--gruvax-off-white); border: 1px solid var(--gruvax-border-light);
+    border-radius: var(--gruvax-radius-pill); padding: 1px 6px; margin-left: auto; }
+  .sheet-actions { display: flex; gap: 10px; margin-top: 14px; }
+  .sheet-actions .gx-btn { flex: 1; }
+  .renumber-hint { font-family: var(--gruvax-font-ui); font-size: 11px; color: var(--gruvax-blue-dark);
+    background: var(--gruvax-yellow-faint); border: 1px solid var(--gruvax-yellow-dark);
+    border-radius: var(--gruvax-radius-sm); padding: 7px 10px; margin-top: 10px; display: none; }
+  .renumber-hint.show { display: block; }
+
+  .toast { position: fixed; left: 50%; bottom: 24px; transform: translateX(-50%) translateY(20px);
+    background: var(--gruvax-blue-darker); color: var(--gruvax-white); font-family: var(--gruvax-font-ui);
+    font-size: 13px; padding: 10px 18px; border-radius: var(--gruvax-radius-pill); box-shadow: var(--gruvax-shadow-lg);
+    opacity: 0; pointer-events: none; transition: all var(--gruvax-duration-base) var(--gruvax-ease-spring); z-index: 9999; }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+  .toast b { color: var(--gruvax-yellow); }
+  .hint { font-family: var(--gruvax-font-ui); font-size: 11px; color: var(--gruvax-text-muted);
+    text-align: center; margin: 10px 0; font-style: italic; }
+  .list { display: flex; flex-direction: column; gap: 8px; }
+
+  #sketch-tools { position: fixed; bottom: 12px; right: 12px; z-index: 9999; font-family: system-ui; font-size: 12px;
+    background: rgba(0,0,0,.78); color: white; padding: 8px 10px; border-radius: 8px; opacity: .4; transition: opacity .2s;
+    display: flex; gap: 6px; align-items: center; }
+  #sketch-tools:hover { opacity: 1; }
+  #sketch-tools button { background: #333; color: #fff; border: 1px solid #555; border-radius: 5px; padding: 4px 8px; cursor: pointer; font-size: 11px; }
+  #sketch-tools button.on { background: var(--gruvax-blue); border-color: var(--gruvax-blue); }
+</style>
+</head>
+<body>
+
+<div id="variant-nav">
+  <span class="brand">GRUVAX</span>
+  <button class="variant-tab active" data-v="a" onclick="showVariant('a', this)">A · Bin list + insert ★</button>
+  <button class="variant-tab" data-v="b" onclick="showVariant('b', this)">B · Record spine</button>
+  <button class="variant-tab" data-v="c" onclick="showVariant('c', this)">C · Cut table</button>
+</div>
+
+<div id="frame">
+  <section id="variant-a" class="variant active">
+    <div class="screen">
+      <div class="scr-head"><span class="gx-label">Shelf A · cut points</span><h1>BOUNDARIES</h1>
+        <div class="scr-sub">Each bin starts at one cut point — the first record on its shelf.</div></div>
+      <div class="list" id="list-a"></div>
+    </div>
+  </section>
+
+  <section id="variant-b" class="variant">
+    <div class="screen">
+      <div class="scr-head"><span class="gx-label">Shelf A · cut points</span><h1>RECORD SPINE</h1>
+        <div class="scr-sub">Drag a cut to move a boundary · tap a gap to add one.</div></div>
+      <div class="spine" id="spine-b"></div>
+      <div class="hint">Cuts are draggable · the record below a cut becomes that bin's first</div>
+    </div>
+  </section>
+
+  <section id="variant-c" class="variant">
+    <div class="screen">
+      <div class="scr-head"><span class="gx-label">Shelf A · cut points</span><h1>CUT TABLE</h1>
+        <div class="scr-sub">One row per bin · edit a first record, or split a bin.</div></div>
+      <table class="cuttable"><thead><tr><th>Bin</th><th>First record</th><th>Label</th><th></th></tr></thead>
+        <tbody id="tbody-c"></tbody></table>
+      <div class="addcut-row"><button class="gx-btn" onclick="openAdd(null)">＋ Add cut · split a bin</button></div>
+    </div>
+  </section>
+</div>
+
+<!-- shared record picker -->
+<div class="overlay" id="overlay" onclick="if(event.target===this)closeSheet()">
+  <div class="sheet">
+    <h3 id="sheet-title">Edit cut point</h3>
+    <div class="sub" id="sheet-sub"></div>
+    <input class="searchbox gx-mono" id="searchbox" placeholder="Type a catalog number…" oninput="filterCands(this.value)" />
+    <div class="candidates" id="candidates"></div>
+    <div class="renumber-hint" id="renumber-hint"></div>
+    <div class="sheet-actions">
+      <button class="gx-btn gx-btn--ghost" onclick="closeSheet()">Cancel</button>
+      <button class="gx-btn" id="confirmbtn" onclick="confirmPick()">Confirm</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div id="sketch-tools"><span style="opacity:.7">view</span>
+  <button onclick="setVP(390,this)" class="on">phone</button>
+  <button onclick="setVP(768,this)">tablet</button>
+  <button onclick="setVP(1100,this)">desktop</button>
+</div>
+
+<script>
+  function el(tag, props, ...kids) {
+    const e = document.createElement(tag);
+    if (props) for (const k in props) { const v = props[k]; if (v == null) continue;
+      if (k === 'class') e.className = v; else if (k === 'style') e.style.cssText = v;
+      else if (k === 'value') e.value = v;
+      else if (k.slice(0,2) === 'on' && typeof v === 'function') e.addEventListener(k.slice(2), v);
+      else e.setAttribute(k, v); }
+    for (const c of kids) { if (c == null || c === false) continue; e.append(c.nodeType ? c : document.createTextNode(String(c))); }
+    return e;
+  }
+  const $ = id => document.getElementById(id);
+  const PAL = ['var(--gruvax-blue)','var(--gruvax-blue-light)','var(--gruvax-blue-dark)','var(--gruvax-blue-darker)'];
+  const FG  = ['#fff','var(--gruvax-blue-dark)','#fff','#fff'];
+
+  // ── Model: bins (each starts at a cut point) with label contents ──
+  let bins = [
+    { label:'BLUE NOTE', record:'BLP 1568', contents:[['BLUE NOTE',45,false],['ECM',12,false],['IMPULSE!',43,true]] },
+    { label:'IMPULSE!',  record:'AS 78',    contents:[['IMPULSE!',60,false],['VERVE',40,false]] },
+    { label:'ESP-DISK',  record:'1002',     contents:[['ESP-DISK',55,false],['SUN RA',45,true]] },
+    { label:'SATURN',    record:'200',      contents:[['SATURN',100,false]] },
+  ];
+
+  // faked autocomplete candidates (note dupes + variants — counts come from rows, not arithmetic)
+  const CANDS = [
+    {label:'IMPULSE!', rec:'AS 77'}, {label:'IMPULSE!', rec:'AS 78'}, {label:'IMPULSE!', rec:'AS 78', dup:'2nd copy'},
+    {label:'IMPULSE!', rec:'AS 78-r', dup:'remix'}, {label:'IMPULSE!', rec:'AS 90'},
+    {label:'ESP-DISK', rec:'1002'}, {label:'ESP-DISK', rec:'1014'}, {label:'SUN RA', rec:'404'},
+    {label:'VERVE', rec:'V6 8807'}, {label:'SATURN', rec:'200'}, {label:'BLUE NOTE', rec:'BLP 4015'},
+  ];
+
+  // ── picker state ──
+  let pick = { mode:'edit', binIdx:0, chosen:null };
+
+  function openEdit(i) {
+    pick = { mode:'edit', binIdx:i, chosen:null };
+    $('sheet-title').textContent = 'Edit cut point · BIN ' + (i+1);
+    $('sheet-sub').textContent = 'Choose the first record that sits in this bin.';
+    $('renumber-hint').classList.remove('show');
+    $('searchbox').value = ''; filterCands(''); $('overlay').classList.add('open');
+    setTimeout(() => $('searchbox').focus(), 50);
+  }
+  function openAdd(afterIdx) {
+    pick = { mode:'add', binIdx:afterIdx, chosen:null };
+    $('sheet-title').textContent = 'Add cut · split a bin';
+    $('sheet-sub').textContent = 'Pick the record that starts the NEW bin. Everything from it onward moves into a new shelf.';
+    $('renumber-hint').classList.remove('show');
+    $('searchbox').value = ''; filterCands(''); $('overlay').classList.add('open');
+    setTimeout(() => $('searchbox').focus(), 50);
+  }
+  function closeSheet() { $('overlay').classList.remove('open'); }
+
+  function filterCands(q) {
+    const box = $('candidates'); box.replaceChildren();
+    const ql = q.trim().toLowerCase();
+    CANDS.filter(c => !ql || c.rec.toLowerCase().includes(ql) || c.label.toLowerCase().includes(ql))
+      .forEach(c => {
+        const row = el('div', { class: 'cand', onclick: () => choose(c, row) },
+          el('span', { class: 'clab' }, c.label),
+          el('span', { class: 'crec' }, c.rec),
+          c.dup ? el('span', { class: 'cdup' }, c.dup) : null);
+        box.append(row);
+      });
+    if (!box.children.length) box.append(el('div', { class: 'hint' }, 'No owned records match — check the catalog number'));
+  }
+  function choose(c, row) {
+    pick.chosen = c;
+    $('candidates').querySelectorAll('.cand').forEach(r => r.style.borderColor = 'transparent');
+    row.style.borderColor = 'var(--gruvax-yellow-dark)';
+    row.style.background = 'var(--gruvax-yellow-faint)';
+    if (pick.mode === 'add') {
+      const h = $('renumber-hint');
+      const newNo = (pick.binIdx == null ? bins.length : pick.binIdx + 2);
+      h.textContent = `New BIN ${newNo} will be inserted · higher bins renumber (e.g. ${newNo}→${newNo+1}).`;
+      h.classList.add('show');
+    }
+  }
+  function confirmPick() {
+    if (!pick.chosen) { flash('Pick a record first'); return; }
+    if (pick.mode === 'edit') {
+      bins[pick.binIdx].label = pick.chosen.label;
+      bins[pick.binIdx].record = pick.chosen.rec;
+      flash('BIN ' + (pick.binIdx+1) + ' cut updated', true);
+    } else {
+      const at = (pick.binIdx == null ? bins.length - 1 : pick.binIdx + 1);
+      bins.splice(at, 0, { label: pick.chosen.label, record: pick.chosen.rec,
+        contents: [[pick.chosen.label, 100, false]], isNew: true });
+      flash('Cut added · bins renumbered', true);
+    }
+    closeSheet(); renderAll();
+  }
+
+  // ── Variant A ──
+  function renderA() {
+    const root = $('list-a'); root.replaceChildren();
+    bins.forEach((b, i) => {
+      const strip = el('div', { class: 'ministrip' });
+      b.contents.forEach((c, j) => strip.append(
+        el('div', { class: 'ms' + (c[2] ? ' cont' : ''),
+          style: `width:${c[1]}%;background:${PAL[j%4]};color:${FG[j%4]}` }, c[1] >= 22 ? c[0] : '')));
+      const card = el('div', { class: 'bincard' + (b.isNew ? ' isnew' : '') },
+        el('div', { class: 'top' },
+          el('div', { class: 'binno' }, String(i+1)),
+          el('div', { class: 'cutinfo' },
+            el('div', { class: 'k' }, 'starts at'),
+            el('div', { class: 'v' },
+              el('span', { class: 'lab' }, b.label),
+              el('span', { class: 'rec' }, b.record),
+              b.isNew ? el('span', { class: 'badge-new' }, 'NEW') : null)),
+          el('button', { class: 'editbtn', title: 'Edit cut', onclick: () => openEdit(i) }, '✎')),
+        strip);
+      root.append(card);
+      if (i < bins.length - 1)
+        root.append(el('div', { class: 'insert' },
+          el('div', { class: 'line' }),
+          el('button', { onclick: () => openAdd(i) }, '＋ insert cut'),
+          el('div', { class: 'line' })));
+    });
+  }
+
+  // ── Variant B: record spine (cuts draggable by reorder among records) ──
+  // A simplified spine: show each bin's first record as a cut line, with a couple of
+  // sample records under it; dragging a cut swaps it with the adjacent record.
+  function renderB() {
+    const root = $('spine-b'); root.replaceChildren();
+    bins.forEach((b, i) => {
+      const cut = el('div', { class: 'cutline' },
+        el('span', { class: 'grip' }, '⠿'),
+        el('span', { class: 'cn' }, 'BIN ' + (i+1)),
+        el('span', { class: 'cr' }, b.label + ' · ' + b.record));
+      makeCutDraggable(cut, i);
+      root.append(cut);
+      // a couple of sample records belonging to this bin (faked)
+      b.contents.forEach(c => {
+        root.append(el('div', { class: 'rec-row' },
+          el('span', { class: 'rl' }, c[0]),
+          el('span', { class: 'rc' }, '· ' + (c[1]) + '% of bin')));
+      });
+      if (i < bins.length - 1)
+        root.append(el('div', { class: 'gap-add' },
+          el('button', { onclick: () => openAdd(i) }, '＋ add cut here')));
+    });
+  }
+  function makeCutDraggable(node, i) {
+    let startY = 0;
+    node.addEventListener('pointerdown', e => {
+      node.classList.add('dragging'); node.setPointerCapture(e.pointerId); startY = e.clientY;
+      const move = ev => { node.style.transform = `translateY(${ev.clientY - startY}px)`; };
+      const up = ev => {
+        node.classList.remove('dragging'); node.style.transform = '';
+        try { node.releasePointerCapture(e.pointerId); } catch(_) {}
+        document.removeEventListener('pointermove', move); document.removeEventListener('pointerup', up);
+        const dy = ev.clientY - startY;
+        if (dy < -30 && i > 0) { [bins[i-1], bins[i]] = [bins[i], bins[i-1]]; flash('Cut moved earlier', true); renderAll(); }
+        else if (dy > 30 && i < bins.length-1) { [bins[i+1], bins[i]] = [bins[i], bins[i+1]]; flash('Cut moved later', true); renderAll(); }
+      };
+      document.addEventListener('pointermove', move); document.addEventListener('pointerup', up);
+    });
+  }
+
+  // ── Variant C: cut table ──
+  function renderC() {
+    const tb = $('tbody-c'); tb.replaceChildren();
+    bins.forEach((b, i) => {
+      tb.append(el('tr', { class: b.isNew ? 'isnew' : '' },
+        el('td', { class: 'tb' }, String(i+1)),
+        el('td', null, el('span', { class: 'tr-rec' }, b.record)),
+        el('td', null, el('span', { class: 'tr-lab' }, b.label)),
+        el('td', null, el('button', { class: 'editbtn', title: 'Edit', onclick: () => openEdit(i) }, '✎'))));
+    });
+  }
+
+  function renderAll() { renderA(); renderB(); renderC(); }
+
+  function showVariant(v, btn) {
+    document.querySelectorAll('.variant').forEach(s => s.classList.remove('active'));
+    document.querySelectorAll('.variant-tab').forEach(t => t.classList.remove('active'));
+    $('variant-' + v).classList.add('active'); btn.classList.add('active'); renderAll();
+  }
+  function setVP(w, btn) { $('frame').style.maxWidth = w + 'px';
+    document.querySelectorAll('#sketch-tools button').forEach(b => b.classList.remove('on')); btn.classList.add('on'); }
+  let toastT;
+  function flash(msg, hot) { const t = $('toast'); t.replaceChildren(); t.append(msg); t.classList.add('show');
+    clearTimeout(toastT); toastT = setTimeout(() => t.classList.remove('show'), 1900); }
+
+  renderAll();
+</script>
+</body>
+</html>
