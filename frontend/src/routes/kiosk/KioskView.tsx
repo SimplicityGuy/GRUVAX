@@ -1,7 +1,7 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import gsap from 'gsap'
-import { fetchCubesWithFill, fetchUnits, searchCollection } from '../../api/client'
+import { fetchCubesWithFill, fetchUnits, locateRelease, searchCollection } from '../../api/client'
 import type { CubeRef } from '../../api/types'
 import { useGruvaxStore, type ShimmerCube } from '../../state/store'
 import { CubeContentsPanel } from './CubeContentsPanel'
@@ -149,10 +149,26 @@ export function KioskView() {
   //   ['units'], ['cubes'], ['cube-contents', unit, row, col],
   //   ['admin', 'cubes'], ['admin', 'history'], ['admin', 'settings']
   useEffect(() => {
+    // D-05 + D-11: re-locate the active selection if one is set.
+    // Uses .getState() to avoid stale closures (Pitfall 5).
+    // Mirrors ResultsList.tsx L70-89 — locateRelease(id).then(setLocateResult).
+    const relocateActiveSelection = () => {
+      const { selectedReleaseId } = useGruvaxStore.getState()
+      if (selectedReleaseId != null) {
+        void locateRelease(selectedReleaseId).then((result) => {
+          // Re-read setLocateResult via getState to ensure it's current (Pitfall 5)
+          useGruvaxStore.getState().setLocateResult(result)
+        })
+      }
+    }
+
     const resync = () => {
       void queryClient.invalidateQueries({ queryKey: ['units'] })
       void queryClient.invalidateQueries({ queryKey: ['cubes'] })
       void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
+      // D-05 + D-11: if a selection is active, re-locate it after reconnect
+      // so the highlight reflects the boundary that may have changed while disconnected.
+      relocateActiveSelection()
     }
 
     const es = new EventSource('/api/events')
@@ -185,6 +201,11 @@ export function KioskView() {
       }
       // D-03: primary on-commit shimmer clear
       useGruvaxStore.getState().clearShimmerCubes(cube_ids)
+      // D-05: if visitor has an active selection, re-run locate so the highlight
+      // follows the record to its new cube. setLocateResult bumps animationToken
+      // → existing GSAP useLayoutEffect fires → old cube fades off, new cube
+      // springs on (D-06 re-glow). No new animation code needed.
+      relocateActiveSelection()
     })
 
     // admin_editing: admin has opened the editor for these cubes → shimmer them

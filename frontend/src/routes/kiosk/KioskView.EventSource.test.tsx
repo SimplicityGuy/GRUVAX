@@ -13,26 +13,51 @@
  * Tests 3 and 4 are RED until Task 2 wires the re-locate in KioskView.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { render } from '@testing-library/react'
+import { act, render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { KioskView } from './KioskView'
 import { useGruvaxStore } from '../../state/store'
-import * as client from '../../api/client'
+
+// ── Module mock (must be top-level for vitest hoisting) ──────────────────────
+//
+// vi.mock replaces the module at the import level — the component's binding to
+// locateRelease resolves to our mock function. vi.spyOn alone does not work for
+// ESM named exports because the component holds its own live binding.
+vi.mock('../../api/client', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../api/client')>()
+  return {
+    ...real,
+    locateRelease: vi.fn().mockResolvedValue({
+      primary_cube: { unit_id: 1, row: 0, col: 0 },
+      label_span: [],
+      sub_cube_interval: null,
+      confidence: 0.8,
+    }),
+  }
+})
+
+// Import after vi.mock so we get the mocked version
+import { locateRelease } from '../../api/client'
 
 // ── MockEventSource ──────────────────────────────────────────────────────────
 //
 // Replaces the global EventSource in jsdom (which has no real implementation).
 // Stores instances for test access; supports addEventListener, onopen/onerror
 // fields, and a dispatchEvent helper that calls named listeners.
+//
+// IMPORTANT: vi.stubGlobal must happen before the useEffect runs (i.e., before
+// render). We stub it at module scope so it applies globally for all tests.
 
 class MockEventSource {
   static instances: MockEventSource[] = []
 
+  url: string
   onopen: (() => void) | null = null
   onerror: (() => void) | null = null
   private listeners: Record<string, Array<(e: { data: string }) => void>> = {}
 
-  constructor(public url: string) {
+  constructor(url: string) {
+    this.url = url
     MockEventSource.instances.push(this)
   }
 
@@ -59,13 +84,19 @@ function makeQueryClient() {
   })
 }
 
-function renderKiosk(queryClient: QueryClient) {
-  render(
-    <QueryClientProvider client={queryClient}>
-      <KioskView />
-    </QueryClientProvider>,
-  )
-  // Return the first MockEventSource instance created during render
+/**
+ * Render KioskView and wait for effects to flush.
+ * Returns the MockEventSource instance created during the SSE useEffect.
+ */
+async function renderKioskAndFlush(queryClient: QueryClient): Promise<MockEventSource> {
+  // act() flushes useEffect hooks after render
+  await act(async () => {
+    render(
+      <QueryClientProvider client={queryClient}>
+        <KioskView />
+      </QueryClientProvider>,
+    )
+  })
   return MockEventSource.instances[MockEventSource.instances.length - 1]
 }
 
@@ -73,38 +104,43 @@ function renderKiosk(queryClient: QueryClient) {
 
 beforeEach(() => {
   MockEventSource.instances = []
-  // Reset the store to a clean state before each test
+  // Reset store to clean state before each test
   useGruvaxStore.setState({
     selectedReleaseId: null,
     connectivity: { sseConnected: false, lastSeenAt: 0, bannerVisible: false },
   })
+  // Reset locateRelease mock call count
+  vi.mocked(locateRelease).mockClear()
 })
 
 afterEach(() => {
-  vi.restoreAllMocks()
+  vi.clearAllMocks()
 })
 
 // ── Tests ────────────────────────────────────────────────────────────────────
 
 describe('KioskView EventSource consumer', () => {
-  it('Test 1: onopen sets sseConnected = true (D-10)', () => {
+  it('Test 1: onopen sets sseConnected = true (D-10)', async () => {
     const qc = makeQueryClient()
-    const es = renderKiosk(qc)
+    const es = await renderKioskAndFlush(qc)
 
     expect(useGruvaxStore.getState().connectivity.sseConnected).toBe(false)
-    es.onopen?.()
+
+    await act(async () => {
+      es.onopen?.()
+    })
+
     expect(useGruvaxStore.getState().connectivity.sseConnected).toBe(true)
   })
 
   it('Test 2: onopen triggers resync — invalidates [units] and [cubes] (D-11)', async () => {
     const qc = makeQueryClient()
     const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
-    const es = renderKiosk(qc)
+    const es = await renderKioskAndFlush(qc)
 
-    es.onopen?.()
-
-    // Allow microtasks to flush (invalidateQueries calls are void-wrapped)
-    await Promise.resolve()
+    await act(async () => {
+      es.onopen?.()
+    })
 
     const calledKeys = invalidateSpy.mock.calls.map(
       (args) => (args[0] as { queryKey?: unknown[] }).queryKey,
@@ -115,61 +151,52 @@ describe('KioskView EventSource consumer', () => {
   })
 
   it('Test 3: boundary_changed with active selection re-calls locateRelease(id) (D-05)', async () => {
-    // Set up a mock for locateRelease so we can assert it was called
-    const locateMock = vi.spyOn(client, 'locateRelease').mockResolvedValue({
-      primary_cube: { unit_id: 2, row: 1, col: 1 },
-      label_span: [],
-      sub_cube_interval: null,
-      confidence: 0.8,
-    })
-
     const qc = makeQueryClient()
-    // Set an active selection in the store BEFORE rendering
-    useGruvaxStore.setState({ selectedReleaseId: 42 })
-    const es = renderKiosk(qc)
+    const es = await renderKioskAndFlush(qc)
 
-    // Connect first (matches real browser behavior)
-    es.onopen?.()
-
-    // Clear any locate calls that may have happened from auto-select on render
-    locateMock.mockClear()
-
-    // Dispatch boundary_changed event
-    es.dispatchEvent('boundary_changed', {
-      cube_ids: [{ unit: 1, row: 0, col: 0 }],
-      change_set_id: 'test-set-123',
+    // Set selectedReleaseId AFTER render — the KioskView clearSearch effect fires on mount
+    // (when debouncedQuery is empty) and resets selectedReleaseId to null. We must set
+    // the active selection after the initial effects have flushed.
+    await act(async () => {
+      useGruvaxStore.setState({ selectedReleaseId: 42 })
     })
 
-    // Allow microtasks to flush (void promise chain)
-    await Promise.resolve()
+    // Connect (simulates browser connect event); clears any locate calls from resync
+    await act(async () => {
+      es.onopen?.()
+    })
+    vi.mocked(locateRelease).mockClear()
 
-    expect(locateMock).toHaveBeenCalledWith(42)
+    // Dispatch boundary_changed — should trigger re-locate for selectedReleaseId=42
+    await act(async () => {
+      es.dispatchEvent('boundary_changed', {
+        cube_ids: [{ unit: 1, row: 0, col: 0 }],
+        change_set_id: 'test-set-123',
+      })
+    })
+
+    expect(locateRelease).toHaveBeenCalledWith(42)
   })
 
   it('Test 4: boundary_changed with NO selection does NOT call locateRelease (D-05 guard)', async () => {
-    const locateMock = vi.spyOn(client, 'locateRelease').mockResolvedValue({
-      primary_cube: { unit_id: 1, row: 0, col: 0 },
-      label_span: [],
-      sub_cube_interval: null,
-      confidence: 0.8,
-    })
-
     const qc = makeQueryClient()
     // Ensure no active selection
     useGruvaxStore.setState({ selectedReleaseId: null })
-    const es = renderKiosk(qc)
+    const es = await renderKioskAndFlush(qc)
 
-    es.onopen?.()
-    locateMock.mockClear()
+    await act(async () => {
+      es.onopen?.()
+    })
+    vi.mocked(locateRelease).mockClear()
 
     // Dispatch boundary_changed with no active selection
-    es.dispatchEvent('boundary_changed', {
-      cube_ids: [{ unit: 1, row: 0, col: 0 }],
-      change_set_id: 'test-set-456',
+    await act(async () => {
+      es.dispatchEvent('boundary_changed', {
+        cube_ids: [{ unit: 1, row: 0, col: 0 }],
+        change_set_id: 'test-set-456',
+      })
     })
 
-    await Promise.resolve()
-
-    expect(locateMock).not.toHaveBeenCalled()
+    expect(locateRelease).not.toHaveBeenCalled()
   })
 })
