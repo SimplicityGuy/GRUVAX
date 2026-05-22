@@ -53,7 +53,7 @@
 - [ ] **ADMN-08**: Admin can log out manually from any screen
 - [ ] **ADMN-09**: Every boundary mutation is recorded in an append-only change log grouped by change-set; admin can undo/revert by change-set
 - [ ] **ADMN-10**: A reshuffle wizard guides the admin through post-haul boundary updates and commits the result as a single atomic change-set
-- [ ] **ADMN-11**: Admin boundary edits on mobile cause the kiosk to re-render the affected cubes without manual refresh
+- [x] **ADMN-11**: Admin boundary edits on mobile cause the kiosk to re-render the affected cubes without manual refresh
 - [ ] **ADMN-12**: The boundary entry UI can auto-suggest a midpoint catalog# for a given cube based on the natural sort of adjacent populated cubes
 
 ### LED Control Surface (hardware stubbed in v1)
@@ -71,10 +71,10 @@
 
 ### Realtime / Multi-Device
 
-- [ ] **RTM-01**: Kiosk subscribes to a server-sent-events stream and re-renders affected cubes on `boundary_changed` events without manual refresh
-- [ ] **RTM-02**: Multiple simultaneous searches (kiosk and mobile) execute concurrently without server-side serialization
-- [ ] **RTM-03**: Admin edits show optimistic UI updates with rollback on server error
-- [ ] **RTM-04**: When admin is actively editing boundaries, the kiosk shows a subtle "boundaries updating" indicator on the affected cube range
+- [x] **RTM-01**: Kiosk subscribes to a server-sent-events stream and re-renders affected cubes on `boundary_changed` events without manual refresh
+- [x] **RTM-02**: Multiple simultaneous searches (kiosk and mobile) execute concurrently without server-side serialization
+- [x] **RTM-03**: Admin edits show optimistic UI updates with rollback on server error
+- [x] **RTM-04**: When admin is actively editing boundaries, the kiosk shows a subtle "boundaries updating" indicator on the affected cube range
 
 ### Offline / Resilience
 
@@ -232,7 +232,7 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | ADMN-08 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | ADMN-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | ADMN-10 | Phase 6 — Wizards + Import/Export | Pending |
-| ADMN-11 | Phase 4 — Realtime + Offline Resilience | Pending |
+| ADMN-11 | Phase 4 — Realtime + Offline Resilience | Complete |
 | ADMN-12 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
 | LED-01 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-02 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
@@ -244,10 +244,10 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | LED-08 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-09 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-10 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| RTM-01 | Phase 4 — Realtime + Offline Resilience | Pending |
-| RTM-02 | Phase 4 — Realtime + Offline Resilience | Pending |
-| RTM-03 | Phase 4 — Realtime + Offline Resilience | Pending |
-| RTM-04 | Phase 4 — Realtime + Offline Resilience | Pending |
+| RTM-01 | Phase 4 — Realtime + Offline Resilience | Complete |
+| RTM-02 | Phase 4 — Realtime + Offline Resilience | Complete |
+| RTM-03 | Phase 4 — Realtime + Offline Resilience | Complete |
+| RTM-04 | Phase 4 — Realtime + Offline Resilience | Complete |
 | OFF-01 | Phase 4 — Realtime + Offline Resilience | Pending |
 | OFF-02 | Phase 4 — Realtime + Offline Resilience | Pending |
 | OFF-03 | Phase 4 — Realtime + Offline Resilience | Pending |
