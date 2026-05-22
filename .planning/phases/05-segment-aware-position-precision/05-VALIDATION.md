@@ -1,8 +1,8 @@
 ---
 phase: 5
 slug: segment-aware-position-precision
-status: draft
-nyquist_compliant: false
+status: approved
+nyquist_compliant: true
 wave_0_complete: false
 created: 2026-05-22
 ---
@@ -96,11 +96,14 @@ created: 2026-05-22
 
 ## Validation Sign-Off
 
-- [ ] All tasks have `<automated>` verify or Wave 0 dependencies
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references
-- [ ] No watch-mode flags
-- [ ] Feedback latency < 60s
-- [ ] `nyquist_compliant: true` set in frontmatter
+- [x] All tasks have `<automated>` verify or Wave 0 dependencies *(plan-checker Dim 8a)*
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify *(plan-checker Dim 8c)*
+- [x] Wave 0 covers all MISSING references *(plan-checker Dim 8d — created in Plan 05-01 Task 3)*
+- [x] No watch-mode flags *(plan-checker Dim 8b)*
+- [x] Feedback latency < 60s *(quick run < 15s, full suite ~30–60s)*
+- [x] `nyquist_compliant: true` set in frontmatter
 
-**Approval:** pending
+> Sign-off reflects the **plan contract** verified by gsd-plan-checker (2026-05-22).
+> `wave_0_complete` remains false until execution creates the Wave 0 test stubs (Plan 05-01).
+
+**Approval:** approved 2026-05-22

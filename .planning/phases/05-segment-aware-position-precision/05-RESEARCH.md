@@ -858,7 +858,7 @@ needed because `new_first_label`/`new_first_catalog` already capture the cut poi
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`boundary_history` schema for new cut-type mutations**
    - What we know: `boundary_history` currently records `prev_first_*`/`new_first_*` for each
@@ -866,7 +866,7 @@ needed because `new_first_label`/`new_first_catalog` already capture the cut poi
      bin, or does the cascade of existing cut-point shifts cover it?
    - What's unclear: Whether a "new bin created by cut insert" needs a special `source` value
      in `boundary_history.source` (currently `CHECK (source IN ('manual', 'bulk', 'revert'))`).
-   - Recommendation: Add `source = 'cut_insert'` to the CHECK constraint in Migration 0005.
+   - RESOLVED: Add `source = 'cut_insert'` to the CHECK constraint in Migration 0005.
      Record one `boundary_history` row per cube whose cut point was changed by the cascade,
      plus one for the newly-created bin (using `prev_is_empty=true, new_is_empty=false`).
 
@@ -875,7 +875,7 @@ needed because `new_first_label`/`new_first_catalog` already capture the cut poi
      The label "Blue Note" and "BLUE NOTE" would fold to the same key.
    - What's unclear: Whether the owner's collection has such duplicates and how `SegmentCache`
      resolves them.
-   - Recommendation: Treat same-casefolded labels as one segment. The existing
+   - RESOLVED: Treat same-casefolded labels as one segment. The existing
      `get_label_records()` already groups them this way.
 
 3. **Frontend route topology for the cut-point editor**
@@ -883,7 +883,7 @@ needed because `new_first_label`/`new_first_catalog` already capture the cut poi
      Phase 3 router has `/admin/cubes/:unit_id/:row/:col` for `CubeEditor`.
    - What's unclear: Whether `CubeEditor` at the old route is replaced in-place or whether a
      redirect is needed for any bookmarked admin URLs.
-   - Recommendation: Replace `CubeEditor` route with `CutPointEditor` at the same parent path;
+   - RESOLVED: Replace `CubeEditor` route with `CutPointEditor` at the same parent path;
      the `/segments` sub-route opens the `SegmentEditorPanel` inline. No redirect needed (admin
      URLs are not bookmarked in a single-user app).
 
