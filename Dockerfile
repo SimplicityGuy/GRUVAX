@@ -42,6 +42,15 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
 
 WORKDIR /build
 
+# Build the venv at its FINAL runtime path so console-script shebangs resolve.
+# uv writes absolute interpreter shebangs (e.g. `#!<venv>/bin/python3`) into the
+# entry-point scripts it generates (gruvax, gruvax-set-pin). If the venv is built
+# at /build/.venv and later copied to /app/.venv, those shebangs point at the
+# now-missing /build/.venv/bin/python3 and the scripts fail with
+# "exec ...: no such file or directory". Pinning UV_PROJECT_ENVIRONMENT to the
+# runtime path makes `uv sync` emit `#!/app/.venv/bin/python3` shebangs directly.
+ENV UV_PROJECT_ENVIRONMENT=/app/.venv
+
 # Copy dependency manifests first so the dep layer caches between source changes
 # README.md is referenced by pyproject.toml and must be present for uv to build the package
 COPY pyproject.toml uv.lock README.md ./
@@ -63,8 +72,10 @@ RUN groupadd --system gruvax && useradd --system --gid gruvax gruvax
 
 WORKDIR /app
 
-# Copy the virtual environment from the Python builder stage
-COPY --from=python-builder /build/.venv /app/.venv
+# Copy the virtual environment from the Python builder stage.
+# It was built at /app/.venv (UV_PROJECT_ENVIRONMENT) so its console-script
+# shebangs already point at /app/.venv/bin/python3 — no path rewrite needed.
+COPY --from=python-builder /app/.venv /app/.venv
 
 # Copy application source
 COPY --from=python-builder /build/src /app/src
