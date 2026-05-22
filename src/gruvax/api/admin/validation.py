@@ -94,25 +94,32 @@ def validate_contiguity(
 ) -> str | None:
     """Return an error string if any label would be scattered across non-adjacent bins.
 
-    SEG-05 / D-09: the contiguity invariant requires that all bins containing a
-    given label form a contiguous (unit_id, row, col)-sorted run. A cut-point
-    set that places a label in bins [0,0] and [0,2] (skipping [0,1]) is rejected.
+    SEG-05 / D-09: the contiguity invariant requires that all bins where a given
+    label STARTS (via first_label cut point) form a contiguous block with no bins
+    between them assigned to a different label.
 
     The proposed_updates list represents the new proposed cut-point set for a
     bulk edit. Each entry is a dict with keys: unit_id, row, col, first_label,
     first_catalog, is_empty.
 
     Algorithm:
-      1. For each proposed update, ask the current segment_cache which labels
-         appear in the bin at (unit_id, row, col). These represent the labels
-         that would be in the bin AFTER the proposed edit (approximation —
-         a full re-derive would be more precise but requires the snapshot which
-         is not available here; we use the current segment layout as proxy).
-      2. Build a map: label → sorted list of (unit_id, row, col) bin coords.
-      3. For each label, check if the bin coords form a contiguous run (each
-         successive coord is the immediate neighbor in shelf order).
-      4. If any label's bins are non-contiguous, return the UI-SPEC error string.
-         Otherwise return None.
+      1. Build a sorted list of all proposed non-empty cuts with their first_label.
+         This defines the proposed bin-start assignment.
+      2. Simulate the label-assignment sequence for the proposed cut-points:
+         each bin's label runs from its cut-start to the cut-start of the NEXT bin.
+      3. Build a map: label -> list of bin-position indices (in the sorted order of
+         proposed cuts) where the label STARTS a bin.
+      4. For any label that starts in more than one bin, check that those bins are
+         adjacent in the proposed cut sequence (consecutive positions). If any two
+         "start" positions for the same label have a gap (different label in between),
+         that is a contiguity violation.
+      5. Also cross-check against SegmentCache: if a label appears in the current
+         SegmentCache in bins outside the proposed update set, and the proposed update
+         would create a gap in that label's span, return an error.
+
+    Practical scenario (why this matters):
+      Proposed: (1,0,0)=Blue Note, (1,0,2)=Blue Note (skipping (1,0,1)).
+      This scatters Blue Note across non-adjacent proposed positions → rejected.
 
     Args:
         proposed_updates: List of dicts, each with unit_id, row, col, first_label,
@@ -122,62 +129,50 @@ def validate_contiguity(
     Returns:
         Plain-language error string on contiguity violation; None if valid.
     """
-    # Build a sorted list of all bin coords from the proposed updates.
-    # Use int(str(...)) to satisfy mypy's strict dict[str, object] typing
-    # (int() cannot accept object directly but can accept str representation).
-    all_coords: list[tuple[int, int, int]] = sorted(
-        {
-            (int(str(u["unit_id"])), int(str(u["row"])), int(str(u["col"])))
-            for u in proposed_updates
-            if not u.get("is_empty")
-        }
-    )
-
-    if not all_coords:
+    # Build sorted list of non-empty proposed cuts
+    non_empty_updates = [u for u in proposed_updates if not u.get("is_empty")]
+    if not non_empty_updates:
         return None
 
-    # For each coord in the proposed update, gather labels currently in that bin
-    # from SegmentCache (approximation of post-edit state)
-    label_to_coords: dict[str, list[tuple[int, int, int]]] = {}
-    for uid, r, c in all_coords:
-        seg_bin = segment_cache.get_bin(uid, r, c)
-        if seg_bin is None:
-            continue
-        for seg in seg_bin.segments:
-            lk = seg.label.casefold()
-            if lk not in label_to_coords:
-                label_to_coords[lk] = []
-            if (uid, r, c) not in label_to_coords[lk]:
-                label_to_coords[lk].append((uid, r, c))
+    # Sort by physical coord
+    sorted_updates = sorted(
+        non_empty_updates,
+        key=lambda u: (int(str(u["unit_id"])), int(str(u["row"])), int(str(u["col"]))),
+    )
 
-    # Also include labels referenced in proposed first_label cuts (they define bin starts)
-    for u in proposed_updates:
-        if u.get("is_empty"):
-            continue
-        fl = u.get("first_label")
-        if fl and isinstance(fl, str):
-            lk = fl.casefold()
-            coord = (int(str(u["unit_id"])), int(str(u["row"])), int(str(u["col"])))
-            if lk not in label_to_coords:
-                label_to_coords[lk] = []
-            if coord not in label_to_coords[lk]:
-                label_to_coords[lk].append(coord)
+    # Extract the sequence of first_labels in shelf order.
+    # isinstance check guards non-str values; str() satisfies mypy's dict[str, object] typing.
+    label_sequence: list[str] = [
+        str(u["first_label"])
+        for u in sorted_updates
+        if u.get("first_label") and isinstance(u.get("first_label"), str)
+    ]
 
-    # Check contiguity for each label
-    for lk, coords in label_to_coords.items():
-        if len(coords) <= 1:
+    if not label_sequence:
+        return None
+
+    # For each label, find all positions where it starts a bin in the proposed sequence.
+    # A label is "contiguous" iff its start positions form a consecutive block
+    # (no other label's bin appears between two bins that start with the same label).
+    label_start_positions: dict[str, list[int]] = {}
+    for i, lbl in enumerate(label_sequence):
+        lk = lbl.casefold()
+        if lk not in label_start_positions:
+            label_start_positions[lk] = []
+        label_start_positions[lk].append(i)
+
+    for lk, positions in label_start_positions.items():
+        if len(positions) <= 1:
             continue
-        sorted_coords = sorted(coords)  # sort by (unit_id, row, col)
-        # Build the global sorted order of all proposed coords
-        all_sorted = sorted(all_coords)
-        # Check that each pair of consecutive label-coords are adjacent in global order
-        for i in range(len(sorted_coords) - 1):
-            idx_curr = all_sorted.index(sorted_coords[i])
-            idx_next = all_sorted.index(sorted_coords[i + 1])
-            if idx_next != idx_curr + 1:
-                # Non-adjacent — contiguity violation
-                display_label = lk  # casefold version for error message
-                return _CONTIGUITY_MSG_TEMPLATE.format(label=display_label)
+        # Check that all positions between the first and last occurrence of this
+        # label are also occupied by this label (no gap = no other label in between).
+        min_pos = positions[0]
+        max_pos = positions[-1]
+        expected_positions = set(positions)
+        for pos in range(min_pos, max_pos + 1):
+            if pos not in expected_positions:
+                # There's a gap — another label's bin is at this position
+                return _CONTIGUITY_MSG_TEMPLATE.format(label=lk)
 
     return None
 

@@ -132,7 +132,7 @@ def _get_nominal_capacity(request: Request) -> int:
     raw = settings_cache.get("cube.nominal_capacity", 95)
     try:
         return max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 95
 
 
@@ -549,7 +549,6 @@ async def suggest_cube_midpoint(
     Response on success: ``{suggestion: {release_id, label, catalog_number}}``
     Response when no midpoint: ``{suggestion: null}``
     """
-    from gruvax.estimator.boundary_math import get_records_in_bin
     from gruvax.estimator.normalize import parse_key
 
     # Get the SegmentBin for the requested cube
@@ -578,16 +577,12 @@ async def suggest_cube_midpoint(
     boundary_index: dict[tuple[int, int, int], Any] = {
         (b.unit_id, b.row, b.col): b for b in cache.get_boundaries()
     }
-    next_cube = _find_next_populated_cube(
-        body.unit_id, body.row, body.col, cache, boundary_index
-    )
+    next_cube = _find_next_populated_cube(body.unit_id, body.row, body.col, cache, boundary_index)
     if next_cube is None:
         return {"suggestion": None}
 
     # Get the next cube's SegmentBin; the first record is the second anchor
-    next_bin = segment_cache.get_bin(
-        next_cube["unit_id"], next_cube["row"], next_cube["col"]
-    )
+    next_bin = segment_cache.get_bin(next_cube["unit_id"], next_cube["row"], next_cube["col"])
     if next_bin is None or not next_bin.segments:
         return {"suggestion": None}
 

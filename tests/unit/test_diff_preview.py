@@ -115,8 +115,14 @@ def test_movement_counts() -> None:
     # --- Before: two cuts, Cube A covers BLP 4001-4050, Cube B covers BLP 4051-4100
     cache_before = _make_cache_two_boundaries(
         unit_id=1,
-        row_a=0, col_a=0, first_label_a="Blue Note", first_catalog_a="BLP 4001",
-        row_b=0, col_b=1, first_label_b="Blue Note", first_catalog_b="BLP 4051",
+        row_a=0,
+        col_a=0,
+        first_label_a="Blue Note",
+        first_catalog_a="BLP 4001",
+        row_b=0,
+        col_b=1,
+        first_label_b="Blue Note",
+        first_catalog_b="BLP 4051",
     )
     sc_before = SegmentCache()
     sc_before.derive(cache_before, snapshot, {})
@@ -128,8 +134,14 @@ def test_movement_counts() -> None:
     # --- After: Cube A's cut covers BLP 4001-4075, Cube B's cut covers BLP 4076-4100
     cache_after = _make_cache_two_boundaries(
         unit_id=1,
-        row_a=0, col_a=0, first_label_a="Blue Note", first_catalog_a="BLP 4001",
-        row_b=0, col_b=1, first_label_b="Blue Note", first_catalog_b="BLP 4076",
+        row_a=0,
+        col_a=0,
+        first_label_a="Blue Note",
+        first_catalog_a="BLP 4001",
+        row_b=0,
+        col_b=1,
+        first_label_b="Blue Note",
+        first_catalog_b="BLP 4076",
     )
     sc_after = SegmentCache()
     sc_after.derive(cache_after, snapshot, {})

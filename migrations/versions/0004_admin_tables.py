@@ -62,15 +62,9 @@ def upgrade() -> None:
         )
     """)
     # DESC index for history-view queries ordered newest-first.
-    op.execute(
-        "CREATE INDEX bh_changed_at_idx"
-        " ON gruvax.boundary_history (changed_at DESC)"
-    )
+    op.execute("CREATE INDEX bh_changed_at_idx ON gruvax.boundary_history (changed_at DESC)")
     # Index for revert queries that look up all rows in a change-set.
-    op.execute(
-        "CREATE INDEX bh_change_set_idx"
-        " ON gruvax.boundary_history (change_set_id)"
-    )
+    op.execute("CREATE INDEX bh_change_set_idx ON gruvax.boundary_history (change_set_id)")
 
     # ── gruvax.admin_sessions ─────────────────────────────────────────────────
     # Server-side session rows; signed session token stored in HttpOnly cookie.
@@ -140,10 +134,7 @@ def upgrade() -> None:
             created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
         )
     """)
-    op.execute(
-        "CREATE INDEX idempotency_keys_created_idx"
-        " ON gruvax.idempotency_keys (created_at)"
-    )
+    op.execute("CREATE INDEX idempotency_keys_created_idx ON gruvax.idempotency_keys (created_at)")
 
 
 def downgrade() -> None:

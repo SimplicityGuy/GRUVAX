@@ -101,6 +101,22 @@ async def test_phantom_force_save(client) -> None:  # type: ignore[no-untyped-de
         f"got {response.status_code}: {response.text}"
     )
 
+    # Restore (1,0,0) to its original BLP 4001 state so subsequent test modules
+    # (test_locate.py) see a clean fixture. BLP 4200 as the cut point causes
+    # BLP 4001 (rank 0 in Blue Note) to fall BELOW the cut → confidence=0.0 for
+    # COVERED_RELEASE_ID=1 (BLP 4001). BLP 4001 IS in the collection, so force=False.
+    await client.put(
+        "/api/admin/cubes/1/0/0/boundary",
+        json={
+            "first_label": "Blue Note",
+            "first_catalog": "BLP 4001",
+            "is_empty": False,
+            "force": True,  # restore; BLP 4001 IS in collection but force ensures idempotent
+        },
+        cookies=login_res.cookies,
+        headers={"X-CSRF-Token": csrf_token or ""},
+    )
+
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_near_misses_returned(client) -> None:  # type: ignore[no-untyped-def]
@@ -227,3 +243,14 @@ async def test_single_cube_put_writes_history(client, db_pool) -> None:  # type:
         "Single-cube PUT must append exactly one source='manual' boundary_history "
         f"row (CR-02); before={before} after={after}"
     )
+
+    # Restore (1,3,3) to its original empty state so subsequent test modules
+    # (test_locate.py) see a clean fixture. Without this, two cubes share
+    # first_catalog='BLP 4001' which corrupts SegmentCache for the locate tests.
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "UPDATE gruvax.cube_boundaries"
+            " SET first_label = NULL, first_catalog = NULL, is_empty = TRUE"
+            " WHERE unit_id = 1 AND row = 3 AND col = 3",
+        )
+        await conn.commit()
