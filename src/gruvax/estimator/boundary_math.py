@@ -45,8 +45,8 @@ if TYPE_CHECKING:
 
 
 def count_records_in_boundary(
-    boundary: "BoundaryRow",
-    snapshot: "CollectionSnapshot",
+    boundary: BoundaryRow,
+    snapshot: CollectionSnapshot,
 ) -> int:
     """DEPRECATED — Phase 5 compatibility shim (used by admin/cubes.py until 05-04).
 
@@ -63,7 +63,7 @@ def count_records_in_boundary(
     return 0
 
 
-def count_records_in_bin(bin_: "SegmentBin") -> int:
+def count_records_in_bin(bin_: SegmentBin) -> int:
     """Count records in a bin using pre-derived LabelSegment.segment_count totals.
 
     Does NOT consult snapshot — counts come from SegmentCache's pre-derived values.
@@ -82,9 +82,9 @@ def count_records_in_bin(bin_: "SegmentBin") -> int:
 
 
 def get_records_in_bin(
-    bin_: "SegmentBin",
-    snapshot: "CollectionSnapshot",
-) -> list["RecordRow"]:
+    bin_: SegmentBin,
+    snapshot: CollectionSnapshot,
+) -> list[RecordRow]:
     """Return all records belonging to a bin by slicing each segment's rank range.
 
     Iterates over the bin's LabelSegments, looks up each label's sorted records
@@ -107,15 +107,15 @@ def get_records_in_bin(
             key=lambda r: parse_key(r.catalog_number),
         )
         # Slice the records that belong to this segment.
-        seg_slice = label_records[seg.first_rank_in_label: seg.last_rank_in_label + 1]
+        seg_slice = label_records[seg.first_rank_in_label : seg.last_rank_in_label + 1]
         result.extend(seg_slice)
     return result
 
 
 def sample_records(
-    records_in_range: "list[RecordRow]",
+    records_in_range: list[RecordRow],
     n: int = 7,
-) -> "list[RecordRow]":
+) -> list[RecordRow]:
     """Return n evenly-spaced records from the list using index-stride sampling.
 
     Sampling contract (RESEARCH.md Pattern 8):
@@ -146,8 +146,8 @@ def suggest_midpoint(
     label: str,
     first_anchor_release_id: int,
     last_anchor_release_id: int,
-    snapshot: "CollectionSnapshot",
-) -> "RecordRow | None":
+    snapshot: CollectionSnapshot,
+) -> RecordRow | None:
     """Suggest the record at the index midpoint between two anchor records.
 
     Walks collection-INDEX space, NOT catalog-string space (Pitfall 22, D-08).

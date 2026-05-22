@@ -195,9 +195,11 @@ def _derive_seg_cache(
 def test_covered_record_confidence(boundary_cache: list[dict]) -> None:
     """A record covered by a boundary must return confidence == 0.30 (D-11)."""
     cache = _make_cache_from_yaml(boundary_cache)
-    snapshot = _make_snapshot([
-        {"release_id": 1, "label": "Blue Note", "catalog_number": "BLP 4010"},
-    ])
+    snapshot = _make_snapshot(
+        [
+            {"release_id": 1, "label": "Blue Note", "catalog_number": "BLP 4010"},
+        ]
+    )
     segment_cache = _derive_seg_cache(cache, snapshot)
     result = locate_cube_only(
         release_id=1,
@@ -212,9 +214,11 @@ def test_covered_record_confidence(boundary_cache: list[dict]) -> None:
 def test_covered_record_sub_cube_interval_is_none(boundary_cache: list[dict]) -> None:
     """Phase 5 cube-only estimator must always return sub_cube_interval=None (D-10)."""
     cache = _make_cache_from_yaml(boundary_cache)
-    snapshot = _make_snapshot([
-        {"release_id": 1, "label": "Blue Note", "catalog_number": "BLP 4010"},
-    ])
+    snapshot = _make_snapshot(
+        [
+            {"release_id": 1, "label": "Blue Note", "catalog_number": "BLP 4010"},
+        ]
+    )
     segment_cache = _derive_seg_cache(cache, snapshot)
     result = locate_cube_only(
         release_id=1,
@@ -229,9 +233,11 @@ def test_covered_record_sub_cube_interval_is_none(boundary_cache: list[dict]) ->
 def test_covered_record_estimator_version(boundary_cache: list[dict]) -> None:
     """Covered record must report estimator_version='cube-only-v1'."""
     cache = _make_cache_from_yaml(boundary_cache)
-    snapshot = _make_snapshot([
-        {"release_id": 1, "label": "Blue Note", "catalog_number": "BLP 4010"},
-    ])
+    snapshot = _make_snapshot(
+        [
+            {"release_id": 1, "label": "Blue Note", "catalog_number": "BLP 4010"},
+        ]
+    )
     segment_cache = _derive_seg_cache(cache, snapshot)
     result = locate_cube_only(
         release_id=1,
@@ -246,9 +252,11 @@ def test_covered_record_estimator_version(boundary_cache: list[dict]) -> None:
 def test_covered_record_primary_cube(boundary_cache: list[dict]) -> None:
     """primary_cube must equal label_span[0] (first in sorted order)."""
     cache = _make_cache_from_yaml(boundary_cache)
-    snapshot = _make_snapshot([
-        {"release_id": 1, "label": "Blue Note", "catalog_number": "BLP 4010"},
-    ])
+    snapshot = _make_snapshot(
+        [
+            {"release_id": 1, "label": "Blue Note", "catalog_number": "BLP 4010"},
+        ]
+    )
     segment_cache = _derive_seg_cache(cache, snapshot)
     result = locate_cube_only(
         release_id=1,
@@ -265,9 +273,11 @@ def test_covered_record_primary_cube(boundary_cache: list[dict]) -> None:
 def test_covered_record_label_span_sorted(boundary_cache: list[dict]) -> None:
     """label_span must be sorted by (unit_id, row, col)."""
     cache = _make_cache_from_yaml(boundary_cache)
-    snapshot = _make_snapshot([
-        {"release_id": 1, "label": "Blue Note", "catalog_number": "BLP 4010"},
-    ])
+    snapshot = _make_snapshot(
+        [
+            {"release_id": 1, "label": "Blue Note", "catalog_number": "BLP 4010"},
+        ]
+    )
     segment_cache = _derive_seg_cache(cache, snapshot)
     result = locate_cube_only(
         release_id=1,
@@ -283,9 +293,11 @@ def test_covered_record_label_span_sorted(boundary_cache: list[dict]) -> None:
 def test_covered_record_release_id(boundary_cache: list[dict]) -> None:
     """locate_cube_only must propagate release_id into the result."""
     cache = _make_single_cube_cache("ECM", "ECM 1001")
-    snapshot = _make_snapshot([
-        {"release_id": 42, "label": "ECM", "catalog_number": "ECM 1001"},
-    ])
+    snapshot = _make_snapshot(
+        [
+            {"release_id": 42, "label": "ECM", "catalog_number": "ECM 1001"},
+        ]
+    )
     segment_cache = _derive_seg_cache(cache, snapshot)
     result = locate_cube_only(
         release_id=42,
@@ -392,9 +404,11 @@ def test_numeric_edge_covering_blp_9_NOT_in_blp_10_20() -> None:
     # Cache with cut point at BLP 10 (records starting at BLP 10)
     cache = _make_single_cube_cache("TestLabel", "BLP 10")
     # BLP 9 is below the cut point — it should not be in this bin
-    snapshot_blp9 = _make_snapshot([
-        {"release_id": 1, "label": "TestLabel", "catalog_number": "BLP 9"},
-    ])
+    snapshot_blp9 = _make_snapshot(
+        [
+            {"release_id": 1, "label": "TestLabel", "catalog_number": "BLP 9"},
+        ]
+    )
     sc_blp9 = _derive_seg_cache(cache, snapshot_blp9)
     result_blp9 = locate_cube_only(
         release_id=1,
@@ -409,9 +423,11 @@ def test_numeric_edge_covering_blp_9_NOT_in_blp_10_20() -> None:
     )
 
     # BLP 10 == cut point → should BE covered
-    snapshot_blp10 = _make_snapshot([
-        {"release_id": 1, "label": "TestLabel", "catalog_number": "BLP 10"},
-    ])
+    snapshot_blp10 = _make_snapshot(
+        [
+            {"release_id": 1, "label": "TestLabel", "catalog_number": "BLP 10"},
+        ]
+    )
     sc_blp10 = _derive_seg_cache(cache, snapshot_blp10)
     result_blp10 = locate_cube_only(
         release_id=1,
@@ -428,9 +444,11 @@ def test_numeric_edge_covering_blp_9_NOT_in_blp_10_20() -> None:
 def test_numeric_edge_blp_9_in_single_cube() -> None:
     """BLP 9 IS in a cube starting at BLP 9 (exact match at cut point)."""
     cache = _make_single_cube_cache("TestLabel", "BLP 9")
-    snapshot = _make_snapshot([
-        {"release_id": 1, "label": "TestLabel", "catalog_number": "BLP 9"},
-    ])
+    snapshot = _make_snapshot(
+        [
+            {"release_id": 1, "label": "TestLabel", "catalog_number": "BLP 9"},
+        ]
+    )
     segment_cache = _derive_seg_cache(cache, snapshot)
     result = locate_cube_only(
         release_id=1,
@@ -688,8 +706,7 @@ def test_single_segment_bin_reproduces_v1_index() -> None:
     label = "D02Label"
     k = 5
     records = [
-        {"release_id": i, "label": label, "catalog_number": f"D0 {i:03d}"}
-        for i in range(1, k + 1)
+        {"release_id": i, "label": label, "catalog_number": f"D0 {i:03d}"} for i in range(1, k + 1)
     ]
     cache = _make_single_cube_cache(label, "D0 001")
     snapshot = _make_snapshot(records)
@@ -700,7 +717,9 @@ def test_single_segment_bin_reproduces_v1_index() -> None:
     assert bin_ is not None, "Expected a SegmentBin for D-02 test"
     assert len(bin_.segments) == 1, f"D-02 requires single-segment bin, got {len(bin_.segments)}"
     seg = bin_.segments[0]
-    assert seg.auto_fraction == 1.0, f"Single-segment must have auto_fraction=1.0, got {seg.auto_fraction}"
+    assert seg.auto_fraction == 1.0, (
+        f"Single-segment must have auto_fraction=1.0, got {seg.auto_fraction}"
+    )
     assert seg.first_rank_in_label == 0, (
         f"Single-segment must start at rank 0, got {seg.first_rank_in_label}"
     )
@@ -736,10 +755,10 @@ def test_single_segment_bin_reproduces_v1_index() -> None:
         si_v1 = v1_result.sub_cube_interval
 
         assert abs(si_seg.start - si_v1.start) < 1e-6, (
-            f"D-02 start mismatch for rank {i-1}: segment={si_seg.start:.8f} v1={si_v1.start:.8f}"
+            f"D-02 start mismatch for rank {i - 1}: segment={si_seg.start:.8f} v1={si_v1.start:.8f}"
         )
         assert abs(si_seg.end - si_v1.end) < 1e-6, (
-            f"D-02 end mismatch for rank {i-1}: segment={si_seg.end:.8f} v1={si_v1.end:.8f}"
+            f"D-02 end mismatch for rank {i - 1}: segment={si_seg.end:.8f} v1={si_v1.end:.8f}"
         )
 
 

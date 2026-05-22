@@ -148,9 +148,7 @@ def test_empty_boundary_zero(label: str, record_count: int) -> None:
     seg_bin = _derive_get_bin(cache, snapshot)
     assert seg_bin is not None, "Expected a SegmentBin even for empty boundary"
     count = count_records_in_bin(seg_bin)
-    assert count == 0, (
-        f"count_records_in_bin must return 0 for is_empty boundary, got {count}"
-    )
+    assert count == 0, f"count_records_in_bin must return 0 for is_empty boundary, got {count}"
 
 
 # ── Property 3: casefold label lookup (Pitfall C / T-03-03) ──────────────────
@@ -222,14 +220,11 @@ def test_fill_count_matches_snapshot_size(label: str, n: int) -> None:
 
     label = label.strip() or "TestLabel"
     records = [
-        RecordRow(release_id=i, label=label, catalog_number=f"CAT {i:04d}")
-        for i in range(1, n + 1)
+        RecordRow(release_id=i, label=label, catalog_number=f"CAT {i:04d}") for i in range(1, n + 1)
     ]
     snapshot = _make_snapshot_from_records(records)
     cache = _make_single_cube_cache(label, "CAT 0001")
     seg_bin = _derive_get_bin(cache, snapshot)
     assert seg_bin is not None, "Expected a SegmentBin"
     count = count_records_in_bin(seg_bin)
-    assert count == n, (
-        f"Expected count == n={n} for single-label single-cube bin, got {count}"
-    )
+    assert count == n, f"Expected count == n={n} for single-label single-cube bin, got {count}"

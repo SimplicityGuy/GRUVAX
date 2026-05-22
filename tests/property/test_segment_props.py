@@ -207,12 +207,10 @@ def test_single_segment_bin_reproduces_v1_index(singleton_props_fixture) -> None
         si_v1 = v1_result.sub_cube_interval
 
         assert abs(si_seg.start - si_v1.start) < 1e-6, (
-            f"D-02 start mismatch at rank {rank}: "
-            f"segment={si_seg.start:.8f} v1={si_v1.start:.8f}"
+            f"D-02 start mismatch at rank {rank}: segment={si_seg.start:.8f} v1={si_v1.start:.8f}"
         )
         assert abs(si_seg.end - si_v1.end) < 1e-6, (
-            f"D-02 end mismatch at rank {rank}: "
-            f"segment={si_seg.end:.8f} v1={si_v1.end:.8f}"
+            f"D-02 end mismatch at rank {rank}: segment={si_seg.end:.8f} v1={si_v1.end:.8f}"
         )
 
 
@@ -244,9 +242,7 @@ def test_straddle_resolves_to_correct_bin(straddle_props_fixture) -> None:  # ty
             snapshot=snapshot,
         )
 
-        assert result.primary_cube is not None, (
-            f"LabelS rank {rank} must have a primary_cube"
-        )
+        assert result.primary_cube is not None, f"LabelS rank {rank} must have a primary_cube"
         assert result.primary_cube.col == expected_col, (
             f"LabelS rank {rank} must resolve to col={expected_col}, "
             f"got col={result.primary_cube.col}"
@@ -365,7 +361,7 @@ def test_monotone_position_within_label(multi_label_props_fixture) -> None:  # t
 
     for i in range(len(starts) - 1):
         assert starts[i] <= starts[i + 1], (
-            f"Monotone violated at index {i}: start[{i}]={starts[i]} > start[{i+1}]={starts[i+1]}"
+            f"Monotone violated at index {i}: start[{i}]={starts[i]} > start[{i + 1}]={starts[i + 1]}"
         )
 
 
@@ -393,8 +389,7 @@ def test_cosmetic_stability(extra_spaces: int, uppercase: bool) -> None:
 
     # Build a 5-record snapshot with a known position
     records = [
-        RecordRow(release_id=i, label=label, catalog_number=f"BLP {4190 + i}")
-        for i in range(1, 6)
+        RecordRow(release_id=i, label=label, catalog_number=f"BLP {4190 + i}") for i in range(1, 6)
     ]
     snapshot = CollectionSnapshot()
     snapshot._load_snapshot({label.casefold(): records})
@@ -439,19 +434,28 @@ def test_cosmetic_stability(extra_spaces: int, uppercase: bool) -> None:
     )
 
     # Both results must have the same sub_cube_interval (POS-01 normalization)
-    if canonical_result.sub_cube_interval is not None and variant_result.sub_cube_interval is not None:
-        assert abs(canonical_result.sub_cube_interval.start - variant_result.sub_cube_interval.start) < 1e-6, (
+    if (
+        canonical_result.sub_cube_interval is not None
+        and variant_result.sub_cube_interval is not None
+    ):
+        assert (
+            abs(canonical_result.sub_cube_interval.start - variant_result.sub_cube_interval.start)
+            < 1e-6
+        ), (
             f"Cosmetic variant '{variant}' produced different start: "
             f"canonical={canonical_result.sub_cube_interval.start} "
             f"variant={variant_result.sub_cube_interval.start}"
         )
-        assert abs(canonical_result.sub_cube_interval.end - variant_result.sub_cube_interval.end) < 1e-6, (
+        assert (
+            abs(canonical_result.sub_cube_interval.end - variant_result.sub_cube_interval.end)
+            < 1e-6
+        ), (
             f"Cosmetic variant '{variant}' produced different end: "
             f"canonical={canonical_result.sub_cube_interval.end} "
             f"variant={variant_result.sub_cube_interval.end}"
         )
     else:
         # Both must agree on whether sub_cube_interval is None
-        assert (canonical_result.sub_cube_interval is None) == (variant_result.sub_cube_interval is None), (
-            f"Cosmetic variant '{variant}' disagrees on sub_cube_interval presence"
-        )
+        assert (canonical_result.sub_cube_interval is None) == (
+            variant_result.sub_cube_interval is None
+        ), f"Cosmetic variant '{variant}' disagrees on sub_cube_interval presence"

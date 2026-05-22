@@ -127,9 +127,7 @@ def test_locate_by_segment_two_level_formula(multi_label_estimator_fixture) -> N
     assert abs(si.start - expected_start) < 1e-9, (
         f"start={si.start:.8f} expected {expected_start:.8f}"
     )
-    assert abs(si.end - expected_end) < 1e-9, (
-        f"end={si.end:.8f} expected {expected_end:.8f}"
-    )
+    assert abs(si.end - expected_end) < 1e-9, f"end={si.end:.8f} expected {expected_end:.8f}"
 
 
 def test_locate_by_segment_straddle_resolves_correct_bin(straddle_estimator_fixture) -> None:  # type: ignore[no-untyped-def]
@@ -281,13 +279,15 @@ def test_cube_only_fallback_version_string() -> None:
     cache._load_rows(rows)
 
     snapshot = CollectionSnapshot()
-    snapshot._load_snapshot({
-        "fallbacklabel": [
-            __import__("gruvax.estimator.collection_snapshot", fromlist=["RecordRow"]).RecordRow(
-                release_id=1, label="FallbackLabel", catalog_number="FL 001"
-            )
-        ]
-    })
+    snapshot._load_snapshot(
+        {
+            "fallbacklabel": [
+                __import__(
+                    "gruvax.estimator.collection_snapshot", fromlist=["RecordRow"]
+                ).RecordRow(release_id=1, label="FallbackLabel", catalog_number="FL 001")
+            ]
+        }
+    )
 
     sc = SegmentCache()
     sc.derive(cache, snapshot, {})
@@ -304,6 +304,4 @@ def test_cube_only_fallback_version_string() -> None:
     assert result.estimator_version == "cube-only-v1", (
         f"Expected 'cube-only-v1' for singleton fallback, got {result.estimator_version!r}"
     )
-    assert result.sub_cube_interval is None, (
-        "§4.8 fallback must set sub_cube_interval=None"
-    )
+    assert result.sub_cube_interval is None, "§4.8 fallback must set sub_cube_interval=None"

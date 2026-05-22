@@ -270,8 +270,13 @@ def locate_by_segment(
     if seg.continues:
         # Find the next bin in the label_span that comes after primary_cube.
         primary_idx = next(
-            (i for i, c in enumerate(label_span)
-             if c.unit_id == primary_cube.unit_id and c.row == primary_cube.row and c.col == primary_cube.col),
+            (
+                i
+                for i, c in enumerate(label_span)
+                if c.unit_id == primary_cube.unit_id
+                and c.row == primary_cube.row
+                and c.col == primary_cube.col
+            ),
             None,
         )
         if primary_idx is not None and primary_idx + 1 < len(label_span):
