@@ -34,6 +34,13 @@ interface CubeProps {
    * Passes back a CubeRef so KioskView can open the contents panel.
    */
   onTap?: (cube: CubeRef) => void
+  /**
+   * When true, renders a decorative ambient shimmer overlay on this cube (D-01/D-02/RTM-04).
+   * The overlay is opacity-only — it never recolors the cube, never sets data-state,
+   * and is aria-hidden so assistive technology ignores it (D-02: never alter data-state).
+   * Default false.
+   */
+  shimmerActive?: boolean
 }
 
 /**
@@ -60,6 +67,7 @@ export function Cube({
   isCompanionBar = false,
   fillLevel,
   onTap,
+  shimmerActive = false,
 }: CubeProps) {
   // Determine whether to render a SubCubeBar in this cube
   const isPrimary = state === 'lit' && subInterval != null
@@ -105,6 +113,11 @@ export function Cube({
       {/* Fill-level bar at the bottom edge (CUBE-07, D-13) — only when fill > 0 */}
       {fillLevel != null && fillLevel > 0 && (
         <FillBar fillLevel={fillLevel} heightPx={4} />
+      )}
+      {/* Shimmer overlay — decorative ambient cue while admin is mid-edit (D-01/D-02/RTM-04).
+          aria-hidden: purely decorative, not data-state — never recolors the cube. */}
+      {shimmerActive && (
+        <div className="cube-shimmer-overlay" aria-hidden="true" />
       )}
     </div>
   )

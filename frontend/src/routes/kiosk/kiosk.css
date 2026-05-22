@@ -814,3 +814,40 @@
   color: var(--gruvax-error);
 }
 
+/* ── Shimmer overlay (Phase 4 / D-01/D-02/RTM-04) ───────────────────────── */
+
+/*
+ * Decorative ambient overlay rendered on cubes whose cube boundary the admin
+ * is currently editing (admin_editing SSE event → shimmerActive=true on Cube).
+ *
+ * Design rules (D-02, UI-SPEC Surface 1):
+ *   - Opacity-only animation — GPU-composited via will-change:opacity (Pitfall 16).
+ *   - NEVER sets a solid background color — only rgba tokens at low opacity.
+ *   - NEVER sets data-state, never suppresses the LED yellow or the lit border.
+ *   - z-index 3 sits above fill-bar (z-index 2) but below nothing critical;
+ *     pointer-events:none so cube tap-through is unaffected.
+ *   - 2000ms (~0.5 Hz) keyframe keeps compositor load minimal on Pi 5 (≤8 cubes typical).
+ *
+ * Tokens: --gruvax-yellow-faint (rgba(255,218,0,0.12)), --gruvax-yellow-glow
+ * (rgba(255,218,0,0.35)), --gruvax-ease-standard (cubic-bezier(0.4,0,0.2,1)).
+ * Zero hardcoded hex — follows the file header convention.
+ */
+
+.cube-shimmer-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 3;
+  border-radius: inherit;
+  pointer-events: none;
+  background: var(--gruvax-yellow-faint);
+  border: 1px solid var(--gruvax-yellow-glow);
+  animation: shimmer-sweep 2000ms var(--gruvax-ease-standard) infinite;
+  will-change: opacity;
+}
+
+@keyframes shimmer-sweep {
+  0%   { opacity: 0; }
+  40%  { opacity: 1; }
+  60%  { opacity: 1; }
+  100% { opacity: 0; }
+}
