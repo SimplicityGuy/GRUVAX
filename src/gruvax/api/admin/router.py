@@ -22,6 +22,7 @@ def create_admin_router() -> APIRouter:
         cubes, history, and settings sub-routers.
     """
     from gruvax.api.admin.cubes import router as cubes_router
+    from gruvax.api.admin.editing import router as editing_router
     from gruvax.api.admin.history import router as history_router
     from gruvax.api.admin.login import router as login_router
     from gruvax.api.admin.settings import router as settings_router
@@ -31,4 +32,5 @@ def create_admin_router() -> APIRouter:
     router.include_router(cubes_router)
     router.include_router(history_router)
     router.include_router(settings_router)
+    router.include_router(editing_router)
     return router
