@@ -8,75 +8,122 @@ Tests:
   - test_concurrent_searches: two simultaneous searches complete without serialization
     (RTM-02, Pitfall 10 — SSE holds no pool slot).
 
-Analog: tests/integration/test_health.py (LifespanManager + ASGITransport + AsyncClient).
+SSE + httpx note:
+  httpx's ASGITransport buffers the full response body before returning, which is
+  incompatible with infinite SSE streams.  We use a real uvicorn server (background
+  thread) so that streaming responses are delivered over a genuine TCP socket.  This
+  is the standard pattern for testing FastAPI SSE endpoints.
 """
 
 from __future__ import annotations
 
 import asyncio
+import threading
 import time
 
+import httpx
 import pytest
-import pytest_asyncio
-from asgi_lifespan import LifespanManager
-from httpx import ASGITransport, AsyncClient
+import uvicorn
 
 from gruvax.app import create_app
 
 
-@pytest_asyncio.fixture(scope="module")
-async def client(db_pool):  # type: ignore[no-untyped-def]
-    """Module-scoped async test client with full ASGI lifespan.
+def _find_free_port() -> int:
+    """Return an OS-assigned free TCP port."""
+    import socket
 
-    ``db_pool`` is the session-scoped fixture from conftest — ensures the
-    DB is running before the app boots.
+    with socket.socket(socket.AF_INET, socket.SOCK_STREAM) as s:
+        s.bind(("127.0.0.1", 0))
+        return s.getsockname()[1]
+
+
+@pytest.fixture(scope="module")
+def live_server(db_pool):  # type: ignore[no-untyped-def]
+    """Start a real uvicorn server in a background thread for SSE testing.
+
+    Returns the base URL (e.g. ``http://127.0.0.1:PORT``).
+
+    Using a real TCP socket is required because httpx's ASGITransport buffers
+    the entire response body before yielding control — incompatible with infinite
+    SSE streams.  Uvicorn streams over real sockets, so httpx can read headers
+    and body chunks incrementally.
+
+    ``db_pool`` in the signature ensures the DB is up before the server starts
+    (session fixture). The server creates its own connection pool via the standard
+    lifespan path — the fixture dependency is only to gate timing.
     """
+    port = _find_free_port()
     app = create_app()
-    async with (
-        LifespanManager(app) as manager,
-        AsyncClient(
-            transport=ASGITransport(app=manager.app),
-            base_url="http://test",
-        ) as ac,
-    ):
-        yield ac, app
+    config = uvicorn.Config(
+        app,
+        host="127.0.0.1",
+        port=port,
+        loop="asyncio",
+        log_level="warning",
+    )
+    server = uvicorn.Server(config)
+    server.install_signal_handlers = lambda: None  # disable SIGINT hijacking
+
+    thread = threading.Thread(target=server.run, daemon=True)
+    thread.start()
+
+    # Wait until the server is ready (polls every 50ms, up to 10s)
+    deadline = time.monotonic() + 10.0
+    while not server.started:
+        if time.monotonic() > deadline:
+            pytest.fail("uvicorn server did not start within 10s")
+        time.sleep(0.05)
+
+    base_url = f"http://127.0.0.1:{port}"
+    yield base_url
+
+    # Graceful shutdown
+    server.should_exit = True
+    thread.join(timeout=5)
 
 
-async def _login(ac: AsyncClient) -> dict[str, str]:
-    """Helper: log in with test PIN and return cookies + CSRF token.
+async def _login(base_url: str) -> dict[str, str]:
+    """Log in with test PIN, return cookies dict + csrf_token.
 
-    Mirrors the conftest admin_session fixture logic inline — we need a local
-    copy here because admin_session depends on the module-scope client fixture
-    shape and scope (module vs. session).  The conftest admin_session fixture
-    is available for tests that need its full seeding behaviour.
+    Mirrors the conftest admin_session fixture inline — we can't depend on
+    the module-scope conftest admin_session from a module-scope fixture that
+    uses a different client shape.
     """
-    res = await ac.post("/api/admin/login", json={"pin": "0000"})
-    if res.status_code != 200:
-        return {}
-    csrf = res.cookies.get("gruvax_csrf") or ""
-    return {"cookies": res.cookies, "csrf_token": csrf}
+    async with httpx.AsyncClient(base_url=base_url) as ac:
+        res = await ac.post("/api/admin/login", json={"pin": "0000"})
+        if res.status_code != 200:
+            return {}
+        csrf = res.cookies.get("gruvax_csrf") or ""
+        return {"cookies": dict(res.cookies), "csrf_token": csrf}
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_sse_headers(client) -> None:  # type: ignore[no-untyped-def]
+async def test_sse_headers(live_server) -> None:  # type: ignore[no-untyped-def]
     """GET /api/events must set X-Accel-Buffering: no and Cache-Control: no-store.
 
     Binds Pitfall 8: without these headers, nginx/proxy buffers SSE data into
     30-second clumps, making live re-render appear broken.
     """
-    ac, _app = client
-    async with ac.stream("GET", "/api/events") as resp:
-        assert resp.status_code == 200, f"Expected 200 from /api/events, got {resp.status_code}"
+    async with (
+        httpx.AsyncClient(base_url=live_server) as ac,
+        ac.stream("GET", "/api/events") as resp,
+    ):
+        assert resp.status_code == 200, (
+            f"Expected 200 from /api/events, got {resp.status_code}"
+        )
         assert resp.headers.get("x-accel-buffering") == "no", (
             f"X-Accel-Buffering header missing or wrong: {dict(resp.headers)}"
         )
         assert resp.headers.get("cache-control") == "no-store", (
             f"Cache-Control header missing or wrong: {dict(resp.headers)}"
         )
+        # Read just the first line (the `: connected` comment) then close.
+        async for _line in resp.aiter_lines():
+            break
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_boundary_changed_latency(client) -> None:  # type: ignore[no-untyped-def]
+async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no-untyped-def]
     """Admin PUT → kiosk receives boundary_changed via SSE in <500ms.
 
     This is the primary ADMN-11 gate (roadmap criterion 1: ~500ms live re-render).
@@ -87,16 +134,17 @@ async def test_boundary_changed_latency(client) -> None:  # type: ignore[no-unty
       3. Record t0, then issue PUT /api/admin/cubes/1/0/0/boundary.
       4. Assert boundary_changed appears in the stream within 0.5s of t0.
     """
-    ac, _app = client
-
-    auth = await _login(ac)
+    auth = await _login(live_server)
     if not auth:
         pytest.skip("Admin login not implemented — skipping SSE latency test")
 
     received = asyncio.Event()
 
     async def read_sse() -> None:
-        async with ac.stream("GET", "/api/events") as response:
+        async with (
+            httpx.AsyncClient(base_url=live_server) as ac,
+            ac.stream("GET", "/api/events") as response,
+        ):
             async for line in response.aiter_lines():
                 if "boundary_changed" in line:
                     received.set()
@@ -108,19 +156,20 @@ async def test_boundary_changed_latency(client) -> None:  # type: ignore[no-unty
 
     t0 = time.perf_counter()
     # Admin PUT triggers boundary_changed fan-out (after cache.load in Phase 4)
-    await ac.put(
-        "/api/admin/cubes/1/0/0/boundary",
-        json={
-            "first_label": "A",
-            "first_catalog": "A001",
-            "last_label": "B",
-            "last_catalog": "B001",
-            "is_empty": False,
-            "force": True,
-        },
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
-    )
+    async with httpx.AsyncClient(base_url=live_server) as ac:
+        await ac.put(
+            "/api/admin/cubes/1/0/0/boundary",
+            json={
+                "first_label": "A",
+                "first_catalog": "A001",
+                "last_label": "B",
+                "last_catalog": "B001",
+                "is_empty": False,
+                "force": True,
+            },
+            cookies=auth["cookies"],
+            headers={"X-CSRF-Token": auth["csrf_token"]},
+        )
 
     try:
         await asyncio.wait_for(received.wait(), timeout=0.5)
@@ -134,19 +183,18 @@ async def test_boundary_changed_latency(client) -> None:  # type: ignore[no-unty
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_concurrent_searches(client) -> None:  # type: ignore[no-untyped-def]
+async def test_concurrent_searches(live_server) -> None:  # type: ignore[no-untyped-def]
     """Two simultaneous searches complete concurrently — no server-side serialization.
 
     Binds RTM-02: the SSE endpoint holds no DB pool slot (Pitfall 10), so concurrent
     search requests are not starved. Both requests must complete independently
-    (total wall-time is not ~2× a single search).
+    (total wall-time is not ~2x a single search).
     """
-    ac, _app = client
 
-    # Fire two concurrent search requests
     async def do_search(q: str) -> float:
         t0 = time.perf_counter()
-        await ac.get("/api/search", params={"q": q})
+        async with httpx.AsyncClient(base_url=live_server) as ac:
+            await ac.get("/api/search", params={"q": q})
         return time.perf_counter() - t0
 
     t_start = time.perf_counter()
@@ -161,7 +209,7 @@ async def test_concurrent_searches(client) -> None:  # type: ignore[no-untyped-d
 
     # Wall-time must be significantly less than the sum of individual times,
     # confirming concurrent (not sequential) execution.
-    # A 2× sequential overhead means wall_time ≈ sum(durations). We allow up
+    # A 2x sequential overhead means wall_time ~ sum(durations). We allow up
     # to max(durations) * 1.5 to account for scheduling overhead.
     max_single = max(durations)
     assert wall_time < max_single * 1.5 + 0.1, (

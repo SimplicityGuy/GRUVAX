@@ -41,6 +41,10 @@ async def stream_events(
     async def generator() -> AsyncIterator[ServerSentEvent]:
         q = bus.subscribe()
         try:
+            # Yield an SSE comment immediately so headers flush to the client
+            # before the first real event arrives (Pitfall 8: proxy buffering).
+            # sse-starlette forwards comment-only ServerSentEvent as ": ...\n\n".
+            yield ServerSentEvent(comment="connected")
             while True:
                 if await request.is_disconnected():
                     break
@@ -50,7 +54,7 @@ async def stream_events(
                         event=event.name,
                         data=json.dumps(event.data),
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue  # loop back; ping=15 handles keepalive
         finally:
             bus.unsubscribe(q)

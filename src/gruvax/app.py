@@ -200,6 +200,11 @@ def create_app() -> FastAPI:
 
     app.include_router(create_admin_router(), prefix="/api")
 
+    # ── Events router (Phase 4 / RTM-01) — BEFORE StaticFiles mount (Pitfall 3) ─
+    from gruvax.api.events import router as events_router
+
+    app.include_router(events_router, prefix="/api")
+
     # ── StaticFiles SPA mount LAST ───────────────────────────────────────────
     # Plan 04 (React SPA) builds the frontend and copies the dist/ into static/.
     # Guard: only mount if the directory exists so startup doesn't crash during
