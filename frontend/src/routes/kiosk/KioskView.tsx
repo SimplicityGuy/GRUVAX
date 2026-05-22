@@ -26,6 +26,9 @@ const SHELF_NAMES = ['SHELF A', 'SHELF B', 'SHELF C', 'SHELF D']
 export function KioskView() {
   const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch, setQuery } =
     useGruvaxStore()
+  // Phase 4 / D-01/D-03/RTM-04: reactive shimmer state from Zustand
+  const shimmerCubes = useGruvaxStore((s) => s.shimmerCubes)
+  const shimmerExpiresAt = useGruvaxStore((s) => s.shimmerExpiresAt)
   const queryClient = useQueryClient()
   const [debouncedQuery, setDebouncedQuery] = useState('')
   // Cube-tap state for the contents panel (CUBE-09, D-14)
@@ -80,6 +83,39 @@ export function KioskView() {
         .map((cb) => [`${cb.unit_id}-${cb.row}-${cb.col}`, cb.fill_level]),
     )
   }, [cubesData])
+
+  // Phase 4 / D-01/RTM-04: derive a Set<"unit-row-col"> from the shimmerCubes array for O(1)
+  // lookup in ShelfGrid. Keyed on shimmerCubes so it only recomputes when the array reference
+  // changes (Zustand replaces the array on every setShimmerCubes / clearShimmerCubes call).
+  const shimmerSet = useMemo<Set<string>>(
+    () => new Set(shimmerCubes.map((c) => `${c.unit}-${c.row}-${c.col}`)),
+    [shimmerCubes],
+  )
+
+  // Phase 4 / D-03: 60s client TTL sweeper — safety clear for abandoned edits.
+  // When shimmerCubes is non-empty, schedule a timeout for (shimmerExpiresAt - now).
+  // On fire, clear all current shimmer cubes via getState() (avoids stale closure —
+  // Pitfall 5). Timer is cancelled on change/unmount so no double-clear happens.
+  // The primary clear path (boundary_changed → clearShimmerCubes) is in the SSE
+  // consumer above — this sweeper only fires if the commit never arrives (~60s idle).
+  useEffect(() => {
+    if (shimmerCubes.length === 0) return
+
+    const msUntilExpiry = shimmerExpiresAt - Date.now()
+    if (msUntilExpiry <= 0) {
+      // Already expired — clear immediately
+      useGruvaxStore.getState().clearShimmerCubes(useGruvaxStore.getState().shimmerCubes)
+      return
+    }
+
+    const timer = setTimeout(() => {
+      useGruvaxStore.getState().clearShimmerCubes(useGruvaxStore.getState().shimmerCubes)
+    }, msUntilExpiry)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [shimmerCubes, shimmerExpiresAt])
 
   // TanStack Query for search — fires on debouncedQuery change (SRCH-01)
   const {
@@ -417,6 +453,7 @@ export function KioskView() {
                 confidence={confidence}
                 fillLevels={fillLevels}
                 onCubeTap={setTappedCube}
+                shimmerCubes={shimmerSet}
               />
             </div>
           ))}
@@ -437,6 +474,7 @@ export function KioskView() {
                     confidence={confidence}
                     fillLevels={fillLevels}
                     onCubeTap={setTappedCube}
+                    shimmerCubes={shimmerSet}
                   />
                 </div>
               ))}
