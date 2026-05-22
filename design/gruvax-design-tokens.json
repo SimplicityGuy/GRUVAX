@@ -15,7 +15,8 @@
       "yellowGlow":    { "value": "rgba(255, 218, 0, 0.35)", "comment": "LED ambient glow" },
       "yellowFaint":   { "value": "rgba(255, 218, 0, 0.12)", "comment": "Subtle highlight background" },
       "white":         { "value": "#FFFFFF", "comment": "Primary background" },
-      "offWhite":      { "value": "#F7F9FC", "comment": "Secondary surface" }
+      "offWhite":      { "value": "#F7F9FC", "comment": "Secondary surface" },
+      "overlayScrim":  { "value": "rgba(0, 40, 85, 0.55)", "comment": "Modal / bottom-sheet backdrop · blue-darker @ 55%" }
     },
     "text": {
       "primary":   { "value": "#0051A2" },

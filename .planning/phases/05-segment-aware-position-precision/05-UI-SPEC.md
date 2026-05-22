@@ -461,7 +461,7 @@ machinery. The picker deliberately surfaces duplicate/variant rows.
 |--------------------------|---------------------------------------------------------------------------------------------------|
 | Sheet background         | `--gruvax-white`, `border-radius: var(--gruvax-radius-xl) var(--gruvax-radius-xl) 0 0`, `box-shadow: var(--gruvax-shadow-lg)` |
 | Slide-up animation       | Enter 250ms `var(--gruvax-ease-decelerate)`; exit 200ms `var(--gruvax-ease-accelerate)`         |
-| Overlay scrim            | `rgba(0, 40, 85, 0.55)` — fixed, full viewport, `z-index: var(--gruvax-z-modal)`               |
+| Overlay scrim            | `var(--gruvax-overlay-scrim)` — fixed, full viewport, `z-index: var(--gruvax-z-modal)`         |
 | Drag handle pill         | 40×4px, `--gruvax-border-light`, `border-radius: var(--gruvax-radius-pill)`, top `--gruvax-space-2` centered |
 | Sheet heading            | Barlow Condensed 900 36px `--gruvax-blue` ALL CAPS per entry mode                               |
 | Two-step autocomplete    | Reuse Phase 3 label picker → catalog# picker (same component, same validation, same A–Z rail on kiosk); see Phase 3 UI-SPEC §D |

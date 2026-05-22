@@ -54,7 +54,7 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 - [ ] **SEG-04**: An optional admin-set **physical-width override** per label-segment takes precedence over the count-derived fraction; segment widths within a bin always total 100%
 - [ ] **SEG-05**: The **label-contiguity invariant** is enforced — a label occupies one contiguous global run spanning at most adjacent bins; the boundary-save validator rejects any cut-point set that would scatter a label across non-adjacent bins
 - [ ] **SEG-06**: `GET /api/locate` returns a sub-cube interval produced by **two-level interpolation** (resolve bin+segment → offset by the fractions of preceding labels in the bin → interpolate by row-rank within the segment) behind the unchanged `LocateResult` contract; a label straddling a cut resolves to the correct bin without special-casing
-- [ ] **SEG-07**: The segment-aware estimator is proven to **meet-or-beat §4.1** on the real (gitignored) CSV and the synthetic CI dataset via the extended `run_all_algorithms.py` A/B harness (per-distribution-shape error metrics) before it becomes the v1 default; `estimator_version` reflects the change
+- [ ] **SEG-07**: The segment-aware estimator **supersedes §4.1** as the sole v1 default index estimator (with §4.8 cube-only retained as the timeout/low-confidence fallback), and `estimator_version` reflects the change. *(Amended 2026-05-22 — Phase 5 decision D-01: the prior "proven to meet-or-beat §4.1 via the extended `run_all_algorithms.py` A/B harness before cutover" gate is **dropped**. §4.1 is retired and the estimator ships on trust; ordinary unit + Hypothesis-invariant tests still apply, including the regression invariant that a single-segment bin reproduces §4.1 exactly.)*
 - [ ] **SEG-08**: Admin can **view, edit, and add cut points** (adding a cut splits a bin and renumbers subsequent bins) and set per-label **width overrides**; saves are parser-validated, flow through the existing diff-preview + change-set undo path, and keep `/api/locate` at p95 ≤ 50 ms (CPU-only, no DB on the hot path)
 
 ### Admin / Data Management
@@ -302,4 +302,4 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 
 ---
 *Requirements defined: 2026-05-19*
-*Last updated: 2026-05-21 — added SEG-01..08 (Phase 5, Segment-Aware Position Precision); corrected traceability phase numbers after the Phase 5 insert renumbered LED→6, Wizards→7, Observability→8*
+*Last updated: 2026-05-22 — amended SEG-07 per Phase 5 decision D-01 (dropped the A/B "meet-or-beat §4.1" proof gate; §4.1 retired, segment-aware ships on trust). 2026-05-21 — added SEG-01..08 (Phase 5, Segment-Aware Position Precision); corrected traceability phase numbers after the Phase 5 insert renumbered LED→6, Wizards→7, Observability→8*
