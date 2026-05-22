@@ -86,8 +86,8 @@ async def _login(base_url: str) -> dict[str, str]:
     # The server has its own pool via the standard lifespan path.
     # Re-use a brief direct DB connection to upsert the hash.
     try:
-        from gruvax.auth.pin import hash_pin  # noqa: PLC0415
-        from gruvax.db.pool import create_pool  # noqa: PLC0415
+        from gruvax.auth.pin import hash_pin
+        from gruvax.db.pool import create_pool
 
         pool = create_pool(min_size=1, max_size=2, open=False)
         await pool.open()

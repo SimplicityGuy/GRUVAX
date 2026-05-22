@@ -9,8 +9,6 @@ Analog: tests/unit/test_normalize.py (pure-function pattern).
 
 from __future__ import annotations
 
-import pytest
-
 
 def test_verify_correct_pin() -> None:
     """hash_pin then verify_pin with the same PIN returns True (ADMN-01)."""

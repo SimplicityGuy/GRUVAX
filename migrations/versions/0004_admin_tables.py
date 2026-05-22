@@ -16,7 +16,7 @@ Adds four tables to the ``gruvax`` schema required for Phase 3 admin loop:
 - ``idempotency_keys``   — 24h dedup store for ``POST /api/admin/cubes/bulk`` so
                            a client retry cannot double-commit a change-set.
 
-Conventions (carried from 0001–0003):
+Conventions (carried from 0001-0003):
 - All DDL via ``op.execute()`` with explicit constraint/index names.
 - ``downgrade()`` drops tables in reverse creation order with IF EXISTS guards.
 - ``migrations/env.py`` is NOT modified; ``version_table_schema="public"`` and

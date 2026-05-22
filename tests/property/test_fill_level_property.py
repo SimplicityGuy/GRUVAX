@@ -179,7 +179,7 @@ def test_label_casefold_not_normalize_catalog(base_label: str, n: int) -> None:
 def test_fill_count_monotone_in_range(label: str, n: int, cut: int) -> None:
     """A wider catalog range produces >= count than a narrower one (monotonicity).
 
-    If boundary A covers records 1–n and boundary B covers 1–(n-cut),
+    If boundary A covers records 1-n and boundary B covers 1-(n-cut),
     then count(A) >= count(B).
     """
     from gruvax.estimator.boundary_math import count_records_in_boundary

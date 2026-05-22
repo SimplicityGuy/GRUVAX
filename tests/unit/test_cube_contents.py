@@ -63,7 +63,7 @@ def test_sample_subset() -> None:
 
     records = _make_records(100)
     result = sample_records(records, n=7)
-    records_set = set(id(r) for r in records)
+    records_set = {id(r) for r in records}
     for sampled in result:
         # Each sampled record must be an element of the original list (same object)
         assert id(sampled) in records_set, (
@@ -78,7 +78,7 @@ def test_sample_n_equals_len() -> None:
     records = _make_records(7)
     result = sample_records(records, n=7)
     assert len(result) == 7
-    assert set(r.release_id for r in result) == set(r.release_id for r in records)
+    assert {r.release_id for r in result} == {r.release_id for r in records}
 
 
 def test_sample_single() -> None:

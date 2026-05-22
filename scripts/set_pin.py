@@ -35,18 +35,17 @@ async def _set_pin(pin: str) -> None:
 
     h = hash_pin(pin)
 
-    async with get_pool_context() as pool:
-        async with pool.connection() as conn:
-            await conn.execute(
-                "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-                " VALUES ('auth.pin_hash', %s::jsonb, 'Argon2id-hashed admin PIN', now())"
-                " ON CONFLICT (key) DO UPDATE"
-                "  SET value = EXCLUDED.value, updated_at = now()",
-                (f'"{h}"',),
-            )
-            await conn.commit()
+    async with get_pool_context() as pool, pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
+            " VALUES ('auth.pin_hash', %s::jsonb, 'Argon2id-hashed admin PIN', now())"
+            " ON CONFLICT (key) DO UPDATE"
+            "  SET value = EXCLUDED.value, updated_at = now()",
+            (f'"{h}"',),
+        )
+        await conn.commit()
 
-    print("PIN set successfully.")  # noqa: T201
+    print("PIN set successfully.")
 
 
 def main() -> None:
