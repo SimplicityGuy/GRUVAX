@@ -141,20 +141,17 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
     if not auth:
         pytest.skip("Admin login not implemented — skipping SSE latency test")
 
-    # Fixture boundary for cube 1/0/0 (boundaries.yaml row 0, col 0)
+    # Fixture boundary for cube 1/0/0 (boundaries.yaml row 0, col 0).
+    # Phase 5 (SEG-01): last_label / last_catalog removed from request bodies.
     ORIGINAL_BOUNDARY = {
         "first_label": "Blue Note",
         "first_catalog": "BLP 4001",
-        "last_label": "Blue Note",
-        "last_catalog": "BLP 4020",
         "is_empty": False,
         "force": True,
     }
     TEST_BOUNDARY = {
         "first_label": "ZZ Test",
         "first_catalog": "ZZT 0001",
-        "last_label": "ZZ Test",
-        "last_catalog": "ZZT 0002",
         "is_empty": False,
         "force": True,
     }

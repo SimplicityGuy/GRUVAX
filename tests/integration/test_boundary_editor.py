@@ -53,8 +53,6 @@ async def test_phantom_blocked(client) -> None:  # type: ignore[no-untyped-def]
         json={
             "first_label": "PHANTOM_NONEXISTENT_LABEL_XYZ",
             "first_catalog": "PHANTOM_999999",
-            "last_label": "PHANTOM_NONEXISTENT_LABEL_XYZ",
-            "last_catalog": "PHANTOM_999999",
             "is_empty": False,
             "force": False,
         },
@@ -71,9 +69,12 @@ async def test_phantom_blocked(client) -> None:  # type: ignore[no-untyped-def]
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_phantom_force_save(client) -> None:  # type: ignore[no-untyped-def]
-    """force:true bypasses phantom check but NOT the POS-01 comparator (ADMN-03, D-07).
+    """force:true bypasses phantom check and saves any first_label/first_catalog (ADMN-03, D-07).
 
-    An inverted boundary (first > last) must still be rejected even with force:true.
+    Phase 5 (05-04 / SEG-01): the cut-point model stores only first_label / first_catalog.
+    The old last_* comparator (first > last rejection) no longer applies — there IS no last_*
+    in cube_boundaries.  force=True now means: skip phantom check and write whatever first_*
+    is provided.  The response must be 200 (successful write).
     """
     login_res = await client.post("/api/admin/login", json={"pin": "0000"})
     if login_res.status_code != 200:
@@ -81,24 +82,23 @@ async def test_phantom_force_save(client) -> None:  # type: ignore[no-untyped-de
 
     csrf_token = login_res.cookies.get("gruvax_csrf")
 
-    # Inverted boundary (BLP 4200 > BLP 4001 numerically) — must fail even with force
+    # BLP 4200 is NOT in the synthetic collection (phantom) — force=True bypasses that check.
+    # In the cut-point model there is no last_* to validate, so the write must succeed.
     response = await client.put(
         "/api/admin/cubes/1/0/0/boundary",
         json={
             "first_label": "Blue Note",
             "first_catalog": "BLP 4200",
-            "last_label": "Blue Note",
-            "last_catalog": "BLP 4001",
             "is_empty": False,
-            "force": True,  # force=True bypasses phantom, not comparator
+            "force": True,  # bypass phantom check; no last_* comparator in Phase 5
         },
         cookies=login_res.cookies,
         headers={"X-CSRF-Token": csrf_token or ""},
     )
-    # Must still be rejected: inverted first > last
-    assert response.status_code == 400, (
-        f"Inverted boundary with force:true must still be rejected (comparator), "
-        f"got {response.status_code}"
+    # Must succeed: phantom check bypassed by force=True, no last_* validation in cut-point model
+    assert response.status_code == 200, (
+        f"force:True with phantom first_catalog must succeed in cut-point model (Phase 5), "
+        f"got {response.status_code}: {response.text}"
     )
 
 
@@ -121,8 +121,6 @@ async def test_near_misses_returned(client) -> None:  # type: ignore[no-untyped-
         json={
             "first_label": "Blu Notte",
             "first_catalog": "BLP 4001",
-            "last_label": "Blu Notte",
-            "last_catalog": "BLP 4200",
             "is_empty": False,
             "force": False,
         },
@@ -161,8 +159,6 @@ async def test_validate_no_db_write(client) -> None:  # type: ignore[no-untyped-
                     "col": 0,
                     "first_label": "Blue Note",
                     "first_catalog": "BLP 4001",
-                    "last_label": "Blue Note",
-                    "last_catalog": "BLP 4195",
                     "is_empty": False,
                 }
             ]
@@ -214,10 +210,8 @@ async def test_single_cube_put_writes_history(client, db_pool) -> None:  # type:
         json={
             "first_label": "Blue Note",
             "first_catalog": "BLP 4001",
-            "last_label": "Blue Note",
-            "last_catalog": "BLP 4001",
             "is_empty": False,
-            "force": True,  # bypass phantom check; comparator passes (first == last)
+            "force": True,  # bypass phantom check; cut-point model has no last_* comparator
         },
         cookies=login_res.cookies,
         headers={"X-CSRF-Token": csrf_token},

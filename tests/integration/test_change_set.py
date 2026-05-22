@@ -70,8 +70,6 @@ async def test_bulk_writes_history(client) -> None:  # type: ignore[no-untyped-d
                     "col": 0,
                     "first_label": "Blue Note",
                     "first_catalog": "BLP 4001",
-                    "last_label": "Blue Note",
-                    "last_catalog": "BLP 4100",
                     "is_empty": False,
                     "force": True,
                 }
@@ -113,8 +111,6 @@ async def test_idempotency_key_replay(client) -> None:  # type: ignore[no-untype
                 "col": 1,
                 "first_label": "Blue Note",
                 "first_catalog": "BLP 4101",
-                "last_label": "Blue Note",
-                "last_catalog": "BLP 4200",
                 "is_empty": False,
                 "force": True,
             }
@@ -174,8 +170,6 @@ async def test_revert_writes_inverse(client) -> None:  # type: ignore[no-untyped
                     "col": 0,
                     "first_label": "ECM",
                     "first_catalog": "ECM 1001",
-                    "last_label": "ECM",
-                    "last_catalog": "ECM 1050",
                     "is_empty": False,
                     "force": True,
                 }
@@ -233,8 +227,6 @@ async def test_revert_conflict_skip(client) -> None:  # type: ignore[no-untyped-
                     "col": 0,
                     "first_label": "Verve",
                     "first_catalog": "V 8001",
-                    "last_label": "Verve",
-                    "last_catalog": "V 8100",
                     "is_empty": False,
                     "force": True,
                 }
@@ -264,8 +256,6 @@ async def test_revert_conflict_skip(client) -> None:  # type: ignore[no-untyped-
                     "col": 0,
                     "first_label": "Verve",
                     "first_catalog": "V 8200",
-                    "last_label": "Verve",
-                    "last_catalog": "V 8300",
                     "is_empty": False,
                     "force": True,
                 }
@@ -319,8 +309,6 @@ async def test_revert_is_undoable(client) -> None:  # type: ignore[no-untyped-de
                     "col": 0,
                     "first_label": "Impulse",
                     "first_catalog": "A 1",
-                    "last_label": "Impulse",
-                    "last_catalog": "A 50",
                     "is_empty": False,
                     "force": True,
                 }
