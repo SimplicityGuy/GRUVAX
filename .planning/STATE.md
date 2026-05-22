@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-last_updated: 2026-05-22T02:37:21.512Z
+status: planning
+last_updated: "2026-05-22T03:42:45.123Z"
 progress:
-  total_phases: 7
-  completed_phases: 3
+  total_phases: 8
+  completed_phases: 4
   total_plans: 17
   completed_plans: 17
-  percent: 43
-stopped_at: Phase 04 complete (4/4) — ready to discuss Phase 5
+  percent: 50
 ---
 
 # State: GRUVAX
@@ -21,11 +20,11 @@ stopped_at: Phase 04 complete (4/4) — ready to discuss Phase 5
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 5 — led contract over mqtt (hardware stubbed)
+**Current Focus:** Phase 5 — segment-aware position precision
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
-**Granularity:** standard (7 phases, 3–5 plans each expected)
+**Granularity:** standard (8 phases, 3–5 plans each expected)
 
 ## Current Position
 
@@ -42,9 +41,10 @@ Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
 Phase 2: Real Position Estimation                   [ ] Not started
 Phase 3: Admin Loop (PIN + Manual Entry + Undo)     [ ] Not started
 Phase 4: Realtime + Offline Resilience              [ ] Not started
-Phase 5: LED Contract over MQTT (Hardware Stubbed)  [ ] Not started
-Phase 6: Wizards + Import/Export                    [ ] Not started
-Phase 7: Observability + Deployment Hardening       [ ] Not started
+Phase 5: Segment-Aware Position Precision           [ ] Not started
+Phase 6: LED Contract over MQTT (Hardware Stubbed)  [ ] Not started
+Phase 7: Wizards + Import/Export                    [ ] Not started
+Phase 8: Observability + Deployment Hardening       [ ] Not started
 ```
 
 ## Performance Metrics
@@ -65,6 +65,10 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 
 ## Accumulated Context
 
+### Roadmap Evolution
+
+- Phase 5 inserted after Phase 4: Segment-Aware Position Precision — true integer insert; bumped LED→6, Wizards→7, Observability→8
+
 ### Decisions Made (from PROJECT.md + research)
 
 - **Vertical MVP slicing** — every phase delivers an end-to-end user-observable capability. No horizontal infrastructure-only phases.
@@ -73,7 +77,7 @@ Phase 7: Observability + Deployment Hardening       [ ] Not started
 - **Estimator contract locked in Phase 1** — `LocateResult{primary_cube, label_span, sub_cube_interval, confidence, generated_at, estimator_version}`. v1 Phase 1 ships cube-only fallback (INTERPOLATION §4.8); Phase 2 swaps in §4.1 index-based estimator behind the same contract.
 - **Boundary cache + SSE invalidation** — cache loads at startup (Phase 1), invalidates on `boundary_changed` events (Phase 4 wires SSE).
 - **In-app numeric keypad** mitigates labwc/squeekboard #2926 (Pitfall 4) — built in Phase 3, no dependency on system on-screen keyboard.
-- **MVP boundary seed via fixture** — Phase 1 uses a committed CSV/YAML fixture (no PII) so the search→highlight slice is demoable before any admin UI exists. Admin tooling lands in Phase 3; wizards in Phase 6.
+- **MVP boundary seed via fixture** — Phase 1 uses a committed CSV/YAML fixture (no PII) so the search→highlight slice is demoable before any admin UI exists. Admin tooling lands in Phase 3; wizards in Phase 7.
 - **Stack pinned** (research/STACK.md, HIGH confidence): Python 3.13, FastAPI 0.136.x, psycopg 3.2 async, SQLAlchemy 2.0 async, Alembic 1.18.x, sse-starlette 2.x, aiomqtt 3.x, eclipse-mosquitto:2.1-alpine, React 19 + Vite 7 + Tailwind + GSAP + Framer Motion, Raspberry Pi OS Trixie + labwc + Chromium kiosk.
 - **search_path set via connect event listener** (not execute-before-configure) — prevents Alembic autobegin bug where _in_external_transaction=True causes no COMMIT. Documented in 01-01-SUMMARY.md.
 - **alembic_version in public schema** (version_table_schema="public") — prevents DROP SCHEMA gruvax cascade from deleting version row before Alembic bookkeeping runs.
@@ -108,10 +112,10 @@ To be resolved during plan-phase or as the user provides input:
 
 - **Service-worker cached search results** — v1 or v1.x? (Pure offline read-cache, ~1 day of work)
 - **Per-visitor PIN** — v1 or v2? (Schema supports it; UX call)
-- **YAML or JSON** for boundary import/export? — Recommend YAML (Phase 6)
+- **YAML or JSON** for boundary import/export? — Recommend YAML (Phase 7)
 - **PIN hash location** — env var or `gruvax.settings`? — Recommend DB-seeded via bootstrap CLI (Phase 3)
-- **Position-estimator algorithm beyond §4.1** — empirically determined via A/B harness against owner's hand-curated boundaries (revisit after Phase 6 reshuffle landing)
-- **INTERPOLATION §8.1 owner-input questions** — density vs uniform shelving, multi-prefix grouping, multi-value catalog handling, multi-label handling, confidence threshold for sub-cube vs cube-only — surfaced during Phase 3 admin sign-off and Phase 6 wizard inspection
+- **Position-estimator algorithm beyond §4.1** — now scoped as Phase 5 (Segment-Aware Position Precision); empirically determined via the extended A/B harness against owner's hand-curated boundaries
+- **INTERPOLATION §8.1 owner-input questions** — density vs uniform shelving, multi-prefix grouping, multi-value catalog handling, multi-label handling, confidence threshold for sub-cube vs cube-only — surfaced during Phase 3 admin sign-off and Phase 7 wizard inspection (multi-label handling now central to Phase 5)
 
 ### Active Todos
 

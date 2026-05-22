@@ -2,8 +2,8 @@
 
 **Created:** 2026-05-19
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
-**Granularity:** standard (7 phases)
-**Requirements covered:** 73 / 73 v1 (100%)
+**Granularity:** standard (8 phases)
+**Requirements covered:** 73 / 73 v1 (100%) + new Phase 5 (SEG-*) requirements pending authoring
 
 ## Core Value (north star for every phase)
 
@@ -17,9 +17,10 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 - [x] **Phase 2: Real Position Estimation** - Sub-cube interval bar, label-span multi-cube highlight, §4.1 index-based estimator with A/B harness; the kiosk now answers "where exactly". (completed 2026-05-20)
 - [x] **Phase 3: Admin Loop (PIN + Manual Entry + Undo)** - Owner can sign in (mobile or kiosk-with-in-app-keypad), enter boundaries, preview diffs, and undo mistakes — boundaries become a living artifact, not a fixture. (completed 2026-05-21)
 - [x] **Phase 4: Realtime + Offline Resilience** - Admin edits reach the kiosk live via SSE; kiosk gracefully degrades on connectivity loss; privacy floors and recently-pulled land here. (completed 2026-05-22)
-- [ ] **Phase 5: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness.
-- [ ] **Phase 6: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable.
-- [ ] **Phase 7: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof.
+- [ ] **Phase 5: Segment-Aware Position Precision** - A bin holds an ordered list of per-label segments; store only cut points + optional physical-width overrides and derive segments/counts/fractions from `v_collection`; a segment-aware estimator supersedes §4.1 via two-level interpolation so a record's position is precise even when multiple labels share a bin.
+- [ ] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness.
+- [ ] **Phase 7: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable.
+- [ ] **Phase 8: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof.
 
 ## Phase Details
 
@@ -149,11 +150,29 @@ Plans:
 **UI hint:** yes
 **SPIDR note:** Split from original "Realtime + Offline Resilience" on the Paths axis (2026-05-21). Happy path (realtime) is this phase; deferred slices: Offline Resilience (OFF-01..04) and Privacy + Recently-Pulled (SRCH-09, PRIV-01..04).
 
-### Phase 5: LED Contract over MQTT (Hardware Stubbed)
+### Phase 5: Segment-Aware Position Precision
+
+**Goal:** Replace the one-span-per-cube boundary model with a segment-aware model — a bin holds an ordered list of per-label segments. Store only **cut points** (the first record of each bin) plus **optional physical-width overrides**; derive every segment's bounds, counts, and bin-fraction by **row-counting `gruvax.v_collection`** (never catalog arithmetic). Ship a segment-aware estimator that supersedes §4.1 via **two-level interpolation** (which-bin/segment → fraction-offset within the bin → row-rank within the segment), so a record's sub-cube position is precise even when multiple labels share a bin and labels straddle a cut.
+**Mode:** mvp
+**Depends on:** Phase 1 (boundary cache, `v_collection`), Phase 2 (POS-01 parser/comparator, §4.1 estimator it supersedes, `run_all_algorithms.py` A/B harness), Phase 3 (admin auth + boundary editor)
+**Sequencing:** Lands **before** the LED phase — LED sub-span precision (now Phase 6) depends on this segment model.
+**Requirements:** TBD — new `SEG-*` category to author in REQUIREMENTS.md before planning (design rationale: `.planning/notes/segment-aware-boundaries.md`).
+**Success Criteria** (what must be TRUE):
+
+  1. A boundary is stored as a set of **cut points** (first record per bin); given the globally-ordered `v_collection`, the system derives each bin's ordered per-label segments (label, first/last record) with **zero additional manual input**, and re-derives automatically as the collection grows.
+  2. Per-label **counts and bin-fractions** are computed by row-counting `v_collection` across each segment's catalog range — correctly including duplicate owned copies and variant releases (`37` vs `37-r`) — and an **optional physical-width override** per segment wins over the count-derived fraction when present.
+  3. `/api/locate` returns a sub-cube interval produced by **two-level interpolation**: it selects the correct bin+segment for the record, offsets by the fractions of preceding labels in the bin, and interpolates by row-rank within the segment; the **straddle case** (a label split across two adjacent bins by a cut) resolves to the correct bin without special-casing.
+  4. The segment-aware estimator is proven to **meet-or-beat §4.1** on the real (gitignored) CSV and the synthetic CI dataset via the extended `run_all_algorithms.py` A/B harness, with per-distribution-shape error metrics — before it is locked in as the v1 default.
+  5. Admin can **view, edit, and add cut points** and set per-label **width overrides** for a bin (the cut-point editor / override UI), with the shared parser validating saves and the existing diff-preview + change-set undo path (Phase 3) covering the new mutations; the locate latency budget (p95 ≤ 50 ms, CPU-only, no DB on the hot path) is preserved.
+
+**Plans:** TBD
+**UI hint:** yes
+
+### Phase 6: LED Contract over MQTT (Hardware Stubbed)
 
 **Goal:** Every search highlight publishes a versioned, Pydantic-validated MQTT payload to `gruvax/v1/leds/...` on an internal Mosquitto broker (no host port exposure); admin tunes colors and brightness; "all off" and diagnostic sequences work end-to-end — the contract is hardware-ready.
 **Mode:** mvp
-**Depends on:** Phase 1 (Compose), Phase 2 (sub-cube interval data), Phase 3 (admin settings UI)
+**Depends on:** Phase 1 (Compose), Phase 2 (sub-cube interval data), Phase 3 (admin settings UI), Phase 5 (segment-aware sub-span data for precise per-label LED illumination)
 **Requirements:** LED-01, LED-02, LED-03, LED-04, LED-05, LED-06, LED-07, LED-08, LED-09, LED-10, DEP-03
 **Success Criteria** (what must be TRUE):
 
@@ -165,11 +184,11 @@ Plans:
 
 **Plans:** TBD
 
-### Phase 6: Wizards + Import/Export
+### Phase 7: Wizards + Import/Export
 
 **Goal:** Owner can stand up boundaries from scratch via a guided setup wizard, atomically apply a post-haul reshuffle, import boundaries from a CSV/YAML seed file (with diff preview), and export current boundaries + LED color settings — boundary maintenance is fast, atomic, and portable.
 **Mode:** mvp
-**Depends on:** Phase 3 (admin auth, history, validate), Phase 5 (color settings exist to export)
+**Depends on:** Phase 3 (admin auth, history, validate), Phase 5 (segment/cut-point model the wizard populates), Phase 6 (color settings exist to export)
 **Requirements:** ADMN-04, ADMN-05, ADMN-10, BAK-01, BAK-02
 **Success Criteria** (what must be TRUE):
 
@@ -182,7 +201,7 @@ Plans:
 **Plans:** TBD
 **UI hint:** yes
 
-### Phase 7: Observability + Deployment Hardening
+### Phase 8: Observability + Deployment Hardening
 
 **Goal:** `/healthz` reports per-subsystem reachability, the slow-query log proves the 200 ms search SLO, sync staleness is surfaced to admin (and kiosk if stale > 7 days), Compose services declare log limits + healthchecks, and a `/version` endpoint reports the running build — the v1 is operable, observable, and self-healing.
 **Mode:** mvp
@@ -206,9 +225,10 @@ Plans:
 | 2. Real Position Estimation | 4/4 | Complete   | 2026-05-20 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
-| 5. LED Contract over MQTT (Hardware Stubbed) | 0/? | Not started | - |
-| 6. Wizards + Import/Export | 0/? | Not started | - |
-| 7. Observability + Deployment Hardening | 0/? | Not started | - |
+| 5. Segment-Aware Position Precision | 0/? | Not started | - |
+| 6. LED Contract over MQTT (Hardware Stubbed) | 0/? | Not started | - |
+| 7. Wizards + Import/Export | 0/? | Not started | - |
+| 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
 ## Critical-Path Notes (carried from research)
 
@@ -216,7 +236,7 @@ These are roadmapper-level reminders surfaced from ARCHITECTURE.md, PITFALLS.md,
 
 - **POS-01 parser is shared infrastructure** — must be implemented and Hypothesis-tested in Phase 1 because the boundary-save validator (Phase 3, ADMN-06), every algorithm (Phase 2, POS-05), and every algorithm test depend on it. (INTERPOLATION §8.2)
 - **`gruvax.v_collection` view + read-only grant** is the only path GRUVAX touches discogsography data — established in Phase 1 (DEP-02) and probed at startup (Pitfall 5).
-- **LED endpoint contract locked early** — Phase 5 implements the contract but `LocateResult.sub_cube_interval` shape (normalized 0..1) is locked in Phase 2 so firmware can land later without API changes.
+- **LED endpoint contract locked early** — Phase 6 implements the contract but `LocateResult.sub_cube_interval` shape (normalized 0..1) is locked in Phase 2 (and refined by the segment-aware estimator in Phase 5) so firmware can land later without API changes.
 - **Boundary cache + SSE invalidation pattern** — Phase 1 builds the cache; Phase 4 wires the SSE invalidation. `boundary_changed` events drive both kiosk re-render (RTM-01) and cache reload (POS-04).
 - **In-app virtual keypad** lands in Phase 3 (mitigates labwc#2926 / Pitfall 4) — squeekboard is treated as not-available throughout v1.
 - **No phase ships horizontal infrastructure alone.** Phase 1 looks broad because the Core Value requires backend + frontend + DB + Compose + parser to all exist together — that breadth is the smallest vertical slice that demos.
@@ -231,10 +251,11 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
 | 2 | CUBE (3,4,8,10), POS (3,5,6), SRCH (7,8) | 9 |
 | 3 | ADMN (1,2,3,6,7,8,9,12), CUBE (7,9) | 10 |
 | 4 | ADMN (11), RTM (1–4), OFF (1–4), SRCH (9), PRIV (1–4) | 14 |
-| 5 | LED (1–10), DEP (3) | 11 |
-| 6 | ADMN (4,5,10), BAK (1,2) | 5 |
-| 7 | OBS (1–7), DEP (4,5) | 9 |
-| **Total** | | **73** |
+| 5 | SEG (*) — new category, pending authoring | TBD |
+| 6 | LED (1–10), DEP (3) | 11 |
+| 7 | ADMN (4,5,10), BAK (1,2) | 5 |
+| 8 | OBS (1–7), DEP (4,5) | 9 |
+| **Total** | | **73 + SEG (TBD)** |
 
 ---
 *Roadmap created: 2026-05-19 from PROJECT.md, REQUIREMENTS.md, and research/{SUMMARY,STACK,ARCHITECTURE,PITFALLS,INTERPOLATION}.md*
