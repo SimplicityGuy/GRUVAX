@@ -26,7 +26,7 @@ import type { AdminCubeBoundary, CubeBoundaryEdit, ValidateItem } from '../../ap
 
 /** Format cube address for display.
  *
- * Uses 0-indexed row/col to match CubesGrid and CubeEditor (F6 fix).
+ * Uses 0-indexed row/col to match CubesGrid (F6 fix).
  * The kiosk A1–D4 letter scheme is a separate surface — do not use it here.
  */
 function cubeAddress(unit_id: number, row: number, col: number): string {
@@ -360,6 +360,64 @@ export function DiffPreviewSheet() {
                     This cube may exceed nominal capacity.
                   </div>
                 )}
+
+                {/* Phase 5: Cut-point change (UI-SPEC §G) */}
+                {edit.first_label && before?.first_label && edit.first_label !== before.first_label && (
+                  <div className="diff-seg-change diff-seg-change--cut">
+                    <span className="diff-seg-change-label">CUT POINT</span>
+                    <span className="diff-seg-change-before">
+                      BEFORE: {before.first_label} · {before.first_catalog || '—'}
+                    </span>
+                    <span className="diff-seg-change-after">
+                      AFTER: {edit.first_label} · {edit.first_catalog || '—'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Phase 5: Width overrides set (UI-SPEC §G) */}
+                {'segment_overrides' in edit &&
+                  Array.isArray((edit as { segment_overrides?: unknown[] }).segment_overrides) &&
+                  (edit as { segment_overrides: Array<{ label: string; fraction: number }> }).segment_overrides.map(
+                    (ov) => (
+                      <div key={ov.label} className="diff-seg-change diff-seg-change--override">
+                        <span className="diff-seg-change-label">OVERRIDE SET</span>
+                        <span className="diff-seg-change-value">
+                          LABEL {ov.label} in BIN {edit.row * 4 + edit.col + 1}{' '}
+                          → {Math.round(ov.fraction * 100)}%
+                        </span>
+                      </div>
+                    ),
+                  )}
+
+                {/* Phase 5: Insert cut / new bin (UI-SPEC §G) */}
+                {'is_insert_cut' in edit && (edit as { is_insert_cut?: boolean }).is_insert_cut && (
+                  <div className="diff-seg-change diff-seg-change--insert">
+                    <span className="diff-seg-change-label">NEW BIN</span>
+                    <span className="diff-seg-change-value">
+                      BIN {edit.row * 4 + edit.col + 1} created · starts at{' '}
+                      {edit.first_label || '—'} · {edit.first_catalog || '—'}
+                    </span>
+                  </div>
+                )}
+
+                {/* Phase 5: Orphaned override removed (UI-SPEC §G, D-04) */}
+                {'orphaned_overrides' in edit &&
+                  Array.isArray((edit as { orphaned_overrides?: unknown[] }).orphaned_overrides) &&
+                  (edit as { orphaned_overrides: Array<{ label: string }> }).orphaned_overrides.map(
+                    (ov) => (
+                      <div
+                        key={ov.label}
+                        className="diff-seg-change diff-seg-change--orphan"
+                        role="alert"
+                      >
+                        <span className="diff-seg-change-label">OVERRIDE REMOVED</span>
+                        <span className="diff-seg-change-value">
+                          LABEL {ov.label} in BIN {edit.row * 4 + edit.col + 1}{' '}
+                          — label no longer in this bin
+                        </span>
+                      </div>
+                    ),
+                  )}
               </div>
             )
           })}

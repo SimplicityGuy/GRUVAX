@@ -30,6 +30,13 @@ import type {
   SuggestResponse,
   ValidateResponse,
 } from './types'
+import type {
+  CutPointBody,
+  InsertCutBody,
+  OverridesBody,
+  Segment,
+  SegmentsResponse,
+} from './cubeTypes'
 
 const BASE = ''
 
@@ -410,6 +417,106 @@ export async function putCubeBoundary(
   if (res.status === 404) throw new Error('cube_not_found')
   if (!res.ok) throw new Error(`Boundary update failed: ${res.status}`)
   return res.json() as Promise<AdminCubeBoundary>
+}
+
+// ── Phase 5: Segment endpoints ────────────────────────────────────────────────
+
+/**
+ * GET /api/admin/cubes/{unit_id}/{row}/{col}/segments
+ * Returns derived segment data for one bin (reads SegmentCache — no DB write).
+ */
+export async function getUnitSegments(
+  unitId: number,
+  row: number,
+  col: number,
+): Promise<SegmentsResponse> {
+  const res = await adminFetch(`/api/admin/cubes/${unitId}/${row}/${col}/segments`)
+  if (res.status === 404) {
+    throw new Error(`Cube ${unitId}/${row}/${col} not found`)
+  }
+  if (!res.ok) {
+    throw new Error(`Failed to fetch segments: ${res.status}`)
+  }
+  return res.json() as Promise<SegmentsResponse>
+}
+
+/**
+ * PUT /api/admin/cubes/{unit_id}/{row}/{col}/cut
+ * Replace the cut point (first_label + first_catalog) for a bin.
+ */
+export async function setCutPoint(
+  unitId: number,
+  row: number,
+  col: number,
+  body: CutPointBody,
+): Promise<void> {
+  const res = await adminFetch(`/api/admin/cubes/${unitId}/${row}/${col}/cut`, {
+    method: 'PUT',
+    body: JSON.stringify(body),
+  })
+  if (res.status === 400) {
+    const errBody = await res.json() as Record<string, unknown>
+    throw new BulkSaveError(
+      400,
+      typeof errBody.type === 'string' ? errBody.type : undefined,
+      typeof errBody.message === 'string' ? errBody.message : undefined,
+    )
+  }
+  if (res.status === 404) throw new Error('cube_not_found')
+  if (!res.ok) throw new Error(`Set cut point failed: ${res.status}`)
+}
+
+/**
+ * POST /api/admin/cubes/{unit_id}/{row}/{col}/overrides
+ * Upsert or remove per-label width overrides for a bin.
+ * Supports Idempotency-Key header for safe retry on flaky connections.
+ */
+export async function setOverrides(
+  unitId: number,
+  row: number,
+  col: number,
+  overrides: OverridesBody,
+  idempotencyKey?: string,
+): Promise<void> {
+  const extraHeaders: Record<string, string> = {}
+  if (idempotencyKey) extraHeaders['Idempotency-Key'] = idempotencyKey
+
+  const res = await adminFetch(`/api/admin/cubes/${unitId}/${row}/${col}/overrides`, {
+    method: 'POST',
+    headers: extraHeaders,
+    body: JSON.stringify(overrides),
+  })
+  if (res.status === 400) {
+    const errBody = await res.json() as Record<string, unknown>
+    throw new BulkSaveError(
+      400,
+      typeof errBody.type === 'string' ? errBody.type : undefined,
+      typeof errBody.message === 'string' ? errBody.message : undefined,
+    )
+  }
+  if (!res.ok) throw new Error(`Set overrides failed: ${res.status}`)
+}
+
+/**
+ * POST /api/admin/cubes/insert-cut
+ * Split a bin by inserting a new cut point after the specified bin.
+ * Returns the new segment data; raises BulkSaveError on 400.
+ */
+export async function insertCut(body: InsertCutBody): Promise<{ segments: Segment[] }> {
+  const res = await adminFetch('/api/admin/cubes/insert-cut', {
+    method: 'POST',
+    body: JSON.stringify(body),
+  })
+  if (res.status === 400) {
+    const errBody = await res.json() as Record<string, unknown>
+    throw new BulkSaveError(
+      400,
+      typeof errBody.type === 'string' ? errBody.type : undefined,
+      typeof errBody.message === 'string' ? errBody.message : undefined,
+    )
+  }
+  if (!res.ok) throw new Error(`Insert cut failed: ${res.status}`)
+  return res.json() as Promise<{ segments: Segment[] }>
 }
 
 // ── Error types ───────────────────────────────────────────────────────────────

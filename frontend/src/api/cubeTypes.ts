@@ -45,3 +45,51 @@ export interface CubeBoundaryWithFill {
 export interface CubesWithFillResponse {
   cubes: CubeBoundaryWithFill[]
 }
+
+// ── Phase 5: Segment model types ──────────────────────────────────────────────
+
+/**
+ * One label's segment within a bin, as returned by GET /api/admin/cubes/{u}/{r}/{c}/segments.
+ * The fraction fields are always 0–1 and all fractions in a bin sum to 1.0.
+ */
+export interface Segment {
+  label: string
+  fraction: number         // applied fraction (override ?? auto)
+  is_override: boolean     // true if fraction was set by admin
+  auto_fraction: number    // count-derived fraction (always present)
+  continues: boolean       // true if this label straddles into the next bin
+  segment_count: number    // row count for this label in this bin
+}
+
+/** Response from GET /api/admin/cubes/{u}/{r}/{c}/segments */
+export interface SegmentsResponse {
+  segments: Segment[]
+}
+
+/** Body for PUT /api/admin/cubes/{u}/{r}/{c}/cut */
+export interface CutPointBody {
+  first_label: string
+  first_catalog: string
+  force?: boolean
+}
+
+/** One override entry for POST /api/admin/cubes/{u}/{r}/{c}/overrides */
+export interface OverrideEntry {
+  label: string
+  fraction: number | null  // null = remove override
+}
+
+/** Body for POST /api/admin/cubes/{u}/{r}/{c}/overrides */
+export interface OverridesBody {
+  overrides: OverrideEntry[]
+}
+
+/** Body for POST /api/admin/cubes/insert-cut */
+export interface InsertCutBody {
+  after_unit_id: number
+  after_row: number
+  after_col: number
+  new_first_label: string
+  new_first_catalog: string
+  force?: boolean
+}
