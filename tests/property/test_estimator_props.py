@@ -1,4 +1,10 @@
-"""Hypothesis property tests for the §4.1 index-based position estimator.
+"""Hypothesis property tests for the segment-aware position estimator (Phase 5).
+
+Phase 5 rewrite (Plan 05-03):
+  - locate_by_index removed; tests updated to use locate_by_segment.
+  - locate() now takes segment_cache= (not cache=).
+  - SegmentCache derived from BoundaryCache + CollectionSnapshot in each test.
+  - Factory return type: (BoundaryCache, CollectionSnapshot, dict[int, float]).
 
 Invariants (INTERPOLATION §7.3):
   1. primary_cube ∈ label_span when locate() returns a non-null primary_cube
@@ -17,8 +23,9 @@ from hypothesis import HealthCheck, given, settings
 from hypothesis import strategies as st
 
 from fixtures.synth_collection import make_multi_prefix, make_singleton, make_uniform_dense
-from gruvax.estimator.algorithm import locate, locate_by_index
+from gruvax.estimator.algorithm import locate, locate_by_segment
 from gruvax.estimator.normalize import parse_key
+from gruvax.estimator.segment_cache import SegmentCache
 
 # ── Session-scoped synth fixtures (no DB) ────────────────────────────────────
 
@@ -41,6 +48,13 @@ def singleton_fixtures():  # type: ignore[no-untyped-def]
     return make_singleton()
 
 
+def _derive(cache, snapshot):  # type: ignore[no-untyped-def]
+    """Derive a SegmentCache from cache + snapshot with no overrides."""
+    sc = SegmentCache()
+    sc.derive(cache, snapshot, {})
+    return sc
+
+
 # ── Invariant 1: primary_cube ∈ label_span ───────────────────────────────────
 
 
@@ -48,6 +62,7 @@ def test_primary_cube_in_label_span(uniform_dense_fixtures) -> None:  # type: ig
     """primary_cube must appear in label_span when locate() returns a non-null primary_cube."""
     cache, snapshot, truth = uniform_dense_fixtures
     label = "UniformDense"
+    segment_cache = _derive(cache, snapshot)
 
     for release_id in truth:
         catalog_number = f"UD {release_id:03d}"
@@ -55,7 +70,7 @@ def test_primary_cube_in_label_span(uniform_dense_fixtures) -> None:  # type: ig
             release_id=release_id,
             label=label,
             catalog_number=catalog_number,
-            cache=cache,
+            segment_cache=segment_cache,
             snapshot=snapshot,
         )
         if result.primary_cube is not None:
@@ -72,14 +87,15 @@ def test_sub_cube_interval_bounds(uniform_dense_fixtures) -> None:  # type: igno
     """0 ≤ start ≤ end ≤ 1 for every non-null sub_cube_interval."""
     cache, snapshot, truth = uniform_dense_fixtures
     label = "UniformDense"
+    segment_cache = _derive(cache, snapshot)
 
     for release_id in truth:
         catalog_number = f"UD {release_id:03d}"
-        result = locate_by_index(
+        result = locate_by_segment(
             release_id=release_id,
             label=label,
             catalog_number=catalog_number,
-            cache=cache,
+            segment_cache=segment_cache,
             snapshot=snapshot,
         )
         if result.sub_cube_interval is not None:
@@ -98,6 +114,7 @@ def test_monotone_position_within_label(uniform_dense_fixtures) -> None:  # type
     """Records sorted by parse_key(catalog_number) produce non-decreasing sub_cube_interval.start."""
     cache, snapshot, truth = uniform_dense_fixtures
     label = "UniformDense"
+    segment_cache = _derive(cache, snapshot)
 
     # Collect (catalog_number, release_id, start) in parse_key order
     records_ordered = sorted(
@@ -107,11 +124,11 @@ def test_monotone_position_within_label(uniform_dense_fixtures) -> None:  # type
 
     starts = []
     for catalog_number, release_id in records_ordered:
-        result = locate_by_index(
+        result = locate_by_segment(
             release_id=release_id,
             label=label,
             catalog_number=catalog_number,
-            cache=cache,
+            segment_cache=segment_cache,
             snapshot=snapshot,
         )
         if result.sub_cube_interval is not None:
@@ -132,27 +149,28 @@ def test_cosmetic_stability_multi_prefix(multi_prefix_fixtures) -> None:  # type
     """Separator and case variants of the same catalog number produce equal positions."""
     cache, snapshot, _truth = multi_prefix_fixtures
     label = "MultiPrefix"
+    segment_cache = _derive(cache, snapshot)
 
     # BLP 100 and BLP-100 should produce the same locate result (parse_key is cosmetic-stable)
-    result_space = locate_by_index(
+    result_space = locate_by_segment(
         release_id=1,
         label=label,
         catalog_number="BLP 100",
-        cache=cache,
+        segment_cache=segment_cache,
         snapshot=snapshot,
     )
-    result_dash = locate_by_index(
+    result_dash = locate_by_segment(
         release_id=1,
         label=label,
         catalog_number="BLP-100",
-        cache=cache,
+        segment_cache=segment_cache,
         snapshot=snapshot,
     )
-    result_upper = locate_by_index(
+    result_upper = locate_by_segment(
         release_id=1,
         label=label,
         catalog_number="blp 100",  # lowercase
-        cache=cache,
+        segment_cache=segment_cache,
         snapshot=snapshot,
     )
 
@@ -175,14 +193,15 @@ def test_cosmetic_stability_multi_prefix(multi_prefix_fixtures) -> None:  # type
 def test_hypothesis_bounds_uniform_dense(release_id: int) -> None:
     """Hypothesis: for any release_id in uniform_dense, 0 ≤ start ≤ end ≤ 1."""
     cache, snapshot, _truth = make_uniform_dense()
+    segment_cache = _derive(cache, snapshot)
     label = "UniformDense"
     catalog_number = f"UD {release_id:03d}"
 
-    result = locate_by_index(
+    result = locate_by_segment(
         release_id=release_id,
         label=label,
         catalog_number=catalog_number,
-        cache=cache,
+        segment_cache=segment_cache,
         snapshot=snapshot,
     )
     if result.sub_cube_interval is not None:
