@@ -277,6 +277,7 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 - **Accessibility constraints from the spec.** Blue-on-white is AAA (body-safe). Yellow-on-blue and blue-on-yellow are ~3.1:1 — large text (18px+) or decoration only, never body copy.
 - **Voice & tone.** Labels are ALL CAPS (Barlow Condensed 700, tracked wide); instructions are sentence case; error messages use plain language, no technical jargon.
 - **Logo usage.** Standard (white-ground) variant on light backgrounds, Reversed (blue-ground) on dark; never recolor the border independently of the wordmark, remove the yellow rule, or add shadows/glows to the mark itself.
+- **Sketch findings for GRUVAX** (validated design decisions, CSS patterns, visual direction — segment-aware boundary editing) → `Skill("sketch-findings-gruvax")`
 
 ## Documentation
 
