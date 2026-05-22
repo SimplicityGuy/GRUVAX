@@ -14,6 +14,7 @@ from fastapi import Depends, HTTPException, Request, status
 
 from gruvax.estimator.boundary_cache import BoundaryCache
 from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.estimator.segment_cache import SegmentCache
 
 
 def get_pool(request: Request) -> Any:
@@ -79,6 +80,28 @@ def get_collection_snapshot(request: Request) -> CollectionSnapshot:
             detail="Collection snapshot not ready",
         )
     return snapshot
+
+
+def get_segment_cache(request: Request) -> SegmentCache:
+    """FastAPI dependency: return the app-level SegmentCache.
+
+    Returns HTTP 503 if the cache is not yet on ``app.state`` (request races
+    lifespan startup / arrives during shutdown). The locate endpoint uses this
+    to feed the segment-aware two-level interpolation estimator (SEG-06/07).
+
+    Usage::
+
+        @router.get("/api/locate")
+        async def locate(..., segment_cache: SegmentCache = Depends(get_segment_cache)):
+            ...
+    """
+    cache: SegmentCache | None = getattr(request.app.state, "segment_cache", None)
+    if cache is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Segment cache not ready",
+        )
+    return cache
 
 
 def get_event_bus(request: Request) -> Any:

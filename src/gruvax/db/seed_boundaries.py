@@ -8,6 +8,12 @@ key.  Running it twice is safe.
 
 It also upserts the unit rows (units must exist before cube_boundaries can
 reference them, per the FK constraint).
+
+Phase 5 changes:
+  - INSERT column list no longer includes last_label / last_catalog (dropped in
+    SEG-01 migration 0005). The YAML fixture already omits these keys (05-01).
+  - ON CONFLICT SET no longer updates last_label / last_catalog.
+  - VALUES placeholder count reduced to match the cut-point-only column set.
 """
 
 from __future__ import annotations
@@ -55,21 +61,24 @@ async def _upsert_cubes(
     unit_id: int,
     cubes: list[dict[str, Any]],
 ) -> int:
-    """Upsert cube boundary rows; return count of rows inserted/updated."""
+    """Upsert cube boundary rows; return count of rows inserted/updated.
+
+    Phase 5: Only writes cut-point columns (first_label, first_catalog).
+    last_label and last_catalog are dropped from the DB schema in SEG-01
+    migration 0005 — they are now derived by SegmentCache, not stored.
+    """
     count = 0
     for cube in cubes:
         await conn.execute(
             """
             INSERT INTO gruvax.cube_boundaries
                 (unit_id, row, col,
-                 first_label, first_catalog, last_label, last_catalog,
+                 first_label, first_catalog,
                  is_empty)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            VALUES (%s, %s, %s, %s, %s, %s)
             ON CONFLICT (unit_id, row, col) DO UPDATE
                 SET first_label   = EXCLUDED.first_label,
                     first_catalog = EXCLUDED.first_catalog,
-                    last_label    = EXCLUDED.last_label,
-                    last_catalog  = EXCLUDED.last_catalog,
                     is_empty      = EXCLUDED.is_empty,
                     updated_at    = now()
             """,
@@ -79,8 +88,6 @@ async def _upsert_cubes(
                 cube["col"],
                 cube.get("first_label"),
                 cube.get("first_catalog"),
-                cube.get("last_label"),
-                cube.get("last_catalog"),
                 cube.get("is_empty", False),
             ),
         )
