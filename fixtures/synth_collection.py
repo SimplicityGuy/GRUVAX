@@ -278,26 +278,28 @@ def make_multi_label_bin() -> tuple[BoundaryCache, SegmentCache, CollectionSnaps
         label_b: [
             "LB 001",
             "LB 002",
-            "LB 003",       # owned copy
-            "LB 003",       # duplicate owned copy (same catalog, different pressing)
-            "LB 003-r",     # remix variant
+            "LB 003",  # owned copy
+            "LB 003",  # duplicate owned copy (same catalog, different pressing)
+            "LB 003-r",  # remix variant
             "LB 006",
         ],
     }
-    snapshot, by_label = _build_snapshot_multi(label_catalogs, start_id=1)
+    snapshot, _by_label = _build_snapshot_multi(label_catalogs, start_id=1)
 
     # Single cut-point cube: starts at LabelA LA 001
     # (LabelB starts mid-cube — no separate cut-point for it)
-    cache = _build_cache_multi([
-        {
-            "unit_id": 1,
-            "row": 0,
-            "col": 0,
-            "first_label": label_a,
-            "first_catalog": "LA 001",
-            "is_empty": False,
-        }
-    ])
+    cache = _build_cache_multi(
+        [
+            {
+                "unit_id": 1,
+                "row": 0,
+                "col": 0,
+                "first_label": label_a,
+                "first_catalog": "LA 001",
+                "is_empty": False,
+            }
+        ]
+    )
 
     # Derive SegmentCache with no overrides (empty override dict)
     seg_cache = SegmentCache()
@@ -332,24 +334,26 @@ def make_straddle() -> tuple[BoundaryCache, SegmentCache, CollectionSnapshot]:
     snapshot = _build_snapshot(label, catalogs)
 
     # Two adjacent cubes with cut points at LS 001 and LS 007
-    cache = _build_cache_multi([
-        {
-            "unit_id": 1,
-            "row": 0,
-            "col": 0,
-            "first_label": label,
-            "first_catalog": "LS 001",
-            "is_empty": False,
-        },
-        {
-            "unit_id": 1,
-            "row": 0,
-            "col": 1,
-            "first_label": label,
-            "first_catalog": "LS 007",
-            "is_empty": False,
-        },
-    ])
+    cache = _build_cache_multi(
+        [
+            {
+                "unit_id": 1,
+                "row": 0,
+                "col": 0,
+                "first_label": label,
+                "first_catalog": "LS 001",
+                "is_empty": False,
+            },
+            {
+                "unit_id": 1,
+                "row": 0,
+                "col": 1,
+                "first_label": label,
+                "first_catalog": "LS 007",
+                "is_empty": False,
+            },
+        ]
+    )
 
     # Derive SegmentCache with no overrides (empty override dict)
     seg_cache = SegmentCache()

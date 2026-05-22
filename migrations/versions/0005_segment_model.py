@@ -51,10 +51,7 @@ def upgrade() -> None:
     # ── 2. Replace CHECK constraint for the cut-point model ───────────────────
     # empty_or_complete required all four bound columns (first_* + last_*).
     # cut_point_complete only requires first_* (last_* are now derived).
-    op.execute(
-        "ALTER TABLE gruvax.cube_boundaries"
-        " DROP CONSTRAINT IF EXISTS empty_or_complete"
-    )
+    op.execute("ALTER TABLE gruvax.cube_boundaries DROP CONSTRAINT IF EXISTS empty_or_complete")
     op.execute("""
         ALTER TABLE gruvax.cube_boundaries
             ADD CONSTRAINT cut_point_complete CHECK (
@@ -132,10 +129,7 @@ def downgrade() -> None:
     #     downgraded rows have last_label=NULL because the data was not preserved
     #     when the 0005 upgrade dropped those columns. NOT VALID means the constraint
     #     applies to future INSERTs/UPDATEs but does not fail on pre-existing rows.
-    op.execute(
-        "ALTER TABLE gruvax.cube_boundaries"
-        " DROP CONSTRAINT IF EXISTS cut_point_complete"
-    )
+    op.execute("ALTER TABLE gruvax.cube_boundaries DROP CONSTRAINT IF EXISTS cut_point_complete")
     op.execute("""
         ALTER TABLE gruvax.cube_boundaries
             ADD CONSTRAINT empty_or_complete CHECK (

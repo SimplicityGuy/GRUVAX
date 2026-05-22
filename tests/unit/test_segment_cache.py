@@ -259,16 +259,138 @@ def test_override_renormalization_sums_to_one(multi_label_bin_fixture) -> None: 
 # ── SEG-05: Contiguity invariant ──────────────────────────────────────────────
 
 
-@pytest.mark.skip(reason="Wave 4 scope — validate_contiguity implemented in Plan 05-04")
 def test_contiguity_validation() -> None:
     """SEG-05: Contiguity validator rejects cuts scattering a label across non-adjacent bins.
 
     Requirement: SEG-05 — label-contiguity invariant enforced by save-validator;
     non-adjacent scatter is hard-rejected; adjacent multi-bin spans are valid (D-09).
-    """
-    from gruvax.api.admin.validation import validate_contiguity  # noqa: F401
 
-    # Wave 4 scope — validate_contiguity doesn't exist yet (Plan 05-04)
-    # Test: a label in bins [0,0] and [0,2] (skipping [0,1]) must be rejected
-    # Test: a label in bins [0,0] and [0,1] (adjacent) must be accepted
-    pytest.skip("Wave 4 scope — validate_contiguity implemented in Plan 05-04")
+    Two cases tested:
+
+    Case 1 — Non-adjacent scatter (rejected):
+      Proposing: (1,0,0)=Blue Note, (1,0,1)=ECM, (1,0,2)=Blue Note
+      Blue Note would be split across non-adjacent bins (ECM between them) → rejected.
+
+    Case 2 — Adjacent multi-bin span (accepted):
+      Proposing: (1,0,0)=Blue Note, (1,0,1)=Blue Note
+      Blue Note occupies adjacent bins (no other label between them) → accepted.
+
+    Note: Simply not including a bin in proposed_updates (e.g. proposing only bins 0
+    and 2) is NOT a scatter if the omitted bin (1,0,1) retains its current Blue Note
+    cut point — the label is still contiguous.  A real scatter requires a DIFFERENT
+    label to appear between two Blue Note bins in the proposed cut sequence.
+    """
+    from gruvax.api.admin.validation import validate_contiguity
+    from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
+    from gruvax.estimator.segment_cache import SegmentCache
+
+    # Build a 3-bin BoundaryCache with 3 different labels
+    cache = BoundaryCache()
+    cache._load_rows(
+        [
+            BoundaryRow(
+                unit_id=1,
+                row=0,
+                col=0,
+                first_label="Blue Note",
+                first_catalog="BLP 4001",
+                is_empty=False,
+            ),
+            BoundaryRow(
+                unit_id=1, row=0, col=1, first_label="ECM", first_catalog="ECM 1001", is_empty=False
+            ),
+            BoundaryRow(
+                unit_id=1,
+                row=0,
+                col=2,
+                first_label="Blue Note",
+                first_catalog="BLP 4011",
+                is_empty=False,
+            ),
+        ]
+    )
+
+    # Synthetic records for each label
+    records_bn_1 = [
+        RecordRow(release_id=i, label="Blue Note", catalog_number=f"BLP {4000 + i}")
+        for i in range(1, 11)
+    ]
+    records_ecm = [
+        RecordRow(release_id=100 + i, label="ECM", catalog_number=f"ECM {1000 + i}")
+        for i in range(1, 11)
+    ]
+    records_bn_2 = [
+        RecordRow(release_id=200 + i, label="Blue Note", catalog_number=f"BLP {4010 + i}")
+        for i in range(1, 11)
+    ]
+    snap = CollectionSnapshot()
+    snap._load_snapshot(
+        {
+            "blue note": records_bn_1 + records_bn_2,
+            "ecm": records_ecm,
+        }
+    )
+
+    sc = SegmentCache()
+    sc.derive(cache, snap, {})
+
+    # Case 1: Non-adjacent scatter — Blue Note in (1,0,0) and (1,0,2) with ECM at (1,0,1)
+    proposed_non_adjacent: list[dict[str, object]] = [
+        {
+            "unit_id": 1,
+            "row": 0,
+            "col": 0,
+            "first_label": "Blue Note",
+            "first_catalog": "BLP 4001",
+            "is_empty": False,
+        },
+        {
+            "unit_id": 1,
+            "row": 0,
+            "col": 1,
+            "first_label": "ECM",
+            "first_catalog": "ECM 1001",
+            "is_empty": False,
+        },
+        {
+            "unit_id": 1,
+            "row": 0,
+            "col": 2,
+            "first_label": "Blue Note",
+            "first_catalog": "BLP 4011",
+            "is_empty": False,
+        },
+    ]
+    result_non_adjacent = validate_contiguity(proposed_non_adjacent, sc)
+    assert result_non_adjacent is not None, (
+        "validate_contiguity must reject non-adjacent label scatter (SEG-05): "
+        "Blue Note at bins 0+2 with ECM at bin 1 should be rejected"
+    )
+    assert (
+        "non-adjacent" in result_non_adjacent.lower() or "split" in result_non_adjacent.lower()
+    ), f"Error message must reference the contiguity problem: {result_non_adjacent}"
+
+    # Case 2: Adjacent span — Blue Note in adjacent bins (1,0,0) and (1,0,1) — valid
+    proposed_adjacent: list[dict[str, object]] = [
+        {
+            "unit_id": 1,
+            "row": 0,
+            "col": 0,
+            "first_label": "Blue Note",
+            "first_catalog": "BLP 4001",
+            "is_empty": False,
+        },
+        {
+            "unit_id": 1,
+            "row": 0,
+            "col": 1,
+            "first_label": "Blue Note",
+            "first_catalog": "BLP 4011",
+            "is_empty": False,
+        },
+    ]
+    result_adjacent = validate_contiguity(proposed_adjacent, sc)
+    assert result_adjacent is None, (
+        f"validate_contiguity must accept adjacent multi-bin spans (SEG-05 D-09), got: {result_adjacent}"
+    )

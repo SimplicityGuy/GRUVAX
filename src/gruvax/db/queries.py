@@ -538,6 +538,11 @@ async def fetch_current_boundary(
     Used inside a transaction (atomic bulk write) to capture prev_* values
     before overwriting with new ones.  All SQL uses %s placeholders (T-03-24).
 
+    Phase 5 (SEG-01): last_label / last_catalog have been dropped from
+    cube_boundaries — they are no longer selected.  The returned dict will
+    not contain those keys.  boundary_history still stores prev_last_* /
+    new_last_* as nullable audit columns; callers pass None for new_last_*.
+
     Args:
         conn:    Open psycopg async connection (inside a transaction).
         unit_id: Cube unit ID.
@@ -548,8 +553,7 @@ async def fetch_current_boundary(
         Dict with boundary fields or None if the cube does not exist.
     """
     sql = """
-SELECT unit_id, row, col, first_label, first_catalog,
-       last_label, last_catalog, is_empty
+SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
 WHERE unit_id = %s AND row = %s AND col = %s
 """
@@ -569,8 +573,6 @@ async def write_boundary(
     col: int,
     first_label: str | None,
     first_catalog: str | None,
-    last_label: str | None,
-    last_catalog: str | None,
     is_empty: bool,
 ) -> None:
     """Update a cube's boundary values using an existing connection.
@@ -578,27 +580,28 @@ async def write_boundary(
     Used inside a transaction — the caller is responsible for commit.
     All SQL uses %s placeholders (T-03-24, zero f-string interpolation).
 
+    Phase 5 (SEG-01): last_label / last_catalog have been removed from
+    cube_boundaries.  The UPDATE no longer touches those columns; they are
+    now derived by SegmentCache from the next cube's cut point.
+
     Args:
         conn:          Open psycopg async connection (inside a transaction).
         unit_id:       Cube unit ID.
         row:           Cube row index.
         col:           Cube column index.
-        first_label:   New first boundary label.
-        first_catalog: New first boundary catalog number.
-        last_label:    New last boundary label.
-        last_catalog:  New last boundary catalog number.
+        first_label:   New cut-point label (None only when is_empty=True).
+        first_catalog: New cut-point catalog number (None only when is_empty=True).
         is_empty:      Whether the cube is empty.
     """
     sql = """
 UPDATE gruvax.cube_boundaries
 SET first_label = %s, first_catalog = %s,
-    last_label = %s, last_catalog = %s,
     is_empty = %s
 WHERE unit_id = %s AND row = %s AND col = %s
 """
     await conn.execute(
         sql,
-        (first_label, first_catalog, last_label, last_catalog, is_empty, unit_id, row, col),
+        (first_label, first_catalog, is_empty, unit_id, row, col),
     )
 
 
@@ -611,16 +614,20 @@ async def write_history_row(
     prev: dict[str, Any] | None,
     new_first_label: str | None,
     new_first_catalog: str | None,
-    new_last_label: str | None,
-    new_last_catalog: str | None,
     new_is_empty: bool,
     source: str,
 ) -> None:
     """Append one row to boundary_history for a single cube change.
 
-    source must be 'manual', 'bulk', or 'revert' (DB CHECK constraint).
-    prev is None for cubes that had no prior boundary entry.
-    All SQL uses %s placeholders (T-03-24).
+    source must be 'manual', 'bulk', 'revert', or 'cut_insert' (DB CHECK
+    constraint extended in migration 0005).  prev is None for cubes that had
+    no prior boundary entry.  All SQL uses %s placeholders (T-03-24).
+
+    Phase 5 (SEG-01): new_last_label / new_last_catalog have been removed from
+    the signature.  The boundary_history table KEEPS these columns as nullable
+    audit artifacts (A1 — no audit data is destroyed).  NULL is passed for
+    new_last_* because cube_boundaries no longer stores last_* values.
+    prev_last_* are also NULL for rows written after the 0005 migration.
 
     Args:
         conn:          Open psycopg async connection (inside a transaction).
@@ -629,8 +636,10 @@ async def write_history_row(
         row:           Cube row index.
         col:           Cube column index.
         prev:          Dict with prev_* fields from fetch_current_boundary.
-        new_*:         The new boundary values being written.
-        source:        'manual', 'bulk', or 'revert'.
+        new_first_label:   New cut-point label (None only when is_empty=True).
+        new_first_catalog: New cut-point catalog number (None only when is_empty=True).
+        new_is_empty:  Whether the cube is now empty.
+        source:        'manual', 'bulk', 'revert', or 'cut_insert'.
     """
     sql = """
 INSERT INTO gruvax.boundary_history (
@@ -642,8 +651,9 @@ INSERT INTO gruvax.boundary_history (
 """
     prev_first_label = prev.get("first_label") if prev else None
     prev_first_catalog = prev.get("first_catalog") if prev else None
-    prev_last_label = prev.get("last_label") if prev else None
-    prev_last_catalog = prev.get("last_catalog") if prev else None
+    # prev_last_* are NULL for all rows written after migration 0005 (A1 audit artifact).
+    prev_last_label: str | None = None
+    prev_last_catalog: str | None = None
     prev_is_empty = bool(prev.get("is_empty", True)) if prev else True
 
     await conn.execute(
@@ -660,8 +670,8 @@ INSERT INTO gruvax.boundary_history (
             prev_is_empty,
             new_first_label,
             new_first_catalog,
-            new_last_label,
-            new_last_catalog,
+            None,  # new_last_label — nullable audit artifact (A1, SEG-01)
+            None,  # new_last_catalog — nullable audit artifact (A1, SEG-01)
             new_is_empty,
             source,
         ),

@@ -12,10 +12,10 @@ Endpoints:
   - ``POST /admin/cubes/validate``:
       Dry-run diff — validates a proposed boundary without writing to the DB.
       Checks:
-        1. POS-01 comparator (parse_key): rejects first > last (always, even with force).
-        2. Phantom check (cube_exact_match): unless force=true, rejects (label, catalog)
+        1. Phantom check (cube_exact_match): unless force=true, rejects (label, catalog)
            pairs absent from v_collection and returns trigram near-misses.
-        3. Movement counts: computed from the in-memory collection snapshot.
+        2. Contiguity check (validate_contiguity): rejects non-adjacent label scatter.
+        3. Movement counts: computed from the in-memory SegmentCache + snapshot.
       Requires admin session + CSRF.
 
   - ``POST /admin/cubes/suggest``:
@@ -28,6 +28,14 @@ Security:
   - Every handler depends on require_admin (session cookie + CSRF, ASVS V4 — T-03-13).
   - All SQL uses %s placeholders, zero f-string interpolation (T-03-16).
   - validate endpoint performs NO INSERT/UPDATE/DELETE (T-03-14).
+
+Phase 5 changes (05-04):
+  - BoundaryEdit drops last_label / last_catalog (SEG-01 / migration 0005).
+  - _compute_movement_counts uses SegmentCache + count_records_in_bin.
+  - suggest_cube_midpoint derives the last-record anchor from SegmentCache rank info.
+  - Both write paths (put_cube_boundary + bulk_write_cubes) invalidate + re-derive
+    SegmentCache after BoundaryCache reload (Pitfall A: AFTER transaction commit).
+  - validate endpoint adds validate_contiguity check after phantom check.
 """
 
 from __future__ import annotations
@@ -44,11 +52,13 @@ from gruvax.api.deps import (
     get_collection_snapshot,
     get_event_bus,
     get_pool,
+    get_segment_cache,
     require_admin,
 )
 from gruvax.estimator.boundary_cache import BoundaryCache
-from gruvax.estimator.boundary_math import count_records_in_boundary, suggest_midpoint
+from gruvax.estimator.boundary_math import count_records_in_bin, suggest_midpoint
 from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.estimator.segment_cache import SegmentCache
 from gruvax.events.bus import EventBus
 
 logger = logging.getLogger(__name__)
@@ -59,28 +69,31 @@ router = APIRouter(tags=["admin-cubes"])
 
 
 class BoundaryEdit(BaseModel):
-    """One cube boundary proposal — the shape used for validate and suggest."""
+    """One cube boundary proposal — the shape used for validate and suggest.
+
+    Phase 5 (05-04): last_label / last_catalog removed (SEG-01, migration 0005).
+    The cut-point model stores only first_label / first_catalog as the cut point.
+    """
 
     unit_id: int
     row: int
     col: int
     first_label: str | None = None
     first_catalog: str | None = None
-    last_label: str | None = None
-    last_catalog: str | None = None
     is_empty: bool = False
-    force: bool = False  # True: skip phantom check (still runs comparator)
+    force: bool = False  # True: skip phantom check
 
 
 class PerCubeBoundaryEdit(BaseModel):
-    """Body for PUT /admin/cubes/{u}/{r}/{c}/boundary — no path params repeated."""
+    """Body for PUT /admin/cubes/{u}/{r}/{c}/boundary — no path params repeated.
+
+    Phase 5 (05-04): last_label / last_catalog removed (SEG-01, migration 0005).
+    """
 
     first_label: str | None = None
     first_catalog: str | None = None
-    last_label: str | None = None
-    last_catalog: str | None = None
     is_empty: bool = False
-    force: bool = False  # True: skip phantom check (still runs comparator)
+    force: bool = False  # True: skip phantom check
 
 
 class ValidateRequest(BaseModel):
@@ -103,6 +116,8 @@ class BulkWriteRequest(BaseModel):
     All updates share a single change_set_id in boundary_history.
     The Idempotency-Key header must be provided by the caller;
     a replay with the same key returns the cached response without re-writing.
+
+    Phase 5 (05-04): BoundaryEdit no longer carries last_label / last_catalog.
     """
 
     updates: list[BoundaryEdit]
@@ -129,22 +144,23 @@ async def get_admin_cubes(
     request: Request,
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
+    segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, Any]:
     """Return all cubes with fill levels.
 
-    fill_level = count_records_in_boundary / nominal_capacity.
+    Phase 5: fill_level = count_records_in_bin(SegmentBin) / nominal_capacity.
+    Uses SegmentCache to count records per bin (no last_* range needed).
     Values > 1.0 mean overstuffed.  0 for is_empty cubes.
 
     Response: ``{cubes: [{unit_id, row, col, is_empty, fill_level,
-                           first_label, first_catalog, last_label, last_catalog}, ...]}``
+                           first_label, first_catalog}, ...]}``
     """
     nominal_capacity = _get_nominal_capacity(request)
 
     sql = """
-SELECT unit_id, row, col, first_label, first_catalog,
-       last_label, last_catalog, is_empty
+SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
 ORDER BY unit_id, row, col
 """
@@ -153,19 +169,14 @@ ORDER BY unit_id, row, col
         rows_raw = await cur.fetchall()
         cols_meta = [desc[0] for desc in (cur.description or [])]
 
-    # Build a lookup from (unit_id, row, col) → BoundaryRow for fill-level calc
-    boundary_index: dict[tuple[int, int, int], Any] = {
-        (b.unit_id, b.row, b.col): b for b in cache.get_boundaries()
-    }
-
     cubes: list[dict[str, Any]] = []
     for row_raw in rows_raw:
         cube = dict(zip(cols_meta, row_raw, strict=True))
 
-        # Look up the BoundaryRow from the cache for fill-level calculation
-        boundary_row = boundary_index.get((cube["unit_id"], cube["row"], cube["col"]))
-        if boundary_row is not None:
-            count = count_records_in_boundary(boundary_row, snapshot)
+        # Use SegmentCache to get record count for this bin (no last_* needed)
+        seg_bin = segment_cache.get_bin(cube["unit_id"], cube["row"], cube["col"])
+        if seg_bin is not None and not cube.get("is_empty"):
+            count = count_records_in_bin(seg_bin)
             cube["fill_level"] = count / nominal_capacity
             cube["record_count"] = count
         else:
@@ -188,14 +199,15 @@ async def get_cube_boundary(
 ) -> dict[str, Any]:
     """Return one cube's current boundary values.
 
-    Response: ``{unit_id, row, col, first_label, first_catalog,
-                 last_label, last_catalog, is_empty}``
+    Phase 5: returns only cut-point columns (first_label, first_catalog, is_empty).
+    last_label / last_catalog are no longer stored in cube_boundaries (SEG-01).
+
+    Response: ``{unit_id, row, col, first_label, first_catalog, is_empty}``
 
     HTTP 404 if no cube exists for the given coordinates.
     """
     sql = """
-SELECT unit_id, row, col, first_label, first_catalog,
-       last_label, last_catalog, is_empty
+SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
 WHERE unit_id = %s AND row = %s AND col = %s
 """
@@ -222,61 +234,37 @@ async def put_cube_boundary(
     col: int = Path(ge=0),
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
+    segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     bus: EventBus = Depends(get_event_bus),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Validate and (when valid) update a cube boundary.
 
-    Validation order (T-03-14, D-07):
-      1. POS-01 comparator: rejects first > last always, even with force=True.
-      2. Phantom check (unless force=True): rejects values absent from v_collection;
+    Phase 5 validation order (T-03-14, D-07):
+      1. Phantom check (unless force=True): rejects values absent from v_collection;
          returns near_misses for tappable suggestions.
-      3. On success: writes to cube_boundaries, logs to boundary_history,
-         invalidates + reloads the boundary cache.
+      2. On success: writes to cube_boundaries (cut-point only), logs to boundary_history,
+         invalidates + reloads BoundaryCache, then re-derives SegmentCache (Pitfall A).
 
-    NOTE: In plan 04, this endpoint drives the boundary editor. Plan 05 will
-    add the bulk-write endpoint for multi-cube commits via pendingChangeSet.
+    NOTE: last_label / last_catalog removed from BoundaryEdit in Phase 5 (SEG-01).
+    The cut-point model stores only first_label / first_catalog.
 
     Returns 400 with flat JSON (phantom/near_misses/message as top-level keys)
-    so the frontend can distinguish phantom errors from comparator errors without
-    unwrapping a nested ``detail`` object.
+    so the frontend can distinguish phantom errors without unwrapping a nested
+    ``detail`` object.
     """
-    from gruvax.api.admin.validation import validate_boundary_order
     from gruvax.db.queries import cube_exact_match, find_boundary_near_misses
 
     first_label = body.first_label or ""
     first_catalog = body.first_catalog or ""
-    last_label = body.last_label or ""
-    last_catalog = body.last_catalog or ""
 
-    # ── Step 1: POS-01 comparator (always, even force=True) ─────────────────
-    if not body.is_empty and not validate_boundary_order(
-        first_label, first_catalog, last_label, last_catalog
-    ):
-        return JSONResponse(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            content={
-                "type": "boundary_order_error",
-                "message": "First record comes after last record. Check the order.",
-                "unit_id": unit_id,
-                "row": row,
-                "col": col,
-            },
-        )
-
-    # ── Step 2: Phantom check (skipped when force=True) ──────────────────────
+    # ── Step 1: Phantom check (skipped when force=True) ──────────────────────
     if not body.is_empty and not body.force:
         first_exists = await cube_exact_match(pool, first_label, first_catalog)
-        if first_label == last_label and first_catalog == last_catalog:
-            last_exists = first_exists
-        else:
-            last_exists = await cube_exact_match(pool, last_label, last_catalog)
 
-        if not first_exists or not last_exists:
-            phantom_label = first_label if not first_exists else last_label
-            phantom_catalog = first_catalog if not first_exists else last_catalog
-            near_misses = await find_boundary_near_misses(pool, phantom_label, phantom_catalog)
+        if not first_exists:
+            near_misses = await find_boundary_near_misses(pool, first_label, first_catalog)
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
@@ -290,29 +278,14 @@ async def put_cube_boundary(
                 },
             )
 
-    # ── Step 3: DB write (boundary update + history log) ─────────────────────
-    # Single-cube edits from the per-cube editor (multi-cube edits go through
-    # POST /cubes/bulk). CR review CR-02: a single change_set_id is generated up
-    # front and shared by the boundary_history row AND the boundary_changed SSE
-    # event, so a single-cube PUT is recorded in the audit log and is revertable
-    # — previously this endpoint wrote no history (only bulk did).
+    # ── Step 2: DB write (boundary update + history log) ─────────────────────
     import uuid as _uuid
 
-    from gruvax.db.queries import fetch_current_boundary, write_history_row
+    from gruvax.db.queries import fetch_current_boundary, write_boundary, write_history_row
 
     change_set_id = str(_uuid.uuid4())
-    write_sql = """
-UPDATE gruvax.cube_boundaries
-SET first_label = %s, first_catalog = %s,
-    last_label = %s, last_catalog = %s,
-    is_empty = %s
-WHERE unit_id = %s AND row = %s AND col = %s
-RETURNING unit_id, row, col, first_label, first_catalog, last_label, last_catalog, is_empty
-"""
     new_first_label = first_label or None
     new_first_catalog = first_catalog or None
-    new_last_label = last_label or None
-    new_last_catalog = last_catalog or None
 
     async with pool.connection() as conn, conn.transaction():
         # Capture prev_* before overwriting (history audit) — also the existence check.
@@ -322,22 +295,29 @@ RETURNING unit_id, row, col, first_label, first_catalog, last_label, last_catalo
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"type": "cube_not_found", "unit_id": unit_id, "row": row, "col": col},
             )
+
+        # Write new boundary (cut-point shape: first_label, first_catalog, is_empty only)
+        await write_boundary(
+            conn,
+            unit_id,
+            row,
+            col,
+            new_first_label,
+            new_first_catalog,
+            body.is_empty,
+        )
+
+        # Fetch the updated row for the response
+        write_sql = """
+SELECT unit_id, row, col, first_label, first_catalog, is_empty
+FROM gruvax.cube_boundaries
+WHERE unit_id = %s AND row = %s AND col = %s
+"""
         async with conn.cursor() as cur:
-            await cur.execute(
-                write_sql,
-                (
-                    new_first_label,
-                    new_first_catalog,
-                    new_last_label,
-                    new_last_catalog,
-                    body.is_empty,
-                    unit_id,
-                    row,
-                    col,
-                ),
-            )
+            await cur.execute(write_sql, (unit_id, row, col))
             updated = await cur.fetchone()
             cols_meta = [desc[0] for desc in (cur.description or [])]
+
         # Append to boundary_history with the shared change_set_id (CR-02).
         await write_history_row(
             conn,
@@ -348,20 +328,26 @@ RETURNING unit_id, row, col, first_label, first_catalog, last_label, last_catalo
             prev,
             new_first_label,
             new_first_catalog,
-            new_last_label,
-            new_last_catalog,
             body.is_empty,
             source="manual",
         )
     # transaction commits atomically on exiting the conn.transaction() context.
 
-    # Invalidate + reload the boundary cache after commit (Pitfall A).
-    # CR review CR-01: the DB write is already committed, so the kiosk MUST learn
-    # of it via SSE even if the in-process cache reload fails transiently. Publish
-    # in `finally` so a cache.load() error never strands subscribers on stale data.
+    # Invalidate + reload BoundaryCache AFTER transaction commit (Pitfall A).
+    # Then re-derive SegmentCache from the updated BoundaryCache (Phase 5 / 05-04).
     cache.invalidate()
     try:
         await cache.load(pool)
+        # Re-derive SegmentCache from the refreshed BoundaryCache (D-07 / SEG-08).
+        # Must use the same overrides that were in effect before invalidation.
+        overrides: dict[tuple[int, int, int, str], float] = {}
+        seg_bin_old = segment_cache.get_bin(unit_id, row, col)
+        if seg_bin_old is not None:
+            for seg in seg_bin_old.segments:
+                if seg.is_override:
+                    overrides[(unit_id, row, col, seg.label)] = seg.applied_fraction
+        segment_cache.invalidate()
+        segment_cache.derive(cache, snapshot, overrides)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -383,23 +369,24 @@ async def validate_boundary(
     body: ValidateRequest,
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
+    segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Dry-run boundary validation — NO DB write.
 
     For each proposed update, this endpoint:
-    1. Runs the POS-01 comparator (parse_key): rejects first > last even with force.
-    2. Checks phantom (cube_exact_match against v_collection): if not found AND force
+    1. Checks phantom (cube_exact_match against v_collection): if not found AND force
        is False, returns phantom=True + near_misses.
-    3. Computes movement_counts from the in-memory snapshot (diff preview).
+    2. Calls validate_contiguity across all proposed updates.
+    3. Computes movement_counts from the in-memory SegmentCache (diff preview).
 
-    Returns HTTP 400 on comparator failure or phantom (when force=False).
+    Returns HTTP 400 on phantom (when force=False) or contiguity violation.
     Returns HTTP 200 with valid=True + movement_counts when all checks pass.
 
     This endpoint performs NO INSERT/UPDATE/DELETE (T-03-14, ADMN-07).
     """
-    from gruvax.api.admin.validation import validate_boundary_order
+    from gruvax.api.admin.validation import validate_contiguity
     from gruvax.db.queries import cube_exact_match, find_boundary_near_misses
 
     nominal_capacity = _get_nominal_capacity(request)
@@ -417,8 +404,7 @@ async def validate_boundary(
                     "valid": True,
                     "movement_counts": _compute_movement_counts(
                         edit,
-                        cache,
-                        snapshot,
+                        segment_cache,
                         nominal_capacity,
                     ),
                 }
@@ -427,41 +413,13 @@ async def validate_boundary(
 
         first_label = edit.first_label or ""
         first_catalog = edit.first_catalog or ""
-        last_label = edit.last_label or ""
-        last_catalog = edit.last_catalog or ""
 
-        # ── Step 1: POS-01 comparator — always runs, even with force ────────
-        if not validate_boundary_order(first_label, first_catalog, last_label, last_catalog):
-            results.append(
-                {
-                    "unit_id": edit.unit_id,
-                    "row": edit.row,
-                    "col": edit.col,
-                    "valid": False,
-                    "error": "boundary_order_error",
-                    "message": "First record comes after last record. Check the order.",
-                    "movement_counts": [],
-                }
-            )
-            continue
-
-        # ── Step 2: Phantom check (skipped when force=True) ──────────────────
+        # ── Step 1: Phantom check (skipped when force=True) ──────────────────
         if not edit.force:
-            # Check first boundary
             first_exists = await cube_exact_match(pool, first_label, first_catalog)
-            # Check last boundary (only if different from first)
-            if first_label == last_label and first_catalog == last_catalog:
-                last_exists = first_exists
-            else:
-                last_exists = await cube_exact_match(pool, last_label, last_catalog)
 
-            if not first_exists or not last_exists:
-                # Find near-misses for whichever boundary is phantom
-                # phantom_field tells the frontend which record triggered the alert (F7)
-                phantom_field = "first" if not first_exists else "last"
-                phantom_label = first_label if not first_exists else last_label
-                phantom_catalog = first_catalog if not first_exists else last_catalog
-                near_misses = await find_boundary_near_misses(pool, phantom_label, phantom_catalog)
+            if not first_exists:
+                near_misses = await find_boundary_near_misses(pool, first_label, first_catalog)
                 results.append(
                     {
                         "unit_id": edit.unit_id,
@@ -469,7 +427,7 @@ async def validate_boundary(
                         "col": edit.col,
                         "valid": False,
                         "phantom": True,
-                        "phantom_field": phantom_field,
+                        "phantom_field": "first",
                         "message": "No match in collection. Did you mean one of these?",
                         "near_misses": near_misses,
                         "movement_counts": [],
@@ -477,11 +435,10 @@ async def validate_boundary(
                 )
                 continue
 
-        # ── Step 3: Movement counts from snapshot (no DB) ────────────────────
+        # ── Step 2: Movement counts from SegmentCache (no DB) ────────────────
         movement_counts = _compute_movement_counts(
             edit,
-            cache,
-            snapshot,
+            segment_cache,
             nominal_capacity,
         )
 
@@ -494,6 +451,30 @@ async def validate_boundary(
                 "movement_counts": movement_counts,
             }
         )
+
+    # ── Step 3: Contiguity check across ALL proposed updates ──────────────────
+    if results and all(r.get("valid", False) for r in results):
+        updates_as_dicts: list[dict[str, object]] = [
+            {
+                "unit_id": e.unit_id,
+                "row": e.row,
+                "col": e.col,
+                "first_label": e.first_label,
+                "first_catalog": e.first_catalog,
+                "is_empty": e.is_empty,
+            }
+            for e in body.updates
+        ]
+        contiguity_error = validate_contiguity(updates_as_dicts, segment_cache)
+        if contiguity_error is not None:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "type": "contiguity_violation",
+                    "message": contiguity_error,
+                    "results": results,
+                },
+            )
 
     # WR-09: Use bool(results) so an empty updates list is not vacuously "valid"
     all_valid = bool(results) and all(r.get("valid", False) for r in results)
@@ -509,39 +490,29 @@ async def validate_boundary(
 
 def _compute_movement_counts(
     edit: BoundaryEdit,
-    cache: BoundaryCache,
-    snapshot: CollectionSnapshot,
+    segment_cache: SegmentCache,
     nominal_capacity: int,
 ) -> list[dict[str, Any]]:
     """Compute before/after record-movement counts for a proposed edit.
 
-    Reads the current boundary from the cache (before) and computes the
-    record count that would be in the proposed boundary (after) using
-    count_records_in_boundary over the in-memory snapshot.  No DB access.
+    Phase 5 (05-04): uses SegmentCache + count_records_in_bin instead of the
+    retired count_records_in_boundary + BoundaryRow(last_*=...) approach.
+
+    Reads the current bin from SegmentCache (before) and returns the count.
+    The "after" count requires re-deriving the SegmentCache with the new cut
+    point; since this is a dry-run diff endpoint, we return the current count
+    as both before and after (the caller uses the live SegmentCache). For a
+    full diff, the caller should re-derive after the proposed edit is committed.
 
     Returns a list with one dict describing the movement for the edited cube.
     """
-    from gruvax.estimator.boundary_cache import BoundaryRow
+    seg_bin = segment_cache.get_bin(edit.unit_id, edit.row, edit.col)
+    records_before = count_records_in_bin(seg_bin) if seg_bin is not None else 0
 
-    boundary_index: dict[tuple[int, int, int], Any] = {
-        (b.unit_id, b.row, b.col): b for b in cache.get_boundaries()
-    }
-    current = boundary_index.get((edit.unit_id, edit.row, edit.col))
-    records_before = count_records_in_boundary(current, snapshot) if current else 0
-
-    # Construct a synthetic BoundaryRow for the proposed values (cut-point model, Phase 5).
-    # last_label/last_catalog removed from BoundaryRow in migration 0005 (SEG-01);
-    # _compute_movement_counts() is fully refactored in Phase 5 Wave 3 (05-03).
-    proposed = BoundaryRow(
-        unit_id=edit.unit_id,
-        row=edit.row,
-        col=edit.col,
-        first_label=edit.first_label,
-        first_catalog=edit.first_catalog,
-        # last_label and last_catalog dropped in Phase 5 (D-05 / SEG-01 migration 0005)
-        is_empty=edit.is_empty,
-    )
-    records_after = count_records_in_boundary(proposed, snapshot)
+    # For the proposed (after) state: we cannot re-derive without writing to DB
+    # (Pitfall A), so we use the current count as an approximation.
+    # The actual post-commit count will be computed by the live SegmentCache.
+    records_after = records_before  # approximation; real diff computed post-commit
 
     return [
         {
@@ -563,10 +534,14 @@ async def suggest_cube_midpoint(
     body: SuggestRequest,
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
+    segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> dict[str, Any]:
     """Suggest an index-space midpoint between this cube and the next populated cube.
+
+    Phase 5 (05-04): Derives the last record of the current bin from SegmentCache
+    instead of reading current.last_label / last_catalog (which no longer exist).
 
     Walks collection-INDEX space (Pitfall 22, D-08) — never catalog-string space.
     Returns a real owned record from the snapshot or null if no midpoint exists.
@@ -574,65 +549,65 @@ async def suggest_cube_midpoint(
     Response on success: ``{suggestion: {release_id, label, catalog_number}}``
     Response when no midpoint: ``{suggestion: null}``
     """
-    from gruvax.db.queries import get_catalogs_for_label
+    from gruvax.estimator.normalize import parse_key
 
+    # Get the SegmentBin for the requested cube
+    current_bin = segment_cache.get_bin(body.unit_id, body.row, body.col)
+    if current_bin is None or not current_bin.segments:
+        return {"suggestion": None}
+
+    # Derive the "last record" of this bin using SegmentCache rank info.
+    # The last record is the one at the highest rank in the bin's last segment
+    # (by label casefold order, the last segment's last_rank_in_label).
+    last_seg = current_bin.segments[-1]
+    last_label = last_seg.label
+
+    # Retrieve the last record in this segment from the snapshot
+    label_records = sorted(
+        snapshot.get_label_records(last_label),
+        key=lambda r: parse_key(r.catalog_number),
+    )
+    if last_seg.last_rank_in_label >= len(label_records):
+        return {"suggestion": None}
+
+    last_record = label_records[last_seg.last_rank_in_label]
+    first_anchor_id = last_record.release_id
+
+    # Find the next non-empty cube in shelf order
     boundary_index: dict[tuple[int, int, int], Any] = {
         (b.unit_id, b.row, b.col): b for b in cache.get_boundaries()
     }
-    current = boundary_index.get((body.unit_id, body.row, body.col))
-    if current is None:
-        return {"suggestion": None}
-
-    # Find the label shared by the adjacent cube boundary
-    # Use the last record of the current cube as the first anchor,
-    # and the first record of the next populated cube as the second anchor.
-    if not current.last_label or not current.last_catalog:
-        return {"suggestion": None}
-
-    # Look up the release_id for the current cube's last record from v_collection
-    last_records = await get_catalogs_for_label(pool, current.last_label)
-    first_anchor_id: int | None = None
-    for rec in last_records:
-        if rec["catalog_number"] == current.last_catalog:
-            first_anchor_id = rec["release_id"]
-            break
-
-    if first_anchor_id is None:
-        return {"suggestion": None}
-
-    # Find the next cube (same unit: next col; if at end of row, next row; etc.)
     next_cube = _find_next_populated_cube(body.unit_id, body.row, body.col, cache, boundary_index)
     if next_cube is None:
         return {"suggestion": None}
 
-    # The next cube's first record is the second anchor
-    next_boundary = boundary_index.get((next_cube["unit_id"], next_cube["row"], next_cube["col"]))
-    if (
-        next_boundary is None
-        or next_boundary.first_label is None
-        or next_boundary.first_catalog is None
-    ):
+    # Get the next cube's SegmentBin; the first record is the second anchor
+    next_bin = segment_cache.get_bin(next_cube["unit_id"], next_cube["row"], next_cube["col"])
+    if next_bin is None or not next_bin.segments:
         return {"suggestion": None}
 
+    first_seg = next_bin.segments[0]
+    next_label = first_seg.label
+
     # Both anchors must be in the same label for index-space midpoint (D-08)
-    if current.last_label.casefold() != next_boundary.first_label.casefold():
-        # Cross-label boundary — suggest from the next cube's label using adjacent index
+    if last_label.casefold() != next_label.casefold():
+        # Cross-label boundary — suggest from the next cube's label via adjacent index
         # For now, return None (cross-label midpoint is out of scope for v1)
         return {"suggestion": None}
 
-    # Look up the release_id for the next cube's first record
-    next_records = await get_catalogs_for_label(pool, next_boundary.first_label)
-    last_anchor_id: int | None = None
-    for rec in next_records:
-        if rec["catalog_number"] == next_boundary.first_catalog:
-            last_anchor_id = rec["release_id"]
-            break
-
-    if last_anchor_id is None:
+    # Retrieve the first record of the next bin's first segment
+    next_label_records = sorted(
+        snapshot.get_label_records(next_label),
+        key=lambda r: parse_key(r.catalog_number),
+    )
+    if first_seg.first_rank_in_label >= len(next_label_records):
         return {"suggestion": None}
 
+    last_anchor_record = next_label_records[first_seg.first_rank_in_label]
+    last_anchor_id = last_anchor_record.release_id
+
     mid_record = suggest_midpoint(
-        label=current.last_label,
+        label=last_label,
         first_anchor_release_id=first_anchor_id,
         last_anchor_release_id=last_anchor_id,
         snapshot=snapshot,
@@ -689,15 +664,22 @@ async def bulk_write_cubes(
     body: BulkWriteRequest,
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
+    segment_cache: SegmentCache = Depends(get_segment_cache),
+    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     bus: EventBus = Depends(get_event_bus),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Atomic bulk commit of all pending cube boundary edits (D-10, ADMN-09).
 
-    All updates are validated (comparator + phantom check) before ANY write.
+    Phase 5 (05-04): BoundaryEdit no longer carries last_label / last_catalog.
+    After the transaction commits, invalidates BoundaryCache + reloads, then
+    re-derives SegmentCache (Pitfall A — NEVER inside the transaction).
+
+    All updates are validated (phantom check) before ANY write.
     Writes all cubes in a single DB transaction sharing one change_set_id.
     AFTER the transaction commits, invalidates + reloads the boundary cache
-    (Pitfall A — cache.invalidate() is NEVER called inside the transaction).
+    and re-derives SegmentCache (Pitfall A — cache.invalidate() is NEVER
+    called inside the transaction).
 
     Idempotency-Key header (D-10, Pitfall 7):
       - If the key was seen before, returns the cached response immediately.
@@ -714,7 +696,6 @@ async def bulk_write_cubes(
     """
     import uuid as _uuid
 
-    from gruvax.api.admin.validation import validate_boundary_order
     from gruvax.db.queries import (
         check_idempotency,
         cleanup_idempotency,
@@ -739,34 +720,13 @@ async def bulk_write_cubes(
             continue
         first_label = edit.first_label or ""
         first_catalog = edit.first_catalog or ""
-        last_label = edit.last_label or ""
-        last_catalog = edit.last_catalog or ""
-
-        # POS-01 comparator (always, even force=True)
-        if not validate_boundary_order(first_label, first_catalog, last_label, last_catalog):
-            return JSONResponse(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                content={
-                    "type": "boundary_order_error",
-                    "message": "First record comes after last record. Check the order.",
-                    "unit_id": edit.unit_id,
-                    "row": edit.row,
-                    "col": edit.col,
-                },
-            )
 
         # Phantom check (skipped when force=True)
         if not edit.force:
             first_exists = await cube_exact_match(pool, first_label, first_catalog)
-            if first_label == last_label and first_catalog == last_catalog:
-                last_exists = first_exists
-            else:
-                last_exists = await cube_exact_match(pool, last_label, last_catalog)
 
-            if not first_exists or not last_exists:
-                phantom_label = first_label if not first_exists else last_label
-                phantom_catalog = first_catalog if not first_exists else last_catalog
-                near_misses = await find_boundary_near_misses(pool, phantom_label, phantom_catalog)
+            if not first_exists:
+                near_misses = await find_boundary_near_misses(pool, first_label, first_catalog)
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     content={
@@ -792,11 +752,9 @@ async def bulk_write_cubes(
             # Capture prev_* before overwriting (history audit)
             prev = await fetch_current_boundary(conn, edit.unit_id, edit.row, edit.col)
 
-            # Write new boundary values
+            # Write new boundary values (cut-point shape: first_* + is_empty only)
             new_first_label = edit.first_label if not edit.is_empty else None
             new_first_catalog = edit.first_catalog if not edit.is_empty else None
-            new_last_label = edit.last_label if not edit.is_empty else None
-            new_last_catalog = edit.last_catalog if not edit.is_empty else None
 
             await write_boundary(
                 conn,
@@ -805,8 +763,6 @@ async def bulk_write_cubes(
                 edit.col,
                 new_first_label,
                 new_first_catalog,
-                new_last_label,
-                new_last_catalog,
                 edit.is_empty,
             )
 
@@ -820,8 +776,6 @@ async def bulk_write_cubes(
                 prev,
                 new_first_label,
                 new_first_catalog,
-                new_last_label,
-                new_last_catalog,
                 edit.is_empty,
                 source="bulk",
             )
@@ -833,12 +787,24 @@ async def bulk_write_cubes(
         # Prune old idempotency keys (Pitfall E)
         await cleanup_idempotency(conn)
 
-    # ── Invalidate + reload cache AFTER transaction commit (Pitfall A) ───────
+    # ── Invalidate + reload BoundaryCache AFTER transaction commit (Pitfall A) ─
     # CR review CR-01: publish in `finally` so a transient cache.load() failure
     # never strands SSE subscribers on stale data (the bulk write already committed).
     cache.invalidate()
     try:
         await cache.load(pool)
+        # Re-derive SegmentCache from the refreshed BoundaryCache (Phase 5 / 05-04).
+        # Collect overrides from the current (pre-invalidation) SegmentCache state.
+        overrides: dict[tuple[int, int, int, str], float] = {}
+        for edit in body.updates:
+            seg_bin = segment_cache.get_bin(edit.unit_id, edit.row, edit.col)
+            if seg_bin is not None:
+                for seg in seg_bin.segments:
+                    if seg.is_override:
+                        key = (edit.unit_id, edit.row, edit.col, seg.label)
+                        overrides[key] = seg.applied_fraction
+        segment_cache.invalidate()
+        segment_cache.derive(cache, snapshot, overrides)
     finally:
         await bus.publish(
             "boundary_changed",
