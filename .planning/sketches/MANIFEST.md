@@ -23,4 +23,4 @@ phone-held tool. The Kallax cube remains the atomic locating unit.
 | # | Name | Design Question | Winner | Tags |
 |---|------|----------------|--------|------|
 | 001 | bin-segment-strip | How does the owner read a bin's per-label split and drag to set physical-width overrides, on a phone? | **A · Strip + drag** | segments, drag, override, mobile |
-| 002 | cut-point-editor | How does the owner view, edit, and add cut points (splitting one bin into two)? | _pending 001_ | cut-points, editing, mobile |
+| 002 | cut-point-editor | How does the owner view, edit, and add cut points (splitting one bin into two)? | **A · Bin list + insert** | cut-points, editing, mobile |
