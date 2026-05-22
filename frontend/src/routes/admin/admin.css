@@ -1629,3 +1629,85 @@
   outline: 2px solid var(--gruvax-blue);
   outline-offset: 2px;
 }
+
+/* ── Rollback toast (Phase 4 / RTM-03 / D-07) ─────────────────────────────── */
+/* Admin-surface only — never shown on KioskView. */
+/* All colors: var(--gruvax-*) tokens — no hardcoded hex (CLAUDE.md constraint). */
+/* Only transform + opacity are animated — GPU-composited (zero layout cost).  */
+
+.toast {
+  position: fixed;
+  bottom: var(--gruvax-space-5);                     /* 24px from screen bottom */
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: calc(var(--gruvax-z-admin) + 10);         /* above admin chrome (z-50) */
+
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);                        /* 8px icon–text gap */
+
+  background: var(--gruvax-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-lg);             /* 12px */
+  box-shadow: var(--gruvax-shadow-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4); /* 8px 16px */
+
+  min-width: 240px;
+  max-width: min(400px, calc(100vw - 48px));          /* 24px margin each side */
+
+  animation: toast-enter 200ms var(--gruvax-ease-decelerate) both;
+}
+
+.toast__icon {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  color: var(--gruvax-warning);                      /* caution, not error red */
+}
+
+.toast__message {
+  font-family: var(--gruvax-font-ui);                /* Space Grotesk */
+  font-size: var(--gruvax-text-body-sm);             /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);          /* 1.5 */
+  flex: 1;
+}
+
+.toast__dismiss {
+  flex-shrink: 0;
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-caption);             /* 12px */
+  font-weight: 500;
+  color: var(--gruvax-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--gruvax-space-1);                    /* 4px touch target padding */
+  min-width: 44px;                                   /* WCAG 2.5.5 touch target */
+  min-height: 44px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: var(--gruvax-radius-sm);
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.toast__dismiss:hover {
+  color: var(--gruvax-text-secondary);
+}
+
+/* Exit state — triggered when user taps Dismiss or auto-dismiss fires */
+.toast--exiting {
+  animation: toast-exit 150ms var(--gruvax-ease-accelerate) both;
+}
+
+@keyframes toast-enter {
+  from { transform: translateX(-50%) translateY(16px); opacity: 0; }
+  to   { transform: translateX(-50%) translateY(0);   opacity: 1; }
+}
+
+@keyframes toast-exit {
+  from { transform: translateX(-50%) translateY(0);   opacity: 1; }
+  to   { transform: translateX(-50%) translateY(16px); opacity: 0; }
+}

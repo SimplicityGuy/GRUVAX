@@ -44,7 +44,7 @@ def reset_login_rate_limit() -> None:  # type: ignore[return]
     ``limiter.reset()`` clears the entire in-memory storage — safe here because
     integration tests run sequentially and the limiter is local to this process.
     """
-    from gruvax.api.admin.limiter import limiter  # noqa: PLC0415
+    from gruvax.api.admin.limiter import limiter
 
     limiter.reset()
 
@@ -61,7 +61,7 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
     if not os.environ.get("SESSION_SECRET"):
         os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
 
-    from gruvax.auth.pin import hash_pin  # noqa: PLC0415
+    from gruvax.auth.pin import hash_pin
 
     test_hash = hash_pin(_TEST_PIN)
 

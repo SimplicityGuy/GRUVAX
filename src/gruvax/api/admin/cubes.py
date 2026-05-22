@@ -39,10 +39,17 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from gruvax.api.deps import get_boundary_cache, get_collection_snapshot, get_pool, require_admin
+from gruvax.api.deps import (
+    get_boundary_cache,
+    get_collection_snapshot,
+    get_event_bus,
+    get_pool,
+    require_admin,
+)
 from gruvax.estimator.boundary_cache import BoundaryCache
 from gruvax.estimator.boundary_math import count_records_in_boundary, suggest_midpoint
 from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.events.bus import EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -216,6 +223,7 @@ async def put_cube_boundary(
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
+    bus: EventBus = Depends(get_event_bus),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Validate and (when valid) update a cube boundary.
@@ -283,8 +291,16 @@ async def put_cube_boundary(
             )
 
     # ── Step 3: DB write (boundary update + history log) ─────────────────────
-    # Note: In plan 05, multi-cube edits go through POST /cubes/bulk.
-    # This endpoint handles single-cube edits from the per-cube editor.
+    # Single-cube edits from the per-cube editor (multi-cube edits go through
+    # POST /cubes/bulk). CR review CR-02: a single change_set_id is generated up
+    # front and shared by the boundary_history row AND the boundary_changed SSE
+    # event, so a single-cube PUT is recorded in the audit log and is revertable
+    # — previously this endpoint wrote no history (only bulk did).
+    import uuid as _uuid
+
+    from gruvax.db.queries import fetch_current_boundary, write_history_row
+
+    change_set_id = str(_uuid.uuid4())
     write_sql = """
 UPDATE gruvax.cube_boundaries
 SET first_label = %s, first_catalog = %s,
@@ -293,33 +309,64 @@ SET first_label = %s, first_catalog = %s,
 WHERE unit_id = %s AND row = %s AND col = %s
 RETURNING unit_id, row, col, first_label, first_catalog, last_label, last_catalog, is_empty
 """
-    async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            write_sql,
-            (
-                first_label or None,
-                first_catalog or None,
-                last_label or None,
-                last_catalog or None,
-                body.is_empty,
-                unit_id,
-                row,
-                col,
-            ),
-        )
-        updated = await cur.fetchone()
-        cols_meta = [desc[0] for desc in (cur.description or [])]
-        await conn.commit()
+    new_first_label = first_label or None
+    new_first_catalog = first_catalog or None
+    new_last_label = last_label or None
+    new_last_catalog = last_catalog or None
 
-    if updated is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"type": "cube_not_found", "unit_id": unit_id, "row": row, "col": col},
+    async with pool.connection() as conn, conn.transaction():
+        # Capture prev_* before overwriting (history audit) — also the existence check.
+        prev = await fetch_current_boundary(conn, unit_id, row, col)
+        if prev is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"type": "cube_not_found", "unit_id": unit_id, "row": row, "col": col},
+            )
+        async with conn.cursor() as cur:
+            await cur.execute(
+                write_sql,
+                (
+                    new_first_label,
+                    new_first_catalog,
+                    new_last_label,
+                    new_last_catalog,
+                    body.is_empty,
+                    unit_id,
+                    row,
+                    col,
+                ),
+            )
+            updated = await cur.fetchone()
+            cols_meta = [desc[0] for desc in (cur.description or [])]
+        # Append to boundary_history with the shared change_set_id (CR-02).
+        await write_history_row(
+            conn,
+            change_set_id,
+            unit_id,
+            row,
+            col,
+            prev,
+            new_first_label,
+            new_first_catalog,
+            new_last_label,
+            new_last_catalog,
+            body.is_empty,
+            source="manual",
         )
+    # transaction commits atomically on exiting the conn.transaction() context.
 
-    # Invalidate + reload the boundary cache after commit (Pitfall A)
+    # Invalidate + reload the boundary cache after commit (Pitfall A).
+    # CR review CR-01: the DB write is already committed, so the kiosk MUST learn
+    # of it via SSE even if the in-process cache reload fails transiently. Publish
+    # in `finally` so a cache.load() error never strands subscribers on stale data.
     cache.invalidate()
-    await cache.load(pool)
+    try:
+        await cache.load(pool)
+    finally:
+        await bus.publish("boundary_changed", {
+            "cube_ids": [{"unit": unit_id, "row": row, "col": col}],
+            "change_set_id": change_set_id,
+        })
 
     return JSONResponse(
         status_code=200,
@@ -626,6 +673,7 @@ async def bulk_write_cubes(
     body: BulkWriteRequest,
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
+    bus: EventBus = Depends(get_event_bus),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Atomic bulk commit of all pending cube boundary edits (D-10, ADMN-09).
@@ -762,7 +810,15 @@ async def bulk_write_cubes(
         await cleanup_idempotency(conn)
 
     # ── Invalidate + reload cache AFTER transaction commit (Pitfall A) ───────
+    # CR review CR-01: publish in `finally` so a transient cache.load() failure
+    # never strands SSE subscribers on stale data (the bulk write already committed).
     cache.invalidate()
-    await cache.load(pool)
+    try:
+        await cache.load(pool)
+    finally:
+        await bus.publish("boundary_changed", {
+            "cube_ids": [{"unit": e.unit_id, "row": e.row, "col": e.col} for e in body.updates],
+            "change_set_id": response_body["change_set_id"],
+        })
 
     return JSONResponse(content=response_body)

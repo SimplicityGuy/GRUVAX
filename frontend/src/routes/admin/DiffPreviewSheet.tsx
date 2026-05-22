@@ -18,9 +18,10 @@
 
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQueryClient } from '@tanstack/react-query'
 import { BulkSaveError, adminBulkSave, adminGetCubeBoundary, validateBoundary } from '../../api/adminClient'
 import { useAdminStore } from '../../state/adminStore'
+import { RollbackToast } from './RollbackToast'
 import type { AdminCubeBoundary, CubeBoundaryEdit, ValidateItem } from '../../api/types'
 
 /** Format cube address for display.
@@ -43,9 +44,9 @@ export function DiffPreviewSheet() {
   const queryClient = useQueryClient()
   const { pendingChangeSet, setPendingChangeSet } = useAdminStore()
 
-  const [isCommitting, setIsCommitting] = useState(false)
-  const [commitError, setCommitError] = useState<string | null>(null)
   const [committedId, setCommittedId] = useState<string | null>(null)
+  /** Toast visible after a rollback (D-07). */
+  const [showRollbackToast, setShowRollbackToast] = useState(false)
 
   // Validate results fetched on mount for movement counts / warnings
   const [validateResults, setValidateResults] = useState<ValidateItem[]>([])
@@ -104,7 +105,13 @@ export function DiffPreviewSheet() {
         }
         setBeforeBoundaries(map)
       } catch {
-        // Failure of validate or any boundary fetch — do not block commit
+        // CR review WR-02: the dry-run validation could not complete (network /
+        // server error). Fail SAFE — guard the commit and warn the user rather
+        // than silently leaving the button enabled with unverified changes.
+        setHasValidationErrors(true)
+        setValidateErrorMessage(
+          "Couldn't check these changes against the collection. Try again before saving.",
+        )
       } finally {
         setIsValidating(false)
       }
@@ -114,6 +121,75 @@ export function DiffPreviewSheet() {
     // Only run on mount — pendingChangeSet identity does not change during preview
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  /**
+   * Optimistic commit mutation (RTM-03, D-07, D-08).
+   *
+   * onMutate: snapshot + optimistic setQueryData on admin keys only (D-08).
+   * onError:  restore snapshot + show RollbackToast; pendingChangeSet NOT cleared
+   *           (D-07 — values retained for retry).
+   * onSuccess: clear pendingChangeSet, invalidate admin history.
+   * onSettled: invalidate ['admin','cubes'] — NEVER kiosk keys (D-08).
+   *            Kiosk updates only on committed boundary_changed SSE (Plan 01).
+   */
+  const commitMutation = useMutation({
+    mutationFn: ({
+      edits: e,
+      idempotencyKey: ik,
+    }: {
+      edits: CubeBoundaryEdit[]
+      idempotencyKey: string
+    }) => adminBulkSave(e, ik),
+
+    onMutate: async ({ edits: e }) => {
+      // Cancel any in-flight refetches so they don't overwrite our optimistic update
+      await queryClient.cancelQueries({ queryKey: ['admin', 'cubes'] })
+
+      // Snapshot the previous admin cubes data for rollback
+      const previousAdminCubes = queryClient.getQueryData(['admin', 'cubes'])
+
+      // Optimistic update: reflect edits on admin cubes query (admin keys only — D-08)
+      queryClient.setQueryData(
+        ['admin', 'cubes'],
+        (old: unknown) => {
+          if (!old || typeof old !== 'object') return old
+          return { ...(old as object), _optimistic: true, edits: e }
+        },
+      )
+
+      return { previousAdminCubes }
+    },
+
+    onError: (_err, _vars, context) => {
+      // Restore the admin cubes snapshot (rollback the optimistic update)
+      if (context?.previousAdminCubes !== undefined) {
+        queryClient.setQueryData(['admin', 'cubes'], context.previousAdminCubes)
+      }
+      // Show the plain-language rollback toast (D-07 — locked copy)
+      setShowRollbackToast(true)
+      // pendingChangeSet is intentionally NOT cleared here (D-07 — values retained for retry)
+    },
+
+    onSuccess: (result) => {
+      setCommittedId(result.change_set_id)
+      // Clear the pending change-set on success (only on success, not on error)
+      setPendingChangeSet(null)
+      // Invalidate admin history so it reflects the new change-set
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'history'] })
+      // Navigate back to cubes grid after 2s
+      setTimeout(() => {
+        void navigate('/admin/cubes')
+      }, 2000)
+    },
+
+    onSettled: () => {
+      // Always re-sync admin cubes after settle (success or error)
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
+      // NEVER invalidate kiosk keys here (D-08, T-04-10):
+      //   ['cubes'] and ['cube-contents'] are NOT invalidated.
+      //   The kiosk learns of committed changes via boundary_changed SSE (Plan 01).
+    },
+  })
 
   if (!pendingChangeSet || pendingChangeSet.edits.length === 0) {
     return (
@@ -140,32 +216,16 @@ export function DiffPreviewSheet() {
     ),
   }))
 
-  async function handleCommit() {
-    setIsCommitting(true)
-    setCommitError(null)
-    try {
-      const result = await adminBulkSave(edits, idempotencyKey)
-      // Invalidate the admin cubes cache so the grid reflects the new boundaries
-      await queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
-      setCommittedId(result.change_set_id)
-      // Clear the pending change-set on success
-      setPendingChangeSet(null)
-      // Navigate back to cubes grid after 2 s
-      setTimeout(() => {
-        void navigate('/admin/cubes')
-      }, 2000)
-    } catch (err) {
-      if (err instanceof BulkSaveError && err.serverMessage) {
-        // Structured server error: boundary_order_error or phantom_boundary
-        setCommitError(err.serverMessage)
-      } else {
-        // Network error or unexpected failure
-        setCommitError('Could not save — check your connection and try again.')
-      }
-    } finally {
-      setIsCommitting(false)
-    }
+  function handleCommit() {
+    commitMutation.mutate({ edits, idempotencyKey })
   }
+
+  const isCommitting = commitMutation.isPending
+  const commitError = commitMutation.isError
+    ? (commitMutation.error instanceof BulkSaveError && commitMutation.error.serverMessage
+        ? commitMutation.error.serverMessage
+        : 'Could not save — check your connection and try again.')
+    : null
 
   // Derive the unique units present in this change-set for mini-grid
   const unitIds = [...new Set(edits.map((e) => e.unit_id))].sort()
@@ -224,10 +284,13 @@ export function DiffPreviewSheet() {
             // movement_counts is a list on the wire (CR-03): use [0] for the single-cube case
             const moveCounts = validateResult?.movement_counts ?? []
             const mc = moveCounts[0]
-            const isEmpty = !edit.last_label && !edit.last_catalog
-            const isOverstuffed = mc
-              ? mc.records_after > (mc.records_before * 1.1 + 1)
-              : false
+            // WR-05: prefer the canonical is_empty flag; fall back to the field
+            // check only when the edit doesn't carry it (editor-created edits).
+            const isEmpty = edit.is_empty ?? (!edit.last_label && !edit.last_catalog)
+            // CR-03: use the server-computed fill level (records_after / nominal
+            // capacity). The old `records_after > records_before*1.1 + 1` heuristic
+            // fired a false positive for empty cubes (threshold 1 → any 2+ records).
+            const isOverstuffed = mc ? mc.fill_level_after > 1.0 : false
 
             // Before-state: fetched from GET /boundary on mount (F5)
             const beforeKey = `${edit.unit_id}-${edit.row}-${edit.col}`
@@ -345,6 +408,14 @@ export function DiffPreviewSheet() {
           </>
         )}
       </div>
+
+      {/* Rollback toast — shown on error; pendingChangeSet NOT cleared (D-07) */}
+      {showRollbackToast && (
+        <RollbackToast
+          message="Couldn't save that change — reverted."
+          onDismiss={() => setShowRollbackToast(false)}
+        />
+      )}
     </div>
   )
 }

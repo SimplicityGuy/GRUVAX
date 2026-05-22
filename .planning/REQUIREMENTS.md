@@ -27,9 +27,9 @@
 - [x] **CUBE-04**: Sub-cube position estimate is rendered as a horizontal range bar inside the primary cube; bar may cross a cube boundary when the interval does
 - [x] **CUBE-05**: Empty cubes (no boundary data, or boundaries indicate emptiness) render in a distinct, desaturated visual state
 - [x] **CUBE-06**: Each cube shows a persistent address overlay (e.g., row letter + column number)
-- [ ] **CUBE-07**: Each cube displays a fill-level indicator computed from the boundary range
+- [x] **CUBE-07**: Each cube displays a fill-level indicator computed from the boundary range
 - [x] **CUBE-08**: Selection-lands animation choreographs label-span fade-in, primary-cube pulse, and sub-cube bar slide-in within ≤600 ms; the animation is interruptible by a new search
-- [ ] **CUBE-09**: User can tap a cube to reveal what's in it (reverse-lookup side panel listing the cube's first/last boundary records and a representative subset)
+- [x] **CUBE-09**: User can tap a cube to reveal what's in it (reverse-lookup side panel listing the cube's first/last boundary records and a representative subset)
 - [x] **CUBE-10**: Single-record labels render with a tick-mark indicator inside the cube rather than a width-proportional range bar
 
 ### Position Estimation
@@ -43,18 +43,18 @@
 
 ### Admin / Data Management
 
-- [ ] **ADMN-01**: Admin can log in via a single PIN (Argon2id-hashed in DB) on either mobile or kiosk
-- [ ] **ADMN-02**: Admin session uses a sliding-window timeout (5–10 min idle); a visible countdown appears in the last 60 seconds before logout
-- [ ] **ADMN-03**: Admin can enter cube boundaries manually via a form with autocomplete drawn from the collection (no free-text accepted unless explicitly confirmed)
+- [x] **ADMN-01**: Admin can log in via a single PIN (Argon2id-hashed in DB) on either mobile or kiosk
+- [x] **ADMN-02**: Admin session uses a sliding-window timeout (5–10 min idle); a visible countdown appears in the last 60 seconds before logout
+- [x] **ADMN-03**: Admin can enter cube boundaries manually via a form with autocomplete drawn from the collection (no free-text accepted unless explicitly confirmed)
 - [ ] **ADMN-04**: Admin can run a guided setup wizard that walks cube-by-cube and infers each boundary from a single point of transition
 - [ ] **ADMN-05**: Admin can upload a CSV/YAML seed file; the system validates per-row and shows a diff preview before atomic replace
-- [ ] **ADMN-06**: All boundary saves are validated against the collection; mismatches are flagged with trigram-near-misses surfaced for confirmation
-- [ ] **ADMN-07**: All boundary mutations show a diff preview with affected cubes highlighted before commit
-- [ ] **ADMN-08**: Admin can log out manually from any screen
-- [ ] **ADMN-09**: Every boundary mutation is recorded in an append-only change log grouped by change-set; admin can undo/revert by change-set
+- [x] **ADMN-06**: All boundary saves are validated against the collection; mismatches are flagged with trigram-near-misses surfaced for confirmation
+- [x] **ADMN-07**: All boundary mutations show a diff preview with affected cubes highlighted before commit
+- [x] **ADMN-08**: Admin can log out manually from any screen
+- [x] **ADMN-09**: Every boundary mutation is recorded in an append-only change log grouped by change-set; admin can undo/revert by change-set
 - [ ] **ADMN-10**: A reshuffle wizard guides the admin through post-haul boundary updates and commits the result as a single atomic change-set
-- [ ] **ADMN-11**: Admin boundary edits on mobile cause the kiosk to re-render the affected cubes without manual refresh
-- [ ] **ADMN-12**: The boundary entry UI can auto-suggest a midpoint catalog# for a given cube based on the natural sort of adjacent populated cubes
+- [x] **ADMN-11**: Admin boundary edits on mobile cause the kiosk to re-render the affected cubes without manual refresh
+- [x] **ADMN-12**: The boundary entry UI can auto-suggest a midpoint catalog# for a given cube based on the natural sort of adjacent populated cubes
 
 ### LED Control Surface (hardware stubbed in v1)
 
@@ -71,10 +71,10 @@
 
 ### Realtime / Multi-Device
 
-- [ ] **RTM-01**: Kiosk subscribes to a server-sent-events stream and re-renders affected cubes on `boundary_changed` events without manual refresh
-- [ ] **RTM-02**: Multiple simultaneous searches (kiosk and mobile) execute concurrently without server-side serialization
-- [ ] **RTM-03**: Admin edits show optimistic UI updates with rollback on server error
-- [ ] **RTM-04**: When admin is actively editing boundaries, the kiosk shows a subtle "boundaries updating" indicator on the affected cube range
+- [x] **RTM-01**: Kiosk subscribes to a server-sent-events stream and re-renders affected cubes on `boundary_changed` events without manual refresh
+- [x] **RTM-02**: Multiple simultaneous searches (kiosk and mobile) execute concurrently without server-side serialization
+- [x] **RTM-03**: Admin edits show optimistic UI updates with rollback on server error
+- [x] **RTM-04**: When admin is actively editing boundaries, the kiosk shows a subtle "boundaries updating" indicator on the affected cube range
 
 ### Offline / Resilience
 
@@ -212,9 +212,9 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | CUBE-04 | Phase 2 — Real Position Estimation | Complete |
 | CUBE-05 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-06 | Phase 1 — First Search → Cube Highlight | Complete |
-| CUBE-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| CUBE-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | CUBE-08 | Phase 2 — Real Position Estimation | Complete |
-| CUBE-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| CUBE-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | CUBE-10 | Phase 2 — Real Position Estimation | Complete |
 | POS-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | POS-02 | Phase 1 — First Search → Cube Highlight | Complete |
@@ -222,18 +222,18 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | POS-04 | Phase 1 — First Search → Cube Highlight | Complete |
 | POS-05 | Phase 2 — Real Position Estimation | Complete |
 | POS-06 | Phase 2 — Real Position Estimation | Complete |
-| ADMN-01 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
-| ADMN-02 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
-| ADMN-03 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| ADMN-01 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
+| ADMN-02 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
+| ADMN-03 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-04 | Phase 6 — Wizards + Import/Export | Pending |
 | ADMN-05 | Phase 6 — Wizards + Import/Export | Pending |
-| ADMN-06 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
-| ADMN-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
-| ADMN-08 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
-| ADMN-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| ADMN-06 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
+| ADMN-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
+| ADMN-08 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
+| ADMN-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-10 | Phase 6 — Wizards + Import/Export | Pending |
-| ADMN-11 | Phase 4 — Realtime + Offline Resilience | Pending |
-| ADMN-12 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Pending |
+| ADMN-11 | Phase 4 — Realtime + Offline Resilience | Complete |
+| ADMN-12 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | LED-01 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-02 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-03 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
@@ -244,10 +244,10 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | LED-08 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-09 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-10 | Phase 5 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| RTM-01 | Phase 4 — Realtime + Offline Resilience | Pending |
-| RTM-02 | Phase 4 — Realtime + Offline Resilience | Pending |
-| RTM-03 | Phase 4 — Realtime + Offline Resilience | Pending |
-| RTM-04 | Phase 4 — Realtime + Offline Resilience | Pending |
+| RTM-01 | Phase 4 — Realtime + Offline Resilience | Complete |
+| RTM-02 | Phase 4 — Realtime + Offline Resilience | Complete |
+| RTM-03 | Phase 4 — Realtime + Offline Resilience | Complete |
+| RTM-04 | Phase 4 — Realtime + Offline Resilience | Complete |
 | OFF-01 | Phase 4 — Realtime + Offline Resilience | Pending |
 | OFF-02 | Phase 4 — Realtime + Offline Resilience | Pending |
 | OFF-03 | Phase 4 — Realtime + Offline Resilience | Pending |

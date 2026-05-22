@@ -81,6 +81,31 @@ def get_collection_snapshot(request: Request) -> CollectionSnapshot:
     return snapshot
 
 
+def get_event_bus(request: Request) -> Any:
+    """FastAPI dependency: return the app-level EventBus.
+
+    Returns HTTP 503 if the bus is not yet on ``app.state`` — e.g. a request
+    that races lifespan startup or arrives during shutdown.
+
+    The SSE endpoint depends ONLY on this — never on ``get_pool`` (D-09, Pitfall 10).
+
+    Usage::
+
+        @router.get("/api/events")
+        async def stream_events(bus: EventBus = Depends(get_event_bus)) -> ...:
+            ...
+    """
+    from gruvax.events.bus import EventBus  # local import avoids circular dep
+
+    bus: EventBus | None = getattr(request.app.state, "event_bus", None)
+    if bus is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Event bus not ready",
+        )
+    return bus
+
+
 async def require_admin(
     request: Request,
     pool: Any = Depends(get_pool),

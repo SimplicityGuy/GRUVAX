@@ -186,6 +186,6 @@ def test_midpoint_none_for_two_records(label: str, record_nums: list[int]) -> No
         snapshot=snapshot,
     )
     assert result is None, (
-        f"suggest_midpoint must return None when only 2 records exist "
-        f"(no record strictly between anchors at index 0 and 1)"
+        "suggest_midpoint must return None when only 2 records exist "
+        "(no record strictly between anchors at index 0 and 1)"
     )

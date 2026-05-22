@@ -9,11 +9,11 @@ Analog: tests/unit/test_algorithm.py (pure-function tests without DB).
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 
 def _now() -> datetime:
-    return datetime.now(timezone.utc)
+    return datetime.now(UTC)
 
 
 def test_hard_cap_expired() -> None:

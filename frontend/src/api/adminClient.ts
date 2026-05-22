@@ -310,6 +310,108 @@ export async function revertChangeSet(changeSetId: string): Promise<RevertRespon
   return res.json() as Promise<RevertResponse>
 }
 
+// ── Admin editing heartbeat (Phase 4 / RTM-04) ───────────────────────────────
+
+/**
+ * POST /api/admin/editing — fire the admin_editing heartbeat so the kiosk
+ * can shimmer the affected cube range while the owner is mid-edit (D-01, RTM-04).
+ *
+ * Network errors are swallowed and logged: a heartbeat failure must never
+ * break the editor UX. The kiosk clears the shimmer after ~60s idle (D-03)
+ * even if the close/commit signal is missed.
+ */
+export async function signalEditing(
+  cubeIds: Array<{ unit: number; row: number; col: number }>,
+  editing: boolean,
+): Promise<void> {
+  try {
+    await adminFetch('/api/admin/editing', {
+      method: 'POST',
+      body: JSON.stringify({ cube_ids: cubeIds, editing }),
+    })
+  } catch (err) {
+    // Swallow — heartbeat failure is non-fatal
+    console.debug('[gruvax] signalEditing network error (non-fatal):', err)
+  }
+}
+
+/**
+ * Debounced admin_editing heartbeat.
+ *
+ * Returns an object with two methods:
+ *  - ``signal(cubeIds, true)``  — debounced ~300ms; fires editing:true after
+ *    the owner pauses typing.
+ *  - ``signal(cubeIds, false)`` — immediate; fires editing:false on close/commit
+ *    so the kiosk shimmer clears without waiting for the debounce.
+ *
+ * Usage::
+ *
+ *   const heartbeat = createEditingHeartbeat()
+ *   // on every value change:
+ *   heartbeat.signal(cubeIds, true)
+ *   // on editor close or commit:
+ *   heartbeat.signal(cubeIds, false)
+ *
+ * The debounce avoids flooding the bus at ~keystroke rate (T-04-09).
+ * Immediate false guarantees the shimmer never outlasts the editing session.
+ */
+export function createEditingHeartbeat(): {
+  signal: (cubeIds: Array<{ unit: number; row: number; col: number }>, editing: boolean) => void
+} {
+  let timeout: ReturnType<typeof setTimeout> | null = null
+  const DEBOUNCE_MS = 300
+
+  return {
+    signal(cubeIds, editing) {
+      if (!editing) {
+        // Immediate on close/commit — clear shimmer without debounce delay
+        if (timeout !== null) {
+          clearTimeout(timeout)
+          timeout = null
+        }
+        void signalEditing(cubeIds, false)
+        return
+      }
+      // Debounce the editing:true signal
+      if (timeout !== null) clearTimeout(timeout)
+      timeout = setTimeout(() => {
+        timeout = null
+        void signalEditing(cubeIds, true)
+      }, DEBOUNCE_MS)
+    },
+  }
+}
+
+// ── Cube boundary mutation (Phase 4 / RTM-03) ────────────────────────────────
+
+/**
+ * PUT /api/admin/cubes/{unit_id}/{row}/{col}/boundary — single-cube write.
+ *
+ * Used by the optimistic useMutation in DiffPreviewSheet as the per-cube
+ * variant; the bulk path (adminBulkSave) remains the primary commit path.
+ * Error handling mirrors adminGetCubeBoundary (BulkSaveError on 400,
+ * Error on 404 and other non-OK statuses).
+ */
+export async function putCubeBoundary(
+  boundary: CubeBoundaryEdit,
+): Promise<AdminCubeBoundary> {
+  const res = await adminFetch(
+    `/api/admin/cubes/${boundary.unit_id}/${boundary.row}/${boundary.col}/boundary`,
+    { method: 'PUT', body: JSON.stringify(boundary) },
+  )
+  if (res.status === 400) {
+    const body = await res.json() as Record<string, unknown>
+    throw new BulkSaveError(
+      400,
+      typeof body.type === 'string' ? body.type : undefined,
+      typeof body.message === 'string' ? body.message : undefined,
+    )
+  }
+  if (res.status === 404) throw new Error('cube_not_found')
+  if (!res.ok) throw new Error(`Boundary update failed: ${res.status}`)
+  return res.json() as Promise<AdminCubeBoundary>
+}
+
 // ── Error types ───────────────────────────────────────────────────────────────
 
 /** Thrown when the server returns 401 — wrong PIN or expired session. */

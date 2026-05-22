@@ -28,6 +28,7 @@ import { useParams, useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import {
   adminGetCubeBoundary,
+  createEditingHeartbeat,
   getCatalogsForLabel,
   getDistinctLabels,
   suggestMidpoint,
@@ -299,6 +300,33 @@ export function CubeEditor() {
       return () => clearTimeout(t)
     }
   }, [debouncedFields, runValidation])
+
+  // ── admin_editing heartbeat (RTM-04 / D-01) ───────────────────────────────
+  // Drives the kiosk's mid-edit shimmer. signal(true) is debounced ~300ms inside
+  // the heartbeat; signal(false) is immediate. Without this call site the whole
+  // shimmer pipeline (endpoint → bus → kiosk overlay) never fires (verifier Gap 1).
+  const heartbeat = useMemo(() => createEditingHeartbeat(), [])
+  const editingCubeIds = useMemo(
+    () => [{ unit: unitId, row: rowNum, col: colNum }],
+    [unitId, rowNum, colNum],
+  )
+
+  // Signal editing only once the user has changed a field away from the seeded
+  // values — an untouched (just-opened) editor must not shimmer the kiosk.
+  useEffect(() => {
+    if (!seededBoundary) return
+    const dirty =
+      fields.labelFirst !== seededBoundary.first_label ||
+      fields.catalogFirst !== seededBoundary.first_catalog ||
+      fields.labelLast !== seededBoundary.last_label ||
+      fields.catalogLast !== seededBoundary.last_catalog
+    if (dirty) heartbeat.signal(editingCubeIds, true)
+  }, [fields, seededBoundary, heartbeat, editingCubeIds])
+
+  // On editor close (unmount) or cube change, clear the shimmer immediately.
+  useEffect(() => {
+    return () => heartbeat.signal(editingCubeIds, false)
+  }, [heartbeat, editingCubeIds])
 
   // ── Suggest midpoint ──────────────────────────────────────────────────────
 

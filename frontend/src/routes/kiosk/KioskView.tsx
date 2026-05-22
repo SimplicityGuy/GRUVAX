@@ -1,9 +1,9 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import gsap from 'gsap'
-import { fetchCubesWithFill, fetchUnits, searchCollection } from '../../api/client'
+import { fetchCubesWithFill, fetchUnits, locateRelease, searchCollection } from '../../api/client'
 import type { CubeRef } from '../../api/types'
-import { useGruvaxStore } from '../../state/store'
+import { useGruvaxStore, type ShimmerCube } from '../../state/store'
 import { CubeContentsPanel } from './CubeContentsPanel'
 import { ResultsList } from './ResultsList'
 import { SearchBox } from './SearchBox'
@@ -26,6 +26,10 @@ const SHELF_NAMES = ['SHELF A', 'SHELF B', 'SHELF C', 'SHELF D']
 export function KioskView() {
   const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch, setQuery } =
     useGruvaxStore()
+  // Phase 4 / D-01/D-03/RTM-04: reactive shimmer state from Zustand
+  const shimmerCubes = useGruvaxStore((s) => s.shimmerCubes)
+  const shimmerExpiresAt = useGruvaxStore((s) => s.shimmerExpiresAt)
+  const queryClient = useQueryClient()
   const [debouncedQuery, setDebouncedQuery] = useState('')
   // Cube-tap state for the contents panel (CUBE-09, D-14)
   const [tappedCube, setTappedCube] = useState<CubeRef | null>(null)
@@ -80,6 +84,39 @@ export function KioskView() {
     )
   }, [cubesData])
 
+  // Phase 4 / D-01/RTM-04: derive a Set<"unit-row-col"> from the shimmerCubes array for O(1)
+  // lookup in ShelfGrid. Keyed on shimmerCubes so it only recomputes when the array reference
+  // changes (Zustand replaces the array on every setShimmerCubes / clearShimmerCubes call).
+  const shimmerSet = useMemo<Set<string>>(
+    () => new Set(shimmerCubes.map((c) => `${c.unit}-${c.row}-${c.col}`)),
+    [shimmerCubes],
+  )
+
+  // Phase 4 / D-03: 60s client TTL sweeper — safety clear for abandoned edits.
+  // When shimmerCubes is non-empty, schedule a timeout for (shimmerExpiresAt - now).
+  // On fire, clear all current shimmer cubes via getState() (avoids stale closure —
+  // Pitfall 5). Timer is cancelled on change/unmount so no double-clear happens.
+  // The primary clear path (boundary_changed → clearShimmerCubes) is in the SSE
+  // consumer above — this sweeper only fires if the commit never arrives (~60s idle).
+  useEffect(() => {
+    if (shimmerCubes.length === 0) return
+
+    const msUntilExpiry = shimmerExpiresAt - Date.now()
+    if (msUntilExpiry <= 0) {
+      // Already expired — clear immediately
+      useGruvaxStore.getState().clearShimmerCubes(useGruvaxStore.getState().shimmerCubes)
+      return
+    }
+
+    const timer = setTimeout(() => {
+      useGruvaxStore.getState().clearShimmerCubes(useGruvaxStore.getState().shimmerCubes)
+    }, msUntilExpiry)
+
+    return () => {
+      clearTimeout(timer)
+    }
+  }, [shimmerCubes, shimmerExpiresAt])
+
   // TanStack Query for search — fires on debouncedQuery change (SRCH-01)
   const {
     data: searchData,
@@ -128,6 +165,115 @@ export function KioskView() {
       clearSearch()
     }
   }, [debouncedQuery, clearSearch])
+
+  // ── Phase 4: SSE consumer — boundary_changed live re-render (RTM-01, ADMN-11) ──
+  //
+  // A single EventSource per kiosk session listens on GET /api/events.
+  // On connect: mark sseConnected + resync all boundary-derived queries (D-11).
+  // On boundary_changed: invalidate the affected query keys so TanStack Query
+  //   refetches in the background → re-renders affected cubes (D-04).
+  // On admin_editing: shimmer the indicated cubes (setShimmerCubes / clearShimmerCubes).
+  // On server_hello: resync + invalidate settings (handles server restart).
+  // On server_shutdown: mark sseConnected false (the EventSource auto-reconnects).
+  // On error: mark sseConnected false — do NOT call es.close() here (Pitfall 4).
+  // Cleanup: es.close() in the return — the ONLY place close is called.
+  //
+  // All store mutations use useGruvaxStore.getState() inside event handlers to
+  // avoid stale closures (Pitfall 5 — do NOT read from the outer destructure).
+  //
+  // Real kiosk query keys (confirmed from this component — NOT ['cube', u, r, c]):
+  //   ['units'], ['cubes'], ['cube-contents', unit, row, col],
+  //   ['admin', 'cubes'], ['admin', 'history'], ['admin', 'settings']
+  useEffect(() => {
+    // D-05 + D-11: re-locate the active selection if one is set.
+    // Uses .getState() to avoid stale closures (Pitfall 5).
+    // Mirrors ResultsList.tsx L70-89 — locateRelease(id).then(setLocateResult).
+    const relocateActiveSelection = () => {
+      const { selectedReleaseId } = useGruvaxStore.getState()
+      if (selectedReleaseId != null) {
+        void locateRelease(selectedReleaseId).then((result) => {
+          // Re-read setLocateResult via getState to ensure it's current (Pitfall 5)
+          useGruvaxStore.getState().setLocateResult(result)
+        })
+      }
+    }
+
+    const resync = () => {
+      // D-08 (CR WR-01 / verifier Gap 2): the kiosk consumer invalidates ONLY
+      // kiosk-owned keys. Admin keys (['admin', ...]) are never mounted on the
+      // kiosk route, so invalidating them here is dead code that risks racing an
+      // admin optimistic update if the same SPA ever shares this consumer.
+      void queryClient.invalidateQueries({ queryKey: ['units'] })
+      void queryClient.invalidateQueries({ queryKey: ['cubes'] })
+      // D-05 + D-11: if a selection is active, re-locate it after reconnect
+      // so the highlight reflects the boundary that may have changed while disconnected.
+      relocateActiveSelection()
+    }
+
+    const es = new EventSource('/api/events')
+
+    es.onopen = () => {
+      useGruvaxStore.getState().setSseConnected(true)
+      resync()
+    }
+
+    es.onerror = () => {
+      // Mark disconnected — EventSource auto-reconnects; do NOT call es.close() (Pitfall 4)
+      useGruvaxStore.getState().setSseConnected(false)
+    }
+
+    // boundary_changed: admin edit committed → re-render affected cubes (D-04, D-03)
+    es.addEventListener('boundary_changed', (e: MessageEvent) => {
+      const { cube_ids } = JSON.parse(e.data) as {
+        cube_ids: ShimmerCube[]
+        change_set_id: string
+      }
+      // Invalidate kiosk-owned query keys only (D-08 — see resync note above)
+      void queryClient.invalidateQueries({ queryKey: ['cubes'] })
+      void queryClient.invalidateQueries({ queryKey: ['units'] })
+      for (const c of cube_ids) {
+        void queryClient.invalidateQueries({
+          queryKey: ['cube-contents', c.unit, c.row, c.col],
+        })
+      }
+      // D-03: primary on-commit shimmer clear
+      useGruvaxStore.getState().clearShimmerCubes(cube_ids)
+      // D-05: if visitor has an active selection, re-run locate so the highlight
+      // follows the record to its new cube. setLocateResult bumps animationToken
+      // → existing GSAP useLayoutEffect fires → old cube fades off, new cube
+      // springs on (D-06 re-glow). No new animation code needed.
+      relocateActiveSelection()
+    })
+
+    // admin_editing: admin has opened the editor for these cubes → shimmer them
+    es.addEventListener('admin_editing', (e: MessageEvent) => {
+      const { cube_ids, editing } = JSON.parse(e.data) as {
+        cube_ids: ShimmerCube[]
+        editing: boolean
+      }
+      if (editing) {
+        useGruvaxStore.getState().setShimmerCubes(cube_ids)
+      } else {
+        useGruvaxStore.getState().clearShimmerCubes(cube_ids)
+      }
+    })
+
+    // server_hello: server (re)started → resync all data + settings
+    es.addEventListener('server_hello', () => {
+      resync()
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] })
+    })
+
+    // server_shutdown: server going down → mark disconnected (auto-reconnect handles it)
+    es.addEventListener('server_shutdown', () => {
+      useGruvaxStore.getState().setSseConnected(false)
+    })
+
+    // Cleanup: close the connection on unmount (the ONLY es.close() call — Pitfall 4)
+    return () => {
+      es.close()
+    }
+  }, [queryClient])
 
   // Derived: the dropdown is open when there is a query that the user has not
   // dismissed by selecting a row. A new query (different string) reopens it
@@ -308,6 +454,7 @@ export function KioskView() {
                 confidence={confidence}
                 fillLevels={fillLevels}
                 onCubeTap={setTappedCube}
+                shimmerCubes={shimmerSet}
               />
             </div>
           ))}
@@ -328,6 +475,7 @@ export function KioskView() {
                     confidence={confidence}
                     fillLevels={fillLevels}
                     onCubeTap={setTappedCube}
+                    shimmerCubes={shimmerSet}
                   />
                 </div>
               ))}

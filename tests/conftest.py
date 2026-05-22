@@ -91,7 +91,7 @@ async def admin_session(client: Any) -> dict[str, Any]:  # type: ignore[no-untyp
 
     # Seed auth.pin_hash for the test PIN "0000" at low cost for speed
     # The hash_pin import comes from Plan 02 — RED until then
-    from gruvax.auth.pin import hash_pin  # noqa: PLC0415
+    from gruvax.auth.pin import hash_pin
 
     # Use time_cost=1 for test speed (Argon2id default is time_cost=2)
     # passlib CryptContext allows overriding rounds via hash(pin, rounds=N) for

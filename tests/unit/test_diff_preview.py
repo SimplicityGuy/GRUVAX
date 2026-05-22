@@ -26,8 +26,8 @@ def test_movement_counts() -> None:
     """Record-movement count is correct for a known boundary change.
 
     Scenario:
-      - Cube A: Blue Note BLP 4001 – BLP 4100 (has 50 records)
-      - Cube B: Blue Note BLP 4101 – BLP 4200 (has 50 records)
+      - Cube A: Blue Note BLP 4001 - BLP 4100 (has 50 records)
+      - Cube B: Blue Note BLP 4101 - BLP 4200 (has 50 records)
       - Change: Cube A's last_catalog moves from BLP 4100 to BLP 4150
         → 50 records move from Cube B to Cube A
 
@@ -35,7 +35,7 @@ def test_movement_counts() -> None:
     """
     from gruvax.estimator.boundary_math import count_records_in_boundary
 
-    # Build a synthetic label with 100 records: BLP 4001 – BLP 4100
+    # Build a synthetic label with 100 records: BLP 4001 - BLP 4100
     records_a = [
         RecordRow(
             release_id=i,
@@ -46,7 +46,7 @@ def test_movement_counts() -> None:
     ]
     snapshot = _make_snapshot({"Blue Note": records_a})
 
-    # Cube A: original boundary covers BLP 4001 – BLP 4050 (first 50 records)
+    # Cube A: original boundary covers BLP 4001 - BLP 4050 (first 50 records)
     cube_a_original = BoundaryRow(
         unit_id=1,
         row=0,
@@ -59,7 +59,7 @@ def test_movement_counts() -> None:
     )
     count_before = count_records_in_boundary(cube_a_original, snapshot)
 
-    # Cube A: new boundary covers BLP 4001 – BLP 4075 (first 75 records)
+    # Cube A: new boundary covers BLP 4001 - BLP 4075 (first 75 records)
     cube_a_new = BoundaryRow(
         unit_id=1,
         row=0,

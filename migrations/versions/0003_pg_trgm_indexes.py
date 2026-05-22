@@ -22,6 +22,8 @@ Downgrade:
 
 from __future__ import annotations
 
+import contextlib
+
 from alembic import op
 
 # revision identifiers, used by Alembic.
@@ -33,11 +35,10 @@ depends_on: str | None = None
 
 def upgrade() -> None:
     # pg_trgm: attempt silently; app degrades if unavailable (Pitfall E).
-    # Insufficient privileges or missing extension will be caught and ignored.
-    try:
+    # Insufficient privileges or a missing extension are caught and ignored so
+    # the migration chain still succeeds; SRCH-07/08 degrade gracefully.
+    with contextlib.suppress(Exception):
         op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
-    except Exception:
-        pass  # Insufficient privileges — SRCH-07/08 degrade gracefully
 
 
 def downgrade() -> None:
