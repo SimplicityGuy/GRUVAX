@@ -34,6 +34,13 @@ interface ShelfGridProps {
    * KioskView uses this to open the CubeContentsPanel for the tapped cube.
    */
   onCubeTap?: (cube: CubeRef) => void
+  /**
+   * Set of cube keys (format "unit-row-col") that are currently in shimmer state
+   * (admin is mid-edit — Phase 4 / D-01/D-02/RTM-04).
+   * Each matching Cube receives shimmerActive=true to render the decorative overlay.
+   * Defaults to an empty Set so callers without shimmer support stay unaffected.
+   */
+  shimmerCubes?: Set<string>
 }
 
 /**
@@ -63,6 +70,7 @@ export function ShelfGrid({
   confidence = 0,
   fillLevels,
   onCubeTap,
+  shimmerCubes = new Set(),
 }: ShelfGridProps) {
   const ROW_LETTERS = 'ABCDEFGH'
   const baseRowOffset = shelfIndex * 4
@@ -114,6 +122,7 @@ export function ShelfGrid({
           isCompanionBar={isCompanion}
           fillLevel={cubeFillLevel}
           onTap={onCubeTap}
+          shimmerActive={shimmerCubes.has(`${unit.id}-${r}-${c}`)}
         />,
       )
     }
