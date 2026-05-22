@@ -1024,9 +1024,14 @@ it('sets sseConnected=true on onopen', () => {
   expect(useGruvaxStore.getState().connectivity.sseConnected).toBe(true)
 })
 
-it('invalidates locate query on boundary_changed when release selected', async () => {
+// NOTE: locate is IMPERATIVE — there is no ['locate', id] query key. D-05 re-runs
+// locate by calling locateRelease(id) again (which bumps animationToken → GSAP re-glow).
+// So the test asserts locateRelease was CALLED, not that a query was invalidated.
+import * as client from '../api/client'
+
+it('re-runs locate on boundary_changed when a release is selected', async () => {
+  const locateSpy = vi.spyOn(client, 'locateRelease').mockResolvedValue(/* LocateResult */ {} as never)
   const qc = new QueryClient()
-  const invalidate = vi.spyOn(qc, 'invalidateQueries')
   useGruvaxStore.setState({ selectedReleaseId: 42 })
   render(<QueryClientProvider client={qc}><KioskView /></QueryClientProvider>)
   const es = MockEventSource.instances[0]
@@ -1035,9 +1040,7 @@ it('invalidates locate query on boundary_changed when release selected', async (
     cube_ids: [{ unit: 1, row: 0, col: 0 }],
     change_set_id: 'abc',
   })
-  expect(invalidate).toHaveBeenCalledWith(expect.objectContaining({
-    queryKey: ['locate', 42],
-  }))
+  expect(locateSpy).toHaveBeenCalledWith(42)
 })
 ```
 
@@ -1093,22 +1096,18 @@ it('invalidates locate query on boundary_changed when release selected', async (
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **`admin_editing` added to `create_admin_router()`**
-   - What we know: `router.py` imports sub-routers inside `create_admin_router()`
-   - What's unclear: Should `editing.py` be a separate sub-router or merged into `cubes.py`?
-   - Recommendation: Separate `editing.py` sub-router added to `create_admin_router()` — keeps the "one concern per file" pattern and is three lines of change to `router.py`
+> All three were resolved during planning (2026-05-21) by reading the actual codebase; resolutions are encoded in the Phase 4 plan `<interfaces>` blocks.
 
-2. **CubeEditor vs DiffPreviewSheet as the mutation site (D-07)**
-   - What we know: Phase 3 has both `CubeEditor.tsx` and `DiffPreviewSheet.tsx`; bulk saves go through `DiffPreviewSheet`; single-cube saves may go through `CubeEditor`
-   - What's unclear: Does `CubeEditor` make its own PUT call or always queue to `pendingChangeSet`?
-   - Recommendation: Planner should read `CubeEditor.tsx` lines below L225 to confirm the save path before placing the `useMutation` hook
+1. **`admin_editing` added to `create_admin_router()`** — **RESOLVED:** separate `editing.py` sub-router added to `create_admin_router()` (one-concern-per-file pattern; ~3 lines in `router.py`). Implemented in Plan 04-03.
+   - What we knew: `router.py` imports sub-routers inside `create_admin_router()`.
 
-3. **`['cubes']` vs `['cube', u, r, c]` query key consistency**
-   - What we know: `KioskView.tsx` uses `queryKey: ['cubes']`; ARCHITECTURE.md uses `['cube', unit, row, col]`
-   - What's unclear: Are both keys in use, or only `['cubes']`?
-   - Recommendation: Planner should `grep -rn "queryKey.*cube" frontend/src/` to confirm all active keys before writing invalidation code
+2. **CubeEditor vs DiffPreviewSheet as the mutation site (D-07)** — **RESOLVED:** the real commit site is `DiffPreviewSheet.tsx` (`adminBulkSave`); `CubeEditor.tsx` only accumulates `pendingChangeSet` (it does NOT make its own PUT). The optimistic `useMutation` is placed in `DiffPreviewSheet.tsx`. Confirmed by grep; implemented in Plan 04-03.
+   - What we knew: Phase 3 has both components; bulk saves go through `DiffPreviewSheet`.
+
+3. **`['cubes']` vs `['cube', u, r, c]` query key consistency** — **RESOLVED:** only `['cubes']` (kiosk grid) and `['cube-contents', ...]` are active; the ARCHITECTURE-sketch key `['cube', unit, row, col]` does **not** exist in the codebase. Likewise there is **no `['locate', id]` query key** — locate is imperative (`locateRelease(id).then(setLocateResult)`), so D-05 re-runs locate imperatively rather than invalidating a query. Confirmed by grep; encoded in Plans 04-01 and 04-02.
+   - What we knew: `KioskView.tsx` uses `queryKey: ['cubes']`; ARCHITECTURE.md used `['cube', unit, row, col]`.
 
 ---
 

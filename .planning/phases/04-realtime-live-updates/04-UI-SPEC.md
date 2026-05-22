@@ -200,16 +200,18 @@ When a `boundary_changed` SSE event causes the visitor's actively-selected recor
 ```mermaid
 sequenceDiagram
     participant SSE as SSE event
-    participant TQ as TanStack Query
+    participant Consumer as EventSource consumer
+    participant API as locateRelease() (imperative)
     participant Store as Zustand store
     participant GSAP as GSAP timeline
 
-    SSE->>TQ: boundary_changed → invalidate ['locate', releaseId]
-    TQ->>TQ: refetch GET /api/locate?release_id=...
-    TQ->>Store: setLocateResult(newResult) → animationToken++
+    SSE->>Consumer: boundary_changed (selectedReleaseId set)
+    Note over Consumer: locate is imperative — there is NO ['locate', id] query key
+    Consumer->>API: locateRelease(selectedReleaseId)
+    API->>Store: setLocateResult(newResult) → animationToken++
     Note over Store: highlight.primaryCube = newCube<br/>animationToken incremented
     Store->>GSAP: useEffect([animationToken]) fires
-    GSAP->>GSAP: old cube: opacity → 0 via led-off (500ms ease-standard)
+    GSAP->>GSAP: old cube: opacity → 0 via led-off (500ms)
     GSAP->>GSAP: new cube: spring pop (300ms ease-spring)
     GSAP->>GSAP: LED glow pulse on new cube (600ms ease-spring, scale 1→1.04→1)
 ```
