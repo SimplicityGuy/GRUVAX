@@ -165,11 +165,11 @@ Plans:
   4. The segment-aware estimator **supersedes §4.1** as the sole v1 default index estimator (with §4.8 cube-only retained as the timeout/low-confidence fallback), and `estimator_version` reflects the change. *(Amended 2026-05-22 — Phase 5 decision D-01: the prior A/B "meet-or-beat §4.1" proof gate via the extended `run_all_algorithms.py` harness is dropped; §4.1 is retired and the estimator ships on trust, covered by ordinary unit/Hypothesis-invariant tests rather than an A/B comparison.)*
   5. Admin can **view, edit, and add cut points** and set per-label **width overrides** for a bin (the cut-point editor / override UI), with the shared parser validating saves and the existing diff-preview + change-set undo path (Phase 3) covering the new mutations; the locate latency budget (p95 ≤ 50 ms, CPU-only, no DB on the hot path) is preserved.
 
-**Plans:** 5/5 plans (planned 2026-05-22)
+**Plans:** 1/5 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 05-01-PLAN.md — Migration 0005 cut-point model + BoundaryRow refactor + SEGMENT_ESTIMATOR_VERSION + Wave-0 test scaffold + synth factories (SEG-01)
+- [x] 05-01-PLAN.md — Migration 0005 cut-point model + BoundaryRow refactor + SEGMENT_ESTIMATOR_VERSION + Wave-0 test scaffold + synth factories (SEG-01)
 
 **Wave 2** *(blocked on Wave 1)*
 
@@ -245,7 +245,7 @@ Plans:
 | 2. Real Position Estimation | 4/4 | Complete   | 2026-05-20 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
-| 5. Segment-Aware Position Precision | 0/5 | Planned | - |
+| 5. Segment-Aware Position Precision | 1/5 | In Progress|  |
 | 6. LED Contract over MQTT (Hardware Stubbed) | 0/? | Not started | - |
 | 7. Wizards + Import/Export | 0/? | Not started | - |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |

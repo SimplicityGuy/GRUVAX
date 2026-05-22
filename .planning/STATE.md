@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-22T16:54:04.905Z"
+last_updated: "2026-05-22T17:00:25.581Z"
 progress:
   total_phases: 8
   completed_phases: 4
@@ -20,7 +20,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 5 — segment-aware position precision
+**Current Focus:** Phase 05 — segment-aware-position-precision
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -28,13 +28,13 @@ progress:
 
 ## Current Position
 
-Phase: 04 (Realtime Live Updates) — EXECUTING
-Plan: 1 of 4
+Phase: 05 (segment-aware-position-precision) — EXECUTION PAUSED (re-plan pending)
+Plan: 05-01 complete & merged; 05-02..05-05 to be re-planned
 
 - **Phase:** 5
-- **Plan:** Not started
-- **Status:** Ready to execute
-- **Progress:** [██████████] 100% (Phase 02)
+- **Plan:** 05-01 done (merged to main); Waves 2–5 blocked pending re-plan
+- **Status:** Paused after Wave 1 — phase under-scoped the BoundaryRow contract change (see 05-REPLAN-NOTES.md)
+- **Progress:** Phase 05: 1/5 plans complete
 
 ```
 Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
@@ -105,6 +105,7 @@ Phase 8: Observability + Deployment Hardening       [ ] Not started
 - [Phase 02-02]: **onTap calls setQuery (not direct locate)** — D-10 explicit user confirmation; no silent auto-correct; user sees corrected term in search box.
 - [Phase 02-04]: **CUBE_ONLY_NULL_MIDPOINT=0.5** — §4.8 null sub_cube_interval scored as midpoint of cube for MAE comparison; worst-case analysis per plan spec.
 - [Phase 02-04]: **session-scoped harness_results fixture** — run_all_algorithms(ci=True) called once per pytest session; all CI tests consume shared per-shape {index, cube_only} dict.
+- [Phase 05-01]: **BoundaryRow contract change under-scoped at plan time** — dropping `last_label`/`last_catalog` (migration 0005) ripples through more consumers than 05-02..05-05 covered. Post-merge gate caught ~40 RED tests + 12 mypy errors. 05-01's work is correct and merged; Waves 2–5 are being re-planned to add orphan coverage (`api/units.py`, `db/seed_boundaries.py`, `db/queries.py`, `boundary_cache.py:100`, ~11 test files). **Lesson:** plans that change a shared dataclass/DDL contract must include an explicit consumer-sweep (grep audit) covering every construction/SQL/test site, and each wave must leave the suite green. Full inventory: `05-REPLAN-NOTES.md`.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
 
@@ -138,8 +139,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-20 (Phase 03 context gathered — admin loop decisions D-01..D-18 captured in 03-CONTEXT.md)
-**Next action:** Phase 03 context ready — run `/gsd:plan-phase 3` (or `/gsd:ui-phase 3` first; this phase is UI-heavy). Resume file: `.planning/phases/03-admin-loop-pin-manual-entry-undo/03-CONTEXT.md`.
+**Last touched:** 2026-05-22 (Phase 05 Wave 1 executed + merged; execute-phase paused — orphan-consumer scoping gap found by post-merge gate)
+**Next action:** Re-plan Phase 5 Waves 2–5 — run `/gsd:plan-phase 5`. **Keep 05-01 (done/merged); do not revert.** The re-plan MUST scope every `last_label`/`last_catalog` consumer per `.planning/phases/05-segment-aware-position-precision/05-REPLAN-NOTES.md` (orphans: `api/units.py`, `db/seed_boundaries.py`, `db/queries.py`, `boundary_cache.py:100` mypy, and ~11 existing test files) so each wave leaves `just test`/`just typecheck` green.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
