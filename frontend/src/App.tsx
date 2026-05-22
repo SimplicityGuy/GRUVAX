@@ -1,7 +1,7 @@
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { AdminShell } from './routes/admin/AdminShell'
-import { CubeEditor } from './routes/admin/CubeEditor'
+import { CutPointEditor } from './routes/admin/CutPointEditor'
 import { CubesGrid } from './routes/admin/CubesGrid'
 import { DiffPreviewSheet } from './routes/admin/DiffPreviewSheet'
 import { HistoryView } from './routes/admin/HistoryView'
@@ -24,6 +24,7 @@ const queryClient = new QueryClient({
  *   /           → KioskView (public, no auth)
  *   /admin      → AdminShell (PIN gate on all /admin/* routes)
  *   /admin/settings → Settings
+ *   /admin/cubes/:unit/:row/:col → CutPointEditor (Phase 5 — replaces Phase 3 first/last form)
  *
  * Design tokens are imported in main.tsx (single entry point).
  */
@@ -37,7 +38,7 @@ function App() {
             <Route index element={<Settings />} />
             <Route path="settings" element={<Settings />} />
             <Route path="cubes" element={<CubesGrid />} />
-            <Route path="cubes/:unit/:row/:col" element={<CubeEditor />} />
+            <Route path="cubes/:unit/:row/:col" element={<CutPointEditor />} />
             <Route path="preview" element={<DiffPreviewSheet />} />
             <Route path="history" element={<HistoryView />} />
           </Route>

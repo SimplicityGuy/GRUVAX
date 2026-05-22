@@ -73,7 +73,7 @@ export function SegmentStrip({ segments, onDragSetOverride, isReadOnly = false }
         const widthPct = (seg.fraction * 100).toFixed(3) + '%'
 
         const segDiv = el('div', {
-          className: `seg-strip__segment${seg.continues ? ' seg-strip__segment--continues' : ''}${seg.isOverride ? ' seg-strip__segment--override' : ''}`,
+          className: `seg-strip__segment${seg.continues ? ' seg-strip__segment--continues' : ''}${seg.is_override ? ' seg-strip__segment--override' : ''}`,
           style: {
             width: widthPct,
             background: `var(${fillToken})`,
@@ -83,7 +83,7 @@ export function SegmentStrip({ segments, onDragSetOverride, isReadOnly = false }
         })
 
         // Override accent bar (5px top for full, 3px for mini)
-        if (seg.isOverride) {
+        if (seg.is_override) {
           const accentHeight = isFullSize ? '5px' : '3px'
           const accentShadow = isFullSize ? 'var(--gruvax-shadow-led)' : 'none'
           const accent = el('div', {
@@ -136,8 +136,8 @@ export function SegmentStrip({ segments, onDragSetOverride, isReadOnly = false }
               draggingSegs.current[idx].fraction = pos - left
               draggingSegs.current[idx + 1].fraction = right - pos
               // Mark both as override during drag
-              draggingSegs.current[idx].isOverride = true
-              draggingSegs.current[idx + 1].isOverride = true
+              draggingSegs.current[idx].is_override = true
+              draggingSegs.current[idx + 1].is_override = true
               renderAll(draggingSegs.current)
             }
 

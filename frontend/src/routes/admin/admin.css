@@ -649,7 +649,7 @@
   white-space: nowrap;
 }
 
-/* ── CubeEditor ──────────────────────────────────────────────────────────── */
+/* ── Bin editor chrome (shared by CutPointEditor + segment panels) ─────── */
 
 .cube-editor {
   display: flex;

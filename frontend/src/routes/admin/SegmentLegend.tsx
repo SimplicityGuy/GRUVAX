@@ -45,7 +45,7 @@ export function SegmentLegend({ segments, onResync }: SegmentLegendProps) {
         const swatchToken = SEGMENT_SWATCH_TOKENS[i % SEGMENT_SWATCH_TOKENS.length]
         const overridePct = Math.round(seg.fraction * 100)
         const autoPct = Math.round(seg.auto_fraction * 100)
-        const isDrifted = seg.isOverride && Math.abs(seg.fraction - seg.auto_fraction) > DRIFT_THRESHOLD
+        const isDrifted = seg.is_override && Math.abs(seg.fraction - seg.auto_fraction) > DRIFT_THRESHOLD
 
         return (
           <div key={seg.label} className="seg-legend-row" role="listitem">
@@ -61,7 +61,7 @@ export function SegmentLegend({ segments, onResync }: SegmentLegendProps) {
 
             {/* Chip column */}
             <div className="seg-legend-chips">
-              {!seg.isOverride ? (
+              {!seg.is_override ? (
                 <span className="seg-chip seg-chip--auto" role="status">
                   AUTO · {autoPct}% from row counts
                 </span>

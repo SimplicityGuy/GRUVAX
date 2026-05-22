@@ -15,7 +15,7 @@
  *   parent.replaceChildren(...nodes)
  */
 
-type ElProps<K extends keyof HTMLElementTagNameMap> = {
+type ElProps = {
   [P in string]?: unknown
 } & Partial<{
   className: string
@@ -35,14 +35,15 @@ type ElProps<K extends keyof HTMLElementTagNameMap> = {
   'aria-expanded': string
   type: string
   disabled: boolean
-  style: Partial<CSSStyleDeclaration>
+  /** CSS properties as string values — passed to Object.assign(el.style, ...) */
+  style: Record<string, string>
   dataset: Record<string, string>
   onClick: (ev: MouseEvent) => void
   onPointerDown: (ev: PointerEvent) => void
   onPointerMove: (ev: PointerEvent) => void
   onPointerUp: (ev: PointerEvent) => void
   onKeyDown: (ev: KeyboardEvent) => void
-}> & Partial<HTMLElementTagNameMap[K]>
+}>
 
 /**
  * Create an HTML element with typed property assignment.
@@ -50,7 +51,7 @@ type ElProps<K extends keyof HTMLElementTagNameMap> = {
  */
 export function el<K extends keyof HTMLElementTagNameMap>(
   tag: K,
-  props?: ElProps<K> | null,
+  props?: ElProps | null,
   ...children: (Node | string)[]
 ): HTMLElementTagNameMap[K] {
   const elem = document.createElement(tag)
