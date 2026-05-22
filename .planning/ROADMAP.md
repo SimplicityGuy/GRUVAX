@@ -165,27 +165,27 @@ Plans:
   4. The segment-aware estimator **supersedes §4.1** as the sole v1 default index estimator (with §4.8 cube-only retained as the timeout/low-confidence fallback), and `estimator_version` reflects the change. *(Amended 2026-05-22 — Phase 5 decision D-01: the prior A/B "meet-or-beat §4.1" proof gate via the extended `run_all_algorithms.py` harness is dropped; §4.1 is retired and the estimator ships on trust, covered by ordinary unit/Hypothesis-invariant tests rather than an A/B comparison.)*
   5. Admin can **view, edit, and add cut points** and set per-label **width overrides** for a bin (the cut-point editor / override UI), with the shared parser validating saves and the existing diff-preview + change-set undo path (Phase 3) covering the new mutations; the locate latency budget (p95 ≤ 50 ms, CPU-only, no DB on the hot path) is preserved.
 
-**Plans:** 1/5 plans executed
+**Plans:** 1/5 plans executed (Waves 2–5 re-planned 2026-05-22 to close the orphan-consumer gap — see 05-REPLAN-NOTES.md; each wave leaves `just lint && just typecheck && just test` green)
 Plans:
-**Wave 1**
+**Wave 1** *(done + merged)*
 
 - [x] 05-01-PLAN.md — Migration 0005 cut-point model + BoundaryRow refactor + SEGMENT_ESTIMATOR_VERSION + Wave-0 test scaffold + synth factories (SEG-01)
 
 **Wave 2** *(blocked on Wave 1)*
 
-- [ ] 05-02-PLAN.md — SegmentCache derivation + two-level interpolation estimator superseding §4.1 + §4.8 fallback refactor + locate wiring + p95 benchmark (SEG-02, SEG-03, SEG-06, SEG-07)
+- [ ] 05-02-PLAN.md — SegmentCache derivation (counts/fractions/override renormalization) + boundary_cache mypy fix + synth factories return derived SegmentCache + SEG-02/03/04 unit tests (SEG-02, SEG-03, SEG-04, SEG-05)
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 05-03-PLAN.md — Admin segment API: GET segments + overrides + cut + insert-cut + contiguity/overflow validation + SegmentCache invalidation (SEG-04, SEG-05, SEG-08)
+- [ ] 05-03-PLAN.md — Two-level interpolation estimator superseding §4.1 + §4.8 fallback via SegmentCache + deps/app/locate wiring + heal read-path orphans (units.py, seed_boundaries.py, run_all_algorithms.py) + SEG-06/07 + D-02 invariants + rewrite §4.1-era/fill-level tests (SEG-06, SEG-07)
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 05-04-PLAN.md — UI primitives: el() helper + adminClient + SegmentStrip drag-override + SegmentLegend drift chips + RecordPickerSheet (SEG-04, SEG-08)
+- [ ] 05-04-PLAN.md — Admin cut-point + override backend: validate_contiguity + cubes.py rework + segments.py (GET/cut/overrides/insert-cut) + queries.py cut-point rework + heal admin/integration test orphans (SEG-05, SEG-08)
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 05-05-PLAN.md — Editor assembly: CutPointEditor + SegmentEditorPanel + LocatorHeader + DiffPreview/Settings extensions + route swap + human-verify (SEG-04, SEG-05, SEG-06, SEG-08) [has human-verify checkpoint]
+- [ ] 05-05-PLAN.md — Frontend editor assembly: el() helper + adminClient + SegmentStrip/Legend/LocatorHeader + RecordPickerSheet + SegmentEditorPanel + CutPointEditor + DiffPreview/Settings extensions + route swap + human-verify (SEG-04, SEG-08) [has human-verify checkpoint]
 **UI hint:** yes
 
 ### Phase 6: LED Contract over MQTT (Hardware Stubbed)
