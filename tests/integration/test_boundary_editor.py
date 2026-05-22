@@ -181,3 +181,55 @@ async def test_validate_no_db_write(client) -> None:  # type: ignore[no-untyped-
     assert "movement_counts" in body or "valid" in body, (
         "Validate response must include movement_counts or valid key"
     )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_single_cube_put_writes_history(client, db_pool) -> None:  # type: ignore[no-untyped-def]
+    """A successful single-cube PUT appends a boundary_history row (CR-02 regression).
+
+    Previously ``put_cube_boundary`` updated ``cube_boundaries`` but wrote NO
+    history row (only the bulk endpoint did), so single-cube edits left no audit
+    trail and were not revertable. The fix records ``source='manual'`` atomically
+    with the boundary write, sharing one ``change_set_id``.
+    """
+    login_res = await client.post("/api/admin/login", json={"pin": "0000"})
+    if login_res.status_code != 200:
+        pytest.skip("Login not implemented — skipping single-cube history test")
+    csrf_token = login_res.cookies.get("gruvax_csrf") or ""
+
+    async def manual_history_count() -> int:
+        async with db_pool.connection() as conn:
+            cur = await conn.execute(
+                "SELECT count(*) FROM gruvax.boundary_history "
+                "WHERE unit_id = %s AND row = %s AND col = %s AND source = %s",
+                (1, 3, 3, "manual"),
+            )
+            fetched = await cur.fetchone()
+            return int(fetched[0]) if fetched else 0
+
+    before = await manual_history_count()
+
+    response = await client.put(
+        "/api/admin/cubes/1/3/3/boundary",
+        json={
+            "first_label": "Blue Note",
+            "first_catalog": "BLP 4001",
+            "last_label": "Blue Note",
+            "last_catalog": "BLP 4001",
+            "is_empty": False,
+            "force": True,  # bypass phantom check; comparator passes (first == last)
+        },
+        cookies=login_res.cookies,
+        headers={"X-CSRF-Token": csrf_token},
+    )
+    if response.status_code == 404:
+        pytest.skip("Single-cube boundary endpoint not implemented")
+    assert response.status_code == 200, (
+        f"Expected 200 from single-cube PUT, got {response.status_code}: {response.text}"
+    )
+
+    after = await manual_history_count()
+    assert after == before + 1, (
+        "Single-cube PUT must append exactly one source='manual' boundary_history "
+        f"row (CR-02); before={before} after={after}"
+    )

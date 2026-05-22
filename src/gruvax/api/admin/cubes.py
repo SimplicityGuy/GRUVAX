@@ -291,8 +291,16 @@ async def put_cube_boundary(
             )
 
     # ── Step 3: DB write (boundary update + history log) ─────────────────────
-    # Note: In plan 05, multi-cube edits go through POST /cubes/bulk.
-    # This endpoint handles single-cube edits from the per-cube editor.
+    # Single-cube edits from the per-cube editor (multi-cube edits go through
+    # POST /cubes/bulk). CR review CR-02: a single change_set_id is generated up
+    # front and shared by the boundary_history row AND the boundary_changed SSE
+    # event, so a single-cube PUT is recorded in the audit log and is revertable
+    # — previously this endpoint wrote no history (only bulk did).
+    import uuid as _uuid
+
+    from gruvax.db.queries import fetch_current_boundary, write_history_row
+
+    change_set_id = str(_uuid.uuid4())
     write_sql = """
 UPDATE gruvax.cube_boundaries
 SET first_label = %s, first_catalog = %s,
@@ -301,43 +309,63 @@ SET first_label = %s, first_catalog = %s,
 WHERE unit_id = %s AND row = %s AND col = %s
 RETURNING unit_id, row, col, first_label, first_catalog, last_label, last_catalog, is_empty
 """
-    async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            write_sql,
-            (
-                first_label or None,
-                first_catalog or None,
-                last_label or None,
-                last_catalog or None,
-                body.is_empty,
-                unit_id,
-                row,
-                col,
-            ),
-        )
-        updated = await cur.fetchone()
-        cols_meta = [desc[0] for desc in (cur.description or [])]
-        await conn.commit()
+    new_first_label = first_label or None
+    new_first_catalog = first_catalog or None
+    new_last_label = last_label or None
+    new_last_catalog = last_catalog or None
 
-    if updated is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"type": "cube_not_found", "unit_id": unit_id, "row": row, "col": col},
+    async with pool.connection() as conn, conn.transaction():
+        # Capture prev_* before overwriting (history audit) — also the existence check.
+        prev = await fetch_current_boundary(conn, unit_id, row, col)
+        if prev is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"type": "cube_not_found", "unit_id": unit_id, "row": row, "col": col},
+            )
+        async with conn.cursor() as cur:
+            await cur.execute(
+                write_sql,
+                (
+                    new_first_label,
+                    new_first_catalog,
+                    new_last_label,
+                    new_last_catalog,
+                    body.is_empty,
+                    unit_id,
+                    row,
+                    col,
+                ),
+            )
+            updated = await cur.fetchone()
+            cols_meta = [desc[0] for desc in (cur.description or [])]
+        # Append to boundary_history with the shared change_set_id (CR-02).
+        await write_history_row(
+            conn,
+            change_set_id,
+            unit_id,
+            row,
+            col,
+            prev,
+            new_first_label,
+            new_first_catalog,
+            new_last_label,
+            new_last_catalog,
+            body.is_empty,
+            source="manual",
         )
+    # transaction commits atomically on exiting the conn.transaction() context.
 
     # Invalidate + reload the boundary cache after commit (Pitfall A).
     # CR review CR-01: the DB write is already committed, so the kiosk MUST learn
     # of it via SSE even if the in-process cache reload fails transiently. Publish
     # in `finally` so a cache.load() error never strands subscribers on stale data.
-    import uuid as _uuid
-
     cache.invalidate()
     try:
         await cache.load(pool)
     finally:
         await bus.publish("boundary_changed", {
             "cube_ids": [{"unit": unit_id, "row": row, "col": col}],
-            "change_set_id": str(_uuid.uuid4()),
+            "change_set_id": change_set_id,
         })
 
     return JSONResponse(

@@ -105,7 +105,13 @@ export function DiffPreviewSheet() {
         }
         setBeforeBoundaries(map)
       } catch {
-        // Failure of validate or any boundary fetch — do not block commit
+        // CR review WR-02: the dry-run validation could not complete (network /
+        // server error). Fail SAFE — guard the commit and warn the user rather
+        // than silently leaving the button enabled with unverified changes.
+        setHasValidationErrors(true)
+        setValidateErrorMessage(
+          "Couldn't check these changes against the collection. Try again before saving.",
+        )
       } finally {
         setIsValidating(false)
       }
@@ -278,10 +284,13 @@ export function DiffPreviewSheet() {
             // movement_counts is a list on the wire (CR-03): use [0] for the single-cube case
             const moveCounts = validateResult?.movement_counts ?? []
             const mc = moveCounts[0]
-            const isEmpty = !edit.last_label && !edit.last_catalog
-            const isOverstuffed = mc
-              ? mc.records_after > (mc.records_before * 1.1 + 1)
-              : false
+            // WR-05: prefer the canonical is_empty flag; fall back to the field
+            // check only when the edit doesn't carry it (editor-created edits).
+            const isEmpty = edit.is_empty ?? (!edit.last_label && !edit.last_catalog)
+            // CR-03: use the server-computed fill level (records_after / nominal
+            // capacity). The old `records_after > records_before*1.1 + 1` heuristic
+            // fired a false positive for empty cubes (threshold 1 → any 2+ records).
+            const isOverstuffed = mc ? mc.fill_level_after > 1.0 : false
 
             // Before-state: fetched from GET /boundary on mount (F5)
             const beforeKey = `${edit.unit_id}-${edit.row}-${edit.col}`
