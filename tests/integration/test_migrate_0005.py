@@ -20,7 +20,6 @@ import pytest_asyncio
 
 from gruvax.db.pool import create_pool
 
-
 # ── Session-scoped DB pool (mirrors pattern from test_locate.py) ─────────────
 
 
@@ -81,7 +80,7 @@ async def _get_first_cube(pool, unit_id: int) -> tuple[int, int, int]:  # type: 
         )
         row = await cur.fetchone()
     if row is None:
-        pytest.skip("No non-empty cubes in cube_boundaries for unit_id=%s" % unit_id)
+        pytest.skip(f"No non-empty cubes in cube_boundaries for unit_id={unit_id}")
     return int(row[0]), int(row[1]), int(row[2])
 
 
@@ -99,9 +98,7 @@ async def test_segment_overrides_table_exists(migrate_pool) -> None:  # type: ig
 async def test_last_label_column_absent(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """Migration 0005 drops last_label from cube_boundaries (D-05 / SEG-01)."""
     exists = await _column_exists(migrate_pool, "cube_boundaries", "last_label")
-    assert not exists, (
-        "last_label column should NOT exist in cube_boundaries after migration 0005"
-    )
+    assert not exists, "last_label column should NOT exist in cube_boundaries after migration 0005"
 
 
 @pytest.mark.asyncio(loop_scope="module")
@@ -232,9 +229,16 @@ async def test_source_check_accepts_cut_insert(migrate_pool) -> None:  # type: i
             "  new_first_label, new_first_catalog, new_is_empty, source)"
             " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (
-                change_set_id, uid, r, c,
-                first_label, first_catalog, is_empty,
-                first_label, first_catalog, is_empty,
+                change_set_id,
+                uid,
+                r,
+                c,
+                first_label,
+                first_catalog,
+                is_empty,
+                first_label,
+                first_catalog,
+                is_empty,
                 "cut_insert",
             ),
         )
@@ -281,9 +285,16 @@ async def test_source_check_rejects_unknown_source(migrate_pool) -> None:  # typ
                 "  new_first_label, new_first_catalog, new_is_empty, source)"
                 " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (
-                    change_set_id, uid, r, c,
-                    first_label, first_catalog, is_empty,
-                    first_label, first_catalog, is_empty,
+                    change_set_id,
+                    uid,
+                    r,
+                    c,
+                    first_label,
+                    first_catalog,
+                    is_empty,
+                    first_label,
+                    first_catalog,
+                    is_empty,
                     "invalid_source",
                 ),
             )
@@ -321,9 +332,7 @@ async def test_0005_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, (
-        f"alembic downgrade -1 failed:\n{result.stdout}\n{result.stderr}"
-    )
+    assert result.returncode == 0, f"alembic downgrade -1 failed:\n{result.stdout}\n{result.stderr}"
 
     # Verify segment_overrides is gone after downgrade
     exists_after_down = await _table_exists(migrate_pool, "segment_overrides")
@@ -337,15 +346,11 @@ async def test_0005_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, (
-        f"alembic upgrade head failed:\n{result.stdout}\n{result.stderr}"
-    )
+    assert result.returncode == 0, f"alembic upgrade head failed:\n{result.stdout}\n{result.stderr}"
 
     # Verify final schema state is correct
     exists_after_up = await _table_exists(migrate_pool, "segment_overrides")
-    assert exists_after_up, (
-        "segment_overrides should exist after re-upgrading to head"
-    )
+    assert exists_after_up, "segment_overrides should exist after re-upgrading to head"
     last_label_absent = not (await _column_exists(migrate_pool, "cube_boundaries", "last_label"))
     assert last_label_absent, (
         "last_label should NOT exist in cube_boundaries after re-upgrading to head"

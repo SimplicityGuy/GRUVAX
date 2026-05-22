@@ -96,8 +96,7 @@ async def test_cube_contents_public_no_auth(client) -> None:  # type: ignore[no-
     # Request without any cookies — must not return 401 or 403
     response = await client.get("/api/cubes/1/0/0")
     assert response.status_code in (200, 404), (
-        f"Public cube endpoint must return 200 or 404, not auth error. "
-        f"Got {response.status_code}"
+        f"Public cube endpoint must return 200 or 404, not auth error. Got {response.status_code}"
     )
     assert response.status_code != 401, "Public endpoint must not require authentication"
     assert response.status_code != 403, "Public endpoint must not require CSRF token"

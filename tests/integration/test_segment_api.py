@@ -21,7 +21,6 @@ from __future__ import annotations
 
 import pytest
 
-
 # ── SEG-08: GET /api/admin/cubes/:u/:r/:c/segments ───────────────────────────
 
 

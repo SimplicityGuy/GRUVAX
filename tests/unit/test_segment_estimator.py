@@ -17,7 +17,6 @@ import pytest
 
 from fixtures.synth_collection import make_multi_label_bin, make_straddle
 
-
 # ── Session-scoped synth fixtures ─────────────────────────────────────────────
 
 
@@ -44,6 +43,7 @@ def test_locate_by_segment_basic(multi_label_estimator_fixture) -> None:  # type
     interpolation behind unchanged LocateResult contract.
     """
     from gruvax.estimator.algorithm import locate_by_segment  # noqa: F401
+
     pytest.skip("Wave 0 stub — locate_by_segment implemented in Plan 05-03")
 
 

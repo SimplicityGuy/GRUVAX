@@ -24,7 +24,7 @@ algorithm works in six steps:
 
 from __future__ import annotations
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
@@ -43,14 +43,14 @@ class LabelSegment:
     """
 
     label: str
-    first_rank_in_label: int       # 0-indexed rank of first record in this bin
-    last_rank_in_label: int        # 0-indexed rank of last record in this bin (inclusive)
-    segment_count: int             # = last_rank - first_rank + 1; row-count, never arithmetic
-    auto_fraction: float           # count-derived: segment_count / total_bin_count
-    applied_fraction: float        # override ?? auto_fraction; see Pitfall 2 normalization
-    offset_in_bin: float           # cumulative sum of applied_fractions of preceding segments
-    is_override: bool              # True iff an admin width override is active for this segment
-    continues: bool                # True if this label continues into the next bin
+    first_rank_in_label: int  # 0-indexed rank of first record in this bin
+    last_rank_in_label: int  # 0-indexed rank of last record in this bin (inclusive)
+    segment_count: int  # = last_rank - first_rank + 1; row-count, never arithmetic
+    auto_fraction: float  # count-derived: segment_count / total_bin_count
+    applied_fraction: float  # override ?? auto_fraction; see Pitfall 2 normalization
+    offset_in_bin: float  # cumulative sum of applied_fractions of preceding segments
+    is_override: bool  # True iff an admin width override is active for this segment
+    continues: bool  # True if this label continues into the next bin
 
 
 @dataclass(frozen=True)
@@ -65,8 +65,8 @@ class SegmentBin:
     unit_id: int
     row: int
     col: int
-    cut_label: str | None          # = BoundaryRow.first_label (the cut point)
-    cut_catalog: str | None        # = BoundaryRow.first_catalog (the cut point)
+    cut_label: str | None  # = BoundaryRow.first_label (the cut point)
+    cut_catalog: str | None  # = BoundaryRow.first_catalog (the cut point)
     segments: tuple[LabelSegment, ...]  # ordered by label.casefold()
 
 
@@ -165,39 +165,14 @@ class SegmentCache:
         # Sort key: (label.casefold(), parse_key(catalog_number))
         # We need all labels from the snapshot (not just those at cut points).
 
-        # Collect all unique labels from snapshot that have records
-        all_snapshot_label_keys: list[str] = []
-        # Access the internal _by_label dict via snapshot's get_label_records interface.
-        # We derive the label keys by checking which labels have non-empty record lists.
-        # Since we don't have direct access to _by_label keys, we iterate over boundary rows
-        # to find labels, then also discover additional labels by checking which label
-        # in the boundary rows' first_label field appears.
-        #
-        # For multi-label bins: labels that start mid-bin are NOT in the boundary's
-        # first_label. We need to discover them via the global sort.
-        #
-        # Strategy: collect all records from all labels in the snapshot into a globally
-        # sorted list, then for each bin determine which records fall in it.
-
-        # We gather all labels from the snapshot. Since CollectionSnapshot._by_label
-        # is a private attribute, we use the known factory-populated data structure.
-        # We sort all records globally by (label.casefold(), parse_key(cat)).
+        # Collect all records from the snapshot into a globally sorted list.
+        # Access the private _by_label attribute directly: SegmentCache is a
+        # trusted internal service (same package, no DB boundary). This avoids
+        # adding a public API to CollectionSnapshot just for this use case.
         all_records: list[RecordRow] = []
-        # We need to enumerate snapshot labels. We do so via the factory's structure.
-        # Since get_label_records takes a label and the snapshot is keyed by casefold,
-        # we need to get all records. Use the boundary cut labels as seeds, but also
-        # handle the case where additional labels exist in the snapshot (multi-label bins).
-        #
-        # The correct approach: access _by_label directly since SegmentCache is a
-        # trusted internal service (same package, no DB boundary).
-
-        # Access the private _by_label attribute to enumerate all labels.
-        # This is intentional: SegmentCache is tightly coupled to CollectionSnapshot
-        # as an internal service — this avoids having to add a public API to
-        # CollectionSnapshot just for this one use case.
         by_label: dict[str, list[RecordRow]] = snapshot._by_label
 
-        for label_key, records in by_label.items():
+        for records in by_label.values():
             all_records.extend(records)
 
         # Sort all records globally by (label casefold, parse_key(catalog_number))
@@ -243,10 +218,9 @@ class SegmentCache:
         cut_keys = [_cut_key(row) for row in boundary_rows]
 
         # Build a list of (record, global_sort_key) pairs, sorted globally
-        record_global_pairs: list[tuple[RecordRow, tuple[str, tuple[tuple[int, int | str], ...]]]] = [
-            (r, (r.label.casefold(), parse_key(r.catalog_number)))
-            for r in all_records
-        ]
+        record_global_pairs: list[
+            tuple[RecordRow, tuple[str, tuple[tuple[int, int | str], ...]]]
+        ] = [(r, (r.label.casefold(), parse_key(r.catalog_number))) for r in all_records]
         record_global_pairs.sort(key=lambda x: x[1])
 
         # For each record, determine which bin it belongs to using bisect-style logic
@@ -266,7 +240,9 @@ class SegmentCache:
         # Step 4 + 5 + 6: Build SegmentBins from bin_records
         result_bins: list[SegmentBin] = []
 
-        for bin_idx, (brow, records_in_bin) in enumerate(zip(boundary_rows, bin_records)):
+        for _bin_idx, (brow, records_in_bin) in enumerate(
+            zip(boundary_rows, bin_records, strict=True)
+        ):
             if brow.is_empty or not records_in_bin:
                 # Empty bin: no segments
                 seg_bin = SegmentBin(
@@ -322,7 +298,6 @@ class SegmentCache:
                     lk_records_in_bin, key=lambda r: parse_key(r.catalog_number)
                 )
                 first_in_bin_key = parse_key(lk_in_bin_sorted[0].catalog_number)
-                last_in_bin_key = parse_key(lk_in_bin_sorted[-1].catalog_number)
 
                 # Find first_rank: the index in sorted_for_label where first_in_bin_key appears
                 first_rank = 0
@@ -380,7 +355,9 @@ class SegmentCache:
                         is_override_flags[lk] = True
                     else:
                         if non_overridden_total > 0:
-                            applied_fractions[lk] = remaining * (label_counts[lk] / non_overridden_total)
+                            applied_fractions[lk] = remaining * (
+                                label_counts[lk] / non_overridden_total
+                            )
                         else:
                             applied_fractions[lk] = 0.0
                         is_override_flags[lk] = False
@@ -468,9 +445,7 @@ class SegmentCache:
         key = label.casefold()
         return [b for b in self._bins if any(s.label.casefold() == key for s in b.segments)]
 
-    def get_segment_for_rank(
-        self, label: str, rank: int
-    ) -> tuple[SegmentBin, LabelSegment] | None:
+    def get_segment_for_rank(self, label: str, rank: int) -> tuple[SegmentBin, LabelSegment] | None:
         """Find the bin + segment where this label's record at ``rank`` lives.
 
         Args:
@@ -484,9 +459,11 @@ class SegmentCache:
         key = label.casefold()
         for bin_ in self._bins:
             for seg in bin_.segments:
-                if seg.label.casefold() == key:
-                    if seg.first_rank_in_label <= rank <= seg.last_rank_in_label:
-                        return bin_, seg
+                if (
+                    seg.label.casefold() == key
+                    and seg.first_rank_in_label <= rank <= seg.last_rank_in_label
+                ):
+                    return bin_, seg
         return None
 
     def invalidate(self) -> None:

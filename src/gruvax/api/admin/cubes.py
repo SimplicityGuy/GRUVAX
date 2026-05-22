@@ -117,7 +117,7 @@ def _get_nominal_capacity(request: Request) -> int:
     raw = settings_cache.get("cube.nominal_capacity", 95)
     try:
         return max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return 95
 
 
@@ -363,10 +363,13 @@ RETURNING unit_id, row, col, first_label, first_catalog, last_label, last_catalo
     try:
         await cache.load(pool)
     finally:
-        await bus.publish("boundary_changed", {
-            "cube_ids": [{"unit": unit_id, "row": row, "col": col}],
-            "change_set_id": change_set_id,
-        })
+        await bus.publish(
+            "boundary_changed",
+            {
+                "cube_ids": [{"unit": unit_id, "row": row, "col": col}],
+                "change_set_id": change_set_id,
+            },
+        )
 
     return JSONResponse(
         status_code=200,
@@ -406,15 +409,20 @@ async def validate_boundary(
     for edit in body.updates:
         # is_empty short-circuit: no validation needed for is_empty cubes
         if edit.is_empty:
-            results.append({
-                "unit_id": edit.unit_id,
-                "row": edit.row,
-                "col": edit.col,
-                "valid": True,
-                "movement_counts": _compute_movement_counts(
-                    edit, cache, snapshot, nominal_capacity,
-                ),
-            })
+            results.append(
+                {
+                    "unit_id": edit.unit_id,
+                    "row": edit.row,
+                    "col": edit.col,
+                    "valid": True,
+                    "movement_counts": _compute_movement_counts(
+                        edit,
+                        cache,
+                        snapshot,
+                        nominal_capacity,
+                    ),
+                }
+            )
             continue
 
         first_label = edit.first_label or ""
@@ -424,15 +432,17 @@ async def validate_boundary(
 
         # ── Step 1: POS-01 comparator — always runs, even with force ────────
         if not validate_boundary_order(first_label, first_catalog, last_label, last_catalog):
-            results.append({
-                "unit_id": edit.unit_id,
-                "row": edit.row,
-                "col": edit.col,
-                "valid": False,
-                "error": "boundary_order_error",
-                "message": "First record comes after last record. Check the order.",
-                "movement_counts": [],
-            })
+            results.append(
+                {
+                    "unit_id": edit.unit_id,
+                    "row": edit.row,
+                    "col": edit.col,
+                    "valid": False,
+                    "error": "boundary_order_error",
+                    "message": "First record comes after last record. Check the order.",
+                    "movement_counts": [],
+                }
+            )
             continue
 
         # ── Step 2: Phantom check (skipped when force=True) ──────────────────
@@ -451,34 +461,39 @@ async def validate_boundary(
                 phantom_field = "first" if not first_exists else "last"
                 phantom_label = first_label if not first_exists else last_label
                 phantom_catalog = first_catalog if not first_exists else last_catalog
-                near_misses = await find_boundary_near_misses(
-                    pool, phantom_label, phantom_catalog
+                near_misses = await find_boundary_near_misses(pool, phantom_label, phantom_catalog)
+                results.append(
+                    {
+                        "unit_id": edit.unit_id,
+                        "row": edit.row,
+                        "col": edit.col,
+                        "valid": False,
+                        "phantom": True,
+                        "phantom_field": phantom_field,
+                        "message": "No match in collection. Did you mean one of these?",
+                        "near_misses": near_misses,
+                        "movement_counts": [],
+                    }
                 )
-                results.append({
-                    "unit_id": edit.unit_id,
-                    "row": edit.row,
-                    "col": edit.col,
-                    "valid": False,
-                    "phantom": True,
-                    "phantom_field": phantom_field,
-                    "message": "No match in collection. Did you mean one of these?",
-                    "near_misses": near_misses,
-                    "movement_counts": [],
-                })
                 continue
 
         # ── Step 3: Movement counts from snapshot (no DB) ────────────────────
         movement_counts = _compute_movement_counts(
-            edit, cache, snapshot, nominal_capacity,
+            edit,
+            cache,
+            snapshot,
+            nominal_capacity,
         )
 
-        results.append({
-            "unit_id": edit.unit_id,
-            "row": edit.row,
-            "col": edit.col,
-            "valid": True,
-            "movement_counts": movement_counts,
-        })
+        results.append(
+            {
+                "unit_id": edit.unit_id,
+                "row": edit.row,
+                "col": edit.col,
+                "valid": True,
+                "movement_counts": movement_counts,
+            }
+        )
 
     # WR-09: Use bool(results) so an empty updates list is not vacuously "valid"
     all_valid = bool(results) and all(r.get("valid", False) for r in results)
@@ -514,15 +529,16 @@ def _compute_movement_counts(
     current = boundary_index.get((edit.unit_id, edit.row, edit.col))
     records_before = count_records_in_boundary(current, snapshot) if current else 0
 
-    # Construct a synthetic BoundaryRow for the proposed values
+    # Construct a synthetic BoundaryRow for the proposed values (cut-point model, Phase 5).
+    # last_label/last_catalog removed from BoundaryRow in migration 0005 (SEG-01);
+    # _compute_movement_counts() is fully refactored in Phase 5 Wave 3 (05-03).
     proposed = BoundaryRow(
         unit_id=edit.unit_id,
         row=edit.row,
         col=edit.col,
         first_label=edit.first_label,
         first_catalog=edit.first_catalog,
-        last_label=edit.last_label,
-        last_catalog=edit.last_catalog,
+        # last_label and last_catalog dropped in Phase 5 (D-05 / SEG-01 migration 0005)
         is_empty=edit.is_empty,
     )
     records_after = count_records_in_boundary(proposed, snapshot)
@@ -784,9 +800,13 @@ async def bulk_write_cubes(
 
             await write_boundary(
                 conn,
-                edit.unit_id, edit.row, edit.col,
-                new_first_label, new_first_catalog,
-                new_last_label, new_last_catalog,
+                edit.unit_id,
+                edit.row,
+                edit.col,
+                new_first_label,
+                new_first_catalog,
+                new_last_label,
+                new_last_catalog,
                 edit.is_empty,
             )
 
@@ -794,10 +814,14 @@ async def bulk_write_cubes(
             await write_history_row(
                 conn,
                 change_set_id,
-                edit.unit_id, edit.row, edit.col,
+                edit.unit_id,
+                edit.row,
+                edit.col,
                 prev,
-                new_first_label, new_first_catalog,
-                new_last_label, new_last_catalog,
+                new_first_label,
+                new_first_catalog,
+                new_last_label,
+                new_last_catalog,
                 edit.is_empty,
                 source="bulk",
             )
@@ -816,9 +840,12 @@ async def bulk_write_cubes(
     try:
         await cache.load(pool)
     finally:
-        await bus.publish("boundary_changed", {
-            "cube_ids": [{"unit": e.unit_id, "row": e.row, "col": e.col} for e in body.updates],
-            "change_set_id": response_body["change_set_id"],
-        })
+        await bus.publish(
+            "boundary_changed",
+            {
+                "cube_ids": [{"unit": e.unit_id, "row": e.row, "col": e.col} for e in body.updates],
+                "change_set_id": response_body["change_set_id"],
+            },
+        )
 
     return JSONResponse(content=response_body)

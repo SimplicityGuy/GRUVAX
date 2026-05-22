@@ -141,10 +141,6 @@ def boundary_cache() -> list[dict[str, Any]]:
         unit_id: int = unit["unit_id"]
         for cube in unit["cubes"]:
             # Ignore stale last_* keys from older YAML files (Phase 5 compatibility)
-            clean_cube = {
-                k: v
-                for k, v in cube.items()
-                if k not in ("last_label", "last_catalog")
-            }
+            clean_cube = {k: v for k, v in cube.items() if k not in ("last_label", "last_catalog")}
             cubes.append({**clean_cube, "unit_id": unit_id})
     return cubes

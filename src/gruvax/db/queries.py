@@ -441,9 +441,12 @@ LIMIT %s
             await cur.execute(
                 sql,
                 (
-                    label, catalog,        # combined score params
-                    label, BOUNDARY_TRGM_THRESHOLD,   # label WHERE
-                    catalog, BOUNDARY_TRGM_THRESHOLD, # catalog WHERE
+                    label,
+                    catalog,  # combined score params
+                    label,
+                    BOUNDARY_TRGM_THRESHOLD,  # label WHERE
+                    catalog,
+                    BOUNDARY_TRGM_THRESHOLD,  # catalog WHERE
                     limit,
                 ),
             )
@@ -646,9 +649,20 @@ INSERT INTO gruvax.boundary_history (
     await conn.execute(
         sql,
         (
-            change_set_id, unit_id, row, col,
-            prev_first_label, prev_first_catalog, prev_last_label, prev_last_catalog, prev_is_empty,
-            new_first_label, new_first_catalog, new_last_label, new_last_catalog, new_is_empty,
+            change_set_id,
+            unit_id,
+            row,
+            col,
+            prev_first_label,
+            prev_first_catalog,
+            prev_last_label,
+            prev_last_catalog,
+            prev_is_empty,
+            new_first_label,
+            new_first_catalog,
+            new_last_label,
+            new_last_catalog,
+            new_is_empty,
             source,
         ),
     )
@@ -702,6 +716,7 @@ VALUES (%s, %s)
 ON CONFLICT (key) DO NOTHING
 """
     import json
+
     await conn.execute(sql, (key, json.dumps(response)))
 
 

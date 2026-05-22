@@ -108,9 +108,7 @@ async def test_sse_headers(live_server) -> None:  # type: ignore[no-untyped-def]
         httpx.AsyncClient(base_url=live_server) as ac,
         ac.stream("GET", "/api/events") as resp,
     ):
-        assert resp.status_code == 200, (
-            f"Expected 200 from /api/events, got {resp.status_code}"
-        )
+        assert resp.status_code == 200, f"Expected 200 from /api/events, got {resp.status_code}"
         assert resp.headers.get("x-accel-buffering") == "no", (
             f"X-Accel-Buffering header missing or wrong: {dict(resp.headers)}"
         )

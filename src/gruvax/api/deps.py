@@ -191,8 +191,7 @@ async def require_admin(
     new_expires_at = now + timedelta(seconds=settings.SESSION_TTL_SECONDS)
     async with pool.connection() as conn:
         await conn.execute(
-            "UPDATE gruvax.admin_sessions"
-            " SET last_seen_at = %s, expires_at = %s WHERE id = %s",
+            "UPDATE gruvax.admin_sessions SET last_seen_at = %s, expires_at = %s WHERE id = %s",
             (now, new_expires_at, session_id),
         )
         await conn.commit()

@@ -33,7 +33,6 @@ from hypothesis import strategies as st
 
 from fixtures.synth_collection import make_multi_label_bin, make_singleton, make_straddle
 
-
 # ── Session-scoped synth fixtures ─────────────────────────────────────────────
 
 
@@ -70,6 +69,7 @@ def test_per_bin_fractions_sum_to_one(multi_label_props_fixture) -> None:  # typ
         sum(seg.applied_fraction for seg in bin.segments) == 1.0 (± 1e-6)
     """
     from gruvax.estimator.segment_cache import SegmentCache
+
     cache, _, snapshot = multi_label_props_fixture
     sc = SegmentCache()
     sc.derive(cache, snapshot, cache.overrides)

@@ -120,9 +120,7 @@ def test_empty_boundary_zero(label: str, record_count: int) -> None:
     snapshot = _make_snapshot_from_records(records)
     boundary = _make_boundary(label, 1, record_count, is_empty=True)
     count = count_records_in_boundary(boundary, snapshot)
-    assert count == 0, (
-        f"count_records_in_boundary must return 0 for is_empty boundary, got {count}"
-    )
+    assert count == 0, f"count_records_in_boundary must return 0 for is_empty boundary, got {count}"
 
 
 # ── Property 3: casefold label lookup (Pitfall C / T-03-03) ──────────────────
@@ -186,8 +184,7 @@ def test_fill_count_monotone_in_range(label: str, n: int, cut: int) -> None:
 
     label = label.strip() or "TestLabel"
     records = [
-        RecordRow(release_id=i, label=label, catalog_number=f"CAT {i}")
-        for i in range(1, n + 1)
+        RecordRow(release_id=i, label=label, catalog_number=f"CAT {i}") for i in range(1, n + 1)
     ]
     snapshot = _make_snapshot_from_records(records)
 

@@ -44,8 +44,8 @@ def test_midpoint_is_real_record() -> None:
 
     result = suggest_midpoint(
         label="Blue Note",
-        first_anchor_release_id=1,   # BLP 4001 → index 0 after sort
-        last_anchor_release_id=5,    # BLP 4200 → index 4 after sort
+        first_anchor_release_id=1,  # BLP 4001 → index 0 after sort
+        last_anchor_release_id=5,  # BLP 4200 → index 4 after sort
         snapshot=snapshot,
     )
     assert result is not None, "suggest_midpoint must return a record when midpoint exists"
@@ -122,7 +122,7 @@ def test_midpoint_three_records_middle() -> None:
     result = suggest_midpoint(
         label="ECM",
         first_anchor_release_id=10,  # index 0
-        last_anchor_release_id=30,   # index 2
+        last_anchor_release_id=30,  # index 2
         snapshot=snapshot,
     )
     assert result is not None

@@ -43,9 +43,7 @@ def test_sample_identity_when_small() -> None:
 
     records = _make_records(5)
     result = sample_records(records, n=7)
-    assert result == records, (
-        "sample_records must return the full list when len <= n"
-    )
+    assert result == records, "sample_records must return the full list when len <= n"
 
 
 def test_sample_size() -> None:

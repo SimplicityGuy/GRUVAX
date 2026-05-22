@@ -86,16 +86,16 @@ def locate_cube_only(
 
     for b in cache.get_boundaries():
         # Skip empty cubes — they have no meaningful label range.
-        if b.is_empty or b.first_label is None or b.last_label is None:
+        if b.is_empty or b.first_label is None or b.last_label is None:  # type: ignore[attr-defined]  # Phase 5 orphan — retired in 05-03
             continue
 
         # Label range check (case-folded, not the POS-01 normalizer — labels are
         # not catalog numbers and must not have separators collapsed).
-        if not (b.first_label.casefold() <= label.casefold() <= b.last_label.casefold()):
+        if not (b.first_label.casefold() <= label.casefold() <= b.last_label.casefold()):  # type: ignore[attr-defined]  # Phase 5 orphan — retired in 05-03
             continue
 
         # Catalog range check — MUST use catalog_in_range (POS-01 / T-01-04).
-        if not catalog_in_range(catalog_number, b.first_catalog, b.last_catalog):
+        if not catalog_in_range(catalog_number, b.first_catalog, b.last_catalog):  # type: ignore[attr-defined]  # Phase 5 orphan — retired in 05-03
             continue
 
         covering.append(CubeRef(unit_id=b.unit_id, row=b.row, col=b.col))

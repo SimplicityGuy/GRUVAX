@@ -106,19 +106,21 @@ ORDER BY unit_id, row, col
             col=row_dict["col"],
             first_label=row_dict["first_label"],
             first_catalog=row_dict["first_catalog"],
-            last_label=row_dict["last_label"],
-            last_catalog=row_dict["last_catalog"],
+            # last_label and last_catalog dropped in Phase 5 (D-05 / SEG-01 migration 0005)
+            # Fill-level via get_records_in_boundary is healed in Phase 5 Wave 3 (05-03)
             is_empty=row_dict["is_empty"],
         )
         records_in_range = get_records_in_boundary(boundary, snapshot)
         fill_level = len(records_in_range) / max(nominal_capacity, 1)
-        cubes.append({
-            "unit_id": row_dict["unit_id"],
-            "row": row_dict["row"],
-            "col": row_dict["col"],
-            "is_empty": row_dict["is_empty"],
-            "fill_level": fill_level,
-        })
+        cubes.append(
+            {
+                "unit_id": row_dict["unit_id"],
+                "row": row_dict["row"],
+                "col": row_dict["col"],
+                "is_empty": row_dict["is_empty"],
+                "fill_level": fill_level,
+            }
+        )
 
     return {"cubes": cubes}
 
@@ -183,8 +185,8 @@ WHERE unit_id = %s AND row = %s AND col = %s
         col=result["col"],
         first_label=result["first_label"],
         first_catalog=result["first_catalog"],
-        last_label=result["last_label"],
-        last_catalog=result["last_catalog"],
+        # last_label and last_catalog dropped in Phase 5 (D-05 / SEG-01 migration 0005)
+        # Full cube-detail fill-level is healed in Phase 5 Wave 3 (05-03)
         is_empty=result["is_empty"],
     )
 

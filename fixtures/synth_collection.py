@@ -4,19 +4,26 @@ Plain Python module (NOT a pytest conftest) — importable from both:
   - tests/property/test_estimator_props.py (Hypothesis invariant tests)
   - scripts/run_all_algorithms.py (A/B harness, Plan 02-04)
   - tests/unit/test_boundary_cache_refactor.py (Phase 5 unit tests)
+  - tests/unit/test_segment_cache.py (Phase 5 segment derivation tests)
 
 Phase 5 shape change (SEG-01): BoundaryRow no longer has last_label / last_catalog.
 The _build_cache() helper now constructs cut-point-only BoundaryRows. The
 existing shape factories (make_uniform_dense etc.) continue to work because they
 only need a single-cube boundary (first_* is the cut point; last_* is derived).
 
-New Phase 5 factories:
+New Phase 5 factories (Plan 05-02: SegmentCache fully populated):
   make_multi_label_bin()  — two labels in one cube (one starts mid-cube)
   make_straddle()         — one label spanning two adjacent bins
 
 Return type for Phase 5 factories:
-    (BoundaryCache, SegmentCache | None, CollectionSnapshot)
-SegmentCache is None/placeholder at this stage — Plan 02 fills derivation.
+    (BoundaryCache, SegmentCache, CollectionSnapshot)
+SegmentCache is derived via SegmentCache.derive() at factory call time. To inject
+overrides for testing, call cache._load_overrides(overrides) then re-derive:
+    cache, seg_cache, snapshot = make_multi_label_bin()
+    cache._load_overrides({(1, 0, 0, "LabelA"): 0.6})
+    seg_cache2 = SegmentCache()
+    seg_cache2.derive(cache, snapshot, cache.overrides)
+Or use the tests' own local SegmentCache() + derive() call pattern.
 
 For Phase 1/2 factories (uniform_dense etc.), the return type is:
     (BoundaryCache, CollectionSnapshot, dict[int, float])
@@ -37,6 +44,7 @@ from collections.abc import Callable
 
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
+from gruvax.estimator.segment_cache import SegmentCache
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 
@@ -236,7 +244,7 @@ def make_singleton() -> tuple[BoundaryCache, CollectionSnapshot, dict[int, float
 # ── Phase 5 factories (multi-label + straddle) ───────────────────────────────
 
 
-def make_multi_label_bin() -> tuple[BoundaryCache, None, CollectionSnapshot]:
+def make_multi_label_bin() -> tuple[BoundaryCache, SegmentCache, CollectionSnapshot]:
     """Multi-label bin: two labels sharing one cube.
 
     Factory for Phase 5 segment-aware tests. One cube holds:
@@ -247,16 +255,19 @@ def make_multi_label_bin() -> tuple[BoundaryCache, None, CollectionSnapshot]:
     record of the first label in the cube is stored as the cut point (D-05).
 
     CollectionSnapshot includes:
-    - duplicates: LA 003 appears twice (release_id=3 and release_id=3 via duplicate owned copy)
-    - a '-r' variant: LB 003-r (remix, release_id=11 within LabelB's records)
+    - duplicates: LB 003 appears twice (duplicate owned copy — same catalog, different pressing)
+    - a '-r' variant: LB 003-r (remix variant)
 
     These ensure SEG-03 row-count tests have data that includes dupes + variants.
+    LabelB.segment_count must be 6 (row-count), not 5 (unique catalog arithmetic).
 
-    SegmentCache is None here — Plan 02 fills the derive() logic.
+    Plan 05-02: SegmentCache is now derived at factory call time (not None).
+    To test with overrides, call cache._load_overrides(overrides) and then
+    create a fresh SegmentCache().derive() — the returned seg_cache uses no overrides.
 
     Returns:
-        (BoundaryCache, None, CollectionSnapshot)
-        where BoundaryCache has one cut-point cube for LabelA's first record.
+        (BoundaryCache, SegmentCache, CollectionSnapshot) where SegmentCache is
+        populated via derive() with no overrides (empty override dict).
     """
     label_a = "LabelA"
     label_b = "LabelB"
@@ -288,27 +299,32 @@ def make_multi_label_bin() -> tuple[BoundaryCache, None, CollectionSnapshot]:
         }
     ])
 
-    return cache, None, snapshot
+    # Derive SegmentCache with no overrides (empty override dict)
+    seg_cache = SegmentCache()
+    seg_cache.derive(cache, snapshot, cache.overrides)
+
+    return cache, seg_cache, snapshot
 
 
-def make_straddle() -> tuple[BoundaryCache, None, CollectionSnapshot]:
+def make_straddle() -> tuple[BoundaryCache, SegmentCache, CollectionSnapshot]:
     """Straddle factory: one label spanning two adjacent bins.
 
     Factory for Phase 5 segment-aware tests. One label (LabelS) has k=12
     records spanning two adjacent cubes:
-    - Cube 0: LabelS LS 001 through LS 006 (first 6 records)
-    - Cube 1: LabelS LS 007 through LS 012 (second 6 records)
+    - Cube (1,0,0): LabelS LS 001 through LS 006 (first 6 records, continues=True)
+    - Cube (1,0,1): LabelS LS 007 through LS 012 (second 6 records, continues=False)
 
     The cut point for Cube 0 is (LabelS, LS 001).
     The cut point for Cube 1 is (LabelS, LS 007).
 
     Both cubes use the same unit_id=1, row=0; col=0 and col=1.
 
-    SegmentCache is None here — Plan 02 fills the derive() logic.
+    Plan 05-02: SegmentCache is now derived at factory call time (not None).
+    The LabelS segment in (1,0,0) will have continues=True; in (1,0,1) continues=False.
 
     Returns:
-        (BoundaryCache, None, CollectionSnapshot)
-        where BoundaryCache has two adjacent cut-point cubes for the straddle label.
+        (BoundaryCache, SegmentCache, CollectionSnapshot) where SegmentCache is
+        populated via derive() with no overrides (empty override dict).
     """
     label = "LabelS"
     catalogs = [f"LS {i:03d}" for i in range(1, 13)]  # LS 001..LS 012 (k=12)
@@ -335,7 +351,11 @@ def make_straddle() -> tuple[BoundaryCache, None, CollectionSnapshot]:
         },
     ])
 
-    return cache, None, snapshot
+    # Derive SegmentCache with no overrides (empty override dict)
+    seg_cache = SegmentCache()
+    seg_cache.derive(cache, snapshot, cache.overrides)
+
+    return cache, seg_cache, snapshot
 
 
 # ── Registry ─────────────────────────────────────────────────────────────────

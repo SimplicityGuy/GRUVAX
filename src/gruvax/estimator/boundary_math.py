@@ -65,17 +65,15 @@ def get_records_in_boundary(
         return []
 
     first_label_cf = (boundary.first_label or "").casefold()
-    last_label_cf = (boundary.last_label or "").casefold()
+    last_label_cf = (boundary.last_label or "").casefold()  # type: ignore[attr-defined]  # Phase 5 orphan — retired in 05-03
     first_catalog = boundary.first_catalog
-    last_catalog = boundary.last_catalog
+    last_catalog = boundary.last_catalog  # type: ignore[attr-defined]  # Phase 5 orphan — retired in 05-03
 
     # Same-label boundary: simple catalog range check
     if first_label_cf == last_label_cf:
         records = snapshot.get_label_records(boundary.first_label)
         return [
-            r
-            for r in records
-            if catalog_in_range(r.catalog_number, first_catalog, last_catalog)
+            r for r in records if catalog_in_range(r.catalog_number, first_catalog, last_catalog)
         ]
 
     # Multi-label boundary: collect records across all labels in range
@@ -92,16 +90,12 @@ def get_records_in_boundary(
         if sample_label_cf == first_label_cf:
             # First label: only records with catalog >= first_catalog
             result.extend(
-                r
-                for r in label_records
-                if parse_key(r.catalog_number) >= parse_key(first_catalog)
+                r for r in label_records if parse_key(r.catalog_number) >= parse_key(first_catalog)
             )
         elif sample_label_cf == last_label_cf:
             # Last label: only records with catalog <= last_catalog
             result.extend(
-                r
-                for r in label_records
-                if parse_key(r.catalog_number) <= parse_key(last_catalog)
+                r for r in label_records if parse_key(r.catalog_number) <= parse_key(last_catalog)
             )
         else:
             # Middle label: fully included

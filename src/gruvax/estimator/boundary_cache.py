@@ -42,7 +42,7 @@ class BoundaryRow:
     unit_id: int
     row: int
     col: int
-    first_label: str | None    # the cut point — first record in this bin
+    first_label: str | None  # the cut point — first record in this bin
     first_catalog: str | None  # the cut point — first catalog# in this bin
     is_empty: bool
     # last_label and last_catalog are DERIVED from SegmentCache — not stored here
@@ -92,8 +92,7 @@ class BoundaryCache:
         # Second SELECT: segment overrides (Phase 5 addition — SEG-04)
         async with pool.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT unit_id, row, col, label, fraction"
-                " FROM gruvax.segment_overrides"
+                "SELECT unit_id, row, col, label, fraction FROM gruvax.segment_overrides"
             )
             overrides_raw = await cur.fetchall()
             # Cast each row to a typed tuple so mypy --strict can verify index access.
@@ -101,14 +100,12 @@ class BoundaryCache:
             # safe because the SELECT column order matches the tuple shape exactly:
             # (unit_id:int, row:int, col:int, label:str, fraction:float).
             from typing import cast as _cast  # local import to avoid module-level name clash
+
             typed_rows = _cast(
                 "list[tuple[int, int, int, str, float]]",
                 overrides_raw,
             )
-            self._overrides = {
-                (r[0], r[1], r[2], r[3]): r[4]
-                for r in typed_rows
-            }
+            self._overrides = {(r[0], r[1], r[2], r[3]): r[4] for r in typed_rows}
 
     def _load_rows(self, rows: list[BoundaryRow]) -> None:
         """Internal seam for testing: bypass DB and load rows directly.
@@ -118,9 +115,7 @@ class BoundaryCache:
         """
         self._rows = list(rows)
 
-    def _load_overrides(
-        self, overrides: dict[tuple[int, int, int, str], float]
-    ) -> None:
+    def _load_overrides(self, overrides: dict[tuple[int, int, int, str], float]) -> None:
         """Internal seam for testing: bypass DB and load overrides directly.
 
         Mirrors ``_load_rows`` for the overrides dict. Used by test factories

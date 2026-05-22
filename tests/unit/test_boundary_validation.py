@@ -94,6 +94,4 @@ def test_numeric_sort_awareness() -> None:
         last_label="Blue Note",
         last_catalog="BLP 10",
     )
-    assert result, (
-        "BLP 9 < BLP 10 numerically — boundary must be valid (parse_key-aware)"
-    )
+    assert result, "BLP 9 < BLP 10 numerically — boundary must be valid (parse_key-aware)"
