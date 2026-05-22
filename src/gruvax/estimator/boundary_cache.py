@@ -96,9 +96,18 @@ class BoundaryCache:
                 " FROM gruvax.segment_overrides"
             )
             overrides_raw = await cur.fetchall()
+            # Cast each row to a typed tuple so mypy --strict can verify index access.
+            # psycopg fetchall() returns list[Any] in practice; the explicit cast is
+            # safe because the SELECT column order matches the tuple shape exactly:
+            # (unit_id:int, row:int, col:int, label:str, fraction:float).
+            from typing import cast as _cast  # local import to avoid module-level name clash
+            typed_rows = _cast(
+                "list[tuple[int, int, int, str, float]]",
+                overrides_raw,
+            )
             self._overrides = {
-                (int(r[0]), int(r[1]), int(r[2]), str(r[3])): float(r[4])
-                for r in overrides_raw
+                (r[0], r[1], r[2], r[3]): r[4]
+                for r in typed_rows
             }
 
     def _load_rows(self, rows: list[BoundaryRow]) -> None:
