@@ -199,9 +199,12 @@ export function KioskView() {
     }
 
     const resync = () => {
+      // D-08 (CR WR-01 / verifier Gap 2): the kiosk consumer invalidates ONLY
+      // kiosk-owned keys. Admin keys (['admin', ...]) are never mounted on the
+      // kiosk route, so invalidating them here is dead code that risks racing an
+      // admin optimistic update if the same SPA ever shares this consumer.
       void queryClient.invalidateQueries({ queryKey: ['units'] })
       void queryClient.invalidateQueries({ queryKey: ['cubes'] })
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
       // D-05 + D-11: if a selection is active, re-locate it after reconnect
       // so the highlight reflects the boundary that may have changed while disconnected.
       relocateActiveSelection()
@@ -225,11 +228,9 @@ export function KioskView() {
         cube_ids: ShimmerCube[]
         change_set_id: string
       }
-      // Invalidate global and per-cube query keys
+      // Invalidate kiosk-owned query keys only (D-08 — see resync note above)
       void queryClient.invalidateQueries({ queryKey: ['cubes'] })
       void queryClient.invalidateQueries({ queryKey: ['units'] })
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'history'] })
       for (const c of cube_ids) {
         void queryClient.invalidateQueries({
           queryKey: ['cube-contents', c.unit, c.row, c.col],
