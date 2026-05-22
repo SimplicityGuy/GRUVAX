@@ -1,8 +1,19 @@
-"""GRUVAX developer A/B harness — §4.1 (index-based) vs §4.8 (cube-only).
+"""GRUVAX developer A/B harness — §4.1 (index-based dispatcher via locate) vs §4.8 (cube-only).
 
 POS-06: Runs both estimators against synthetic planted-truth collection shapes
 and (optionally) the gitignored local CSV, emitting per-distribution-shape MAE,
 p95 timing, and confidence metrics.
+
+Phase 5 changes:
+  - ``locate()`` now takes ``segment_cache`` instead of ``cache``. The harness
+    constructs a SegmentCache via derive() from the existing cache/snapshot.
+  - BoundaryRow no longer has last_label/last_catalog (SEG-01 / Phase 5).
+  - Per D-01: the harness is NOT extended with the segment estimator as a new
+    compared algorithm. The ``locate`` dispatcher already calls ``locate_by_segment``
+    internally; the harness output structure ("index" / "cube_only") is unchanged.
+  - The "index" key in results now reflects the segment-aware locate() output
+    (estimator_version = "segment-v1"), not the retired §4.1 index-based version.
+    This is correct: the harness validates that the new estimator beats cube-only on MAE.
 
 Standalone run (developer):
     uv run python scripts/run_all_algorithms.py
@@ -43,6 +54,7 @@ from fixtures.synth_collection import all_shapes  # noqa: E402
 from gruvax.estimator.algorithm import locate, locate_cube_only  # noqa: E402
 from gruvax.estimator.boundary_cache import BoundaryCache  # noqa: E402
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow  # noqa: E402
+from gruvax.estimator.segment_cache import SegmentCache  # noqa: E402
 
 # POS-03 budget: aggregate p95 per shape must stay under this threshold.
 P95_BUDGET_MS: float = 50.0
@@ -65,7 +77,11 @@ def _score_shape(
     truth: dict[int, float],
     label: str,
 ) -> dict[str, dict[str, float]]:
-    """Run §4.1 and §4.8 on every planted-truth release and return per-shape metrics.
+    """Run locate() and locate_cube_only() on every planted-truth release and return per-shape metrics.
+
+    Phase 5: locate() dispatcher calls locate_by_segment() internally (segment-v1 estimator).
+    The harness output structure ("index" / "cube_only") is unchanged per D-01.
+    SegmentCache is derived from cache + snapshot here.
 
     Args:
         cache: BoundaryCache for this shape.
@@ -79,6 +95,10 @@ def _score_shape(
             "cube_only":{"mae": float, "p95_ms": float, "confidence_mean": float},
         }
     """
+    # Phase 5: derive SegmentCache from cache + snapshot (no overrides in harness)
+    segment_cache = SegmentCache()
+    segment_cache.derive(cache, snapshot, cache.overrides)
+
     index_errors: list[float] = []
     index_timings_ms: list[float] = []
     index_confidences: list[float] = []
@@ -95,13 +115,14 @@ def _score_shape(
     for release_id, planted_pos in truth.items():
         catalog_number = release_to_catalog.get(release_id, "")
 
-        # §4.1 index-based estimator (locate dispatcher: §4.1 primary, §4.8 fallback)
+        # Phase 5: locate() dispatcher calls locate_by_segment() internally (segment-v1).
+        # Per D-01: harness output key stays "index" (not renamed to "segment").
         t0 = time.perf_counter()
         index_result = locate(
             release_id=release_id,
             label=label,
             catalog_number=catalog_number,
-            cache=cache,
+            segment_cache=segment_cache,
             snapshot=snapshot,
         )
         index_elapsed_ms = (time.perf_counter() - t0) * 1000.0
@@ -110,7 +131,7 @@ def _score_shape(
             si = index_result.sub_cube_interval
             predicted = _midpoint(si.start, si.end)
         else:
-            # §4.1 fell back to cube-only (singleton confidence gate): worst-case 0.5
+            # locate() fell back to cube-only (singleton confidence gate): worst-case 0.5
             predicted = CUBE_ONLY_NULL_MIDPOINT
 
         index_errors.append(abs(predicted - planted_pos))
@@ -123,7 +144,8 @@ def _score_shape(
             release_id=release_id,
             label=label,
             catalog_number=catalog_number,
-            cache=cache,
+            segment_cache=segment_cache,
+            snapshot=snapshot,
         )
         cube_elapsed_ms = (time.perf_counter() - t0) * 1000.0
 
@@ -175,10 +197,13 @@ def _find_local_csv(repo_root: Path) -> Path | None:
 
 
 def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
-    """Run §4.1 and §4.8 against the local collection CSV + boundaries.yaml.
+    """Run locate() and locate_cube_only() against the local collection CSV + boundaries.yaml.
 
     Returns None when the CSV is absent or any loading step fails.
     This path is silently skipped under --ci.
+
+    Phase 5: BoundaryRow no longer has last_label/last_catalog (dropped in SEG-01).
+    SegmentCache is derived from cache + snapshot for the locate() calls.
     """
     csv_path = _find_local_csv(repo_root)
     if csv_path is None or not csv_path.exists():
@@ -194,7 +219,7 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
             print(f"  [skip] fixtures/boundaries.yaml not found at {boundaries_path}")
             return None
 
-        # Load boundaries
+        # Load boundaries — Phase 5: cut-point model (no last_*)
         from gruvax.estimator.boundary_cache import BoundaryRow
 
         with boundaries_path.open() as f:
@@ -209,8 +234,7 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
                     col=item["col"],
                     first_label=item.get("first_label"),
                     first_catalog=item.get("first_catalog"),
-                    last_label=item.get("last_label"),
-                    last_catalog=item.get("last_catalog"),
+                    # last_label and last_catalog dropped in Phase 5 (SEG-01)
                     is_empty=item.get("is_empty", False),
                 )
             )
@@ -238,6 +262,10 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
         snapshot = CollectionSnapshot()
         snapshot._load_snapshot(records_by_label)
 
+        # Phase 5: derive SegmentCache from loaded cache + snapshot
+        segment_cache = SegmentCache()
+        segment_cache.derive(cache, snapshot, cache.overrides)
+
         # Compute aggregate metrics across all labels
         total_index_errors: list[float] = []
         total_index_ms: list[float] = []
@@ -256,7 +284,7 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
                 release_id=rec.release_id,
                 label=rec.label,
                 catalog_number=rec.catalog_number,
-                cache=cache,
+                segment_cache=segment_cache,
                 snapshot=snapshot,
             )
             elapsed = (time.perf_counter() - t0) * 1000.0
@@ -270,7 +298,8 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
                 release_id=rec.release_id,
                 label=rec.label,
                 catalog_number=rec.catalog_number,
-                cache=cache,
+                segment_cache=segment_cache,
+                snapshot=snapshot,
             )
             celapsed = (time.perf_counter() - t0) * 1000.0
             total_cube_ms.append(celapsed)
@@ -289,7 +318,7 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
 
         print(f"\n  Local CSV: {csv_path.name} — {len(all_records_flat)} records loaded")
         print(
-            f"  §4.1 index  — p95={_p95(total_index_ms):.2f} ms"
+            f"  locate()  — p95={_p95(total_index_ms):.2f} ms"
             f"  conf_mean={_mean(total_index_conf):.3f}"
         )
         print(
@@ -323,7 +352,11 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
 
 
 def run_all_algorithms(ci: bool = False) -> dict[str, dict[str, dict[str, float]]]:
-    """Run §4.1 and §4.8 against all synthetic planted-truth shapes.
+    """Run locate() and locate_cube_only() against all synthetic planted-truth shapes.
+
+    Phase 5: locate() internally calls locate_by_segment() (segment-v1 estimator).
+    Per D-01: the harness output structure ("index" / "cube_only") is unchanged;
+    the segment estimator is NOT added as a new third algorithm in the harness.
 
     Args:
         ci: When True, skip the local CSV path (CI mode — CSV is gitignored).
@@ -344,7 +377,7 @@ def run_all_algorithms(ci: bool = False) -> dict[str, dict[str, dict[str, float]
     shapes = all_shapes()
     results: dict[str, dict[str, dict[str, float]]] = {}
 
-    print("\n=== GRUVAX A/B Harness: §4.1 index-based vs §4.8 cube-only ===")
+    print("\n=== GRUVAX A/B Harness: locate() [segment-v1] vs §4.8 cube-only ===")
     print(f"{'Shape':<18} {'Estimator':<12} {'MAE':>8} {'p95 ms':>9} {'conf':>7}")
     print("-" * 60)
 
@@ -364,7 +397,7 @@ def run_all_algorithms(ci: bool = False) -> dict[str, dict[str, dict[str, float]
         co = metrics["cube_only"]
 
         print(
-            f"  {shape_name:<16} §4.1 index   MAE={idx['mae']:.4f}"
+            f"  {shape_name:<16} locate()     MAE={idx['mae']:.4f}"
             f"  p95={idx['p95_ms']:.2f}ms  conf={idx['confidence_mean']:.3f}"
         )
         print(
@@ -376,7 +409,7 @@ def run_all_algorithms(ci: bool = False) -> dict[str, dict[str, dict[str, float]
             "=" if abs(idx["mae"] - co["mae"]) < 1e-9 else ("<" if idx["mae"] < co["mae"] else ">")
         )
         print(
-            f"  {'':<16} §4.1 MAE {better} §4.8 MAE {'[PASS]' if better in ('<', '=') else '[FAIL]'}"
+            f"  {'':<16} locate() MAE {better} §4.8 MAE {'[PASS]' if better in ('<', '=') else '[FAIL]'}"
         )
         print()
 
@@ -407,7 +440,7 @@ def run_all_algorithms(ci: bool = False) -> dict[str, dict[str, dict[str, float]
 def main() -> None:
     parser = argparse.ArgumentParser(
         description=(
-            "GRUVAX A/B harness: compare §4.1 (index-based) vs §4.8 (cube-only) "
+            "GRUVAX A/B harness: compare locate() [segment-v1] vs §4.8 (cube-only) "
             "position estimators across synthetic planted-truth collection shapes."
         )
     )
