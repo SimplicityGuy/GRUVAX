@@ -120,7 +120,22 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # Proceed with empty snapshot — locate falls back to cube-only-v1.
     app.state.collection_snapshot = snapshot
 
-    # ── 3c. Settings cache (Phase 3) ─────────────────────────────────────────
+    # ── 3c. SegmentCache (Phase 5) ───────────────────────────────────────────
+    # Derived from BoundaryCache + CollectionSnapshot (both already populated above).
+    # CPU-only; no DB access during derive() or any lookup. Mirrors the try/except
+    # + logger.error + proceed pattern of steps 3 and 3b.
+    from gruvax.estimator.segment_cache import SegmentCache
+
+    segment_cache = SegmentCache()
+    try:
+        segment_cache.derive(cache, snapshot, cache.overrides)
+        logger.info("SegmentCache derived (%d bins)", len(segment_cache._bins))
+    except Exception as exc:
+        logger.error("SegmentCache derive failed — locate will fall back to cube-only-v1: %s", exc)
+        # Proceed with empty segment_cache — locate() falls back to cube-only-v1.
+    app.state.segment_cache = segment_cache
+
+    # ── 3e. Settings cache (Phase 3) ─────────────────────────────────────────
     # Loads gruvax.settings key/value rows into app.state.settings_cache so
     # endpoints can read nominal_capacity, idle TTL, etc. without a DB hit.
     # Mirrors the try/except + logger.error + proceed pattern of steps 3 and 3b.
@@ -134,7 +149,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         logger.error("Settings cache load failed — proceeding with empty cache: %s", exc)
         app.state.settings_cache = {}
 
-    # ── 3d. Event bus (Phase 4) ──────────────────────────────────────────────
+    # ── 3f. Event bus (Phase 4) ──────────────────────────────────────────────
     from gruvax.events.bus import EventBus
 
     event_bus = EventBus()

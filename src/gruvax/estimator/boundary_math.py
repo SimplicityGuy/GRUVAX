@@ -1,12 +1,21 @@
 """Pure boundary-math helpers for fill-level, cube-contents, and midpoint suggestion.
 
-These three functions operate entirely on in-memory data structures (BoundaryRow,
-CollectionSnapshot) with no DB access, no I/O, and no side effects.
+Phase 5 changes:
+  - ``count_records_in_bin`` replaces ``count_records_in_boundary`` and
+    ``get_records_in_boundary``. Uses pre-derived LabelSegment.segment_count totals
+    from SegmentCache — no snapshot or last_* needed.
+  - ``get_records_in_boundary`` and ``count_records_in_boundary`` are RETIRED
+    (used last_label/last_catalog which no longer exist in BoundaryRow, Phase 5).
+  - ``sample_records`` and ``suggest_midpoint`` are unchanged — they operate on
+    CollectionSnapshot records and do not reference BoundaryRow.last_*.
+  - ``get_records_in_bin`` is provided as a snapshot-based record enumerator for
+    units.py sample_records computation (slices bin segments from snapshot by rank).
 
 Exported functions:
-  - ``count_records_in_boundary`` — count records in a boundary's label/catalog range
-  - ``sample_records``            — evenly-spaced index-stride sample of n records
-  - ``suggest_midpoint``          — index-space midpoint between two anchor records
+  - ``count_records_in_bin``   — count records in a bin using SegmentCache segment_counts
+  - ``get_records_in_bin``     — return records in a bin by slicing snapshot by rank
+  - ``sample_records``         — evenly-spaced index-stride sample of n records
+  - ``suggest_midpoint``       — index-space midpoint between two anchor records
 
 Key rules (from RESEARCH.md / CONTEXT.md):
   - Pitfall C (T-03-03): Labels compared with .casefold() ONLY — NEVER normalize_catalog().
@@ -18,7 +27,7 @@ Key rules (from RESEARCH.md / CONTEXT.md):
     The suggestion is always a real owned RecordRow from the snapshot.
 
 Phase scope: These helpers are consumed by:
-  - Phase 3: GET /api/cubes/{u}/{r}/{c} (fill_level + sample_records)
+  - Phase 3: GET /api/cubes/{u}/{r}/{c} (fill_level + sample_records via SegmentCache)
   - Phase 3: POST /api/admin/cubes/validate (diff preview movement counts)
   - Phase 3: POST /api/admin/cubes/suggest (midpoint suggestion)
 """
@@ -27,106 +36,66 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from gruvax.estimator.normalize import catalog_in_range, parse_key
+from gruvax.estimator.normalize import parse_key
 
 if TYPE_CHECKING:
-    from gruvax.estimator.boundary_cache import BoundaryRow
     from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
+    from gruvax.estimator.segment_cache import SegmentBin
 
 
-def get_records_in_boundary(
-    boundary: BoundaryRow,
-    snapshot: CollectionSnapshot,
-) -> list[RecordRow]:
-    """Return all records whose (label, catalog#) falls within the boundary's range.
+def count_records_in_bin(bin_: "SegmentBin") -> int:
+    """Count records in a bin using pre-derived LabelSegment.segment_count totals.
 
-    Returns [] for is_empty boundaries or boundaries with no first_label.
+    Does NOT consult snapshot — counts come from SegmentCache's pre-derived values.
+    Returns 0 for bins with no segments (is_empty or empty bin).
 
-    Multi-label semantics (Open Question 4 / RESEARCH.md §Pattern 8):
-      - Records of the FIRST label: catalog_number >= first_catalog (parse_key)
-      - Records of any MIDDLE label (first_label < label < last_label by casefold):
-        fully included (no catalog filter needed for middle labels)
-      - Records of the LAST label: catalog_number <= last_catalog (parse_key)
-      - For a same-label boundary (first_label == last_label):
-        only records with catalog_number in [first_catalog, last_catalog] (parse_key)
-
-    All label comparisons via .casefold() (Pitfall C — never normalize_catalog()).
-    All catalog comparisons via parse_key / catalog_in_range (POS-01, T-03-03).
+    This replaces the retired ``count_records_in_boundary`` which used
+    ``last_label``/``last_catalog`` (Phase 5 cut-point model drops those fields).
 
     Args:
-        boundary: BoundaryRow from BoundaryCache.
+        bin_: SegmentBin from SegmentCache.
+
+    Returns:
+        Integer count of records in the bin. Never negative.
+    """
+    return sum(seg.segment_count for seg in bin_.segments)
+
+
+def get_records_in_bin(
+    bin_: "SegmentBin",
+    snapshot: "CollectionSnapshot",
+) -> list["RecordRow"]:
+    """Return all records belonging to a bin by slicing each segment's rank range.
+
+    Iterates over the bin's LabelSegments, looks up each label's sorted records
+    in the snapshot, and slices [first_rank_in_label, last_rank_in_label+1].
+    Used by units.py ``get_cube`` for sample_records computation.
+
+    Args:
+        bin_: SegmentBin from SegmentCache.
         snapshot: CollectionSnapshot loaded from v_collection.
 
     Returns:
-        List of RecordRow in the boundary's range. Empty list if is_empty or no
-        first_label. Order reflects snapshot insertion order within each label group.
+        List of RecordRow in the bin. Order: per-segment in segment order,
+        records within each segment in parse_key sort order.
     """
-    if boundary.is_empty or boundary.first_label is None:
-        return []
-
-    first_label_cf = (boundary.first_label or "").casefold()
-    last_label_cf = (boundary.last_label or "").casefold()  # type: ignore[attr-defined]  # Phase 5 orphan — retired in 05-03
-    first_catalog = boundary.first_catalog
-    last_catalog = boundary.last_catalog  # type: ignore[attr-defined]  # Phase 5 orphan — retired in 05-03
-
-    # Same-label boundary: simple catalog range check
-    if first_label_cf == last_label_cf:
-        records = snapshot.get_label_records(boundary.first_label)
-        return [
-            r for r in records if catalog_in_range(r.catalog_number, first_catalog, last_catalog)
-        ]
-
-    # Multi-label boundary: collect records across all labels in range
     result: list[RecordRow] = []
-    for label_key, label_records in snapshot._by_label.items():
-        if not label_records:
-            continue
-
-        sample_label_cf = label_key  # already casefolded in snapshot
-
-        if sample_label_cf < first_label_cf or sample_label_cf > last_label_cf:
-            continue
-
-        if sample_label_cf == first_label_cf:
-            # First label: only records with catalog >= first_catalog
-            result.extend(
-                r for r in label_records if parse_key(r.catalog_number) >= parse_key(first_catalog)
-            )
-        elif sample_label_cf == last_label_cf:
-            # Last label: only records with catalog <= last_catalog
-            result.extend(
-                r for r in label_records if parse_key(r.catalog_number) <= parse_key(last_catalog)
-            )
-        else:
-            # Middle label: fully included
-            result.extend(label_records)
-
+    for seg in bin_.segments:
+        # Get all records for this label sorted by parse_key (D-13).
+        label_records = sorted(
+            snapshot.get_label_records(seg.label),
+            key=lambda r: parse_key(r.catalog_number),
+        )
+        # Slice the records that belong to this segment.
+        seg_slice = label_records[seg.first_rank_in_label: seg.last_rank_in_label + 1]
+        result.extend(seg_slice)
     return result
 
 
-def count_records_in_boundary(
-    boundary: BoundaryRow,
-    snapshot: CollectionSnapshot,
-) -> int:
-    """Count records whose (label, catalog#) falls within the boundary's range.
-
-    Delegates to ``get_records_in_boundary`` so count and sample share one pass.
-    Returns 0 for is_empty boundaries or boundaries with no first_label.
-
-    Args:
-        boundary: BoundaryRow from BoundaryCache.
-        snapshot: CollectionSnapshot loaded from v_collection.
-
-    Returns:
-        Integer count of records in the boundary's range. Never negative.
-    """
-    return len(get_records_in_boundary(boundary, snapshot))
-
-
 def sample_records(
-    records_in_range: list[RecordRow],
+    records_in_range: "list[RecordRow]",
     n: int = 7,
-) -> list[RecordRow]:
+) -> "list[RecordRow]":
     """Return n evenly-spaced records from the list using index-stride sampling.
 
     Sampling contract (RESEARCH.md Pattern 8):
@@ -138,7 +107,7 @@ def sample_records(
     All returned records are elements of the original input (real owned records).
 
     Args:
-        records_in_range: List of RecordRow, typically all records in a boundary.
+        records_in_range: List of RecordRow, typically all records in a bin.
         n: Target sample size (default 7, per D-14 / RESEARCH.md Pattern 8).
 
     Returns:
@@ -157,8 +126,8 @@ def suggest_midpoint(
     label: str,
     first_anchor_release_id: int,
     last_anchor_release_id: int,
-    snapshot: CollectionSnapshot,
-) -> RecordRow | None:
+    snapshot: "CollectionSnapshot",
+) -> "RecordRow | None":
     """Suggest the record at the index midpoint between two anchor records.
 
     Walks collection-INDEX space, NOT catalog-string space (Pitfall 22, D-08).
