@@ -49,8 +49,25 @@ function isOverridden(seg: Segment): boolean {
   return seg.is_override && Math.abs(seg.fraction - (seg.auto_fraction ?? seg.fraction)) > 0.005
 }
 
-function rnd(n: number): number {
-  return Math.round(n * 100)
+/**
+ * Largest-remainder (Hamilton) rounding: convert fractions (summing to ~1.0) into
+ * integer percentages that sum to exactly 100, so the displayed numbers never read
+ * 99 or 101 against the "widths always total 100%" promise.
+ */
+function roundPercents(fractions: number[]): number[] {
+  if (fractions.length === 0) return []
+  const raw = fractions.map((f) => f * 100)
+  const floors = raw.map((v) => Math.floor(v))
+  let deficit = 100 - floors.reduce((a, b) => a + b, 0)
+  const result = [...floors]
+  const byRemainder = raw
+    .map((v, i) => ({ i, rem: v - floors[i] }))
+    .sort((a, b) => b.rem - a.rem)
+  for (let k = 0; k < byRemainder.length && deficit > 0; k++) {
+    result[byRemainder[k].i] += 1
+    deficit -= 1
+  }
+  return result
 }
 
 /**
@@ -162,6 +179,7 @@ export function BinWidthEditor() {
 
     // Build segment divs
     const segNodes: Node[] = []
+    const pcts = roundPercents(segs.map((s) => s.fraction)) // display integers sum to 100
     segs.forEach((seg, i) => {
       const pal = PALETTE[i % PALETTE.length]
       const showName = seg.fraction >= 0.16
@@ -180,7 +198,7 @@ export function BinWidthEditor() {
         )
       }
       segDiv.appendChild(
-        el('span', { className: 'bwe-seg-pct', textContent: `${rnd(seg.fraction)}%` }),
+        el('span', { className: 'bwe-seg-pct', textContent: `${pcts[i]}%` }),
       )
 
       if (seg.continues) {
@@ -277,12 +295,14 @@ export function BinWidthEditor() {
     if (!root) return
     root.replaceChildren()
 
+    // Largest-remainder rounding so both applied and auto displays sum to exactly 100
+    const pcts = roundPercents(segs.map((s) => s.fraction))
+    const autoPcts = roundPercents(segs.map((s) => s.auto_fraction ?? s.fraction))
     segs.forEach((seg, i) => {
       const pal = PALETTE[i % PALETTE.length]
       const ov = isOverridden(seg)
-      const autoFrac = seg.auto_fraction ?? seg.fraction
-      const displayPct = rnd(seg.fraction)
-      const autoPct = rnd(autoFrac)
+      const displayPct = pcts[i]
+      const autoPct = autoPcts[i]
 
       // Swatch
       const swatch = el('span', {
