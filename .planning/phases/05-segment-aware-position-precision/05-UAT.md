@@ -52,7 +52,8 @@ skipped: 0
 
 ```yaml
 - truth: "A cut that would scatter a label across non-adjacent bins is hard-blocked in the UI with a plain-language contiguity error (SEG-05)."
-  status: failed
+  status: resolved
+  resolution: "Closed by gap-closure plan 05-06 (commits 0f88d7b..HEAD), direction A. validate_contiguity is now wired into the LIVE write paths put_bin_cut (PUT /cut) and insert_cut (POST /insert-cut) via the new build_proposed_cuts() helper, returning 400 {type:'contiguity_error'} BEFORE any DB transaction. RecordPickerSheet surfaces the server message via BulkSaveError and keeps the sheet open. The orphaned /admin/preview route + DiffPreviewSheet/RollbackToast were removed. Regression test test_put_cut_scatter_rejected_contiguity_error asserts 400 + no DB write and PASSES; 05-VERIFICATION.md re-verification (8/8) confirms the server+wiring fix programmatically. REMAINING: one human visual confirmation of the on-screen rendering in the running SPA (verifier status human_needed) — see 05-VERIFICATION.md human_verification."
   reason: "The rebuilt ShelfBinList/BinWidthEditor commit cut/insert/override edits DIRECTLY (RecordPickerSheet→setCutPoint/insertCut, BinWidthEditor 'Save overrides'→setOverrides) and never route through the validate→DiffPreviewSheet→commit gate. validate_contiguity (SEG-05) is wired ONLY into POST /cubes/validate + the bulk path (cubes.py:468), which feed the now-orphaned DiffPreviewSheet (/admin/preview — no live route navigates to it). put_bin_cut and insert_cut do NOT call validate_contiguity. Net: SEG-05 is not enforced where edits actually happen, and the movement-count / empty-overstuffed warnings + commit-gate (D-06/D-07) are also bypassed."
   severity: major
   test: 6
