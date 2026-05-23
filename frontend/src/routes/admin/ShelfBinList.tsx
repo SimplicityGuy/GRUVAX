@@ -123,10 +123,14 @@ export function ShelfBinList() {
     // Close the sheet immediately — no manual reload needed.
     setInsertState(null)
 
-    // invalidateQueries resolves once the active ['admin','cubes'] observer has
-    // refetched, so the real interactive BinCard is in the cache before we diff.
-    await queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
-    void queryClient.invalidateQueries({ queryKey: ['admin', 'segments', unitId] })
+    // Await BOTH invalidations: the cubes refetch surfaces the new interactive
+    // BinCard (so the diff sees it), and the segments refetch refreshes every
+    // shifted bin's mini-strip — otherwise a settled bin could briefly show the
+    // pre-cascade strip while the animation signals "this is now correct".
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'segments', unitId] }),
+    ])
 
     const fresh = queryClient.getQueryData<AdminCubesResponse>(['admin', 'cubes'])
     if (!fresh) return
@@ -138,13 +142,13 @@ export function ShelfBinList() {
     flagChanged(appeared)
   }
 
-  function handleEditCommit() {
+  async function handleEditCommit() {
     const target = editingCube
     setEditingCube(null)
-    void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
-    void queryClient.invalidateQueries({
-      queryKey: ['admin', 'segments', unitId],
-    })
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] }),
+      queryClient.invalidateQueries({ queryKey: ['admin', 'segments', unitId] }),
+    ])
     // The edited bin keeps its position; settle it so the change is visible.
     if (target) flagChanged([cubeKey(target)])
   }
@@ -263,7 +267,7 @@ export function ShelfBinList() {
           unitId={unitId}
           row={editingCube.row}
           col={editingCube.col}
-          onCommit={handleEditCommit}
+          onCommit={() => void handleEditCommit()}
           onCancel={() => setEditingCube(null)}
         />
       )}

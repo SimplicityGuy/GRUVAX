@@ -455,10 +455,12 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
             [*filter(None, before.values()), "BLP 4010"]
         ), "insert-cut changed the set of cut points beyond adding the new one"
     finally:
-        # Clean up the change-set's history rows. The suite shares the dev DB and
-        # `test_migrate_0005` downgrades migration 0005, which restores the old
-        # boundary_history CHECK (source IN 'manual','bulk','revert'); leftover
-        # 'cut_insert' rows would make that downgrade fail.
+        # Full cleanup — the suite shares the dev DB, so restore everything this
+        # test mutated:
+        #   * boundary_history 'cut_insert' rows would break `test_migrate_0005`'s
+        #     downgrade (it restores the old CHECK: source IN manual/bulk/revert).
+        #   * cube_boundaries were cascaded by the insert; re-seed the canonical
+        #     fixture so later test modules don't inherit the shifted layout.
         if change_set_id:
             async with db_pool.connection() as conn:
                 await conn.execute(
@@ -466,6 +468,9 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
                     (change_set_id,),
                 )
                 await conn.commit()
+        from gruvax.db.seed_boundaries import load_boundaries
+
+        await load_boundaries(_BOUNDARIES_YAML)
 
 
 # ── SEG-08: require_admin 401/403 ────────────────────────────────────────────
