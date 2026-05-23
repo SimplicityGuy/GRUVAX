@@ -603,9 +603,20 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
         assert body.get("type") == "contiguity_error", (
             f"Expected type=contiguity_error, got: {body.get('type')!r}"
         )
-        msg = (body.get("message") or "").lower()
+        raw_msg = body.get("message") or ""
+        msg = raw_msg.lower()
         assert "split" in msg or "non-adjacent" in msg, (
-            f"contiguity_error message must mention 'split' or 'non-adjacent': {msg!r}"
+            f"contiguity_error message must mention 'split' or 'non-adjacent': {raw_msg!r}"
+        )
+        # WR-04: the message must surface the ORIGINAL-case label ("Blue Note"),
+        # never the casefolded key ("blue note"). Assert the proper-case form is
+        # present and the lowercased-key form is absent, so the casing fix stays
+        # locked in against regression.
+        assert "Blue Note" in raw_msg, (
+            f"contiguity_error must surface the proper-case label 'Blue Note', got: {raw_msg!r}"
+        )
+        assert "blue note" not in raw_msg, (
+            f"contiguity_error must NOT leak the casefolded label 'blue note', got: {raw_msg!r}"
         )
 
         # Confirm no DB write occurred — (1,0,3) must still be "KC"

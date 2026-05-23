@@ -236,11 +236,16 @@ def validate_contiguity(
     # For each label, find all positions where it starts a bin in the proposed sequence.
     # A label is "contiguous" iff its start positions form a consecutive block
     # (no other label's bin appears between two bins that start with the same label).
+    # label_display maps the casefold key back to the first-seen ORIGINAL-case label
+    # so the user-facing error message reads "Blue Note", not "blue note" (WR-04).
     label_start_positions: dict[str, list[int]] = {}
+    label_display: dict[str, str] = {}
     for i, lbl in enumerate(label_sequence):
         lk = lbl.casefold()
         if lk not in label_start_positions:
             label_start_positions[lk] = []
+        if lk not in label_display:
+            label_display[lk] = lbl
         label_start_positions[lk].append(i)
 
     for lk, positions in label_start_positions.items():
@@ -253,8 +258,10 @@ def validate_contiguity(
         expected_positions = set(positions)
         for pos in range(min_pos, max_pos + 1):
             if pos not in expected_positions:
-                # There's a gap — another label's bin is at this position
-                return _CONTIGUITY_MSG_TEMPLATE.format(label=lk)
+                # There's a gap — another label's bin is at this position.
+                # Surface the original-case label (label_display), never the
+                # casefold key, in the owner-facing message (WR-04).
+                return _CONTIGUITY_MSG_TEMPLATE.format(label=label_display[lk])
 
     return None
 
