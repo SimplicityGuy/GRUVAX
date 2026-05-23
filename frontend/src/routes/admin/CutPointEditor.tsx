@@ -23,6 +23,7 @@ import { SegmentStrip } from './SegmentStrip'
 import { SegmentEditorPanel } from './SegmentEditorPanel'
 import { RecordPickerSheet } from './RecordPickerSheet'
 import { getUnitSegments } from '../../api/adminClient'
+import { shelfName } from '../../lib/shelf'
 import type { Segment } from '../../api/cubeTypes'
 
 /** One bin card entry in the cut-point list. */
@@ -149,17 +150,17 @@ export function CutPointEditor() {
   return (
     <div className="cut-point-editor">
       {/* Back nav + heading */}
-      <header className="cube-editor-header">
+      <header className="cut-point-editor-header">
         <button
           type="button"
-          className="cube-editor-back"
+          className="cut-point-editor-back"
           onClick={() => void navigate('/admin/cubes')}
           aria-label="Back to cubes grid"
         >
           ← CUBES
         </button>
-        <h1 className="cube-editor-title">
-          EDIT UNIT {unitId}
+        <h1 className="cut-point-editor-title">
+          EDIT SHELF {String.fromCharCode(64 + unitId)}
         </h1>
       </header>
 
@@ -168,7 +169,7 @@ export function CutPointEditor() {
         unitId={unitId}
         row={editRow}
         col={editCol}
-        shelfName="SHELF A"
+        shelfName={shelfName(unitId)}
         binNumber={editBinDisplay}
         rows={ROWS}
         cols={COLS}
@@ -199,26 +200,23 @@ export function CutPointEditor() {
 
               {/* Bin card */}
               <div
-                className={`bin-card${isEditing ? ' bin-card--editing' : ''}${isCurrentBin ? ' bin-card--current' : ''}`}
+                className={`bin-card${isEditing ? ' bin-card--editing' : ''}`}
               >
                 <div className="bin-card-header">
                   {/* Bin-number chip */}
-                  <div className="bin-card-chip">
-                    <span className="bin-card-chip-label">B{card.display}</span>
+                  <div className="bin-number-chip">
+                    <span className="bin-number-chip-text">B{card.display}</span>
                   </div>
 
-                  {/* "starts at" label */}
-                  <div className="bin-card-starts">
-                    <span className="bin-card-starts-label">STARTS AT</span>
+                  {/* "starts at" label + value */}
+                  <div className="bin-card-info">
+                    <span className="bin-starts-at">STARTS AT</span>
                     {isCurrentBin && editedSegments.length > 0 ? (
-                      <span className="bin-card-starts-value">
-                        {editedSegments[0].label}{' '}
-                        <span className="bin-card-catalog">
-                          {/* catalog shown via segment label only — first record data not available here */}
-                        </span>
+                      <span className="bin-cut-record">
+                        {editedSegments[0].label}
                       </span>
                     ) : (
-                      <span className="bin-card-starts-value bin-card-starts-empty">
+                      <span className="bin-cut-record">
                         Not configured
                       </span>
                     )}
@@ -226,18 +224,16 @@ export function CutPointEditor() {
                 </div>
 
                 {/* Mini segment strip */}
-                <div className="bin-card-strip">
-                  <SegmentStrip
-                    segments={isCurrentBin ? editedSegments : []}
-                    isReadOnly={true}
-                  />
-                </div>
+                <SegmentStrip
+                  segments={isCurrentBin ? editedSegments : []}
+                  isReadOnly={true}
+                />
 
                 {/* Actions */}
                 <div className="bin-card-actions">
                   <button
                     type="button"
-                    className="bin-card-edit-btn"
+                    className="bin-edit-segments-btn"
                     onClick={() => handleEditSegments(card)}
                     aria-expanded={!!isEditing}
                     aria-controls={`seg-panel-${card.row}-${card.col}`}
@@ -249,22 +245,17 @@ export function CutPointEditor() {
 
               {/* Inline segment editor panel */}
               {isEditing && isCurrentBin && (
-                <div
-                  id={`seg-panel-${card.row}-${card.col}`}
-                  className="bin-card-seg-panel"
-                >
-                  <SegmentEditorPanel
-                    unitId={unitId}
-                    row={card.row}
-                    col={card.col}
-                    binDisplay={card.display}
-                    shelfName="SHELF A"
-                    initialSegments={editedSegments}
-                    rows={ROWS}
-                    cols={COLS}
-                    onEditCutPoint={() => undefined}
-                  />
-                </div>
+                <SegmentEditorPanel
+                  unitId={unitId}
+                  row={card.row}
+                  col={card.col}
+                  binDisplay={card.display}
+                  shelfName={shelfName(unitId)}
+                  initialSegments={editedSegments}
+                  rows={ROWS}
+                  cols={COLS}
+                  onEditCutPoint={() => undefined}
+                />
               )}
 
               {/* Renumber hint (after new-bin inserts) */}
@@ -282,13 +273,13 @@ export function CutPointEditor() {
               {newBinsAfter.map((nb) => (
                 <div key={`new-${nb.row}-${nb.col}`} className="bin-card bin-card--new">
                   <div className="bin-card-header">
-                    <div className="bin-card-chip">
-                      <span className="bin-card-chip-label">B{nb.display}</span>
-                      <span className="bin-card-chip-new-badge">NEW</span>
+                    <div className="bin-number-chip">
+                      <span className="bin-number-chip-text">B{nb.display}</span>
+                      <span className="bin-new-badge">NEW</span>
                     </div>
-                    <div className="bin-card-starts">
-                      <span className="bin-card-starts-label">STARTS AT</span>
-                      <span className="bin-card-starts-value bin-card-starts-empty">
+                    <div className="bin-card-info">
+                      <span className="bin-starts-at">STARTS AT</span>
+                      <span className="bin-cut-record">
                         New cut — see diff preview
                       </span>
                     </div>

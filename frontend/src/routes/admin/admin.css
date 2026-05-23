@@ -2422,6 +2422,26 @@
   outline-offset: 2px;
 }
 
+/* Settings action button row (primary + secondary stacked) */
+.settings-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+/* Modifier variants (additive — no base rule override needed) */
+.settings-section--overrides {
+  /* No extra layout — inherits .settings-section flex column */
+}
+
+.settings-heading--xl {
+  /* Inherits .settings-heading — no size change needed for now */
+}
+
+.settings-number-input--mono {
+  /* Inherits .settings-number-input — DM Mono already applied */
+}
+
 /* ── Rollback toast (Phase 4 / RTM-03 / D-07) ─────────────────────────────── */
 /* Admin-surface only — never shown on KioskView. */
 /* All colors: var(--gruvax-*) tokens — no hardcoded hex (CLAUDE.md constraint). */

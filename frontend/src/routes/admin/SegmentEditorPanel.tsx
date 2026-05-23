@@ -160,8 +160,8 @@ export function SegmentEditorPanel({
   )
 
   return (
-    <div className="seg-editor-panel">
-      <h2 className="seg-editor-heading">BIN {binDisplay} SEGMENTS</h2>
+    <div className="segment-editor-panel">
+      <h2 className="segment-editor-heading">BIN {binDisplay} SEGMENTS</h2>
 
       <LocatorHeader
         unitId={unitId}
@@ -177,7 +177,7 @@ export function SegmentEditorPanel({
       {onEditCutPoint && (
         <button
           type="button"
-          className="seg-editor-cut-link"
+          className="editor-btn-secondary"
           onClick={() => setShowCutPicker(true)}
         >
           ✎ EDIT CUT POINT
@@ -185,13 +185,11 @@ export function SegmentEditorPanel({
       )}
 
       {/* Full segment strip (draggable) */}
-      <div className="seg-editor-strip-wrap">
-        <SegmentStrip
-          segments={segments}
-          onDragSetOverride={(idx, frac) => void handleDragSetOverride(idx, frac)}
-          isReadOnly={false}
-        />
-      </div>
+      <SegmentStrip
+        segments={segments}
+        onDragSetOverride={(idx, frac) => void handleDragSetOverride(idx, frac)}
+        isReadOnly={false}
+      />
 
       {/* Legend */}
       <SegmentLegend
@@ -201,19 +199,19 @@ export function SegmentEditorPanel({
 
       {/* Status */}
       {isSavingOverride && (
-        <p className="seg-editor-saving" aria-live="polite">Saving override…</p>
+        <p className="editor-status-validating" aria-live="polite">Saving override…</p>
       )}
       {saveError && (
-        <p className="seg-editor-error" role="alert">{saveError}</p>
+        <p className="editor-save-error" role="alert">{saveError}</p>
       )}
       {!hasChanges && (
-        <p className="seg-editor-no-changes">No changes made yet.</p>
+        <p className="segment-editor-no-change">No changes made yet.</p>
       )}
 
       {/* Preview CTA */}
       <button
         type="button"
-        className="editor-btn-primary seg-editor-preview-btn"
+        className="editor-btn-primary"
         onClick={() => void navigate('/admin/preview')}
         disabled={!hasChanges}
       >
