@@ -185,7 +185,7 @@ Plans:
 
 **Wave 5** *(blocked on Wave 4)*
 
-- [ ] 05-05-PLAN.md — Frontend editor assembly: el() helper + adminClient + SegmentStrip/Legend/LocatorHeader + RecordPickerSheet + SegmentEditorPanel + CutPointEditor + DiffPreview/Settings extensions + route swap + human-verify (SEG-04, SEG-08) [has human-verify checkpoint]
+- [x] 05-05-PLAN.md — Frontend editor assembly: el() helper + adminClient + SegmentStrip/Legend/LocatorHeader + RecordPickerSheet + SegmentEditorPanel + CutPointEditor + DiffPreview/Settings extensions + route swap + human-verify (SEG-04, SEG-08) [has human-verify checkpoint]
 **UI hint:** yes
 
 ### Phase 6: LED Contract over MQTT (Hardware Stubbed)

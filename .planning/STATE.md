@@ -2,14 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: executing
-last_updated: "2026-05-22T18:31:52.199Z"
+status: ready_to_plan
+last_updated: 2026-05-23T04:38:15.659Z
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 22
-  completed_plans: 18
+  completed_plans: 22
   percent: 50
+stopped_at: Phase 05 complete (5/5) — ready to discuss Phase 6
 ---
 
 # State: GRUVAX
@@ -20,7 +21,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 05 — segment-aware-position-precision
+**Current Focus:** Phase 6 — led contract over mqtt (hardware stubbed)
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -31,9 +32,9 @@ progress:
 Phase: 05 (segment-aware-position-precision) — EXECUTING
 Plan: 1 of 5
 
-- **Phase:** 5
-- **Plan:** 05-01 done (merged to main); Waves 2–5 re-planned (two-tier green-gate model)
-- **Status:** Executing Phase 05
+- **Phase:** 6
+- **Plan:** Not started
+- **Status:** Ready to plan
 - **Progress:** Phase 05: 1/5 plans complete
 
 ```
