@@ -20,8 +20,10 @@ import { useAdminStore } from '../../state/adminStore'
 import { PinOverlay } from './PinOverlay'
 import './admin.css'
 
-const POLL_INTERVAL_MS = 30_000 // 30 s
+const POLL_INTERVAL_MS = 30_000    // 30 s — background session sync
 const WARNING_THRESHOLD_MS = 60_000 // last 60 s → warning color
+/** Throttle activity-driven session refresh to at most once per 15 s. */
+const ACTIVITY_THROTTLE_MS = 15_000
 
 function formatCountdown(ms: number): string {
   if (ms <= 0) return '0:00'
@@ -39,15 +41,19 @@ export function AdminShell() {
   const [nowMs, setNowMs] = useState(() => Date.now())
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null)
   const tickRef = useRef<ReturnType<typeof setInterval> | null>(null)
+  /** Timestamp (ms) of the last activity-driven session refresh call. */
+  const lastActivityRefreshRef = useRef<number>(0)
 
   // Refs to hold latest values for reading inside the long-lived tick interval
   // without stale closures. Synced via effects (not render-time assignment) to
   // satisfy the react-hooks/refs rule.
   const isLoggedInRef = useRef(isLoggedIn)
   const sessionExpiresAtRef = useRef(sessionExpiresAt)
+  const hardCapExpiresAtRef = useRef(hardCapExpiresAt)
   // Sync ref values in layout effects so the tick interval always reads current
   useEffect(() => { isLoggedInRef.current = isLoggedIn }, [isLoggedIn])
   useEffect(() => { sessionExpiresAtRef.current = sessionExpiresAt }, [sessionExpiresAt])
+  useEffect(() => { hardCapExpiresAtRef.current = hardCapExpiresAt }, [hardCapExpiresAt])
 
   // ── Tick every second for countdown + expiry check ───────────────────────
   // The expiry check is collapsed into this interval so the setState calls
@@ -90,6 +96,35 @@ export function AdminShell() {
     return () => {
       clearTimeout(immediateId)
       if (pollRef.current) clearInterval(pollRef.current)
+    }
+  }, [isLoggedIn, pollSession])
+
+  // ── Activity-driven session extension ────────────────────────────────────
+  // On user interaction (pointerdown / keydown), call pollSession to slide
+  // the server's idle TTL — throttled to at most once per ACTIVITY_THROTTLE_MS.
+  // Does NOT fire when the hard cap is within the warning window (≤5 min) so
+  // the "activity cannot extend it" banner is accurate.
+  useEffect(() => {
+    if (!isLoggedIn) return
+
+    function handleActivity() {
+      const now = Date.now()
+      if (now - lastActivityRefreshRef.current < ACTIVITY_THROTTLE_MS) return
+      // Respect the hard-cap: don't call pollSession when near the hard cap
+      // (the banner already warns "activity cannot extend it")
+      const hardCapRem = hardCapExpiresAtRef.current > 0
+        ? hardCapExpiresAtRef.current - now
+        : Infinity
+      if (hardCapRem < 5 * 60_000) return
+      lastActivityRefreshRef.current = now
+      void pollSession()
+    }
+
+    document.addEventListener('pointerdown', handleActivity, { passive: true })
+    document.addEventListener('keydown', handleActivity, { passive: true })
+    return () => {
+      document.removeEventListener('pointerdown', handleActivity)
+      document.removeEventListener('keydown', handleActivity)
     }
   }, [isLoggedIn, pollSession])
 
