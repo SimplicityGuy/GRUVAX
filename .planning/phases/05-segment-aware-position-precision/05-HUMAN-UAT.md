@@ -1,14 +1,19 @@
 ---
-status: partial
+status: complete
 phase: 05-segment-aware-position-precision
 source: [05-VERIFICATION.md]
 started: 2026-05-23T04:40:00Z
-updated: 2026-05-23T04:40:00Z
+updated: 2026-05-23T18:59:54Z
+superseded_by: 05-UAT.md
 ---
 
 ## Current Test
 
-[awaiting human testing of the remaining interactive items]
+[testing complete — resolved via /gsd:verify-work session, see 05-UAT.md]
+
+> **Resolved 2026-05-23 via `/gsd:verify-work 5`.** Items 1–5 passed; item 6
+> (UI contiguity hard-block, SEG-05) found to be a real gap → logged in
+> `05-UAT.md` Gaps for gap closure. See `05-UAT.md` for authoritative results.
 
 ## Tests
 
