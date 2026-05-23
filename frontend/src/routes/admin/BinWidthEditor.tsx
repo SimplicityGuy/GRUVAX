@@ -53,6 +53,30 @@ function rnd(n: number): number {
   return Math.round(n * 100)
 }
 
+/**
+ * Recompute applied fractions so the bin always sums to 1.0 (mirrors the backend
+ * D-03 renormalization): overridden labels keep their fraction; the remaining width
+ * is split among non-overridden labels proportionally by their auto (count-derived)
+ * fraction. Used after dropping a single label's override.
+ */
+function renormalize(segs: Segment[]): Segment[] {
+  const overrideSum = segs.filter((s) => s.is_override).reduce((a, s) => a + s.fraction, 0)
+  const autoLabels = segs.filter((s) => !s.is_override)
+  const autoSum = autoLabels.reduce((a, s) => a + s.auto_fraction, 0)
+  const remainder = Math.max(0, 1 - overrideSum)
+  return segs.map((s) =>
+    s.is_override
+      ? s
+      : {
+          ...s,
+          fraction:
+            autoSum > 0
+              ? (s.auto_fraction / autoSum) * remainder
+              : remainder / Math.max(1, autoLabels.length),
+        },
+  )
+}
+
 export function BinWidthEditor() {
   const { unit, row, col } = useParams<{ unit: string; row: string; col: string }>()
   const navigate = useNavigate()
@@ -301,7 +325,7 @@ export function BinWidthEditor() {
           textContent: `reset to ${autoPct}%`,
           // resetOne is a hoisted function decl below; mutual recursion with updateLegend
           // eslint-disable-next-line react-hooks/immutability
-          onclick: () => resetOne(seg.label),
+          onClick: () => resetOne(seg.label),
         })
         main.appendChild(reset)
       } else {
@@ -327,11 +351,11 @@ export function BinWidthEditor() {
   // ── Reset helpers ────────────────────────────────────────────────────────────
   function resetOne(label: string) {
     setSegments((prev) => {
-      const updated = prev.map((s) =>
-        s.label === label
-          ? { ...s, fraction: s.auto_fraction ?? s.fraction, is_override: false }
-          : s,
+      // Drop this label's override, then renormalize so the bin still sums to 100%.
+      const cleared = prev.map((s) =>
+        s.label === label ? { ...s, is_override: false } : { ...s },
       )
+      const updated = renormalize(cleared)
       draggingSegs.current = updated.map((s) => ({ ...s }))
       renderStrip(updated)
       updateCaption(updated)
