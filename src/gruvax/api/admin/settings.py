@@ -80,8 +80,7 @@ async def update_settings(
                 continue
             value = body[body_key]
             await conn.execute(
-                "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now()"
-                " WHERE key = %s",
+                "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now() WHERE key = %s",
                 (str(value), db_key),
             )
             updated.append(db_key)

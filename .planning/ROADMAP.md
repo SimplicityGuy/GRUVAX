@@ -17,7 +17,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 - [x] **Phase 2: Real Position Estimation** - Sub-cube interval bar, label-span multi-cube highlight, §4.1 index-based estimator with A/B harness; the kiosk now answers "where exactly". (completed 2026-05-20)
 - [x] **Phase 3: Admin Loop (PIN + Manual Entry + Undo)** - Owner can sign in (mobile or kiosk-with-in-app-keypad), enter boundaries, preview diffs, and undo mistakes — boundaries become a living artifact, not a fixture. (completed 2026-05-21)
 - [x] **Phase 4: Realtime + Offline Resilience** - Admin edits reach the kiosk live via SSE; kiosk gracefully degrades on connectivity loss; privacy floors and recently-pulled land here. (completed 2026-05-22)
-- [ ] **Phase 5: Segment-Aware Position Precision** - A bin holds an ordered list of per-label segments; store only cut points + optional physical-width overrides and derive segments/counts/fractions from `v_collection`; a segment-aware estimator supersedes §4.1 via two-level interpolation so a record's position is precise even when multiple labels share a bin.
+- [x] **Phase 5: Segment-Aware Position Precision** - A bin holds an ordered list of per-label segments; store only cut points + optional physical-width overrides and derive segments/counts/fractions from `v_collection`; a segment-aware estimator supersedes §4.1 via two-level interpolation so a record's position is precise even when multiple labels share a bin. (completed 2026-05-23)
 - [ ] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness.
 - [ ] **Phase 7: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable.
 - [ ] **Phase 8: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof.
@@ -162,10 +162,34 @@ Plans:
   1. A boundary is stored as a set of **cut points** (first record per bin); given the globally-ordered `v_collection`, the system derives each bin's ordered per-label segments (label, first/last record) with **zero additional manual input**, and re-derives automatically as the collection grows.
   2. Per-label **counts and bin-fractions** are computed by row-counting `v_collection` across each segment's catalog range — correctly including duplicate owned copies and variant releases (`37` vs `37-r`) — and an **optional physical-width override** per segment wins over the count-derived fraction when present.
   3. `/api/locate` returns a sub-cube interval produced by **two-level interpolation**: it selects the correct bin+segment for the record, offsets by the fractions of preceding labels in the bin, and interpolates by row-rank within the segment; the **straddle case** (a label split across two adjacent bins by a cut) resolves to the correct bin without special-casing.
-  4. The segment-aware estimator is proven to **meet-or-beat §4.1** on the real (gitignored) CSV and the synthetic CI dataset via the extended `run_all_algorithms.py` A/B harness, with per-distribution-shape error metrics — before it is locked in as the v1 default.
+  4. The segment-aware estimator **supersedes §4.1** as the sole v1 default index estimator (with §4.8 cube-only retained as the timeout/low-confidence fallback), and `estimator_version` reflects the change. *(Amended 2026-05-22 — Phase 5 decision D-01: the prior A/B "meet-or-beat §4.1" proof gate via the extended `run_all_algorithms.py` harness is dropped; §4.1 is retired and the estimator ships on trust, covered by ordinary unit/Hypothesis-invariant tests rather than an A/B comparison.)*
   5. Admin can **view, edit, and add cut points** and set per-label **width overrides** for a bin (the cut-point editor / override UI), with the shared parser validating saves and the existing diff-preview + change-set undo path (Phase 3) covering the new mutations; the locate latency budget (p95 ≤ 50 ms, CPU-only, no DB on the hot path) is preserved.
 
-**Plans:** TBD
+**Plans:** 6/6 plans complete
+Plans:
+**Wave 1** *(done + merged)*
+
+- [x] 05-01-PLAN.md — Migration 0005 cut-point model + BoundaryRow refactor + SEGMENT_ESTIMATOR_VERSION + Wave-0 test scaffold + synth factories (SEG-01)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [x] 05-02-PLAN.md — SegmentCache derivation (counts/fractions/override renormalization) + boundary_cache mypy fix + synth factories return derived SegmentCache + SEG-02/03/04 unit tests (SEG-02, SEG-03, SEG-04, SEG-05)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [x] 05-03-PLAN.md — Two-level interpolation estimator superseding §4.1 + §4.8 fallback via SegmentCache + deps/app/locate wiring + heal read-path orphans (units.py, seed_boundaries.py, run_all_algorithms.py) + SEG-06/07 + D-02 invariants + rewrite §4.1-era/fill-level tests (SEG-06, SEG-07)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [x] 05-04-PLAN.md — Admin cut-point + override backend: validate_contiguity + cubes.py rework + segments.py (GET/cut/overrides/insert-cut) + queries.py cut-point rework + heal admin/integration test orphans (SEG-05, SEG-08)
+
+**Wave 5** *(blocked on Wave 4)*
+
+- [x] 05-05-PLAN.md — Frontend editor assembly: el() helper + adminClient + SegmentStrip/Legend/LocatorHeader + RecordPickerSheet + SegmentEditorPanel + CutPointEditor + DiffPreview/Settings extensions + route swap + human-verify (SEG-04, SEG-08) [has human-verify checkpoint]
+
+**Gap closure** *(UAT — SEG-05 not enforced on live edit paths)*
+
+- [x] 05-06-PLAN.md — Enforce SEG-05 contiguity on the live PUT /cut + POST /insert-cut write paths (server 400 type=contiguity_error before any DB write), surface it in RecordPickerSheet, remove the orphaned /admin/preview + DiffPreviewSheet, add a direct-path regression test (SEG-05)
 **UI hint:** yes
 
 ### Phase 6: LED Contract over MQTT (Hardware Stubbed)
@@ -225,7 +249,7 @@ Plans:
 | 2. Real Position Estimation | 4/4 | Complete   | 2026-05-20 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
-| 5. Segment-Aware Position Precision | 0/? | Not started | - |
+| 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
 | 6. LED Contract over MQTT (Hardware Stubbed) | 0/? | Not started | - |
 | 7. Wizards + Import/Export | 0/? | Not started | - |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
@@ -259,3 +283,23 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
 
 ---
 *Roadmap created: 2026-05-19 from PROJECT.md, REQUIREMENTS.md, and research/{SUMMARY,STACK,ARCHITECTURE,PITFALLS,INTERPOLATION}.md*
+
+## Backlog
+
+### Phase 999.1: Shelf-overview mini-Kallax shows per-cube fill/occupancy (BACKLOG)
+
+**Goal:** [Captured for future planning]
+**Requirements:** TBD
+**Plans:** 0 plans
+
+On the admin **ShelfBinList** screen ("EDIT SHELF {letter}", route `/admin/cubes/:unit`),
+the `LocatorHeader` mini 4×4 Kallax overview renders every cube as a uniform empty/dim
+tile, so it conveys nothing about the shelf's contents. It should show per-cube
+fill/occupancy at a glance — e.g. a fill-level shade or occupied-vs-empty state per cube
+(and/or a shelf-level fill summary). Data already exists: `GET /api/admin/cubes` returns
+`is_empty` and `fill_level` per cube. Cosmetic/discoverability enhancement; not blocking.
+Relates to Phase 5 (segment editor) and the CUBE-05 empty-cube desaturated state in the
+design language.
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)

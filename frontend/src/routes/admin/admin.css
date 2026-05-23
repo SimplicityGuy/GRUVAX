@@ -649,64 +649,8 @@
   white-space: nowrap;
 }
 
-/* ── CubeEditor ──────────────────────────────────────────────────────────── */
-
-.cube-editor {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gruvax-space-5);
-  max-width: 480px;
-  margin: 0 auto;
-  padding: var(--gruvax-space-4);
-}
-
-.cube-editor-loading {
-  padding: var(--gruvax-space-6);
-  font-family: var(--gruvax-font-ui);
-  font-size: var(--gruvax-text-body-sm, 14px);
-  color: var(--gruvax-text-muted);
-}
-
-.cube-editor-header {
-  display: flex;
-  align-items: center;
-  gap: var(--gruvax-space-4);
-}
-
-.cube-editor-back {
-  font-family: var(--gruvax-font-display);
-  font-size: var(--gruvax-text-display-sm, 16px);
-  font-weight: 700;
-  color: var(--gruvax-blue);
-  letter-spacing: var(--gruvax-tracking-display, 0.14em);
-  background: transparent;
-  border: none;
-  cursor: pointer;
-  padding: 0;
-  text-transform: uppercase;
-  touch-action: manipulation;
-}
-
-.cube-editor-back:focus-visible {
-  outline: 2px solid var(--gruvax-blue);
-  outline-offset: 2px;
-}
-
-.cube-editor-title {
-  font-family: var(--gruvax-font-display);
-  font-size: var(--gruvax-text-display-lg, 36px);
-  font-weight: 900;
-  color: var(--gruvax-blue);
-  letter-spacing: var(--gruvax-tracking-display, 0.14em);
-  text-transform: uppercase;
-  margin: 0;
-}
-
-.cube-editor-body {
-  display: flex;
-  flex-direction: column;
-  gap: var(--gruvax-space-5);
-}
+/* ── Bin editor chrome (shared by CutPointEditor + segment panels) ─────── */
+/* NOTE: .cube-editor-* removed — those 6 dead rules had no consumers.     */
 
 .editor-boundary-section {
   background: var(--gruvax-white);
@@ -1630,6 +1574,1020 @@
   outline-offset: 2px;
 }
 
+/* ── Phase 5: LocatorHeader ──────────────────────────────────────────────────── */
+
+.locator-header {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-3) 0;
+}
+
+.locator-header-labels {
+  display: flex;
+  gap: var(--gruvax-space-3);
+  align-items: baseline;
+}
+
+.locator-header-shelf,
+.locator-header-bin {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+}
+
+.locator-mini-grid {
+  display: grid;
+  gap: var(--gruvax-cell-gap-sm);
+}
+
+.locator-cell {
+  width: var(--gruvax-cell-size-sm);
+  height: var(--gruvax-cell-size-sm);
+  border-radius: var(--gruvax-cell-radius-sm);
+}
+
+.locator-cell--dim {
+  background: var(--gruvax-cell-dim);
+}
+
+.locator-cell--lit {
+  background: var(--gruvax-cell-lit);
+  box-shadow: var(--gruvax-shadow-led);
+}
+
+/* ── Phase 5: SegmentStrip ───────────────────────────────────────────────────── */
+
+.seg-strip {
+  position: relative;
+  display: flex;
+  border-radius: var(--gruvax-radius-md);
+  overflow: hidden;
+  width: 100%;
+}
+
+.seg-strip--full {
+  height: 88px;
+  border: 1.5px solid var(--gruvax-blue);
+}
+
+.seg-strip--mini {
+  height: 24px;
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-sm);
+}
+
+.seg-strip__segment {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  flex-shrink: 0;
+}
+
+.seg-strip__segment--continues {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 14px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 14px), transparent);
+}
+
+.seg-strip--mini .seg-strip__segment--continues {
+  -webkit-mask-image: linear-gradient(90deg, #000 calc(100% - 8px), transparent);
+  mask-image: linear-gradient(90deg, #000 calc(100% - 8px), transparent);
+}
+
+.seg-strip__override-accent {
+  width: 100%;
+  flex-shrink: 0;
+}
+
+.seg-strip__label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  padding: var(--gruvax-space-2);
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+  letter-spacing: var(--gruvax-tracking-display);
+  flex: 1;
+  align-self: flex-end;
+}
+
+/* Drag handle */
+.seg-strip__handle {
+  position: relative;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 6px;
+  margin: 0 -19px;
+  cursor: col-resize;
+  flex-shrink: 0;
+  align-self: stretch;
+  touch-action: none;
+}
+
+.seg-strip__handle::after {
+  content: '';
+  display: block;
+  width: 6px;
+  height: 46px;
+  border-radius: var(--gruvax-radius-pill);
+  background: var(--gruvax-white);
+  border: 1.5px solid var(--gruvax-blue);
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+              border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+              box-shadow var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.seg-strip__handle:hover::after,
+.seg-strip__handle:active::after,
+.seg-strip__handle:focus-visible::after {
+  background: var(--gruvax-yellow);
+  border-color: var(--gruvax-yellow-dark);
+  box-shadow: var(--gruvax-shadow-led);
+}
+
+.seg-strip__handle:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+/* ── Phase 5: SegmentLegend ──────────────────────────────────────────────────── */
+
+.seg-legend {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  overflow: hidden;
+}
+
+.seg-legend-empty {
+  padding: var(--gruvax-space-4);
+}
+
+.seg-legend-empty-text {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+}
+
+.seg-legend-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  min-height: 44px;
+  padding: var(--gruvax-space-2) var(--gruvax-space-3);
+  background: var(--gruvax-white);
+  border-bottom: 1px solid var(--gruvax-border-faint);
+}
+
+.seg-legend-row:last-child {
+  border-bottom: none;
+}
+
+.seg-legend-swatch {
+  display: inline-block;
+  width: 16px;
+  height: 16px;
+  border-radius: var(--gruvax-radius-sm);
+  flex-shrink: 0;
+}
+
+.seg-legend-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  flex: 1;
+  min-width: 80px;
+}
+
+.seg-legend-chips {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--gruvax-space-1);
+}
+
+.seg-chip {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-body-sm);
+  border-radius: var(--gruvax-radius-pill);
+  padding: var(--gruvax-space-1) var(--gruvax-space-2);
+  white-space: nowrap;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gruvax-space-1);
+}
+
+.seg-chip--auto {
+  background: var(--gruvax-blue-faint);
+  border: 1px solid var(--gruvax-border-light);
+  color: var(--gruvax-text-muted);
+}
+
+.seg-chip--override {
+  background: var(--gruvax-yellow-faint);
+  border: 1px solid var(--gruvax-yellow-dark);
+  color: var(--gruvax-blue-dark);
+}
+
+.seg-chip-resync {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0 var(--gruvax-space-1);
+  text-decoration: underline;
+  touch-action: manipulation;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.seg-chip-resync:hover {
+  color: var(--gruvax-blue-dark);
+}
+
+.seg-chip-resync:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.seg-legend-straddle {
+  width: 100%;
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-secondary);
+  margin: 0;
+  padding-left: calc(16px + var(--gruvax-space-2));
+}
+
+/* ── Phase 5: CutPointEditor ─────────────────────────────────────────────────── */
+
+.cut-point-editor-loading {
+  padding: var(--gruvax-space-6);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+}
+
+/* Single "add cut" affordance row at the bottom of the configured-bin list */
+.cut-point-add-affordance {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gruvax-space-4);
+  border: 2px dashed var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  background: var(--gruvax-off-white);
+  margin-top: var(--gruvax-space-2);
+}
+
+.cut-point-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-4);
+  max-width: 480px;
+  margin: 0 auto;
+  padding: var(--gruvax-space-4);
+}
+
+.cut-point-editor-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-4);
+}
+
+.cut-point-editor-back {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-transform: uppercase;
+  touch-action: manipulation;
+}
+
+.cut-point-editor-back:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.cut-point-editor-title {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.cut-point-list {
+  display: flex;
+  flex-direction: column;
+}
+
+.insert-cut-divider {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  cursor: pointer;
+  padding: 0 var(--gruvax-space-4);
+  border-radius: var(--gruvax-radius-sm);
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.insert-cut-divider:hover,
+.insert-cut-divider:focus-visible {
+  background: var(--gruvax-blue-faint);
+}
+
+.insert-cut-divider:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.insert-cut-divider::before,
+.insert-cut-divider::after {
+  content: '';
+  flex: 1;
+  height: 2px;
+  border-top: 2px dashed var(--gruvax-border-light);
+  transition: border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.insert-cut-divider:hover::before,
+.insert-cut-divider:hover::after {
+  border-color: var(--gruvax-blue);
+}
+
+.insert-cut-label {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  padding: 0 var(--gruvax-space-3);
+  white-space: nowrap;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.insert-cut-divider:hover .insert-cut-label {
+  color: var(--gruvax-blue);
+}
+
+.bin-card {
+  background: var(--gruvax-off-white);
+  border-radius: var(--gruvax-radius-md);
+  box-shadow: var(--gruvax-shadow-sm);
+  border: 1px solid var(--gruvax-border-light);
+  padding: var(--gruvax-space-4);
+  min-height: 80px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+  transition: border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.bin-card--editing {
+  border: 2px solid var(--gruvax-blue);
+  background: var(--gruvax-blue-faint);
+}
+
+.bin-card-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+}
+
+.bin-number-chip {
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: var(--gruvax-radius-md);
+  background: var(--gruvax-blue);
+  flex-shrink: 0;
+}
+
+.bin-number-chip-text {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 900;
+  color: var(--gruvax-white);
+  letter-spacing: var(--gruvax-tracking-display);
+}
+
+.bin-new-badge {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-label);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  color: var(--gruvax-blue-dark);
+  background: var(--gruvax-yellow);
+  border-radius: var(--gruvax-radius-pill);
+  padding: 1px var(--gruvax-space-1);
+  line-height: 1.2;
+}
+
+.bin-card-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+}
+
+.bin-starts-at {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  color: var(--gruvax-text-muted);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+}
+
+.bin-cut-record {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  color: var(--gruvax-text-secondary);
+}
+
+.bin-card-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+}
+
+.bin-edit-segments-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--gruvax-space-1) 0;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  touch-action: manipulation;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.bin-edit-segments-btn:hover {
+  text-decoration: underline;
+  color: var(--gruvax-blue-dark);
+}
+
+.bin-edit-segments-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.renumber-hint {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-3);
+  background: var(--gruvax-yellow-faint);
+  border-left: 3px solid var(--gruvax-yellow-dark);
+  border-radius: 0 var(--gruvax-radius-sm) var(--gruvax-radius-sm) 0;
+}
+
+.renumber-hint-icon {
+  flex-shrink: 0;
+  color: var(--gruvax-warning);
+}
+
+.renumber-hint-text {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-secondary);
+  margin: 0;
+}
+
+.contiguity-error-banner {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-3);
+  background: color-mix(in srgb, var(--gruvax-error) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gruvax-error) 30%, transparent);
+  border-radius: var(--gruvax-radius-md);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-error);
+}
+
+/* ── Phase 5: SegmentEditorPanel ─────────────────────────────────────────────── */
+
+.segment-editor-panel {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-5);
+  padding: var(--gruvax-space-4);
+  background: var(--gruvax-white);
+  border-radius: var(--gruvax-radius-lg);
+  box-shadow: var(--gruvax-shadow-sm);
+}
+
+.segment-editor-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.segment-editor-no-change {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  text-align: center;
+  margin: 0;
+}
+
+/* ── Phase 5: RecordPickerSheet ──────────────────────────────────────────────── */
+
+.record-picker-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gruvax-z-modal);
+  background: var(--gruvax-overlay-scrim);
+}
+
+.record-picker-sheet {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: calc(var(--gruvax-z-modal) + 1);
+  max-height: 80vh;
+  background: var(--gruvax-white);
+  border-radius: var(--gruvax-radius-xl) var(--gruvax-radius-xl) 0 0;
+  box-shadow: var(--gruvax-shadow-lg);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: sheet-slide-up var(--gruvax-duration-base) var(--gruvax-ease-decelerate);
+}
+
+@keyframes sheet-slide-up {
+  from { transform: translateY(100%); }
+  to   { transform: translateY(0); }
+}
+
+.record-picker-drag-handle {
+  width: 40px;
+  height: 4px;
+  background: var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-pill);
+  margin: var(--gruvax-space-2) auto var(--gruvax-space-1);
+  flex-shrink: 0;
+}
+
+.record-picker-header {
+  padding: var(--gruvax-space-2) var(--gruvax-space-4) var(--gruvax-space-3);
+  flex-shrink: 0;
+}
+
+.record-picker-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.record-picker-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--gruvax-space-4) var(--gruvax-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.record-picker-step-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  color: var(--gruvax-text-muted);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0 0 var(--gruvax-space-1);
+}
+
+.record-picker-row {
+  display: flex;
+  flex-direction: column;
+  padding: var(--gruvax-space-2) var(--gruvax-space-3);
+  min-height: 44px;
+  cursor: pointer;
+  background: var(--gruvax-white);
+  border: none;
+  border-bottom: 1px solid var(--gruvax-border-faint);
+  text-align: left;
+  touch-action: manipulation;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  width: 100%;
+}
+
+.record-picker-row:nth-child(even) {
+  background: var(--gruvax-off-white);
+}
+
+.record-picker-row:hover {
+  background: var(--gruvax-blue-faint);
+}
+
+.record-picker-row--selected {
+  background: var(--gruvax-blue-faint);
+  border-left: 3px solid var(--gruvax-blue);
+}
+
+.record-picker-row:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.record-picker-row-primary {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-primary);
+}
+
+.record-picker-row-secondary {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono-sm);
+  color: var(--gruvax-text-muted);
+}
+
+.record-picker-actions {
+  padding: var(--gruvax-space-3) var(--gruvax-space-4) var(--gruvax-space-7);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  flex-shrink: 0;
+  border-top: 1px solid var(--gruvax-border-faint);
+}
+
+.record-picker-commit-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-white);
+  background: var(--gruvax-blue);
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-5);
+  min-height: 48px;
+  cursor: pointer;
+  width: 100%;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.record-picker-commit-btn:hover:not(:disabled) {
+  background: var(--gruvax-blue-dark);
+}
+
+.record-picker-commit-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.record-picker-commit-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.record-picker-cancel-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--gruvax-space-2) 0;
+  width: 100%;
+  text-align: center;
+  touch-action: manipulation;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.record-picker-cancel-btn:hover {
+  color: var(--gruvax-text-primary);
+}
+
+.record-picker-cancel-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.record-picker-use-anyway {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-3);
+  background: color-mix(in srgb, var(--gruvax-warning) 10%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gruvax-warning) 35%, transparent);
+  border-radius: var(--gruvax-radius-md);
+}
+
+.record-picker-use-anyway-copy {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-primary);
+  margin: 0;
+}
+
+.record-picker-use-anyway-buttons {
+  display: flex;
+  gap: var(--gruvax-space-2);
+  flex-wrap: wrap;
+}
+
+/* ── Phase 5: DiffPreviewSheet extensions ────────────────────────────────────── */
+
+.diff-warning--orphan {
+  background: color-mix(in srgb, var(--gruvax-error) 10%, transparent);
+  color: var(--gruvax-error);
+  border: 1px solid color-mix(in srgb, var(--gruvax-error) 30%, transparent);
+}
+
+.diff-change-type-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-label);
+  font-weight: 700;
+  color: var(--gruvax-text-muted);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0 0 var(--gruvax-space-1);
+}
+
+/* ── Phase 5: Settings — Segment Overrides section ───────────────────────────── */
+
+.settings-review-overrides-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: 1px solid var(--gruvax-blue);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 44px;
+  cursor: pointer;
+  width: fit-content;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.settings-review-overrides-btn:hover:not(:disabled) {
+  background: var(--gruvax-blue-light);
+}
+
+.settings-review-overrides-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* Settings action button row (primary + secondary stacked) */
+.settings-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+/* Modifier variants (additive — no base rule override needed) */
+.settings-section--overrides {
+  /* No extra layout — inherits .settings-section flex column */
+}
+
+.settings-heading--xl {
+  /* Inherits .settings-heading — no size change needed for now */
+}
+
+.settings-number-input--mono {
+  /* Inherits .settings-number-input — DM Mono already applied */
+}
+
+/* ── Phase 5: RecordPickerSheet (sheet-* variant names) ─────────────────────── */
+/* RecordPickerSheet uses sheet-* class names distinct from record-picker-*.   */
+
+.sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gruvax-z-modal);
+  background: var(--gruvax-overlay-scrim);
+}
+
+.sheet-drag-pill {
+  width: 40px;
+  height: 4px;
+  background: var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-pill);
+  margin: var(--gruvax-space-2) auto var(--gruvax-space-1);
+  flex-shrink: 0;
+}
+
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--gruvax-space-4) var(--gruvax-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.sheet-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0 0 var(--gruvax-space-3);
+}
+
+.sheet-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-error);
+  margin: 0;
+}
+
+.sheet-actions {
+  padding: var(--gruvax-space-3) 0 var(--gruvax-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  flex-shrink: 0;
+  border-top: 1px solid var(--gruvax-border-faint);
+}
+
+/* sheet-commit-btn and sheet-cancel-btn extend editor-btn-primary/cancel */
+.sheet-commit-btn {
+  width: 100%;
+}
+
+.sheet-cancel-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--gruvax-space-2) 0;
+  width: 100%;
+  text-align: center;
+  touch-action: manipulation;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.sheet-cancel-btn:hover {
+  color: var(--gruvax-text-primary);
+}
+
+.sheet-cancel-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* ── Phase 5: insert-cut-divider-label ───────────────────────────────────────── */
+/* The span inside .insert-cut-divider */
+.insert-cut-divider-label {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  padding: 0 var(--gruvax-space-3);
+  white-space: nowrap;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.insert-cut-divider:hover .insert-cut-divider-label {
+  color: var(--gruvax-blue);
+}
+
+/* ── Phase 5: bin-card--new modifier ─────────────────────────────────────────── */
+/* Pending new bin card (local display only, not yet committed) */
+.bin-card--new {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--gruvax-yellow) 8%, transparent);
+}
+
+/* ── Phase 5: seg-chip--drifted ──────────────────────────────────────────────── */
+/* Override chip when drift > threshold (SegmentLegend) */
+.seg-chip--drifted {
+  background: color-mix(in srgb, var(--gruvax-warning) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gruvax-warning) 40%, transparent);
+  color: var(--gruvax-warning);
+}
+
+/* ── Phase 5: DiffPreviewSheet segment change rows ───────────────────────────── */
+
+.diff-field-before {
+  color: var(--gruvax-text-muted);
+}
+
+.diff-seg-change {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-2) 0;
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  border-bottom: 1px solid var(--gruvax-border-faint);
+}
+
+.diff-seg-change:last-child {
+  border-bottom: none;
+}
+
+.diff-seg-change-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-label);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.diff-seg-change-before {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  color: var(--gruvax-text-muted);
+  text-decoration: line-through;
+}
+
+.diff-seg-change-after {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  color: var(--gruvax-text-primary);
+}
+
+.diff-seg-change-value {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  color: var(--gruvax-text-secondary);
+}
+
+/* Change-type color accents */
+.diff-seg-change--cut .diff-seg-change-label {
+  color: var(--gruvax-blue);
+}
+
+.diff-seg-change--override .diff-seg-change-label {
+  color: var(--gruvax-yellow-dark);
+}
+
+.diff-seg-change--insert .diff-seg-change-label {
+  color: var(--gruvax-success);
+}
+
+.diff-seg-change--orphan .diff-seg-change-label {
+  color: var(--gruvax-warning);
+}
+
 /* ── Rollback toast (Phase 4 / RTM-03 / D-07) ─────────────────────────────── */
 /* Admin-surface only — never shown on KioskView. */
 /* All colors: var(--gruvax-*) tokens — no hardcoded hex (CLAUDE.md constraint). */
@@ -1710,4 +2668,866 @@
 @keyframes toast-exit {
   from { transform: translateX(-50%) translateY(0);   opacity: 1; }
   to   { transform: translateX(-50%) translateY(16px); opacity: 0; }
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Phase 05-05: CubesGrid — shelf-card list (sketch 002 shelf-level nav)
+   All colors: var(--gruvax-*) tokens only (CLAUDE.md constraint).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.shelves-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+  padding: var(--gruvax-space-4);
+  max-width: 480px;
+  margin: 0 auto;
+}
+
+.shelf-card {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-4);
+  background: var(--gruvax-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-lg);
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  cursor: pointer;
+  text-align: left;
+  width: 100%;
+  transition:
+    border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+    box-shadow var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.shelf-card:hover {
+  border-color: var(--gruvax-blue);
+  box-shadow: var(--gruvax-shadow-sm);
+}
+
+.shelf-card:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.shelf-card-info {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+}
+
+.shelf-card-name {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+}
+
+.shelf-card-count {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+}
+
+.shelf-card-chevron {
+  font-size: 20px;
+  color: var(--gruvax-text-muted);
+  flex-shrink: 0;
+}
+
+/* Mini 4×4 Kallax preview in shelf card */
+.shelf-mini-kallax {
+  display: grid;
+  grid-template-columns: repeat(4, 12px);
+  grid-template-rows: repeat(4, 12px);
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.shelf-mini-cell {
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  background: var(--gruvax-off-white);
+  border: 1px solid var(--gruvax-border-faint);
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.shelf-mini-cell--lit {
+  background: var(--gruvax-yellow);
+  border-color: var(--gruvax-yellow-dark);
+}
+
+.shelves-empty {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  text-align: center;
+  padding: var(--gruvax-space-6) 0;
+}
+
+.cubes-grid-loading,
+.cubes-grid-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  padding: var(--gruvax-space-6);
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Phase 05-05: ShelfBinList — sbl-* (faithful port of sketch 002 Variant A)
+   All colors: var(--gruvax-*) tokens only (CLAUDE.md constraint).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.sbl-screen {
+  display: flex;
+  flex-direction: column;
+  max-width: 480px;
+  margin: 0 auto;
+  padding-bottom: var(--gruvax-space-6);
+}
+
+/* Header: back + title */
+.sbl-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-4);
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  border-bottom: 1px solid var(--gruvax-border-faint);
+  flex-shrink: 0;
+}
+
+.sbl-back {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  touch-action: manipulation;
+}
+
+.sbl-back:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.sbl-title {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  margin: 0;
+}
+
+/* Locator header wrapper */
+.sbl-locator {
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  border-bottom: 1px solid var(--gruvax-border-faint);
+  flex-shrink: 0;
+}
+
+/* Bin-card list */
+.sbl-list {
+  display: flex;
+  flex-direction: column;
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  gap: 0;
+}
+
+/* Bin card (faithful port of .bincard in sketch 002) */
+.sbl-bincard {
+  background: var(--gruvax-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-lg);
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+}
+
+/* CHANGED-state modifier — the bin a commit just created/edited settles in
+   from a yellow "lit" state to normal (~3s). Nordic Grid: yellow = changed,
+   spring on (overshoot) → smooth fade off. */
+.sbl-bincard--changed {
+  animation: sbl-bin-settle 3s var(--gruvax-ease-standard) both;
+}
+
+@keyframes sbl-bin-settle {
+  0% {
+    transform: scale(0.97);
+    border-color: var(--gruvax-yellow-dark);
+    background: var(--gruvax-yellow-faint);
+    box-shadow: var(--gruvax-shadow-led);
+  }
+  12% {
+    transform: scale(1.01);
+    border-color: var(--gruvax-yellow-dark);
+    background: var(--gruvax-yellow-faint);
+    box-shadow: var(--gruvax-shadow-led);
+  }
+  22% {
+    transform: scale(1);
+    border-color: var(--gruvax-yellow-dark);
+    background: var(--gruvax-yellow-faint);
+    box-shadow: var(--gruvax-shadow-led);
+  }
+  100% {
+    transform: scale(1);
+    border-color: var(--gruvax-border-light);
+    background: var(--gruvax-white);
+    box-shadow: none;
+  }
+}
+
+/* Respect reduced-motion: skip the 3s settle, show a brief static highlight. */
+@media (prefers-reduced-motion: reduce) {
+  .sbl-bincard--changed {
+    animation: none;
+    border-color: var(--gruvax-yellow-dark);
+    background: var(--gruvax-yellow-faint);
+  }
+}
+
+/* Top row: bin-number chip + cut info + edit button */
+.sbl-bincard-top {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+}
+
+/* Square bin-number chip (faithful port of .binno in sketch 002) */
+.sbl-binno {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--gruvax-radius-sm);
+  background: var(--gruvax-blue);
+  color: var(--gruvax-white);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+/* "STARTS AT label · record" (faithful port of .cutinfo in sketch 002) */
+.sbl-cutinfo {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.sbl-cutinfo-k {
+  font-family: var(--gruvax-font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+}
+
+.sbl-cutinfo-v {
+  display: flex;
+  align-items: baseline;
+  gap: var(--gruvax-space-2);
+}
+
+.sbl-cutinfo-lab {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-text-primary);
+}
+
+.sbl-cutinfo-rec {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  color: var(--gruvax-text-muted);
+}
+
+/* Edit cut-point button (✎ pencil) */
+.sbl-editbtn {
+  background: transparent;
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-sm);
+  color: var(--gruvax-text-muted);
+  cursor: pointer;
+  padding: var(--gruvax-space-1) var(--gruvax-space-2);
+  font-size: 16px;
+  line-height: 1;
+  flex-shrink: 0;
+  min-width: 32px;
+  min-height: 32px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  touch-action: manipulation;
+  transition:
+    color var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+    border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.sbl-editbtn:hover {
+  color: var(--gruvax-blue);
+  border-color: var(--gruvax-blue);
+}
+
+.sbl-editbtn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* Mini read-only segment strip wrapper inside bin card */
+.sbl-ministrip-wrap {
+  margin: 0 0 var(--gruvax-space-1);
+}
+
+/* ✎ EDIT SEGMENTS button */
+.sbl-edit-segments-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: 1px solid var(--gruvax-blue);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 40px;
+  cursor: pointer;
+  width: 100%;
+  text-align: center;
+  touch-action: manipulation;
+  transition:
+    background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+    color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.sbl-edit-segments-btn:hover {
+  background: var(--gruvax-blue);
+  color: var(--gruvax-white);
+}
+
+.sbl-edit-segments-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* Dashed "＋ insert cut" divider (faithful port of .insert in sketch 002) */
+.sbl-insert {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-2) 0;
+}
+
+.sbl-insert-line {
+  flex: 1;
+  height: 1px;
+  border-top: 1px dashed var(--gruvax-border-light);
+}
+
+.sbl-insert-btn {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--gruvax-space-1) var(--gruvax-space-2);
+  white-space: nowrap;
+  touch-action: manipulation;
+  border-radius: var(--gruvax-radius-sm);
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.sbl-insert-btn:hover {
+  color: var(--gruvax-blue);
+}
+
+.sbl-insert-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* NEW badge (on newly-inserted placeholder) */
+/* Empty state */
+.sbl-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  padding: var(--gruvax-space-5) 0;
+}
+
+.sbl-empty-text {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+  text-align: center;
+}
+
+/* Unconfigured capacity hint */
+.sbl-unconfigured-hint {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  font-style: italic;
+  text-align: center;
+  padding: var(--gruvax-space-2) 0;
+  margin: 0;
+}
+
+/* Loading / error states */
+.cut-point-editor-loading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  padding: var(--gruvax-space-6);
+  text-align: center;
+}
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   Phase 05-05: BinWidthEditor — bwe-* (faithful port of sketch 001 Variant A)
+   All colors: var(--gruvax-*) tokens only (CLAUDE.md constraint).
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+.bwe-screen {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-4);
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 0 var(--gruvax-space-4) var(--gruvax-space-6);
+}
+
+/* Header: back + title */
+.bwe-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-4);
+  padding: var(--gruvax-space-3) 0;
+  border-bottom: 1px solid var(--gruvax-border-faint);
+}
+
+.bwe-back {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  touch-action: manipulation;
+  flex-shrink: 0;
+}
+
+.bwe-back:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.bwe-title {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  margin: 0;
+}
+
+/* Sum note: "{N} labels share this bin · widths always total 100%" */
+.bwe-sum-note {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-secondary);
+  margin: 0;
+}
+
+.bwe-sum-note b {
+  color: var(--gruvax-success);
+  font-weight: 700;
+}
+
+/* Strip wrapper — position:relative so handles can be absolutely positioned */
+.bwe-strip-wrap {
+  position: relative;
+  height: 48px;
+  user-select: none;
+  touch-action: none;
+}
+
+/* Proportional strip — contains segment divs */
+.bwe-strip {
+  display: flex;
+  height: 100%;
+  border-radius: var(--gruvax-radius-md);
+  overflow: hidden;
+}
+
+/* Individual segment bar (built via el() + replaceChildren) */
+.bwe-seg {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  position: relative;
+  overflow: hidden;
+  transition: width var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+/* Override: yellow LED top accent line (1px) */
+.bwe-seg--overridden::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 2px;
+  background: var(--gruvax-yellow);
+}
+
+/* Straddle: right-edge fade mask */
+.bwe-seg--continues::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: 24px;
+  background: linear-gradient(
+    to right,
+    transparent,
+    color-mix(in srgb, var(--gruvax-blue-darker) 60%, transparent)
+  );
+  pointer-events: none;
+}
+
+.bwe-seg-name {
+  font-family: var(--gruvax-font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: calc(100% - 4px);
+}
+
+.bwe-seg-pct {
+  font-family: var(--gruvax-font-mono);
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.bwe-seg-continues-icon {
+  position: absolute;
+  right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  opacity: 0.75;
+}
+
+/* Drag handle — absolutely positioned over strip-wrap */
+/* SINGLE white pill grip (6px × 46px) — faithful to sketch 001 */
+.bwe-handle {
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 26px;                 /* generous touch/hit target (sketch 001 .handle) */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: ew-resize;
+  z-index: 10;
+  transform: translateX(-50%);
+  touch-action: none;
+}
+
+.bwe-grip {
+  width: 6px;
+  height: 46px;
+  background: var(--gruvax-white);
+  border: 1.5px solid var(--gruvax-blue);   /* blue border = visible on any segment fill */
+  border-radius: var(--gruvax-radius-pill);
+  box-shadow: var(--gruvax-shadow-md);
+  transition:
+    background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+    border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+    transform var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  pointer-events: none;
+}
+
+/* Hover + active: white pill → yellow with LED glow (sketch 001) */
+.bwe-handle:hover .bwe-grip,
+.bwe-handle--dragging .bwe-grip {
+  background: var(--gruvax-yellow);
+  border-color: var(--gruvax-yellow-dark);
+  box-shadow: var(--gruvax-shadow-led);
+  transform: scaleY(1.08);
+}
+
+/* Continue caption (↪ label continues in BIN n+1) */
+.bwe-continue-cap {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-style: italic;
+  color: var(--gruvax-text-muted);
+  min-height: 18px;
+}
+
+.bwe-caption-mono {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+}
+
+/* Drag hint */
+.bwe-hint {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-style: italic;
+  color: var(--gruvax-text-muted);
+  margin: 0;
+}
+
+/* Membership-vs-cosmetics discoverability note (cut points = membership). */
+.bwe-membership-note {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  margin: var(--gruvax-space-1) 0 0;
+}
+
+/* Legend (white cards with AUTO/OVERRIDE chips) */
+.bwe-legend {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+}
+
+/* One legend row: swatch + main info + pct */
+.bwe-leg-row {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--gruvax-space-3);
+  background: var(--gruvax-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3);
+}
+
+.bwe-leg-swatch {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  flex-shrink: 0;
+  margin-top: 3px;
+}
+
+.bwe-leg-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+}
+
+.bwe-leg-nm {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-text-primary);
+}
+
+.bwe-leg-rng {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  color: var(--gruvax-text-muted);
+}
+
+/* Percentage display on right */
+.bwe-leg-pct {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  color: var(--gruvax-text-primary);
+  letter-spacing: -0.02em;
+  flex-shrink: 0;
+  line-height: 1;
+}
+
+/* AUTO chip (green tint) */
+.bwe-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-family: var(--gruvax-font-display);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  border-radius: var(--gruvax-radius-pill);
+  padding: 2px 8px;
+}
+
+.bwe-chip--auto {
+  background: color-mix(in srgb, var(--gruvax-success) 12%, transparent);
+  color: var(--gruvax-success);
+  border: 1px solid color-mix(in srgb, var(--gruvax-success) 30%, transparent);
+}
+
+/* OVERRIDE chip (yellow tint) */
+.bwe-chip--set {
+  background: color-mix(in srgb, var(--gruvax-yellow) 20%, transparent);
+  color: var(--gruvax-yellow-dark);
+  border: 1px solid color-mix(in srgb, var(--gruvax-yellow-dark) 35%, transparent);
+}
+
+.bwe-chip-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: currentColor;
+  flex-shrink: 0;
+}
+
+/* Reset link (inline button) */
+.bwe-reset-link {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+  touch-action: manipulation;
+}
+
+.bwe-reset-link:hover {
+  color: var(--gruvax-blue-dark);
+}
+
+.bwe-reset-link:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+/* Save/reset action row */
+.bwe-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  padding-top: var(--gruvax-space-2);
+}
+
+/* Primary save button */
+.bwe-btn-primary {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-white);
+  background: var(--gruvax-blue);
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-5);
+  min-height: 48px;
+  cursor: pointer;
+  width: 100%;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.bwe-btn-primary:hover:not(:disabled) {
+  background: var(--gruvax-blue-dark);
+}
+
+.bwe-btn-primary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+.bwe-btn-primary:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* Ghost "Reset to computed" button */
+.bwe-btn-ghost {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--gruvax-space-2) 0;
+  width: 100%;
+  text-align: center;
+  touch-action: manipulation;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.bwe-btn-ghost:hover:not(:disabled) {
+  color: var(--gruvax-text-secondary);
+}
+
+.bwe-btn-ghost:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.bwe-btn-ghost:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+  border-radius: var(--gruvax-radius-sm);
+}
+
+/* Success / error status messages */
+.editor-save-success {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-success);
+  margin: 0;
+}
+
+.editor-save-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-error);
+  margin: 0;
 }

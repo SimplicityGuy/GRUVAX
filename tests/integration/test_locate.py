@@ -37,11 +37,19 @@ COVERED_EXPECTED_CUBE = {"unit_id": 1, "row": 0, "col": 0}
 # release_id=999: not in v_collection (max is 152 in the synthetic seed)
 ABSENT_RELEASE_ID = 999
 
-# release_id=111: Saturn SR-9956-2-LP — in v_collection but no boundary covers it.
-# The boundary for unit_id=2, row=1, col=3 spans "Saturn"→"ESP", but the label
-# range check ("saturn" <= "saturn" <= "esp") fails because "saturn" > "esp"
-# alphabetically, so confidence=0.0.
-NO_BOUNDARY_RELEASE_ID = 111
+# release_id=119: Apple PCS 7088 — in v_collection but genuinely uncovered under
+# the cut-point model. Under the cut-point model, records are assigned to bins
+# by global (label.casefold(), parse_key(catalog)) sort. Apple sorts BEFORE the
+# lowest cut-point alphabetically (Apple < Atlantic < Blue Note...), so it falls
+# through without landing in any bin. SegmentCache.get_bins_for_label("Apple")
+# returns [] and get_segment_for_rank returns None → confidence=0.0, primary_cube=None.
+#
+# Reconciliation note: the old NO_BOUNDARY_RELEASE_ID=111 (Saturn SR-9956-2-LP)
+# relied on the retired last_* range-check semantics (migration 0005 dropped
+# last_label/last_catalog). Saturn is now COVERED via the cut-point at (2,1,3)
+# first_label="Saturn". Apple is the genuine no-boundary case in the seed under
+# the cut-point model (D-12 / SEG-01).
+NO_BOUNDARY_RELEASE_ID = 119
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -82,7 +90,7 @@ async def test_locate_covered(client) -> None:  # type: ignore[no-untyped-def]
         f"Expected primary_cube in label_span. label_span={body['label_span']}"
     )
     assert "T" in body.get("generated_at", ""), "generated_at must be ISO-8601"
-    assert body["estimator_version"] in ("cube-only-v1", "index-v1"), (
+    assert body["estimator_version"] in ("cube-only-v1", "index-v1", "segment-v1"), (
         f"Unexpected estimator_version: {body['estimator_version']!r}"
     )
     # sub_cube_interval is None (cube-only) or a dict (index-v1 with snapshot loaded)

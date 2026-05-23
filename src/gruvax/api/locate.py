@@ -7,7 +7,7 @@ Response (HTTP 200): Locked LocateResult JSON contract (D-10/D-11/D-12):
   ``{release_id, primary_cube, label_span, sub_cube_interval, confidence,
      generated_at, estimator_version}``
 
-The ``sub_cube_interval`` field (Phase 2) shape (UI-SPEC §TypeScript Type Extension):
+The ``sub_cube_interval`` field (Phase 5) shape (UI-SPEC §TypeScript Type Extension):
   ``{start, end, crosses_boundary, next_cube}``
   NOTE: the ``cube`` field of the SubInterval dataclass is NOT emitted — the frontend
   derives the cube from context (primary_cube / label_span).
@@ -27,12 +27,12 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from gruvax.api.deps import get_boundary_cache, get_collection_snapshot, get_pool
+from gruvax.api.deps import get_collection_snapshot, get_pool, get_segment_cache
 from gruvax.db.queries import get_release_for_locate
 from gruvax.estimator.algorithm import locate
-from gruvax.estimator.boundary_cache import BoundaryCache
 from gruvax.estimator.collection_snapshot import CollectionSnapshot
 from gruvax.estimator.contract import CubeRef, SubInterval
+from gruvax.estimator.segment_cache import SegmentCache
 
 logger = logging.getLogger(__name__)
 
@@ -64,14 +64,14 @@ async def locate_endpoint(
     request: Request,
     release_id: int,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
+    segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
 ) -> JSONResponse:
     """Return the locked LocateResult for a release.
 
     Looks up the release in ``gruvax.v_collection``, runs the position estimator
-    dispatcher (§4.1 index-based primary, §4.8 cube-only fallback), and returns
-    the JSON result.
+    dispatcher (segment-aware two-level interpolation primary, §4.8 cube-only fallback),
+    and returns the JSON result.
 
     Args:
         release_id: Discogs release ID (integer; 422 on non-integer T-01-09).
@@ -80,7 +80,7 @@ async def locate_endpoint(
         HTTP 200 with the LocateResult JSON on success (including no-boundary case).
         HTTP 404 with ``{type: "release_not_in_collection"}`` if not in collection.
 
-    The JSON shape (Phase 2 extension of the Phase 1 contract):
+    The JSON shape (Phase 5 extension of the contract):
       ``{release_id, primary_cube, label_span, sub_cube_interval,
          confidence, generated_at, estimator_version}``
     where ``sub_cube_interval`` is ``{start, end, crosses_boundary, next_cube}``
@@ -104,7 +104,7 @@ async def locate_endpoint(
         release_id=release_id,
         label=label,
         catalog_number=catalog_number,
-        cache=cache,
+        segment_cache=segment_cache,
         snapshot=snapshot,
     )
 

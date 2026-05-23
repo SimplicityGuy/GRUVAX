@@ -22,10 +22,12 @@ cases:
     release_id: 1
     k: 1
     idx: 0
-    # Singleton: full-cube band regardless of index
-    expected_start: 0.0
-    expected_end: 1.0
-    expected_confidence: 0.30     # CUBE_ONLY_CONFIDENCE (D-02)
+    # Singleton (Phase 5 / locate_by_segment): midpoint band.
+    # segment_count=1 → singleton branch: f = offset + applied_fraction * 0.5 = 0.5
+    # start = max(0, 0.5 - 0.05) = 0.45, end = min(1, 0.5 + 0.05) = 0.55
+    expected_start: 0.45
+    expected_end: 0.55
+    expected_confidence: 0.30     # CUBE_ONLY_CONFIDENCE (D-02): singleton stays at 0.30
     expected_crosses_boundary: false
     tolerance: 0.001
 
@@ -133,19 +135,24 @@ cases:
 
   # ── Two-cube span: label occupies 2 cubes (CUBE-03) ─────────────────────────
   # Note: label_span >= 2 is exercised by the integration test test_multi_cube_label_span.
-  # This unit golden case documents §4.1 for a record whose label spans two cubes.
-  # The test builder creates two cubes: cube0 covers TC 001-TC 005, cube1 TC 006-TC 010.
-  # TC 005 falls in cube0 only (catalog_in_range for cube0 includes TC 005).
-  # f = 4/9 ≈ 0.444 (single-cube path applies since label_span=[cube0]).
-  # start = max(0, 0.444 - 0.05) = 0.394, end = min(1, 0.444 + 0.05) = 0.494
+  # Phase 5 / locate_by_segment: TC 005 is rank=4 (0-based) in 10 records.
+  # SegmentCache assigns TC 001..TC 005 (ranks 0-4, count=5) to bin col=0,
+  # and TC 006..TC 010 (ranks 5-9, count=5) to bin col=1.
+  # Each bin has TwoCubeGold as its SOLE label, so applied_fraction=1.0 per bin.
+  # For TC 005 (rank=4) in bin col=0:
+  #   segment_count=5, applied_fraction=1.0, offset=0.0
+  #   rank_in_segment = 4 - 0 = 4
+  #   f = 0.0 + (4 / (5-1)) * 1.0 = 1.0
+  #   start = max(0, 1.0 - 0.05) = 0.95, end = min(1, 1.0 + 0.05) = 1.0
+  #   crosses_boundary = True (seg.continues=True — TwoCubeGold extends into col=1)
   - id: two_cube_span_label_crosses_both
     label: TwoCubeGold
     catalog_number: "TC 005"
     release_id: 5
     k: 10
-    idx: 4     # f = 4/9 ≈ 0.444; single-cube path (label_span=[cube0] for TC 005)
-    expected_start: 0.394
-    expected_end: 0.494
+    idx: 4     # rank=4 in bin col=0 (last rank in this bin; applied_fraction=1.0)
+    expected_start: 0.95
+    expected_end: 1.0
     expected_confidence: 0.70    # compute_confidence(k=10): min(0.70, 0.50+0.05*(10-3))=0.70
-    expected_crosses_boundary: false
+    expected_crosses_boundary: true  # seg.continues=True (TwoCubeGold spans two bins)
     tolerance: 0.005    # slightly looser for float division

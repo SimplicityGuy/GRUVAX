@@ -173,14 +173,12 @@ async def test_editing_fans_out(live_server) -> None:  # type: ignore[no-untyped
         f"Expected 200 from POST /api/admin/editing, got {res.status_code}: {res.text}"
     )
     body = res.json()
-    assert body == {"ok": True}, f"Expected {{\"ok\": true}}, got {body}"
+    assert body == {"ok": True}, f'Expected {{"ok": true}}, got {body}'
 
     try:
         await asyncio.wait_for(received.wait(), timeout=1.0)
     except TimeoutError:
         sse_task.cancel()
-        pytest.fail(
-            "admin_editing event not received via SSE within 1s — RTM-04 gate FAILED"
-        )
+        pytest.fail("admin_editing event not received via SSE within 1s — RTM-04 gate FAILED")
 
     sse_task.cancel()

@@ -34,6 +34,7 @@
 
   --gruvax-white:         #FFFFFF;   /* Primary background */
   --gruvax-off-white:     #F7F9FC;   /* Secondary surface */
+  --gruvax-overlay-scrim: rgba(0, 40, 85, 0.55); /* Modal / bottom-sheet backdrop · blue-darker @ 55% */
 
   /* ─────────────────────────────────────────
      COLOR — UI SEMANTIC

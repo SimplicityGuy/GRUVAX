@@ -155,7 +155,7 @@ Copy `.env.example` to `.env` and set your values. Key variables:
 | `GRUVAX_DB_NAME` | `gruvax` | Database name |
 | `OBSERVED_DISCOGSOGRAPHY_SCHEMA` | `gruvax_dev` | Schema holding collection source tables |
 
-**DB connectivity from inside Docker (Linux):** The gruvax-api container reaches the host Postgres
+**DB connectivity from inside Docker (Linux):** The `api` service container reaches the host Postgres
 via `host.docker.internal`. On Linux, this resolves via the `extra_hosts: host-gateway` line
 in `compose.yaml`. On macOS/Windows, `host.docker.internal` is built in.
 
@@ -165,7 +165,7 @@ in `compose.yaml`. On macOS/Windows, `host.docker.internal` is built in.
 gruvax/
 ├── pyproject.toml           # Python project (uv-managed)
 ├── uv.lock                  # Python lockfile
-├── compose.yaml             # Docker Compose: gruvax-api + mosquitto
+├── compose.yaml             # Docker Compose: api + mosquitto (container: gruvax-api-1)
 ├── Dockerfile               # Multi-stage: frontend build + Python runtime
 ├── justfile                 # Task runner: test, lint, migrate, seed-dev, up
 ├── alembic.ini              # Alembic migration config

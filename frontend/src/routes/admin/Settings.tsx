@@ -1,21 +1,27 @@
 /**
- * Settings page — /admin/settings (UI-SPEC §G).
+ * Settings page — /admin/settings (UI-SPEC §G, §H).
  *
  * Phase 3 scope:
  *   - Change PIN (current PIN + new 4-digit PIN)
  *   - Nominal cube capacity (integer ≥ 1, default 95)
  *   - Idle session timeout (5–30 minutes, default 10)
  *
- * LED settings (Phase 5) are deferred — D-18.
+ * Phase 5 additions (UI-SPEC §H):
+ *   - Segment override drift alert threshold (integer 1–20 percentage points, default 3)
+ *   - REVIEW OVERRIDES secondary button
+ *
+ * LED settings are deferred.
  */
 
 import { useEffect, useState } from 'react'
+import { useNavigate } from 'react-router'
 import { changePin, getAdminSettings, putAdminSettings } from '../../api/adminClient'
 import './admin.css'
 
 type SaveStatus = 'idle' | 'saving' | 'saved' | 'error'
 
 export function Settings() {
+  const navigate = useNavigate()
   const [capacity, setCapacity] = useState(95)
   const [idleMin, setIdleMin] = useState(10)
   const [settingsStatus, setSettingsStatus] = useState<SaveStatus>('idle')
@@ -25,6 +31,11 @@ export function Settings() {
   const [newPin, setNewPin] = useState('')
   const [pinStatus, setPinStatus] = useState<SaveStatus>('idle')
   const [pinError, setPinError] = useState('')
+
+  // Phase 5: drift threshold (UI-SPEC §H)
+  const [driftThresholdPct, setDriftThresholdPct] = useState(3)
+  const [driftStatus, setDriftStatus] = useState<SaveStatus>('idle')
+  const [driftError, setDriftError] = useState('')
 
   // Load current settings on mount — use backend key names (WR-01)
   useEffect(() => {
@@ -52,6 +63,21 @@ export function Settings() {
     } catch {
       setSettingsStatus('error')
       setSettingsError('Failed to save settings. Please try again.')
+    }
+  }
+
+  // Phase 5: Save drift threshold (stored client-side via localStorage for now;
+  // no backend endpoint yet — D-03 deferred to backend settings extension).
+  const handleSaveDriftThreshold = async () => {
+    setDriftStatus('saving')
+    setDriftError('')
+    try {
+      localStorage.setItem('gruvax_drift_threshold_pct', String(driftThresholdPct))
+      setDriftStatus('saved')
+      setTimeout(() => setDriftStatus('idle'), 2000)
+    } catch {
+      setDriftStatus('error')
+      setDriftError('Could not save drift threshold.')
     }
   }
 
@@ -199,6 +225,63 @@ export function Settings() {
         >
           {settingsStatus === 'saving' ? 'SAVING…' : 'SAVE SETTINGS'}
         </button>
+      </section>
+
+      {/* ── Segment Overrides (Phase 5, UI-SPEC §H) ─────────────────────────── */}
+      <section className="settings-section settings-section--overrides" aria-labelledby="overrides-heading">
+        <h2 id="overrides-heading" className="settings-heading settings-heading--xl">
+          SEGMENT OVERRIDES
+        </h2>
+
+        <div className="settings-field">
+          <label className="settings-label" htmlFor="drift-threshold">
+            DRIFT ALERT THRESHOLD (% POINTS)
+          </label>
+          <input
+            id="drift-threshold"
+            type="number"
+            min={1}
+            max={20}
+            value={driftThresholdPct}
+            onChange={(e) =>
+              setDriftThresholdPct(
+                Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 3)),
+              )
+            }
+            className="settings-number-input settings-number-input--mono"
+          />
+          <p className="settings-hint">
+            Show a review alert when an override drifts more than this far from
+            the row-count fraction. Default: 3%.
+          </p>
+        </div>
+
+        {driftError && (
+          <p className="settings-error" role="alert">{driftError}</p>
+        )}
+
+        {driftStatus === 'saved' && (
+          <p className="settings-success" role="status">Drift threshold saved.</p>
+        )}
+
+        <div className="settings-actions">
+          <button
+            type="button"
+            className="settings-btn-primary"
+            onClick={() => { void handleSaveDriftThreshold() }}
+            disabled={driftStatus === 'saving'}
+          >
+            {driftStatus === 'saving' ? 'SAVING…' : 'SAVE THRESHOLD'}
+          </button>
+
+          <button
+            type="button"
+            className="settings-review-overrides-btn"
+            onClick={() => void navigate('/admin/cubes')}
+          >
+            REVIEW OVERRIDES
+          </button>
+        </div>
       </section>
     </div>
   )

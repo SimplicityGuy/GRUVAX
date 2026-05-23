@@ -102,9 +102,7 @@ async def test_login_success(client) -> None:  # type: ignore[no-untyped-def]
 async def test_login_wrong_pin(client) -> None:  # type: ignore[no-untyped-def]
     """POST /api/admin/login with wrong PIN returns 401 (ADMN-01)."""
     response = await client.post("/api/admin/login", json={"pin": "9999"})
-    assert response.status_code == 401, (
-        f"Expected 401 for wrong PIN, got {response.status_code}"
-    )
+    assert response.status_code == 401, f"Expected 401 for wrong PIN, got {response.status_code}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -160,9 +158,7 @@ async def test_cookie_flags(client) -> None:  # type: ignore[no-untyped-def]
 
     # Check raw Set-Cookie headers for HttpOnly attribute
     set_cookie_headers = response.headers.get_list("set-cookie")
-    session_cookie_header = next(
-        (h for h in set_cookie_headers if "gruvax_session" in h), None
-    )
+    session_cookie_header = next((h for h in set_cookie_headers if "gruvax_session" in h), None)
     assert session_cookie_header is not None, "gruvax_session Set-Cookie header missing"
     assert "httponly" in session_cookie_header.lower(), (
         "gruvax_session must be HttpOnly (SPA must NOT read it directly)"
@@ -181,9 +177,7 @@ async def test_csrf_cookie_readable(client) -> None:  # type: ignore[no-untyped-
         pytest.skip("Login not yet implemented — skipping CSRF cookie flag test")
 
     set_cookie_headers = response.headers.get_list("set-cookie")
-    csrf_cookie_header = next(
-        (h for h in set_cookie_headers if "gruvax_csrf" in h), None
-    )
+    csrf_cookie_header = next((h for h in set_cookie_headers if "gruvax_csrf" in h), None)
     assert csrf_cookie_header is not None, "gruvax_csrf Set-Cookie header missing"
     assert "httponly" not in csrf_cookie_header.lower(), (
         "gruvax_csrf must NOT be HttpOnly (SPA must be able to read it)"
@@ -205,9 +199,7 @@ async def test_logout(client) -> None:  # type: ignore[no-untyped-def]
         cookies=login_res.cookies,
         headers={"X-CSRF-Token": csrf_token or ""},
     )
-    assert logout_res.status_code == 200, (
-        f"Expected 200 from logout, got {logout_res.status_code}"
-    )
+    assert logout_res.status_code == 200, f"Expected 200 from logout, got {logout_res.status_code}"
 
     # After logout, session must be revoked — a session-gated request must return 401
     verify_res = await client.get(

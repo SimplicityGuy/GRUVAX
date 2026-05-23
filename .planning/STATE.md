@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: planning
-last_updated: "2026-05-22T03:42:45.123Z"
+status: "Phase 05 shipped — PR #8"
+last_updated: "2026-05-23T23:00:40.298Z"
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 4
-  total_plans: 17
-  completed_plans: 17
-  percent: 50
+  total_plans: 24
+  completed_plans: 22
+  percent: 44
 ---
 
 # State: GRUVAX
@@ -20,7 +20,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 5 — segment-aware position precision
+**Current Focus:** Phase 05 — segment-aware-position-precision
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -28,13 +28,13 @@ progress:
 
 ## Current Position
 
-Phase: 04 (Realtime Live Updates) — EXECUTING
-Plan: 1 of 4
+Phase: 05 (segment-aware-position-precision) — EXECUTING
+Plan: 1 of 6
 
-- **Phase:** 5
+- **Phase:** 6
 - **Plan:** Not started
-- **Status:** Ready to plan
-- **Progress:** [██████████] 100% (Phase 02)
+- **Status:** Phase 05 shipped — PR #8
+- **Progress:** Phase 05: 1/5 plans complete
 
 ```
 Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
@@ -105,6 +105,7 @@ Phase 8: Observability + Deployment Hardening       [ ] Not started
 - [Phase 02-02]: **onTap calls setQuery (not direct locate)** — D-10 explicit user confirmation; no silent auto-correct; user sees corrected term in search box.
 - [Phase 02-04]: **CUBE_ONLY_NULL_MIDPOINT=0.5** — §4.8 null sub_cube_interval scored as midpoint of cube for MAE comparison; worst-case analysis per plan spec.
 - [Phase 02-04]: **session-scoped harness_results fixture** — run_all_algorithms(ci=True) called once per pytest session; all CI tests consume shared per-shape {index, cube_only} dict.
+- [Phase 05-01]: **BoundaryRow contract change under-scoped at plan time** — dropping `last_label`/`last_catalog` (migration 0005) ripples through more consumers than 05-02..05-05 covered. Post-merge gate caught ~40 RED tests + 12 mypy errors. 05-01's work is correct and merged; Waves 2–5 are being re-planned to add orphan coverage (`api/units.py`, `db/seed_boundaries.py`, `db/queries.py`, `boundary_cache.py:100`, ~11 test files). **Lesson:** plans that change a shared dataclass/DDL contract must include an explicit consumer-sweep (grep audit) covering every construction/SQL/test site, and each wave must leave the suite green. Full inventory: `05-REPLAN-NOTES.md`.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
 
@@ -130,6 +131,8 @@ None.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260522-u48 | Rename docker compose service gruvax-api → api (container gruvax-api-1) | 2026-05-23 | b753bd2 | [260522-u48-rename-docker-compose-service-gruvax-api](./quick/260522-u48-rename-docker-compose-service-gruvax-api/) |
+| 260522-mwy | Fix Docker venv shebangs so console scripts (gruvax-set-pin) run directly | 2026-05-22 | 1695cd5 | [260522-mwy-fix-docker-cli-shebangs](./quick/260522-mwy-fix-docker-cli-shebangs/) |
 | 260521-jb3 | Replace eslint set-state-in-effect suppressions with real refactors in admin UI | 2026-05-21 | 9c26bbf | [260521-jb3-replace-eslint-set-state-in-effect-suppr](./quick/260521-jb3-replace-eslint-set-state-in-effect-suppr/) |
 | 260521-g3o | Fix all 8 eslint errors in the frontend admin UI | 2026-05-21 | b093e9f | [260521-g3o-fix-all-8-eslint-errors-in-the-frontend-](./quick/260521-g3o-fix-all-8-eslint-errors-in-the-frontend-/) |
 | 260521-fn0 | Fix all 8 findings from the Phase 3 UI audit in the frontend admin UI | 2026-05-21 | b47c097 | [260521-fn0-fix-all-8-findings-from-the-phase-3-ui-a](./quick/260521-fn0-fix-all-8-findings-from-the-phase-3-ui-a/) |
@@ -138,8 +141,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-20 (Phase 03 context gathered — admin loop decisions D-01..D-18 captured in 03-CONTEXT.md)
-**Next action:** Phase 03 context ready — run `/gsd:plan-phase 3` (or `/gsd:ui-phase 3` first; this phase is UI-heavy). Resume file: `.planning/phases/03-admin-loop-pin-manual-entry-undo/03-CONTEXT.md`.
+**Last touched:** 2026-05-23 (Phase 05 FULLY VERIFIED — gap-closure 05-06 complete (6/6 plans) + all 6 UAT items pass. SEG-05 label-contiguity enforced on the LIVE admin write paths PUT /cut + POST /insert-cut (400 type=contiguity_error before any DB write) via build_proposed_cuts→validate_contiguity, surfaced in RecordPickerSheet (sheet stays open), orphaned /admin/preview + DiffPreviewSheet/RollbackToast removed. UAT test 6 RE-VERIFIED LIVE via Playwright on the rebuilt stack — the container image predated 05-06 so it was rebuilt (docker compose up -d --build api) and the dev DB was DROPPED + RE-SEEDED from fixtures (which also cleared the cut_insert pollution → test_migrate_0005 now passes → full backend suite exits 0). 05-VERIFICATION.md status=passed. Admin PIN re-seeded to 0000 after the DB drop.)
+**Next action:** Phase 05 is COMPLETE across every gate — 6/6 plans, UAT 6/6 pass, 05-VERIFICATION.md status=passed, 05-SECURITY.md SECURED (24/24, threats_open=0), and code-review fixes applied (05-REVIEW-FIX.md: WR-04 fixed — contiguity message now shows proper-case "Blue Note", confirmed live; WR-01 docstring marked deferred; WR-03 freshness comment added; WR-02 deliberately deferred — real cross-unit gap needing its own plan; INFO items out of scope). Container rebuilt so the live stack carries the WR-04 fix. Ready for Phase 6 (LED Contract over MQTT, hardware-stubbed): `/clear` then `/gsd-discuss-phase 6` or `/gsd-plan-phase 6`. REMAINING DEFERRED (future hardening, own plan): WR-02 cross-unit contiguity (build_proposed_cuts is unit-scoped) and WR-01 step-5 SegmentCache occupancy cross-check (validate_contiguity only checks bin-START labels) — both documented in 05-REVIEW.md / 05-REVIEW-FIX.md, beyond the SEG-05 must-haves.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*

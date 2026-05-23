@@ -127,9 +127,10 @@ async def admin_session(client: Any) -> dict[str, Any]:  # type: ignore[no-untyp
 def boundary_cache() -> list[dict[str, Any]]:
     """Load ``fixtures/boundaries.yaml`` and return the flat list of cube rows.
 
-    Each row is a dict matching the ``gruvax.cube_boundaries`` column shape:
-      unit_id, row, col, first_label, first_catalog, last_label, last_catalog,
-      is_empty.
+    Phase 5 update: Each row is a dict matching the updated ``gruvax.cube_boundaries``
+    column shape (cut-point model): unit_id, row, col, first_label, first_catalog,
+    is_empty. The last_label / last_catalog keys have been removed from the YAML
+    (SEG-01 / D-05). Any stale last_* keys in older YAML files are silently ignored.
 
     This fixture does NOT require a live database and is safe to use in unit
     and property tests.
@@ -139,5 +140,7 @@ def boundary_cache() -> list[dict[str, Any]]:
     for unit in data["units"]:
         unit_id: int = unit["unit_id"]
         for cube in unit["cubes"]:
-            cubes.append({**cube, "unit_id": unit_id})
+            # Ignore stale last_* keys from older YAML files (Phase 5 compatibility)
+            clean_cube = {k: v for k, v in cube.items() if k not in ("last_label", "last_catalog")}
+            cubes.append({**clean_cube, "unit_id": unit_id})
     return cubes

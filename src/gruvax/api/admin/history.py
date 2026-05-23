@@ -118,64 +118,69 @@ async def revert_change_set(
             original_changed_at = hist["changed_at"]
 
             # Conflict check: is there a newer history row for this cube?
-            conflict = await has_newer_changes(
-                conn, unit_id, row_idx, col_idx, original_changed_at
-            )
+            conflict = await has_newer_changes(conn, unit_id, row_idx, col_idx, original_changed_at)
             if conflict:
-                skipped.append({
-                    "unit_id": unit_id,
-                    "row": row_idx,
-                    "col": col_idx,
-                })
+                skipped.append(
+                    {
+                        "unit_id": unit_id,
+                        "row": row_idx,
+                        "col": col_idx,
+                    }
+                )
                 continue
 
-            # Restore prev_* values to cube_boundaries
+            # Restore prev_* values to cube_boundaries.
+            # Phase 5 (SEG-01): cube_boundaries no longer has last_* columns.
+            # Revert restores only first_label, first_catalog, and is_empty.
+            # The prev_last_* columns in boundary_history are nullable audit
+            # artifacts (A1) — they may be NULL for rows from 0005 onwards.
             prev_first_label = hist.get("prev_first_label")
             prev_first_catalog = hist.get("prev_first_catalog")
-            prev_last_label = hist.get("prev_last_label")
-            prev_last_catalog = hist.get("prev_last_catalog")
-            # WR-07: If any boundary column is NULL, coerce is_empty=True to avoid
-            # the empty_or_complete CHECK violation (prev_is_empty=False with NULLs).
+            # WR-07 (updated for cut-point model): coerce is_empty=True if
+            # first_* columns are NULL — the old empty_or_complete/last_* check
+            # no longer applies; only first_* completeness matters now.
             prev_is_empty_raw = bool(hist.get("prev_is_empty", True))
-            has_complete_boundary = all([
-                prev_first_label, prev_first_catalog,
-                prev_last_label, prev_last_catalog,
-            ])
-            prev_is_empty = prev_is_empty_raw or not has_complete_boundary
+            has_cut_point = bool(prev_first_label and prev_first_catalog)
+            prev_is_empty = prev_is_empty_raw or not has_cut_point
 
             await write_boundary(
                 conn,
-                unit_id, row_idx, col_idx,
-                prev_first_label, prev_first_catalog,
-                prev_last_label, prev_last_catalog,
+                unit_id,
+                row_idx,
+                col_idx,
+                prev_first_label,
+                prev_first_catalog,
                 prev_is_empty,
             )
 
-            # Record the inverse change in history (source='revert')
-            # The "prev" for this revert row is the *current* (new_*) values
+            # Record the inverse change in history (source='revert').
+            # The "prev" for this revert row is the *current* (new_*) values.
+            # last_* fields are omitted from the prev dict (not in cube_boundaries).
             prev_for_revert: dict[str, Any] = {
                 "first_label": hist.get("new_first_label"),
                 "first_catalog": hist.get("new_first_catalog"),
-                "last_label": hist.get("new_last_label"),
-                "last_catalog": hist.get("new_last_catalog"),
                 "is_empty": bool(hist.get("new_is_empty", True)),
             }
             await write_history_row(
                 conn,
                 new_change_set_id,
-                unit_id, row_idx, col_idx,
+                unit_id,
+                row_idx,
+                col_idx,
                 prev_for_revert,
-                prev_first_label, prev_first_catalog,
-                prev_last_label, prev_last_catalog,
+                prev_first_label,
+                prev_first_catalog,
                 prev_is_empty,
                 source="revert",
             )
 
-            reverted.append({
-                "unit_id": unit_id,
-                "row": row_idx,
-                "col": col_idx,
-            })
+            reverted.append(
+                {
+                    "unit_id": unit_id,
+                    "row": row_idx,
+                    "col": col_idx,
+                }
+            )
 
     # WR-11: Removed the dead `not reverted and not skipped` 404 branch.
     # `fetch_change_set_rows` returned non-empty rows (otherwise we 404'd above),

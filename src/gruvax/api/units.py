@@ -12,11 +12,16 @@ Endpoints:
       ``is_empty=true``. Row/col are 0-based.
 
   - ``GET /api/cubes/{unit_id}/{row}/{col}``:
-      Returns one cube's boundary metadata (first/last label+catalog,
+      Returns one cube's boundary metadata (first_label, first_catalog,
       is_empty) PLUS fill_level, total_count, and sample_records computed
-      from the in-memory snapshot (no DB during compute, D-13/D-14).
+      from the in-memory SegmentCache and snapshot (no DB during compute, D-13/D-14).
       Typed int path params; FastAPI returns 422 on non-int.
       Public endpoint — no admin auth required (D-15).
+
+Phase 5 changes:
+  - last_label/last_catalog removed from DB SELECT and BoundaryRow construction (SEG-01).
+  - fill_level/count computed via SegmentCache.get_bin + count_records_in_bin (no last_*).
+  - sample_records computed via get_records_in_bin(bin_, snapshot) + sample_records().
 """
 
 from __future__ import annotations
@@ -26,10 +31,16 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
-from gruvax.api.deps import get_boundary_cache, get_collection_snapshot, get_pool
+from gruvax.api.deps import (
+    get_boundary_cache,
+    get_collection_snapshot,
+    get_pool,
+    get_segment_cache,
+)
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
-from gruvax.estimator.boundary_math import get_records_in_boundary, sample_records
+from gruvax.estimator.boundary_math import count_records_in_bin, get_records_in_bin, sample_records
 from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.estimator.segment_cache import SegmentCache
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +79,7 @@ async def get_cubes_bulk(
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
+    segment_cache: SegmentCache = Depends(get_segment_cache),
 ) -> dict[str, Any]:
     """Return all cube boundary rows with their empty-state flag and fill level.
 
@@ -77,14 +89,14 @@ async def get_cubes_bulk(
     ``/api/locate`` and ``/api/cubes/{unit_id}/{row}/{col}``.
     The kiosk SPA uses this endpoint to render:
       - CUBE-05 empty state for cubes flagged ``is_empty=true``
-      - CUBE-07 fill bars (fill_level 0.0-1.0+) from the in-memory snapshot
+      - CUBE-07 fill bars (fill_level 0.0-1.0+) from the in-memory segment cache
 
-    ``fill_level`` is computed from the in-memory snapshot (no extra DB calls
-    during compute, D-13 / T-03-12). The full boundary fields (first_label etc.)
-    are also fetched so they can be used to build BoundaryRow objects for compute.
+    ``fill_level`` is computed from the in-memory SegmentCache (no extra DB calls
+    during compute, D-13 / T-03-12). Phase 5: uses count_records_in_bin(SegmentBin).
     """
+    # Phase 5: fetch only cut-point columns (last_* dropped in SEG-01 migration 0005)
     sql = """
-SELECT unit_id, row, col, first_label, first_catalog, last_label, last_catalog, is_empty
+SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
 ORDER BY unit_id, row, col
 """
@@ -100,25 +112,24 @@ ORDER BY unit_id, row, col
     cubes = []
     for raw in rows_raw:
         row_dict = dict(zip(cols_meta, raw, strict=True))
-        boundary = BoundaryRow(
-            unit_id=row_dict["unit_id"],
-            row=row_dict["row"],
-            col=row_dict["col"],
-            first_label=row_dict["first_label"],
-            first_catalog=row_dict["first_catalog"],
-            last_label=row_dict["last_label"],
-            last_catalog=row_dict["last_catalog"],
-            is_empty=row_dict["is_empty"],
+        unit_id = row_dict["unit_id"]
+        row = row_dict["row"]
+        col = row_dict["col"]
+
+        # Phase 5: compute fill_level via SegmentCache (no last_* needed)
+        seg_bin = segment_cache.get_bin(unit_id, row, col)
+        count = count_records_in_bin(seg_bin) if seg_bin else 0
+        fill_level = count / max(nominal_capacity, 1)
+
+        cubes.append(
+            {
+                "unit_id": unit_id,
+                "row": row,
+                "col": col,
+                "is_empty": row_dict["is_empty"],
+                "fill_level": fill_level,
+            }
         )
-        records_in_range = get_records_in_boundary(boundary, snapshot)
-        fill_level = len(records_in_range) / max(nominal_capacity, 1)
-        cubes.append({
-            "unit_id": row_dict["unit_id"],
-            "row": row_dict["row"],
-            "col": row_dict["col"],
-            "is_empty": row_dict["is_empty"],
-            "fill_level": fill_level,
-        })
 
     return {"cubes": cubes}
 
@@ -132,6 +143,7 @@ async def get_cube(
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
+    segment_cache: SegmentCache = Depends(get_segment_cache),
 ) -> dict[str, Any]:
     """Return one cube's boundary metadata plus fill level, count, and sample records.
 
@@ -144,11 +156,12 @@ async def get_cube(
         col:     Column index (0-indexed). FastAPI returns 422 on non-int.
 
     Returns:
-        ``{unit_id, row, col, first_label, first_catalog, last_label, last_catalog,
-           is_empty, total_count, fill_level, sample_records}``
+        ``{unit_id, row, col, first_label, first_catalog, is_empty,
+           total_count, fill_level, sample_records}``
 
+        Note: last_label and last_catalog are dropped (Phase 5 / SEG-01 migration 0005).
         ``fill_level`` is total_count / nominal_capacity (may exceed 1.0 for
-        overstuffed cubes). Computed from in-memory snapshot — no DB during compute
+        overstuffed cubes). Computed from in-memory SegmentCache — no DB during compute
         (D-13, T-03-12).
 
         ``sample_records`` is a list of up to 7 evenly-spaced records from the range
@@ -156,8 +169,9 @@ async def get_cube(
 
     HTTP 404 if no cube boundary row exists for the given coordinates (T-03-11).
     """
+    # Phase 5: fetch only cut-point columns (last_* dropped in SEG-01 migration 0005)
     sql = """
-SELECT unit_id, row, col, first_label, first_catalog, last_label, last_catalog, is_empty
+SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
 WHERE unit_id = %s AND row = %s AND col = %s
 """
@@ -174,17 +188,14 @@ WHERE unit_id = %s AND row = %s AND col = %s
 
     result = dict(zip(cols_meta, row_raw, strict=True))
 
-    # Build a BoundaryRow from the DB result to feed the in-memory compute helpers.
-    # This avoids a second DB query — the boundary cache may lag slightly after an
-    # admin commit, but the DB result is always authoritative (T-03-12).
+    # Phase 5: Build BoundaryRow without last_* (dropped in SEG-01 migration 0005).
+    # Used only for type compatibility; fill/count/sample computed via SegmentCache below.
     boundary = BoundaryRow(
         unit_id=result["unit_id"],
         row=result["row"],
         col=result["col"],
         first_label=result["first_label"],
         first_catalog=result["first_catalog"],
-        last_label=result["last_label"],
-        last_catalog=result["last_catalog"],
         is_empty=result["is_empty"],
     )
 
@@ -194,10 +205,16 @@ WHERE unit_id = %s AND row = %s AND col = %s
         getattr(request.app.state, "settings_cache", {}).get("cube.nominal_capacity", 95)
     )
 
-    # Compute fill level and sample from the in-memory snapshot (no DB during compute,
+    # Phase 5: Compute fill level and sample from SegmentCache + snapshot (no DB during compute,
     # O(records-per-label) — negligible at ~50 worst case, T-03-12 / RESEARCH.md A5).
-    records_in_range = get_records_in_boundary(boundary, snapshot)
-    total_count = len(records_in_range)
+    seg_bin = segment_cache.get_bin(boundary.unit_id, boundary.row, boundary.col)
+    if seg_bin is not None:
+        total_count = count_records_in_bin(seg_bin)
+        records_in_range = get_records_in_bin(seg_bin, snapshot)
+    else:
+        total_count = 0
+        records_in_range = []
+
     fill_level = total_count / max(nominal_capacity, 1)
     sampled = sample_records(records_in_range, n=7)
 

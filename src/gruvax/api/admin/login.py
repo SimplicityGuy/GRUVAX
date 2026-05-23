@@ -201,8 +201,7 @@ async def get_session(
 
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT expires_at, hard_expires_at"
-            " FROM gruvax.admin_sessions WHERE id = %s",
+            "SELECT expires_at, hard_expires_at FROM gruvax.admin_sessions WHERE id = %s",
             (session_id,),
         )
         row = await cur.fetchone()
@@ -215,6 +214,10 @@ async def get_session(
 
     expires_at, hard_expires_at = row
     return {
-        "expires_at": expires_at.isoformat() if hasattr(expires_at, "isoformat") else str(expires_at),
-        "hard_cap_at": hard_expires_at.isoformat() if hasattr(hard_expires_at, "isoformat") else str(hard_expires_at),
+        "expires_at": expires_at.isoformat()
+        if hasattr(expires_at, "isoformat")
+        else str(expires_at),
+        "hard_cap_at": hard_expires_at.isoformat()
+        if hasattr(hard_expires_at, "isoformat")
+        else str(hard_expires_at),
     }

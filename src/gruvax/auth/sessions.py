@@ -184,9 +184,7 @@ async def revoke_all_sessions_except(
     """
     now = datetime.now(UTC)
     await conn.execute(
-        "UPDATE gruvax.admin_sessions"
-        " SET revoked_at = %s"
-        " WHERE revoked_at IS NULL AND id != %s",
+        "UPDATE gruvax.admin_sessions SET revoked_at = %s WHERE revoked_at IS NULL AND id != %s",
         (now, current_session_id),
     )
     await conn.commit()

@@ -63,7 +63,7 @@ async def stream_events(
         generator(),
         ping=15,  # Pitfall 8: flush proxy buffers; do NOT lengthen
         headers={
-            "X-Accel-Buffering": "no",    # Pitfall 8: nginx/proxy buffering
-            "Cache-Control": "no-store",   # Pitfall 8: no caching
+            "X-Accel-Buffering": "no",  # Pitfall 8: nginx/proxy buffering
+            "Cache-Control": "no-store",  # Pitfall 8: no caching
         },
     )

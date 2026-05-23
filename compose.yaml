@@ -1,15 +1,15 @@
 ---
-# GRUVAX Docker Compose stack — gruvax-api + mosquitto
+# GRUVAX Docker Compose stack — api + mosquitto (container: gruvax-api-1)
 #
 # DATABASE CONNECTIVITY NOTE
 # ─────────────────────────────────────────────────────────────────────────────
-# This compose file wires gruvax-api to either:
+# This compose file wires the api service to either:
 #
 #   1. Host dev Postgres (default for local dev):
-#      The gruvax-api container uses `host.docker.internal` to reach the
+#      The api container uses `host.docker.internal` to reach the
 #      gruvax-dev-pg container running on the host (`localhost:5432`).
 #      On Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]`
-#      to the gruvax-api service (already done below).
+#      to the api service (already done below).
 #      DATABASE_URL must use host.docker.internal instead of localhost.
 #
 #   2. The shared discogsography Postgres (production on `lux`):
@@ -23,7 +23,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 #   1. just up                # ONE command: builds + starts gruvax-dev-pg
 #                             # (auto-seeds the synthetic collection via initdb),
-#                             # gruvax-api (auto-runs migrations + seeds cube
+#                             # api (auto-runs migrations + seeds cube
 #                             # boundaries), and mosquitto.
 #   2. open http://localhost:8000
 #   3. docker compose down    # stop and remove containers (no -v to keep volumes!)
@@ -41,7 +41,7 @@
 
 services:
 
-  gruvax-api:
+  api:
     build:
       context: .
       dockerfile: Dockerfile
@@ -91,8 +91,8 @@ services:
 
   # Local dev Postgres. A single `just up` brings this up with data: on first
   # start the mounted fixtures/synth_collection.sql runs via initdb, creating the
-  # gruvax_dev schema + ~200 synthetic records BEFORE gruvax-api migrates (so the
-  # v_collection view in migration 0002 resolves). gruvax-api seeds cube
+  # gruvax_dev schema + ~200 synthetic records BEFORE the api service migrates (so
+  # the v_collection view in migration 0002 resolves). The api service seeds cube
   # boundaries on startup. To use lux instead, set GRUVAX_DB_HOST (see header).
   gruvax-dev-pg:
     image: postgres:18

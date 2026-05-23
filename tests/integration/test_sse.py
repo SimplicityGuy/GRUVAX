@@ -108,9 +108,7 @@ async def test_sse_headers(live_server) -> None:  # type: ignore[no-untyped-def]
         httpx.AsyncClient(base_url=live_server) as ac,
         ac.stream("GET", "/api/events") as resp,
     ):
-        assert resp.status_code == 200, (
-            f"Expected 200 from /api/events, got {resp.status_code}"
-        )
+        assert resp.status_code == 200, f"Expected 200 from /api/events, got {resp.status_code}"
         assert resp.headers.get("x-accel-buffering") == "no", (
             f"X-Accel-Buffering header missing or wrong: {dict(resp.headers)}"
         )
@@ -143,20 +141,17 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
     if not auth:
         pytest.skip("Admin login not implemented — skipping SSE latency test")
 
-    # Fixture boundary for cube 1/0/0 (boundaries.yaml row 0, col 0)
+    # Fixture boundary for cube 1/0/0 (boundaries.yaml row 0, col 0).
+    # Phase 5 (SEG-01): last_label / last_catalog removed from request bodies.
     ORIGINAL_BOUNDARY = {
         "first_label": "Blue Note",
         "first_catalog": "BLP 4001",
-        "last_label": "Blue Note",
-        "last_catalog": "BLP 4020",
         "is_empty": False,
         "force": True,
     }
     TEST_BOUNDARY = {
         "first_label": "ZZ Test",
         "first_catalog": "ZZT 0001",
-        "last_label": "ZZ Test",
-        "last_catalog": "ZZT 0002",
         "is_empty": False,
         "force": True,
     }
