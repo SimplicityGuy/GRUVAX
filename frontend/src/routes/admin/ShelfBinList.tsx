@@ -10,13 +10,20 @@
  *   - Vertical list: CONFIGURED bins ONLY (non-empty cubes for this unit)
  *   - Dashed "＋ insert cut" dividers between bins (and before first / after last)
  *   - Each bin card: bin-number chip B{n}, "STARTS AT {label} · {record}", mini read-only strip, ✎ EDIT SEGMENTS
- *   - Insert opens RecordPickerSheet; NEW badge + renumber hint on insert
+ *   - Insert opens RecordPickerSheet; the committed bin settles in from yellow → normal
+ *
+ * Insert-cut refresh (no manual reload):
+ *   insertCut persists synchronously server-side (POST /cubes/insert-cut cascades
+ *   cut points right by one in a single change-set). On commit we refetch
+ *   ['admin','cubes'] + this unit's segments, then diff configured-bin keys to find
+ *   the bin the cascade created (a formerly-empty cube turned non-empty) and play a
+ *   ~3s settle animation (yellow = changed, per Nordic Grid).
  *
  * Design tokens only — no hardcoded hex (CLAUDE.md constraint).
  * No innerHTML — all DOM built with React JSX.
  */
 
-import { useState, useMemo } from 'react'
+import { useState, useMemo, useRef, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LocatorHeader } from './LocatorHeader'
@@ -24,15 +31,23 @@ import { SegmentStrip } from './SegmentStrip'
 import { RecordPickerSheet } from './RecordPickerSheet'
 import { adminGetCubes, getUnitSegments } from '../../api/adminClient'
 import { shelfName, shelfLetter } from '../../lib/shelf'
-import type { AdminCube } from '../../api/types'
+import type { AdminCube, AdminCubesResponse } from '../../api/types'
 import type { Segment } from '../../api/cubeTypes'
 
 const ROWS = 4
 const COLS = 4
 
+/** How long the newly-committed bin glows yellow before settling to normal. */
+const CHANGE_ANIM_MS = 3000
+
 /** Stable display bin number (1-based, row-major). */
 function binNum(cube: AdminCube): number {
   return cube.row * COLS + cube.col + 1
+}
+
+/** Stable per-cube key within a unit. */
+function cubeKey(cube: AdminCube): string {
+  return `${cube.row}-${cube.col}`
 }
 
 interface InsertState {
@@ -40,14 +55,6 @@ interface InsertState {
   afterCube: AdminCube | null
   /** After-bin display number. */
   afterDisplay: number
-}
-
-interface NewBinPlaceholder {
-  afterRow: number
-  afterCol: number
-  display: number
-  label: string
-  record: string
 }
 
 export function ShelfBinList() {
@@ -61,9 +68,16 @@ export function ShelfBinList() {
   const [insertState, setInsertState] = useState<InsertState | null>(null)
   const [editingCube, setEditingCube] = useState<AdminCube | null>(null)
 
-  // New bins inserted locally (display-only until commit)
-  const [newBins, setNewBins] = useState<NewBinPlaceholder[]>([])
-  const [showRenumberHint, setShowRenumberHint] = useState(false)
+  // Cube keys ("row-col") to play the settle animation on after a commit.
+  const [recentlyChanged, setRecentlyChanged] = useState<Set<string>>(new Set())
+  const changeTimerRef = useRef<number | null>(null)
+
+  // Clear any pending settle timer on unmount.
+  useEffect(() => {
+    return () => {
+      if (changeTimerRef.current !== null) window.clearTimeout(changeTimerRef.current)
+    }
+  }, [])
 
   // ── Data ─────────────────────────────────────────────────────────────────────
   const { data: cubesData, isLoading, isError } = useQuery({
@@ -89,33 +103,50 @@ export function ShelfBinList() {
     setEditingCube(cube)
   }
 
-  function handleInsertCommit() {
-    if (insertState) {
-      const afterCube = insertState.afterCube
-      const newDisplay = insertState.afterDisplay + 1
-      setNewBins((prev) => [
-        ...prev,
-        {
-          afterRow: afterCube?.row ?? -1,
-          afterCol: afterCube?.col ?? -1,
-          display: newDisplay,
-          label: '',
-          record: '',
-        },
-      ])
-      setShowRenumberHint(true)
-    }
+  /** Flag freshly-appeared bins for the settle animation, auto-clearing after ~3s. */
+  function flagChanged(keys: string[]) {
+    if (keys.length === 0) return
+    setRecentlyChanged(new Set(keys))
+    if (changeTimerRef.current !== null) window.clearTimeout(changeTimerRef.current)
+    changeTimerRef.current = window.setTimeout(() => {
+      setRecentlyChanged(new Set())
+      changeTimerRef.current = null
+    }, CHANGE_ANIM_MS)
+  }
+
+  async function handleInsertCommit() {
+    // Snapshot configured bins BEFORE the refetch so we can detect the bin the
+    // cascade just created (a formerly-empty cube turning non-empty). insertCut
+    // has already persisted server-side by the time onCommit fires.
+    const beforeKeys = new Set(configuredBins.map(cubeKey))
+
+    // Close the sheet immediately — no manual reload needed.
     setInsertState(null)
-    void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
+
+    // invalidateQueries resolves once the active ['admin','cubes'] observer has
+    // refetched, so the real interactive BinCard is in the cache before we diff.
+    await queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
     void queryClient.invalidateQueries({ queryKey: ['admin', 'segments', unitId] })
+
+    const fresh = queryClient.getQueryData<AdminCubesResponse>(['admin', 'cubes'])
+    if (!fresh) return
+    const appeared = fresh.cubes
+      .filter((c) => c.unit_id === unitId && !c.is_empty)
+      .map((c) => `${c.row}-${c.col}`)
+      .filter((key) => !beforeKeys.has(key))
+
+    flagChanged(appeared)
   }
 
   function handleEditCommit() {
+    const target = editingCube
     setEditingCube(null)
     void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
     void queryClient.invalidateQueries({
       queryKey: ['admin', 'segments', unitId],
     })
+    // The edited bin keeps its position; settle it so the change is visible.
+    if (target) flagChanged([cubeKey(target)])
   }
 
   // ── Loading / error ──────────────────────────────────────────────────────────
@@ -176,38 +207,19 @@ export function ShelfBinList() {
 
         {configuredBins.map((cube) => {
           const display = binNum(cube)
-          // New bins inserted after this cube
-          const newBinsAfter = newBins.filter(
-            (nb) => nb.afterRow === cube.row && nb.afterCol === cube.col,
-          )
 
           return (
-            <div key={`${cube.row}-${cube.col}`}>
+            <div key={cubeKey(cube)}>
               <BinCard
                 cube={cube}
                 display={display}
                 unitId={unitId}
+                isChanged={recentlyChanged.has(cubeKey(cube))}
                 onEditSegments={() =>
                   void navigate(`/admin/cubes/${unitId}/${cube.row}/${cube.col}`)
                 }
                 onEditCut={() => openEditCut(cube)}
               />
-
-              {/* Renumber hint after insert */}
-              {showRenumberHint && newBinsAfter.length > 0 && (
-                <div className="sbl-renumber-hint" role="status">
-                  New BIN {display + 1} will be inserted · higher bins renumber
-                  (e.g. {display + 1}→{display + 2}).
-                </div>
-              )}
-
-              {/* Locally-inserted new bin placeholders */}
-              {newBinsAfter.map((nb) => (
-                <NewBinCard
-                  key={`new-${nb.afterRow}-${nb.afterCol}-${nb.display}`}
-                  display={nb.display}
-                />
-              ))}
 
               {/* Insert-cut divider AFTER each bin */}
               <InsertCutDivider onTap={() => openInsertAfter(cube)} />
@@ -239,7 +251,7 @@ export function ShelfBinList() {
           row={insertState.afterCube?.row ?? 0}
           col={insertState.afterCube?.col ?? 0}
           afterBinDisplay={insertState.afterDisplay}
-          onCommit={handleInsertCommit}
+          onCommit={() => void handleInsertCommit()}
           onCancel={() => setInsertState(null)}
         />
       )}
@@ -264,12 +276,14 @@ function BinCard({
   cube,
   display,
   unitId,
+  isChanged,
   onEditSegments,
   onEditCut,
 }: {
   cube: AdminCube
   display: number
   unitId: number
+  isChanged: boolean
   onEditSegments: () => void
   onEditCut: () => void
 }) {
@@ -283,7 +297,7 @@ function BinCard({
   const segments: Segment[] = segsData?.segments ?? []
 
   return (
-    <div className="sbl-bincard">
+    <div className={`sbl-bincard${isChanged ? ' sbl-bincard--changed' : ''}`}>
       <div className="sbl-bincard-top">
         {/* Square bin-number chip */}
         <div className="sbl-binno">{display}</div>
@@ -322,24 +336,6 @@ function BinCard({
       >
         ✎ EDIT SEGMENTS
       </button>
-    </div>
-  )
-}
-
-/** ── NewBinCard — placeholder for a locally-inserted new bin ──────────────── */
-function NewBinCard({ display }: { display: number }) {
-  return (
-    <div className="sbl-bincard sbl-bincard--new">
-      <div className="sbl-bincard-top">
-        <div className="sbl-binno sbl-binno--new">{display}</div>
-        <div className="sbl-cutinfo">
-          <span className="sbl-cutinfo-k">STARTS AT</span>
-          <div className="sbl-cutinfo-v">
-            <span className="sbl-cutinfo-lab">New cut</span>
-            <span className="sbl-badge-new">NEW</span>
-          </div>
-        </div>
-      </div>
     </div>
   )
 }

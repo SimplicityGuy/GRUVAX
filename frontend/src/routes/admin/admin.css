@@ -2857,10 +2857,47 @@
   gap: var(--gruvax-space-2);
 }
 
-/* NEW-state modifier — dashed border, faint yellow background */
-.sbl-bincard--new {
-  border-style: dashed;
-  background: color-mix(in srgb, var(--gruvax-yellow) 8%, transparent);
+/* CHANGED-state modifier — the bin a commit just created/edited settles in
+   from a yellow "lit" state to normal (~3s). Nordic Grid: yellow = changed,
+   spring on (overshoot) → smooth fade off. */
+.sbl-bincard--changed {
+  animation: sbl-bin-settle 3s var(--gruvax-ease-standard) both;
+}
+
+@keyframes sbl-bin-settle {
+  0% {
+    transform: scale(0.97);
+    border-color: var(--gruvax-yellow-dark);
+    background: var(--gruvax-yellow-faint);
+    box-shadow: var(--gruvax-shadow-led);
+  }
+  12% {
+    transform: scale(1.01);
+    border-color: var(--gruvax-yellow-dark);
+    background: var(--gruvax-yellow-faint);
+    box-shadow: var(--gruvax-shadow-led);
+  }
+  22% {
+    transform: scale(1);
+    border-color: var(--gruvax-yellow-dark);
+    background: var(--gruvax-yellow-faint);
+    box-shadow: var(--gruvax-shadow-led);
+  }
+  100% {
+    transform: scale(1);
+    border-color: var(--gruvax-border-light);
+    background: var(--gruvax-white);
+    box-shadow: none;
+  }
+}
+
+/* Respect reduced-motion: skip the 3s settle, show a brief static highlight. */
+@media (prefers-reduced-motion: reduce) {
+  .sbl-bincard--changed {
+    animation: none;
+    border-color: var(--gruvax-yellow-dark);
+    background: var(--gruvax-yellow-faint);
+  }
 }
 
 /* Top row: bin-number chip + cut info + edit button */
@@ -2885,11 +2922,6 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-}
-
-.sbl-binno--new {
-  background: color-mix(in srgb, var(--gruvax-yellow-dark) 80%, transparent);
-  color: var(--gruvax-white);
 }
 
 /* "STARTS AT label · record" (faithful port of .cutinfo in sketch 002) */
@@ -3037,27 +3069,6 @@
 }
 
 /* NEW badge (on newly-inserted placeholder) */
-.sbl-badge-new {
-  font-family: var(--gruvax-font-display);
-  font-size: 10px;
-  font-weight: 700;
-  letter-spacing: var(--gruvax-tracking-display);
-  text-transform: uppercase;
-  color: var(--gruvax-white);
-  background: var(--gruvax-yellow-dark);
-  border-radius: var(--gruvax-radius-pill);
-  padding: 1px 6px;
-}
-
-/* Renumber hint below newly-inserted bin */
-.sbl-renumber-hint {
-  font-family: var(--gruvax-font-ui);
-  font-size: var(--gruvax-text-body-sm);
-  font-style: italic;
-  color: var(--gruvax-text-muted);
-  padding: var(--gruvax-space-1) var(--gruvax-space-2);
-}
-
 /* Empty state */
 .sbl-empty {
   display: flex;
@@ -3304,6 +3315,14 @@
   font-style: italic;
   color: var(--gruvax-text-muted);
   margin: 0;
+}
+
+/* Membership-vs-cosmetics discoverability note (cut points = membership). */
+.bwe-membership-note {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  margin: var(--gruvax-space-1) 0 0;
 }
 
 /* Legend (white cards with AUTO/OVERRIDE chips) */

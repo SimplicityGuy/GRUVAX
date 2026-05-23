@@ -495,6 +495,12 @@ export function BinWidthEditor() {
       {/* Hint */}
       <p className="bwe-hint">Drag a yellow handle to set a physical-width override</p>
 
+      {/* Membership vs. cosmetics: widths here are display-only; which labels
+          live in this bin is determined by the cut points. */}
+      <p className="bwe-membership-note">
+        To change which labels are in this bin, edit the cut points.
+      </p>
+
       {/* Legend */}
       <div className="bwe-legend" ref={legendRef} />
 

@@ -34,7 +34,6 @@ import type {
   CutPointBody,
   InsertCutBody,
   OverridesBody,
-  Segment,
   SegmentsResponse,
 } from './cubeTypes'
 
@@ -497,12 +496,22 @@ export async function setOverrides(
   if (!res.ok) throw new Error(`Set overrides failed: ${res.status}`)
 }
 
+/** Response from POST /api/admin/cubes/insert-cut (segments.py insert_cut). */
+export interface InsertCutResult {
+  change_set_id: string
+  inserted_after: { unit_id: number; row: number; col: number }
+  new_cut: { first_label: string; first_catalog: string }
+  /** Number of cubes the cascade rewrote in this change-set. */
+  affected: number
+}
+
 /**
  * POST /api/admin/cubes/insert-cut
- * Split a bin by inserting a new cut point after the specified bin.
- * Returns the new segment data; raises BulkSaveError on 400.
+ * Insert a new cut point after the specified bin; the backend cascades all
+ * subsequent cut points right by one in a single undoable change-set.
+ * Returns the committed change-set summary; raises BulkSaveError on 400.
  */
-export async function insertCut(body: InsertCutBody): Promise<{ segments: Segment[] }> {
+export async function insertCut(body: InsertCutBody): Promise<InsertCutResult> {
   const res = await adminFetch('/api/admin/cubes/insert-cut', {
     method: 'POST',
     body: JSON.stringify(body),
@@ -516,7 +525,7 @@ export async function insertCut(body: InsertCutBody): Promise<{ segments: Segmen
     )
   }
   if (!res.ok) throw new Error(`Insert cut failed: ${res.status}`)
-  return res.json() as Promise<{ segments: Segment[] }>
+  return res.json() as Promise<InsertCutResult>
 }
 
 // ── Error types ───────────────────────────────────────────────────────────────
