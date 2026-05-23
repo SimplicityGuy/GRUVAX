@@ -227,6 +227,14 @@ async def put_bin_cut(
     # flow that the owner accepted dropping (05-UAT.md test 5 note).
     from gruvax.api.admin.validation import build_proposed_cuts, validate_contiguity
 
+    # Freshness contract (WR-03): build_proposed_cuts reads the live in-app
+    # BoundaryCache, so the contiguity decision is only as correct as the cache
+    # is current.  If a prior request mutated the DB without triggering a cache
+    # reload, this check reasons over a stale boundary view and could reject a
+    # valid cut or accept a scattering one.  The cache is expected to be reloaded
+    # on every mutating write (post-commit invalidate+load) and on boundary_changed
+    # SSE; the integration test forces a no-op cache-sync PUT before its assertion
+    # for exactly this reason.  Guaranteeing freshness here is deferred.
     proposed = build_proposed_cuts(cache, replace=(unit_id, row, col, first_label, first_catalog))
     contiguity_error = validate_contiguity(proposed, segment_cache)
     if contiguity_error is not None:
@@ -619,6 +627,12 @@ async def insert_cut(
     # so a scatter-inducing insert is never committed.  The cascade_cubes list
     # already encodes the full post-insert cut-point set for the affected cubes;
     # build_proposed_cuts merges it with the remaining (unaffected) live cuts.
+    # Freshness contract (WR-03): build_proposed_cuts reads the live in-app
+    # BoundaryCache, so this decision is only as correct as the cache is current.
+    # A stale cache (DB mutated without a reload) could reject a valid insert or
+    # accept a scattering one.  The cache is expected to be reloaded on every
+    # mutating write and on boundary_changed SSE; guaranteeing freshness here is
+    # deferred.
     proposed_insert = build_proposed_cuts(cache, cascade=cascade_cubes)
     insert_contiguity_error = validate_contiguity(proposed_insert, segment_cache)
     if insert_contiguity_error is not None:
