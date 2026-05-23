@@ -303,3 +303,87 @@ All design tokens only — no hardcoded hex values added.
 - [x] `fixtures/boundaries.yaml` col 2 first_catalog is "ECM 1010"
 - [x] CutPointEditor filters on `!c.is_empty` (no static 16-card loop)
 - [x] AdminShell has `pointerdown` + `keydown` activity listeners
+
+---
+
+## Faithful Sketch-Port Rebuild (Round 2)
+
+Complete rebuild of the admin segment editor per owner direction: "faithful port of the two
+validated sketch HTML files — not a re-derivation." CutPointEditor and SegmentEditorPanel
+replaced by a new three-level nav flow matching the confirmed owner navigation model.
+
+### Nav Flow (owner-confirmed)
+
+```
+CUBES → CubesGrid (shelf list) → tap shelf → ShelfBinList (bin cards) → ✎ EDIT SEGMENTS → BinWidthEditor (width editor)
+```
+
+### Commits
+
+| Hash | Component | Description |
+|------|-----------|-------------|
+| `88e82d6` | ShelfBinList.tsx | Faithful port of sketch 002 Variant A — bin-card list |
+| `5d48900` | BinWidthEditor.tsx | Faithful port of sketch 001 Variant A — width editor |
+| `0de8fb4` | CubesGrid.tsx | Rewritten — now lists Kallax units (shelves), not individual cubes |
+| `18eaa04` | App.tsx | New routes: /:unit → ShelfBinList, /:unit/:row/:col → BinWidthEditor |
+| `d1e6885` | admin.css | sbl-* + bwe-* + shelf-* CSS; removed 6 dead .cube-editor-* rules |
+
+### What Was Built
+
+**ShelfBinList** (`/admin/cubes/:unit`) — Faithful port of sketch 002 Variant A:
+- Configured bins only (filtered non-empty cubes for `unitId`)
+- `InsertCutDivider` (dashed "＋ insert cut") before first and after each bin
+- `BinCard`: square bin-number chip, STARTS AT label/record, mini read-only `SegmentStrip`, ✎ EDIT SEGMENTS button
+- `NewBinCard` placeholder with NEW badge on local insert
+- Renumber hint ("New BIN n+1 will be inserted · higher bins renumber")
+- `RecordPickerSheet` in insert and edit-cut modes
+- No raw unit/row/col triples in UI (SHELF A / BIN n notation throughout)
+
+**BinWidthEditor** (`/admin/cubes/:unit/:row/:col`) — Faithful port of sketch 001 Variant A:
+- Proportional segment strip with SINGLE white pill grip handle (6px × 46px, `.bwe-grip`)
+- Handle turns yellow when active (`bwe-handle--dragging .bwe-grip`)
+- `attachDragH` drag: pointer-capture, sum-conserving, MIN=5%, continuous (no snapping)
+- Strip + handles built via `el()` + `replaceChildren()` — never `innerHTML`
+- Graduated blue palette cycled by index: blue / blue-light / blue-dark / blue-darker
+- Override = yellow LED top accent on segment bar (`bwe-seg--overridden::before`)
+- Straddle = right-edge fade mask + ↪ icon (`bwe-seg--continues::after`)
+- Continue caption below strip: "↪ LABEL continues in BIN n+1"
+- Legend white cards: swatch, name, catalog range, AUTO chip or OVERRIDE chip + reset link
+- `resetOne(label)` and `resetAll()` restore auto fractions
+- Save → calls `setOverrides()` and stages in pending change-set
+
+**CubesGrid** (rewritten) — now lists Kallax units (shelves):
+- `MiniKallax` 4×4 preview: lit cells = configured (non-empty) bins
+- `shelf-card-name` (SHELF A), `shelf-card-count` (n of 16 bins configured)
+- Tapping navigates to `/admin/cubes/:unit` (ShelfBinList)
+
+### Specification Compliance Checks
+
+| Constraint | Status |
+|-----------|--------|
+| SINGLE yellow pill grip (6px×46px), not double bar | PASS |
+| Drag sum-conserving, MIN 5%, continuous, no snapping | PASS |
+| Strip+handle DOM via el()+replaceChildren() | PASS |
+| No innerHTML in admin components | PASS |
+| No hardcoded hex (all var(--gruvax-*) tokens) | PASS |
+| No raw unit/row/col triples in UI | PASS |
+| Dead .cube-editor-* rules removed | PASS |
+| Frontend tsc --noEmit | PASS |
+| Frontend npm run build | PASS |
+| Frontend eslint --max-warnings=0 | PASS |
+| Backend just lint | PASS |
+| Backend just typecheck | PASS |
+| Backend tests | SKIPPED (Postgres not running in dev; no code changes) |
+
+### Self-Check (Round 2)
+
+- [x] `88e82d6` exists in git log (ShelfBinList)
+- [x] `5d48900` exists in git log (BinWidthEditor)
+- [x] `0de8fb4` exists in git log (CubesGrid rewrite)
+- [x] `18eaa04` exists in git log (App.tsx routes)
+- [x] `d1e6885` exists in git log (admin.css)
+- [x] `frontend/src/routes/admin/ShelfBinList.tsx` exists
+- [x] `frontend/src/routes/admin/BinWidthEditor.tsx` exists
+- [x] grep `.cube-editor` admin.css returns only comment line
+- [x] grep `innerHTML` new files returns only comment text (no assignments)
+- [x] grep `#[0-9a-fA-F]` new files returns empty
