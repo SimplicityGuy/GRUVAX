@@ -184,7 +184,7 @@ def validate_contiguity(
     bulk edit. Each entry is a dict with keys: unit_id, row, col, first_label,
     first_catalog, is_empty.
 
-    Algorithm:
+    Algorithm (currently implemented):
       1. Build a sorted list of all proposed non-empty cuts with their first_label.
          This defines the proposed bin-start assignment.
       2. Simulate the label-assignment sequence for the proposed cut-points:
@@ -195,9 +195,20 @@ def validate_contiguity(
          adjacent in the proposed cut sequence (consecutive positions). If any two
          "start" positions for the same label have a gap (different label in between),
          that is a contiguity violation.
-      5. Also cross-check against SegmentCache: if a label appears in the current
-         SegmentCache in bins outside the proposed update set, and the proposed update
-         would create a gap in that label's span, return an error.
+
+    DEFERRED — not yet implemented (future enhancement, tracked as WR-01):
+      A step-5 SegmentCache occupancy cross-check. The current algorithm reasons
+      only about bin-START labels (first_label cut points). A label that physically
+      CONTINUES into a later bin without STARTING it (overflow) is therefore not
+      consulted, so a scatter-by-continuation can slip through. Closing that gap
+      means re-deriving label OCCUPANCY per proposed interval (reuse the global
+      ordering in SegmentCache.derive) and running the same gap test on occupancy
+      rather than on start positions. That is a behavioral enhancement requiring
+      its own plan + verification and is intentionally out of scope here. The
+      ``segment_cache`` parameter below is RESERVED for that future step and is
+      currently UNUSED by this function — it is kept in the signature to stabilize
+      the call contract so the deferred cross-check can be added without touching
+      every call site.
 
     Practical scenario (why this matters):
       Proposed: (1,0,0)=Blue Note, (1,0,2)=Blue Note (skipping (1,0,1)).
@@ -206,7 +217,9 @@ def validate_contiguity(
     Args:
         proposed_updates: List of dicts, each with unit_id, row, col, first_label,
                           first_catalog, is_empty.
-        segment_cache:    Current SegmentCache (pre-edit approximation).
+        segment_cache:    Current SegmentCache (pre-edit approximation). RESERVED
+                          for the deferred step-5 occupancy cross-check described
+                          above; currently UNUSED.
 
     Returns:
         Plain-language error string on contiguity violation; None if valid.
