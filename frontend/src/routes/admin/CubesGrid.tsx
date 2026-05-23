@@ -18,6 +18,7 @@ import { adminGetCubes } from '../../api/adminClient'
 import type { AdminCube } from '../../api/types'
 import { AlphaRail } from './AlphaRail'
 import { FillBar } from './FillBar'
+import { shelfLetter } from '../../lib/shelf'
 
 /** Group cubes by unit_id preserving original order within each unit. */
 function groupByUnit(cubes: AdminCube[]): Map<number, AdminCube[]> {
@@ -101,7 +102,7 @@ export function CubesGrid() {
       <div className="cubes-grid-scroll" ref={containerRef}>
         {Array.from(cubesByUnit.entries()).map(([unitId, cubes]) => (
           <section key={unitId} className="cubes-unit-section">
-            <h2 className="cubes-unit-heading">SHELF {unitId}</h2>
+            <h2 className="cubes-unit-heading">SHELF {shelfLetter(unitId)}</h2>
 
             <div className="cubes-unit-grid">
               {cubes.map((cube) => {

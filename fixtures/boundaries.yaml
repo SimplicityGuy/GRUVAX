@@ -37,11 +37,12 @@ units:
         first_catalog: "BST 84001"
         is_empty: false
 
-      # Row 0, col 2 — ECM series
+      # Row 0, col 2 — ECM series (mid-series cut; col 1 spans Blue Note BST + ECM 1001-1009)
+      # This creates a multi-label bin at (0,1) for drag-handle demonstration (Issue 4).
       - row: 0
         col: 2
         first_label: "ECM"
-        first_catalog: "ECM 1001"
+        first_catalog: "ECM 1010"
         is_empty: false
 
       # Row 0, col 3 — KC mixed-separator series

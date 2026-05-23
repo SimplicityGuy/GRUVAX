@@ -264,7 +264,7 @@ export function Settings() {
           <p className="settings-success" role="status">Drift threshold saved.</p>
         )}
 
-        <div className="settings-overrides-actions">
+        <div className="settings-actions">
           <button
             type="button"
             className="settings-btn-primary"
@@ -276,7 +276,7 @@ export function Settings() {
 
           <button
             type="button"
-            className="settings-btn-secondary"
+            className="settings-review-overrides-btn"
             onClick={() => void navigate('/admin/cubes')}
           >
             REVIEW OVERRIDES
