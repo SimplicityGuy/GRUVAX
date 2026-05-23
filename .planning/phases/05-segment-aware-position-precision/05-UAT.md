@@ -36,17 +36,18 @@ note: REVERT correctly restores prior widths and the change-set is listed in His
 
 ### 6. UI contiguity hard-block (SEG-05)
 expected: A cut that would scatter a label across non-adjacent bins hard-blocks the commit with a plain-language contiguity error (server validator already unit-verified).
-result: issue
-reported: "Contiguity hard-block is unreachable in the rebuilt editor — SEG-05 not enforced on the live cut/insert edit paths."
-severity: major
+result: pass
+note: RE-VERIFIED 2026-05-23 after gap-closure 05-06 + a clean DB drop/re-seed + container rebuild (the running image predated 05-06 and had to be rebuilt). Live end-to-end on the rebuilt stack via Playwright: in EDIT SHELF A, editing bin 4 (KC) → "Blue Note / BLP 4001" is hard-blocked — the EDIT CUT POINT sheet stays open and renders an alert "This cut would split blue note across non-adjacent bins. Reposition the cut or remove the existing boundary." API returns 400 type=contiguity_error and the bin remains KC (no write). Screenshot evidence: seg05-contiguity-block.png.
+followup: COSMETIC (WR-04, non-blocking) — the message interpolates the casefolded label ("blue note" instead of "Blue Note"), which reads as a bug and violates the CLAUDE.md plain-language/voice rule. Fix: format with the original-cased label. Tracked in 05-REVIEW.md.
 
 ## Summary
 
 total: 6
-passed: 5
-issues: 1
+passed: 6
+issues: 0
 pending: 0
 skipped: 0
+note: All 6 UAT items pass. One cosmetic follow-up (WR-04 casefolded contiguity message) is advisory, not a UAT failure.
 
 ## Gaps
 
