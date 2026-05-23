@@ -132,6 +132,7 @@ None.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260522-u48 | Rename docker compose service gruvax-api → api (container gruvax-api-1) | 2026-05-23 | b753bd2 | [260522-u48-rename-docker-compose-service-gruvax-api](./quick/260522-u48-rename-docker-compose-service-gruvax-api/) |
 | 260522-mwy | Fix Docker venv shebangs so console scripts (gruvax-set-pin) run directly | 2026-05-22 | 1695cd5 | [260522-mwy-fix-docker-cli-shebangs](./quick/260522-mwy-fix-docker-cli-shebangs/) |
 | 260521-jb3 | Replace eslint set-state-in-effect suppressions with real refactors in admin UI | 2026-05-21 | 9c26bbf | [260521-jb3-replace-eslint-set-state-in-effect-suppr](./quick/260521-jb3-replace-eslint-set-state-in-effect-suppr/) |
 | 260521-g3o | Fix all 8 eslint errors in the frontend admin UI | 2026-05-21 | b093e9f | [260521-g3o-fix-all-8-eslint-errors-in-the-frontend-](./quick/260521-g3o-fix-all-8-eslint-errors-in-the-frontend-/) |
@@ -141,8 +142,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-22 (Phase 05 re-planned — Waves 2–5 rewritten with full orphan coverage; plan-checker PASSED, requirements 8/8 + decisions 9/9 covered)
-**Next action:** Execute Phase 5 from Wave 2 — `/clear` then `/gsd:execute-phase 5` (it skips the completed 05-01 via its SUMMARY and resumes at 05-02). Plans use a two-tier green-gate model: Waves 2–3 scoped gates (typecheck green, no new failures), Wave 4 (05-04) is the authoritative full-suite green gate, Wave 5 (05-05) is the frontend phase-exit gate + human-verify checkpoint. Orphan/decision rationale: `05-REPLAN-NOTES.md`.
+**Last touched:** 2026-05-23 (Phase 05 COMPLETE — 5/5 plans; insert-cut auto-refresh + settle animation, backend cascade data-loss fix, label/catalog autocomplete endpoints wired, code review 0 blockers; quick task 260522-u48 renamed the compose service gruvax-api → api)
+**Next action:** Phase 6 (LED Contract over MQTT, hardware-stubbed) — `/clear` then `/gsd:discuss-phase 6` or `/gsd:plan-phase 6`. Phase 05 left 4 interactive UAT items (drag feel, drift-chip resync, diff→commit→revert, UI contiguity block) tracked in `05-HUMAN-UAT.md` — surface via `/gsd:progress` or run `/gsd:verify-work 5` to close them.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
