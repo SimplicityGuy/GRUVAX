@@ -561,6 +561,26 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
     auth = await _login(client)
     assert auth, "login should succeed after seeding the test PIN"
 
+    # Ensure the DB AND the in-app BoundaryCache are in the canonical fixture state.
+    # The module-scoped client holds a running app whose cache may be stale if a
+    # prior mutating test (e.g. test_insert_cut_cascade_preserves_bin_after_empty)
+    # restored the DB without triggering a cache reload.  A valid, non-scattering
+    # PUT at (1,0,0) = Blue Note BLP 4001 (already the canonical value) is a no-op
+    # DB-wise but forces `cache.invalidate() + cache.load()` via the handler's
+    # post-commit path — syncing the in-app cache with the restored DB.
+    from gruvax.db.seed_boundaries import load_boundaries
+
+    await load_boundaries(_BOUNDARIES_YAML)
+    cache_sync_res = await client.put(
+        "/api/admin/cubes/1/0/0/cut",
+        json={"first_label": "Blue Note", "first_catalog": "BLP 4001", "force": True},
+        cookies=auth["cookies"],
+        headers={"X-CSRF-Token": auth["csrf_token"]},
+    )
+    assert cache_sync_res.status_code == 200, (
+        f"Cache-sync PUT failed: {cache_sync_res.status_code} {cache_sync_res.text}"
+    )
+
     response = await client.put(
         "/api/admin/cubes/1/0/3/cut",
         json={
@@ -604,9 +624,8 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
             f"cube (1,0,3) first_label should still be 'KC' (no write), got: {cube_103.get('first_label')!r}"
         )
     finally:
-        # Restore the fixture (in case the test failed after a partial write, belt-and-suspenders)
-        from gruvax.db.seed_boundaries import load_boundaries
-
+        # Restore the fixture (belt-and-suspenders: no write happens on a rejected cut,
+        # but earlier load_boundaries + cache_sync_put may have altered state)
         await load_boundaries(_BOUNDARIES_YAML)
 
 

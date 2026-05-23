@@ -27,6 +27,88 @@ if TYPE_CHECKING:
     from gruvax.estimator.segment_cache import SegmentCache
 
 
+def build_proposed_cuts(
+    cache: BoundaryCache,
+    *,
+    replace: tuple[int, int, int, str, str] | None = None,
+    cascade: list[tuple[int, int, int, str | None, str | None, bool]] | None = None,
+) -> list[dict[str, object]]:
+    """Build the proposed_updates list from the live BoundaryCache + one edit.
+
+    SEG-05 / D-09 (Direction A): enforce contiguity on the live write paths
+    (put_bin_cut and insert_cut) before the DB transaction.  The preview/bulk path
+    is the original site; this helper makes the same validate_contiguity call
+    available to the direct write paths without re-wiring the two-step flow.
+
+    Scope: only boundaries from the unit affected by the edit are returned.  The
+    same label can legitimately appear in two different physical units (shelves);
+    contiguity is a per-unit invariant because bins in different units are never
+    adjacent on the same shelf.
+
+    Args:
+        cache:   Live BoundaryCache — provides the full current cut-point set.
+        replace: For PUT /cut: (unit_id, row, col, first_label, first_catalog).
+                 Overwrites the matching cube's cut point in the proposed list;
+                 is_empty is set to False.  The unit_id in the tuple determines
+                 which unit's boundaries are returned.
+        cascade: For POST /insert-cut: list of (unit_id, row, col, first_label,
+                 first_catalog, is_empty) 6-tuples already computed by insert_cut.
+                 Each tuple overwrites the matching cube's entry in the proposed list.
+                 The first tuple's unit_id determines the scope; all cubes in the
+                 cascade are expected to belong to the same unit.
+
+    Returns:
+        List of dicts with keys (unit_id, row, col, first_label, first_catalog,
+        is_empty) scoped to the target unit, in the exact shape validate_contiguity
+        consumes. All cubes of that unit are included (empty or not) so the validator
+        has the complete picture. Order is not guaranteed — validate_contiguity sorts.
+    """
+    # Determine the target unit from the edit descriptor
+    target_unit_id: int | None = None
+    if replace is not None:
+        target_unit_id = replace[0]
+    elif cascade is not None and cascade:
+        target_unit_id = cascade[0][0]
+
+    # Start from the current live boundary set, scoped to the target unit
+    proposed: list[dict[str, object]] = [
+        {
+            "unit_id": b.unit_id,
+            "row": b.row,
+            "col": b.col,
+            "first_label": b.first_label,
+            "first_catalog": b.first_catalog,
+            "is_empty": b.is_empty,
+        }
+        for b in cache.get_boundaries()
+        if target_unit_id is None or b.unit_id == target_unit_id
+    ]
+
+    if replace is not None:
+        r_uid, r_row, r_col, r_label, r_catalog = replace
+        for entry in proposed:
+            if entry["unit_id"] == r_uid and entry["row"] == r_row and entry["col"] == r_col:
+                entry["first_label"] = r_label
+                entry["first_catalog"] = r_catalog
+                entry["is_empty"] = False
+                break
+
+    if cascade is not None:
+        # Build a lookup for O(n) replacement
+        cascade_lookup: dict[tuple[int, int, int], tuple[str | None, str | None, bool]] = {
+            (uid, r, c): (fl, fc, ie) for uid, r, c, fl, fc, ie in cascade
+        }
+        for entry in proposed:
+            key = (int(str(entry["unit_id"])), int(str(entry["row"])), int(str(entry["col"])))
+            if key in cascade_lookup:
+                fl, fc, ie = cascade_lookup[key]
+                entry["first_label"] = fl
+                entry["first_catalog"] = fc
+                entry["is_empty"] = ie
+
+    return proposed
+
+
 # ── UI-SPEC error copy (verbatim per plan) ────────────────────────────────────
 
 _SHELF_OVERFLOW_MSG = (
