@@ -6,15 +6,16 @@
  *
  * Screen structure:
  *   - Locator Header (mini-Kallax, edited bin lit yellow)
- *   - Vertical list of bin cards, one per Kallax cube
+ *   - Vertical list of bin cards, one per CONFIGURED cube in this unit
  *   - Insert-cut dividers between cards (44px tap target)
+ *   - A single compact "add cut" affordance at the bottom for unconfigured cubes
  *   - Inline SegmentEditorPanel expands when "EDIT SEGMENTS" is tapped
  *   - RecordPickerSheet slides up for insert-cut actions
  *
  * Design tokens only — no hardcoded hex (CLAUDE.md constraint).
  */
 
-import { useState } from 'react'
+import { useState, useMemo } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { Info } from 'lucide-react'
@@ -22,42 +23,17 @@ import { LocatorHeader } from './LocatorHeader'
 import { SegmentStrip } from './SegmentStrip'
 import { SegmentEditorPanel } from './SegmentEditorPanel'
 import { RecordPickerSheet } from './RecordPickerSheet'
-import { getUnitSegments } from '../../api/adminClient'
+import { getUnitSegments, adminGetCubes } from '../../api/adminClient'
 import { shelfName } from '../../lib/shelf'
+import type { AdminCube } from '../../api/types'
 import type { Segment } from '../../api/cubeTypes'
 
-/** One bin card entry in the cut-point list. */
-interface BinCard {
-  /** 0-based row within the unit. */
-  row: number
-  /** 0-based col within the unit. */
-  col: number
-  /** 1-based display number. */
+/** One locally-inserted (pending) new bin, shown after a user inserts a cut. */
+interface NewBin {
+  /** The position of the card AFTER which this new bin appears. */
+  afterRow: number
+  afterCol: number
   display: number
-  firstLabel: string | null
-  firstCatalog: string | null
-  segments: Segment[]
-  isNew?: boolean
-}
-
-/** Derive a simple grid of bin cards for a 4×4 Kallax unit. */
-function buildBinCards(rows: number, cols: number): BinCard[] {
-  const cards: BinCard[] = []
-  let display = 1
-  for (let r = 0; r < rows; r++) {
-    for (let c = 0; c < cols; c++) {
-      cards.push({
-        row: r,
-        col: c,
-        display,
-        firstLabel: null,
-        firstCatalog: null,
-        segments: [],
-      })
-      display++
-    }
-  }
-  return cards
 }
 
 export function CutPointEditor() {
@@ -76,25 +52,37 @@ export function CutPointEditor() {
   const ROWS = 4
   const COLS = 4
 
-  // Track which bin's editor panel is expanded
+  // Track which bin's editor panel is expanded (default: the routed-to bin)
   const [expandedBin, setExpandedBin] = useState<{ row: number; col: number } | null>(
     { row: editRow, col: editCol },
   )
 
-  // Track insert-cut state: which divider was tapped
-  const [insertAfterBin, setInsertAfterBin] = useState<BinCard | null>(null)
+  // Track insert-cut state: which cube we're inserting after
+  const [insertAfterCube, setInsertAfterCube] = useState<AdminCube | null>(null)
 
   // Track locally inserted new bins (display only — actual cut persisted on commit)
-  const [newBins, setNewBins] = useState<BinCard[]>([])
+  const [newBins, setNewBins] = useState<NewBin[]>([])
 
-  // Track renumber-hint visibility (shown after insert, hidden on preview)
+  // Track renumber-hint visibility (shown after insert)
   const [showRenumberHint, setShowRenumberHint] = useState(false)
 
-  // Build card list for this unit (4×4 default)
-  const [cards] = useState<BinCard[]>(() => buildBinCards(ROWS, COLS))
+  // ── Fetch all cubes for this unit (one request, no per-card requests) ──────
+  const { data: cubesData, isLoading: cubesLoading } = useQuery({
+    queryKey: ['admin', 'cubes'],
+    queryFn: adminGetCubes,
+    staleTime: 60_000,
+  })
 
-  // Fetch segment data for the currently edited bin
-  const { data: editedBinSegments, isLoading } = useQuery({
+  // Filter to configured cubes for this unit (non-empty = has a boundary set)
+  const configuredCubes = useMemo(() => {
+    if (!cubesData) return []
+    return cubesData.cubes.filter(
+      (c) => c.unit_id === unitId && !c.is_empty,
+    )
+  }, [cubesData, unitId])
+
+  // ── Fetch segment data for the currently edited bin ───────────────────────
+  const { data: editedBinSegments, isLoading: segsLoading } = useQuery({
     queryKey: ['admin', 'segments', unitId, editRow, editCol],
     queryFn: () => getUnitSegments(unitId, editRow, editCol),
     staleTime: 30_000,
@@ -103,49 +91,45 @@ export function CutPointEditor() {
   // Compute edit bin display number (1-based, row-major)
   const editBinDisplay = editRow * COLS + editCol + 1
 
-  function handleEditSegments(card: BinCard) {
+  const isLoading = cubesLoading || segsLoading
+
+  function handleEditSegments(cube: AdminCube) {
     setExpandedBin(
-      expandedBin && expandedBin.row === card.row && expandedBin.col === card.col
+      expandedBin && expandedBin.row === cube.row && expandedBin.col === cube.col
         ? null
-        : { row: card.row, col: card.col },
+        : { row: cube.row, col: cube.col },
     )
   }
 
-  function handleInsertCutDivider(afterCard: BinCard) {
-    setInsertAfterBin(afterCard)
-  }
-
   function handleInsertCommit() {
-    // Add a display-only "new" bin below the target
-    if (insertAfterBin) {
-      const newBin: BinCard = {
-        row: insertAfterBin.row,
-        col: insertAfterBin.col,
-        display: insertAfterBin.display + 1,
-        firstLabel: null,
-        firstCatalog: null,
-        segments: [],
-        isNew: true,
-      }
-      setNewBins((prev) => [...prev, newBin])
+    if (insertAfterCube) {
+      const afterDisplay = insertAfterCube.row * COLS + insertAfterCube.col + 1
+      setNewBins((prev) => [
+        ...prev,
+        {
+          afterRow: insertAfterCube.row,
+          afterCol: insertAfterCube.col,
+          display: afterDisplay + 1,
+        },
+      ])
       setShowRenumberHint(true)
     }
-    setInsertAfterBin(null)
-    // Invalidate segments for the edited bin
-    void queryClient.invalidateQueries({
-      queryKey: ['admin', 'segments', unitId],
-    })
+    setInsertAfterCube(null)
+    // Invalidate cubes + segments so the list refreshes
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
+    void queryClient.invalidateQueries({ queryKey: ['admin', 'segments', unitId] })
   }
 
   if (isLoading) {
     return (
       <div className="cut-point-editor-loading" aria-live="polite">
-        Loading segments…
+        Loading…
       </div>
     )
   }
 
   const editedSegments = editedBinSegments?.segments ?? []
+  const hasUnconfigured = configuredCubes.length < ROWS * COLS
 
   return (
     <div className="cut-point-editor">
@@ -175,26 +159,34 @@ export function CutPointEditor() {
         cols={COLS}
       />
 
-      {/* Bin-card cut-point list */}
+      {/* Bin-card cut-point list — only configured cubes */}
       <div className="cut-point-list">
-        {cards.map((card, idx) => {
+        {configuredCubes.map((cube, idx) => {
           const isEditing =
-            expandedBin && expandedBin.row === card.row && expandedBin.col === card.col
-          const isCurrentBin = card.row === editRow && card.col === editCol
+            expandedBin &&
+            expandedBin.row === cube.row &&
+            expandedBin.col === cube.col
+          const isCurrentBin = cube.row === editRow && cube.col === editCol
+          const cubeDisplay = cube.row * COLS + cube.col + 1
 
-          // Check if any locally-inserted new bins follow this card
+          // Pending new bins inserted after this cube
           const newBinsAfter = newBins.filter(
-            (nb) => nb.row === card.row && nb.col === card.col,
+            (nb) => nb.afterRow === cube.row && nb.afterCol === cube.col,
           )
 
+          // Segments for this bin: real data for current bin, mini strip data
+          // from adminGetCubes for others (no per-card fetch)
+          const cardSegments: Segment[] = isCurrentBin
+            ? editedSegments
+            : [] // mini strip shows empty for non-current bins (real data loads on expand)
+
           return (
-            <div key={`${card.row}-${card.col}`}>
+            <div key={`${cube.row}-${cube.col}`}>
               {/* Insert-cut divider ABOVE first card */}
               {idx === 0 && (
                 <InsertCutDivider
-                  afterBin={card}
-                  isFirst
-                  onTap={() => handleInsertCutDivider({ ...card, display: 0 })}
+                  label="insert cut before first bin"
+                  onTap={() => setInsertAfterCube({ ...cube, row: -1, col: -1 })}
                 />
               )}
 
@@ -205,27 +197,22 @@ export function CutPointEditor() {
                 <div className="bin-card-header">
                   {/* Bin-number chip */}
                   <div className="bin-number-chip">
-                    <span className="bin-number-chip-text">B{card.display}</span>
+                    <span className="bin-number-chip-text">B{cubeDisplay}</span>
                   </div>
 
                   {/* "starts at" label + value */}
                   <div className="bin-card-info">
                     <span className="bin-starts-at">STARTS AT</span>
-                    {isCurrentBin && editedSegments.length > 0 ? (
-                      <span className="bin-cut-record">
-                        {editedSegments[0].label}
-                      </span>
-                    ) : (
-                      <span className="bin-cut-record">
-                        Not configured
-                      </span>
-                    )}
+                    <span className="bin-cut-record">
+                      {cube.first_label ?? 'Not configured'}
+                      {cube.first_catalog ? ` · ${cube.first_catalog}` : ''}
+                    </span>
                   </div>
                 </div>
 
-                {/* Mini segment strip */}
+                {/* Mini segment strip (read-only; real segments only for current bin) */}
                 <SegmentStrip
-                  segments={isCurrentBin ? editedSegments : []}
+                  segments={cardSegments}
                   isReadOnly={true}
                 />
 
@@ -234,9 +221,9 @@ export function CutPointEditor() {
                   <button
                     type="button"
                     className="bin-edit-segments-btn"
-                    onClick={() => handleEditSegments(card)}
+                    onClick={() => handleEditSegments(cube)}
                     aria-expanded={!!isEditing}
-                    aria-controls={`seg-panel-${card.row}-${card.col}`}
+                    aria-controls={`seg-panel-${cube.row}-${cube.col}`}
                   >
                     ✎ EDIT SEGMENTS
                   </button>
@@ -245,17 +232,19 @@ export function CutPointEditor() {
 
               {/* Inline segment editor panel */}
               {isEditing && isCurrentBin && (
-                <SegmentEditorPanel
-                  unitId={unitId}
-                  row={card.row}
-                  col={card.col}
-                  binDisplay={card.display}
-                  shelfName={shelfName(unitId)}
-                  initialSegments={editedSegments}
-                  rows={ROWS}
-                  cols={COLS}
-                  onEditCutPoint={() => undefined}
-                />
+                <div id={`seg-panel-${cube.row}-${cube.col}`}>
+                  <SegmentEditorPanel
+                    unitId={unitId}
+                    row={cube.row}
+                    col={cube.col}
+                    binDisplay={cubeDisplay}
+                    shelfName={shelfName(unitId)}
+                    initialSegments={editedSegments}
+                    rows={ROWS}
+                    cols={COLS}
+                    onEditCutPoint={() => undefined}
+                  />
+                </div>
               )}
 
               {/* Renumber hint (after new-bin inserts) */}
@@ -263,15 +252,15 @@ export function CutPointEditor() {
                 <div className="renumber-hint" role="status">
                   <Info size={16} className="renumber-hint-icon" aria-hidden="true" />
                   <span className="renumber-hint-text">
-                    New BIN {card.display + 1} will be inserted · higher bins
-                    renumber — e.g. BIN {card.display + 1}→{card.display + 2}
+                    New BIN {cubeDisplay + 1} will be inserted · higher bins
+                    renumber — e.g. BIN {cubeDisplay + 1}→{cubeDisplay + 2}
                   </span>
                 </div>
               )}
 
-              {/* Display new bins inserted after this card */}
+              {/* Display locally-inserted pending bins after this card */}
               {newBinsAfter.map((nb) => (
-                <div key={`new-${nb.row}-${nb.col}`} className="bin-card bin-card--new">
+                <div key={`new-${nb.afterRow}-${nb.afterCol}-${nb.display}`} className="bin-card bin-card--new">
                   <div className="bin-card-header">
                     <div className="bin-number-chip">
                       <span className="bin-number-chip-text">B{nb.display}</span>
@@ -287,26 +276,61 @@ export function CutPointEditor() {
                 </div>
               ))}
 
-              {/* Insert-cut divider BELOW this card (between cards and at end) */}
+              {/* Insert-cut divider BELOW this card */}
               <InsertCutDivider
-                afterBin={card}
-                onTap={() => handleInsertCutDivider(card)}
+                label={`Insert cut after BIN ${cubeDisplay}`}
+                onTap={() => setInsertAfterCube(cube)}
               />
             </div>
           )
         })}
+
+        {/* Empty-state: no configured bins yet */}
+        {configuredCubes.length === 0 && (
+          <p className="segment-editor-no-change">
+            No bins configured for this shelf yet.
+          </p>
+        )}
+
+        {/* Single compact "add cut" affordance for unconfigured capacity */}
+        {hasUnconfigured && (
+          <div className="cut-point-add-affordance">
+            <button
+              type="button"
+              className="bin-edit-segments-btn"
+              onClick={() => {
+                const last = configuredCubes[configuredCubes.length - 1]
+                setInsertAfterCube(
+                  last ?? {
+                    unit_id: unitId, row: 0, col: -1,
+                    is_empty: false,
+                    first_label: '', first_catalog: '',
+                    last_label: '', last_catalog: '',
+                    fill_level: 0,
+                  },
+                )
+              }}
+            >
+              + ADD CUT POINT ({ROWS * COLS - configuredCubes.length} unconfigured)
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Insert-cut record picker sheet */}
-      {insertAfterBin && (
+      {insertAfterCube && (
         <RecordPickerSheet
           mode="insert"
           unitId={unitId}
-          row={insertAfterBin.row}
-          col={insertAfterBin.col}
-          afterBinDisplay={insertAfterBin.display}
+          row={insertAfterCube.row < 0 ? 0 : insertAfterCube.row}
+          col={insertAfterCube.col < 0 ? 0 : insertAfterCube.col}
+          afterBinDisplay={
+            insertAfterCube.row < 0
+              ? 0
+              : insertAfterCube.row * COLS + insertAfterCube.col + 1
+          }
           onCommit={() => handleInsertCommit()}
-          onCancel={() => setInsertAfterBin(null)}
+          onCancel={() => setInsertAfterCube(null)}
         />
       )}
     </div>
@@ -315,12 +339,10 @@ export function CutPointEditor() {
 
 /** Dashed insert-cut divider button. */
 function InsertCutDivider({
-  afterBin,
-  isFirst = false,
+  label,
   onTap,
 }: {
-  afterBin: BinCard
-  isFirst?: boolean
+  label: string
   onTap: () => void
 }) {
   return (
@@ -328,11 +350,7 @@ function InsertCutDivider({
       className="insert-cut-divider"
       role="button"
       tabIndex={0}
-      aria-label={
-        isFirst
-          ? 'Insert cut before first bin'
-          : `Insert cut after BIN ${afterBin.display}`
-      }
+      aria-label={label}
       onClick={onTap}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {

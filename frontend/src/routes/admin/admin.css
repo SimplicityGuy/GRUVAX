@@ -1892,6 +1892,25 @@
 
 /* ── Phase 5: CutPointEditor ─────────────────────────────────────────────────── */
 
+.cut-point-editor-loading {
+  padding: var(--gruvax-space-6);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm, 14px);
+  color: var(--gruvax-text-muted);
+}
+
+/* Single "add cut" affordance row at the bottom of the configured-bin list */
+.cut-point-add-affordance {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gruvax-space-4);
+  border: 2px dashed var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  background: var(--gruvax-off-white);
+  margin-top: var(--gruvax-space-2);
+}
+
 .cut-point-editor {
   display: flex;
   flex-direction: column;
