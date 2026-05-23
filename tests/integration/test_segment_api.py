@@ -532,6 +532,103 @@ async def test_labels_requires_admin_401() -> None:  # type: ignore[no-untyped-d
     assert res.status_code == 401, f"expected 401 without auth, got {res.status_code}"
 
 
+# ── SEG-05: contiguity enforcement on live PUT /cut write path ───────────────
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> None:  # type: ignore[no-untyped-def]
+    """SEG-05 regression: PUT /cut that scatters a label is rejected 400 contiguity_error.
+
+    Scatter scenario (boundaries.yaml unit 1, row 0):
+      (1,0,0) = Blue Note BLP 4001
+      (1,0,1) = Blue Note BST 84001
+      (1,0,2) = Creole CRLP 501
+      (1,0,3) = KC KC 32731
+
+    If we PUT (1,0,3) to first_label="Blue Note", the sequence becomes:
+      Blue Note, Blue Note, Creole, Blue Note
+    Blue Note starts at positions 0, 1, and 3 — with Creole between positions 1
+    and 3 — which is a contiguity violation (SEG-05 / D-09).
+
+    Assertions:
+    1. Response is HTTP 400 with type="contiguity_error".
+    2. The error message mentions scatter or non-adjacent (validator's copy).
+    3. GET /api/admin/cubes confirms (1,0,3) is STILL "KC" (no DB write occurred).
+
+    Guard: the fixture is restored in finally so later tests see canonical state.
+    """
+    await _seed_test_pin(db_pool)
+    auth = await _login(client)
+    assert auth, "login should succeed after seeding the test PIN"
+
+    # Ensure the DB AND the in-app BoundaryCache are in the canonical fixture state.
+    # The module-scoped client holds a running app whose cache may be stale if a
+    # prior mutating test (e.g. test_insert_cut_cascade_preserves_bin_after_empty)
+    # restored the DB without triggering a cache reload.  A valid, non-scattering
+    # PUT at (1,0,0) = Blue Note BLP 4001 (already the canonical value) is a no-op
+    # DB-wise but forces `cache.invalidate() + cache.load()` via the handler's
+    # post-commit path — syncing the in-app cache with the restored DB.
+    from gruvax.db.seed_boundaries import load_boundaries
+
+    await load_boundaries(_BOUNDARIES_YAML)
+    cache_sync_res = await client.put(
+        "/api/admin/cubes/1/0/0/cut",
+        json={"first_label": "Blue Note", "first_catalog": "BLP 4001", "force": True},
+        cookies=auth["cookies"],
+        headers={"X-CSRF-Token": auth["csrf_token"]},
+    )
+    assert cache_sync_res.status_code == 200, (
+        f"Cache-sync PUT failed: {cache_sync_res.status_code} {cache_sync_res.text}"
+    )
+
+    response = await client.put(
+        "/api/admin/cubes/1/0/3/cut",
+        json={
+            "first_label": "Blue Note",
+            "first_catalog": "BLP 4001",
+            "force": True,  # bypass phantom check; Blue Note BLP 4001 IS in the collection
+        },
+        cookies=auth["cookies"],
+        headers={"X-CSRF-Token": auth["csrf_token"]},
+    )
+    if response.status_code in (404, 405):
+        pytest.skip("PUT cut endpoint not yet implemented")
+
+    try:
+        assert response.status_code == 400, (
+            f"Expected 400 (contiguity_error) for scatter-inducing PUT /cut, "
+            f"got {response.status_code}: {response.text}"
+        )
+        body = response.json()
+        assert body.get("type") == "contiguity_error", (
+            f"Expected type=contiguity_error, got: {body.get('type')!r}"
+        )
+        msg = (body.get("message") or "").lower()
+        assert "split" in msg or "non-adjacent" in msg, (
+            f"contiguity_error message must mention 'split' or 'non-adjacent': {msg!r}"
+        )
+
+        # Confirm no DB write occurred — (1,0,3) must still be "KC"
+        cubes_res = await client.get("/api/admin/cubes", cookies=auth["cookies"])
+        assert cubes_res.status_code == 200, cubes_res.text
+        cube_103 = next(
+            (
+                c
+                for c in cubes_res.json()["cubes"]
+                if c["unit_id"] == 1 and c["row"] == 0 and c["col"] == 3
+            ),
+            None,
+        )
+        assert cube_103 is not None, "cube (1,0,3) not found in GET /admin/cubes response"
+        assert cube_103.get("first_label") == "KC", (
+            f"cube (1,0,3) first_label should still be 'KC' (no write), got: {cube_103.get('first_label')!r}"
+        )
+    finally:
+        # Restore the fixture (belt-and-suspenders: no write happens on a rejected cut,
+        # but earlier load_boundaries + cache_sync_put may have altered state)
+        await load_boundaries(_BOUNDARIES_YAML)
+
+
 # ── SEG-08: require_admin 401/403 ────────────────────────────────────────────
 
 

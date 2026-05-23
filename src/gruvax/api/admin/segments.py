@@ -218,6 +218,29 @@ async def put_bin_cut(
                 },
             )
 
+    # ── Contiguity check (SEG-05 / D-09 — Direction A) ───────────────────────
+    # Enforce label contiguity on the live write path BEFORE the DB transaction
+    # so a scatter-inducing cut is never committed.  Direction A (enforce here,
+    # not via the orphaned DiffPreviewSheet/preview route) is the lowest-risk
+    # fix: one validate_contiguity call per direct write path instead of
+    # re-wiring the whole editor through the two-step validate→preview→commit
+    # flow that the owner accepted dropping (05-UAT.md test 5 note).
+    from gruvax.api.admin.validation import build_proposed_cuts, validate_contiguity
+
+    proposed = build_proposed_cuts(cache, replace=(unit_id, row, col, first_label, first_catalog))
+    contiguity_error = validate_contiguity(proposed, segment_cache)
+    if contiguity_error is not None:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "type": "contiguity_error",
+                "message": contiguity_error,
+                "unit_id": unit_id,
+                "row": row,
+                "col": col,
+            },
+        )
+
     # ── DB write ──────────────────────────────────────────────────────────────
     # Note: validate_no_empty_bin is NOT called here — PUT /cut REPLACES the
     # existing cut point (not inserts a new one), so there's no risk of an
@@ -443,7 +466,12 @@ async def insert_cut(
     Returns 400 with specific error types on each failure condition.
     HTTP 404 if (after_unit_id, after_row, after_col) is not a known cube.
     """
-    from gruvax.api.admin.validation import validate_no_empty_bin, validate_shelf_overflow
+    from gruvax.api.admin.validation import (
+        build_proposed_cuts,
+        validate_contiguity,
+        validate_no_empty_bin,
+        validate_shelf_overflow,
+    )
     from gruvax.db.queries import (
         cube_exact_match,
         fetch_current_boundary,
@@ -585,6 +613,19 @@ async def insert_cut(
                 # nxt was the first empty cube — it absorbed the shift. Stop so the
                 # next (real) bin is left untouched.
                 break
+
+    # ── Contiguity check (SEG-05 / D-09 — Direction A) ───────────────────────
+    # Enforce label contiguity on the live write path BEFORE the DB transaction
+    # so a scatter-inducing insert is never committed.  The cascade_cubes list
+    # already encodes the full post-insert cut-point set for the affected cubes;
+    # build_proposed_cuts merges it with the remaining (unaffected) live cuts.
+    proposed_insert = build_proposed_cuts(cache, cascade=cascade_cubes)
+    insert_contiguity_error = validate_contiguity(proposed_insert, segment_cache)
+    if insert_contiguity_error is not None:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"type": "contiguity_error", "message": insert_contiguity_error},
+        )
 
     change_set_id = str(_uuid.uuid4())
     affected_cubes: list[dict[str, int]] = []

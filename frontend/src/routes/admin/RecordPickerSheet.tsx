@@ -20,10 +20,11 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { AlertTriangle } from 'lucide-react'
 import {
+  BulkSaveError,
   getCatalogsForLabel,
   getDistinctLabels,
-  setCutPoint,
   insertCut,
+  setCutPoint,
 } from '../../api/adminClient'
 import type { CatalogOption, NearMiss } from '../../api/types'
 import type { InsertCutBody } from '../../api/cubeTypes'
@@ -243,8 +244,16 @@ export function RecordPickerSheet({
         onCommit(result)
       }
     } catch (err) {
-      const msg = err instanceof Error ? err.message : 'Could not save — check your connection and try again.'
-      setSaveError(msg)
+      // Both contiguity_error (SEG-05) and phantom_boundary share this 400 surfacing
+      // path via BulkSaveError: the server's plain-language message is shown in the
+      // .sheet-error block and the sheet stays open so the owner can reposition the cut.
+      if (err instanceof BulkSaveError) {
+        setSaveError(err.serverMessage ?? err.message)
+        // Do NOT call onCommit or onCancel — sheet stays open for correction.
+      } else {
+        const msg = err instanceof Error ? err.message : 'Could not save — check your connection and try again.'
+        setSaveError(msg)
+      }
     } finally {
       setIsSaving(false)
     }
