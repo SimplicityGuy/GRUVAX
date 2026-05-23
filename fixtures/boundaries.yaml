@@ -37,12 +37,14 @@ units:
         first_catalog: "BST 84001"
         is_empty: false
 
-      # Row 0, col 2 — ECM series (mid-series cut; col 1 spans Blue Note BST + ECM 1001-1009)
-      # This creates a multi-label bin at (0,1) for drag-handle demonstration (Issue 4).
+      # Row 0, col 2 — Creole cut. This makes bin (0,1) span Blue Note BST + Capitol +
+      # Columbia = a realistic THREE-label bin for the drag-handle demo (Issue 4),
+      # instead of the earlier 5-label bin that overcrowded the strip. Label order in
+      # the collection: Blue Note → Capitol → Columbia → Creole → ECM → KC → Prestige.
       - row: 0
         col: 2
-        first_label: "ECM"
-        first_catalog: "ECM 1010"
+        first_label: "Creole"
+        first_catalog: "CRLP 501"
         is_empty: false
 
       # Row 0, col 3 — KC mixed-separator series
