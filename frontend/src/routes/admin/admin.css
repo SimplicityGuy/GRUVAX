@@ -2461,6 +2461,189 @@
   /* Inherits .settings-number-input — DM Mono already applied */
 }
 
+/* ── Phase 5: RecordPickerSheet (sheet-* variant names) ─────────────────────── */
+/* RecordPickerSheet uses sheet-* class names distinct from record-picker-*.   */
+
+.sheet-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gruvax-z-modal);
+  background: var(--gruvax-overlay-scrim);
+}
+
+.sheet-drag-pill {
+  width: 40px;
+  height: 4px;
+  background: var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-pill);
+  margin: var(--gruvax-space-2) auto var(--gruvax-space-1);
+  flex-shrink: 0;
+}
+
+.sheet-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 0 var(--gruvax-space-4) var(--gruvax-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-3);
+}
+
+.sheet-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0 0 var(--gruvax-space-3);
+}
+
+.sheet-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-error);
+  margin: 0;
+}
+
+.sheet-actions {
+  padding: var(--gruvax-space-3) 0 var(--gruvax-space-2);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  flex-shrink: 0;
+  border-top: 1px solid var(--gruvax-border-faint);
+}
+
+/* sheet-commit-btn and sheet-cancel-btn extend editor-btn-primary/cancel */
+.sheet-commit-btn {
+  width: 100%;
+}
+
+.sheet-cancel-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: var(--gruvax-space-2) 0;
+  width: 100%;
+  text-align: center;
+  touch-action: manipulation;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.sheet-cancel-btn:hover {
+  color: var(--gruvax-text-primary);
+}
+
+.sheet-cancel-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* ── Phase 5: insert-cut-divider-label ───────────────────────────────────────── */
+/* The span inside .insert-cut-divider */
+.insert-cut-divider-label {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  padding: 0 var(--gruvax-space-3);
+  white-space: nowrap;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.insert-cut-divider:hover .insert-cut-divider-label {
+  color: var(--gruvax-blue);
+}
+
+/* ── Phase 5: bin-card--new modifier ─────────────────────────────────────────── */
+/* Pending new bin card (local display only, not yet committed) */
+.bin-card--new {
+  border-style: dashed;
+  background: color-mix(in srgb, var(--gruvax-yellow) 8%, transparent);
+}
+
+/* ── Phase 5: seg-chip--drifted ──────────────────────────────────────────────── */
+/* Override chip when drift > threshold (SegmentLegend) */
+.seg-chip--drifted {
+  background: color-mix(in srgb, var(--gruvax-warning) 15%, transparent);
+  border: 1px solid color-mix(in srgb, var(--gruvax-warning) 40%, transparent);
+  color: var(--gruvax-warning);
+}
+
+/* ── Phase 5: DiffPreviewSheet segment change rows ───────────────────────────── */
+
+.diff-field-before {
+  color: var(--gruvax-text-muted);
+}
+
+.diff-seg-change {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-2) 0;
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  border-bottom: 1px solid var(--gruvax-border-faint);
+}
+
+.diff-seg-change:last-child {
+  border-bottom: none;
+}
+
+.diff-seg-change-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-label);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+.diff-seg-change-before {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  color: var(--gruvax-text-muted);
+  text-decoration: line-through;
+}
+
+.diff-seg-change-after {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  color: var(--gruvax-text-primary);
+}
+
+.diff-seg-change-value {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  color: var(--gruvax-text-secondary);
+}
+
+/* Change-type color accents */
+.diff-seg-change--cut .diff-seg-change-label {
+  color: var(--gruvax-blue);
+}
+
+.diff-seg-change--override .diff-seg-change-label {
+  color: var(--gruvax-yellow-dark);
+}
+
+.diff-seg-change--insert .diff-seg-change-label {
+  color: var(--gruvax-success);
+}
+
+.diff-seg-change--orphan .diff-seg-change-label {
+  color: var(--gruvax-warning);
+}
+
 /* ── Rollback toast (Phase 4 / RTM-03 / D-07) ─────────────────────────────── */
 /* Admin-surface only — never shown on KioskView. */
 /* All colors: var(--gruvax-*) tokens — no hardcoded hex (CLAUDE.md constraint). */
