@@ -1,9 +1,10 @@
 ---
 phase: 05-segment-aware-position-precision
-verified: 2026-05-23T20:30:00Z
-status: human_needed
-score: 8/8 must-haves verified (code) — SEG-05 live-path gap now closed; one human re-confirmation of the UI block requested
+verified: 2026-05-23T21:05:00Z
+status: passed
+score: 8/8 must-haves verified — SEG-05 live-path gap closed AND the UI block confirmed live (Playwright) after a clean DB re-seed + container rebuild
 overrides_applied: 0
+human_verification_outcome: "CONFIRMED 2026-05-23. The running container image predated 05-06, so it was rebuilt (docker compose up -d --build api) and the dev DB was dropped + re-seeded from fixtures (clears the cut_insert pollution that also fixed test_migrate_0005). On the rebuilt stack: editing bin 4 (KC) → 'Blue Note / BLP 4001' in EDIT SHELF A is hard-blocked — the EDIT CUT POINT sheet stays open and renders the alert 'This cut would split blue note across non-adjacent bins…', API returns 400 type=contiguity_error, and the bin remains KC (no write). Full backend suite now exits 0 (268 passed, prior migration failure resolved). Cosmetic follow-up: WR-04 (message shows casefolded 'blue note' not 'Blue Note')."
 re_verification:
   previous_status: gaps_found
   previous_score: "8/8 code; UAT found 1 gap (SEG-05 not enforced on live edit paths)"
