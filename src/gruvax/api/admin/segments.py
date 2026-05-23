@@ -554,24 +554,37 @@ async def insert_cut(
         )
     )
 
-    # Shift each subsequent cube's cut point from the previous cube's cut point
-    for i in range(insert_after_idx + 1, len(boundaries) - 1):
-        curr = boundaries[i]
-        nxt = boundaries[i + 1]
-        # The next cube gets curr's cut point (shift right by one)
-        cascade_cubes.append(
-            (
-                nxt.unit_id,
-                nxt.row,
-                nxt.col,
-                curr.first_label,
-                curr.first_catalog,
-                curr.is_empty,
+    # Shift each subsequent cube's cut point right by one, reading ORIGINAL values
+    # from `boundaries`. The first empty cube absorbs the shift: it receives the
+    # last real cut point, and the cascade stops there.
+    #
+    # The stop condition MUST fire as soon as we FILL the empty cube (nxt.is_empty),
+    # NOT one step later when that cube would become the source. Breaking on
+    # `curr.is_empty` copied the empty cube's blank value onto the following real
+    # bin before stopping — silently dropping that record (e.g. inserting in row 0
+    # wiped Columbia at (3,0), the bin just past the empty (2,3) absorber).
+    #
+    # If next_cube was itself empty it already absorbed the insert above, so there
+    # is nothing left to shift.
+    if not next_cube.is_empty:
+        for i in range(insert_after_idx + 1, len(boundaries) - 1):
+            curr = boundaries[i]
+            nxt = boundaries[i + 1]
+            # nxt receives curr's ORIGINAL (real) cut point — always non-empty.
+            cascade_cubes.append(
+                (
+                    nxt.unit_id,
+                    nxt.row,
+                    nxt.col,
+                    curr.first_label,
+                    curr.first_catalog,
+                    False,
+                )
             )
-        )
-        if curr.is_empty:
-            # Empty cube absorbs the shift — stop cascading
-            break
+            if nxt.is_empty:
+                # nxt was the first empty cube — it absorbed the shift. Stop so the
+                # next (real) bin is left untouched.
+                break
 
     change_set_id = str(_uuid.uuid4())
     affected_cubes: list[dict[str, int]] = []

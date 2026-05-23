@@ -17,12 +17,16 @@ Auth patterns mirror test_boundary_editor.py and test_change_set.py.
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 
 from gruvax.app import create_app
+
+_BOUNDARIES_YAML = Path(__file__).parents[2] / "fixtures" / "boundaries.yaml"
 
 
 @pytest.fixture(autouse=True)
@@ -42,7 +46,17 @@ def reset_login_rate_limit() -> None:  # type: ignore[return]
 
 @pytest_asyncio.fixture(scope="module")
 async def client(db_pool):  # type: ignore[no-untyped-def]
-    """Module-scoped async test client with full ASGI lifespan."""
+    """Module-scoped async test client with full ASGI lifespan.
+
+    Re-seeds boundaries to the canonical fixture BEFORE the app starts so the
+    app's BoundaryCache (loaded once at lifespan startup) sees known state. The
+    suite shares the dev DB and does not otherwise reset it, so mutating tests
+    (insert-cut) would otherwise leave later runs working on polluted data.
+    """
+    from gruvax.db.seed_boundaries import load_boundaries
+
+    await load_boundaries(_BOUNDARIES_YAML)
+
     app = create_app()
     async with (
         LifespanManager(app) as manager,
@@ -351,6 +365,107 @@ async def test_insert_cut_shelf_overflow_rejected(client) -> None:  # type: igno
         assert body.get("type") in ("shelf_overflow", "cube_not_found"), (
             f"400 response must have shelf_overflow or cube_not_found type: {body}"
         )
+
+
+async def _seed_test_pin(db_pool) -> None:  # type: ignore[no-untyped-def]
+    """Seed the test PIN ("0000") so ``_login`` succeeds.
+
+    The shared ``admin_session`` fixture is broken under this httpx version (it
+    references the removed ``AsyncClient.app``), so auth tests in this module fall
+    back to the skip-prone ``_login``. This helper seeds the hash directly through
+    ``db_pool`` (same DATABASE_URL the app uses), mirroring the conftest's
+    JSON-quoted ``settings.value`` format.
+    """
+    from gruvax.auth.pin import hash_pin
+
+    pin_hash = hash_pin("0000")
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
+            " VALUES ('auth.pin_hash', %s, 'Test PIN (cascade regression)', now())"
+            " ON CONFLICT (key) DO UPDATE"
+            "  SET value = EXCLUDED.value, updated_at = now()",
+            (f'"{pin_hash}"',),
+        )
+        await conn.commit()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> None:  # type: ignore[no-untyped-def]
+    """SEG-08 regression: the insert cascade must not drop the bin past the absorber.
+
+    The fixture has an empty cube at (1,2,3) directly followed by a non-empty bin at
+    (1,3,0) = Columbia C2S 841. A cut inserted earlier in the unit cascades right
+    until the empty cube absorbs the shift. A prior off-by-one (`break` on
+    ``curr.is_empty`` instead of ``nxt.is_empty``) copied the empty cube's blank
+    value onto (1,3,0), silently deleting Columbia. This guards the invariant:
+    inserting a cut adds exactly one occupied bin and loses no existing cut point.
+    """
+    await _seed_test_pin(db_pool)
+    auth = await _login(client)
+    assert auth, "login should succeed after seeding the test PIN"
+
+    def unit1_cuts(payload: dict) -> dict[tuple[int, int], str | None]:
+        return {
+            (c["row"], c["col"]): c.get("first_catalog")
+            for c in payload["cubes"]
+            if c["unit_id"] == 1 and not c["is_empty"]
+        }
+
+    before_res = await client.get("/api/admin/cubes", cookies=auth["cookies"])
+    if before_res.status_code in (404, 405):
+        pytest.skip("Admin cubes endpoint not yet implemented")
+    assert before_res.status_code == 200, before_res.text
+    before = unit1_cuts(before_res.json())
+
+    response = await client.post(
+        "/api/admin/cubes/insert-cut",
+        json={
+            "after_unit_id": 1,
+            "after_row": 0,
+            "after_col": 0,
+            "new_first_label": "Blue Note",
+            "new_first_catalog": "BLP 4010",
+            "force": True,
+        },
+        cookies=auth["cookies"],
+        headers={"X-CSRF-Token": auth["csrf_token"]},
+    )
+    if response.status_code in (404, 405):
+        pytest.skip("POST insert-cut endpoint not yet implemented")
+    assert response.status_code == 200, (
+        f"Expected 200 from a valid insert-cut, got {response.status_code}: {response.text}"
+    )
+    change_set_id = response.json().get("change_set_id")
+
+    try:
+        after_res = await client.get("/api/admin/cubes", cookies=auth["cookies"])
+        assert after_res.status_code == 200, after_res.text
+        after = unit1_cuts(after_res.json())
+
+        # The bin just past the empty absorber must survive (the original bug wiped it).
+        assert "C2S 841" in after.values(), (
+            "Columbia C2S 841 (the bin after the empty absorber) was dropped by the cascade"
+        )
+        # Exactly one new occupied bin, and no existing cut point lost (multiset check).
+        assert len(after) == len(before) + 1, (
+            f"insert-cut should add exactly one occupied bin: {len(before)} -> {len(after)}"
+        )
+        assert sorted(filter(None, after.values())) == sorted(
+            [*filter(None, before.values()), "BLP 4010"]
+        ), "insert-cut changed the set of cut points beyond adding the new one"
+    finally:
+        # Clean up the change-set's history rows. The suite shares the dev DB and
+        # `test_migrate_0005` downgrades migration 0005, which restores the old
+        # boundary_history CHECK (source IN 'manual','bulk','revert'); leftover
+        # 'cut_insert' rows would make that downgrade fail.
+        if change_set_id:
+            async with db_pool.connection() as conn:
+                await conn.execute(
+                    "DELETE FROM gruvax.boundary_history WHERE change_set_id = %s",
+                    (change_set_id,),
+                )
+                await conn.commit()
 
 
 # ── SEG-08: require_admin 401/403 ────────────────────────────────────────────
