@@ -473,6 +473,65 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
         await load_boundaries(_BOUNDARIES_YAML)
 
 
+# ── Admin label/catalog autocomplete endpoints ───────────────────────────────
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_labels_returns_distinct_labels(client, db_pool) -> None:  # type: ignore[no-untyped-def]
+    """GET /api/admin/labels returns the distinct-label list for the picker.
+
+    Regression guard: the RecordPickerSheet autocomplete + client-side phantom
+    USE-ANYWAY path depend on this route, which was previously unrouted (the
+    frontend called it but no backend endpoint existed).
+    """
+    await _seed_test_pin(db_pool)
+    auth = await _login(client)
+    assert auth, "login should succeed after seeding the test PIN"
+
+    res = await client.get("/api/admin/labels", cookies=auth["cookies"])
+    assert res.status_code == 200, f"expected 200, got {res.status_code}: {res.text}"
+    body = res.json()
+    assert isinstance(body, list) and body, "labels response must be a non-empty list"
+    assert all("label" in item for item in body), "each entry must have a 'label' key"
+    labels = [item["label"] for item in body]
+    assert "Blue Note" in labels, "fixture label 'Blue Note' should be present"
+    assert len(labels) == len(set(labels)), "labels must be distinct (no duplicates)"
+    # Case-insensitive sort (the SQL ORDER BY uses the DB collation, not Python
+    # codepoint order — e.g. 'Epic' before 'ESP').
+    assert labels == sorted(labels, key=str.lower), "labels must be sorted (case-insensitive)"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_list_catalogs_for_label(client, db_pool) -> None:  # type: ignore[no-untyped-def]
+    """GET /api/admin/labels/{label}/catalogs returns release_id + catalog_number."""
+    await _seed_test_pin(db_pool)
+    auth = await _login(client)
+    assert auth, "login should succeed after seeding the test PIN"
+
+    res = await client.get("/api/admin/labels/Blue%20Note/catalogs", cookies=auth["cookies"])
+    assert res.status_code == 200, f"expected 200, got {res.status_code}: {res.text}"
+    body = res.json()
+    assert isinstance(body, list) and body, "catalogs response must be a non-empty list"
+    for item in body:
+        assert "release_id" in item and "catalog_number" in item, (
+            f"each entry must have release_id + catalog_number: {item}"
+        )
+    catalogs = [item["catalog_number"] for item in body]
+    assert "BLP 4001" in catalogs, "fixture catalog 'BLP 4001' should be present"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_labels_requires_admin_401() -> None:  # type: ignore[no-untyped-def]
+    """GET /api/admin/labels without a session returns 401."""
+    app = create_app()
+    async with (
+        LifespanManager(app) as manager,
+        AsyncClient(transport=ASGITransport(app=manager.app), base_url="http://test") as ac,
+    ):
+        res = await ac.get("/api/admin/labels")
+    assert res.status_code == 401, f"expected 401 without auth, got {res.status_code}"
+
+
 # ── SEG-08: require_admin 401/403 ────────────────────────────────────────────
 
 
