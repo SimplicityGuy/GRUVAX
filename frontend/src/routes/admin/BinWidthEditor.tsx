@@ -23,7 +23,7 @@
  * Design tokens only — no hardcoded hex (CLAUDE.md constraint).
  */
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import { useParams, useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LocatorHeader } from './LocatorHeader'
@@ -179,6 +179,8 @@ export function BinWidthEditor() {
         style: { left: `${(cum * 100).toFixed(4)}%` },
       })
       handle.appendChild(el('div', { className: 'bwe-grip' }))
+      // attachDragH is a hoisted function decl below; mutual recursion with renderStrip
+      // eslint-disable-next-line react-hooks/immutability
       attachDragH(handle, i, strip)
       wrap.appendChild(handle)
     }
@@ -210,7 +212,7 @@ export function BinWidthEditor() {
 
       const onUp = () => {
         handle.classList.remove('bwe-handle--dragging')
-        try { handle.releasePointerCapture(e.pointerId) } catch (_) { /* ignore */ }
+        try { handle.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
         document.removeEventListener('pointermove', onMove)
         document.removeEventListener('pointerup', onUp)
         // Commit drag result to React state
@@ -278,12 +280,10 @@ export function BinWidthEditor() {
       }
       main.appendChild(nm)
 
-      // Catalog range
+      // Record count (honesty rule: counts come from row-counting v_collection, not catalog math)
       const rng = el('div', {
         className: 'bwe-leg-rng',
-        textContent: seg.first_catalog
-          ? `${seg.first_catalog}${seg.last_catalog ? ` → ${seg.last_catalog}` : ''}${seg.continues ? '  ·  spans into next bin' : ''}`
-          : seg.continues ? 'spans into next bin' : '',
+        textContent: `${seg.segment_count} record${seg.segment_count !== 1 ? 's' : ''}${seg.continues ? '  ·  spans into next bin' : ''}`,
       })
       main.appendChild(rng)
 
@@ -299,6 +299,8 @@ export function BinWidthEditor() {
         const reset = el('button', {
           className: 'bwe-reset-link',
           textContent: `reset to ${autoPct}%`,
+          // resetOne is a hoisted function decl below; mutual recursion with updateLegend
+          // eslint-disable-next-line react-hooks/immutability
           onclick: () => resetOne(seg.label),
         })
         main.appendChild(reset)

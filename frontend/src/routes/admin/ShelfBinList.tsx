@@ -174,7 +174,7 @@ export function ShelfBinList() {
           <InsertCutDivider onTap={() => openInsertAfter(null)} />
         )}
 
-        {configuredBins.map((cube, idx) => {
+        {configuredBins.map((cube) => {
           const display = binNum(cube)
           // New bins inserted after this cube
           const newBinsAfter = newBins.filter(
