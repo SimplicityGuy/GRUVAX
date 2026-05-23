@@ -185,3 +185,121 @@ See `.planning/phases/05-segment-aware-position-precision/05-VALIDATION.md` for 
 - [x] no innerHTML (grep -n "innerHTML" returns nothing in new files)
 
 ## Self-Check: PASSED
+
+---
+
+## Human-Verify Fixes (round 1)
+
+Fixes applied after the Phase 05 / 05-05 human-verify checkpoint. Seven issues were identified;
+all seven resolved across five atomic commits.
+
+### Commits
+
+| Hash | Description | Files |
+|------|-------------|-------|
+| `c00c22a` | fix(05-05): CSS drift + shelf letter notation (Issues 1, 2, 3, 7) | CutPointEditor.tsx, SegmentEditorPanel.tsx, Settings.tsx, CubesGrid.tsx, admin.css, shelf.ts (new) |
+| `de8e318` | fix(05-05): multi-label dev bin in fixtures (Issue 4) | fixtures/boundaries.yaml |
+| `335b2b2` | fix(05-05): show only configured bins, single add-cut affordance (Issue 5) | CutPointEditor.tsx |
+| `56a472f` | fix(05-05): activity-driven session extension (Issue 6) | AdminShell.tsx |
+| `e85f45a` | fix(05-05): CSS audit — add all missing rule blocks | admin.css |
+
+### Fix Details
+
+**Issue 1 — "STARTS ATblue note" (missing space)**
+
+Root cause: JSX used `bin-card-starts`, `bin-card-label`, `bin-card-value` class names but
+admin.css defined `bin-card-info`, `bin-starts-at`, `bin-cut-record`. With no matching CSS
+rule the flex container had no gap and the two text spans ran together.
+Fix: renamed JSX class names to match existing CSS. No CSS was changed.
+
+**Issue 2 — "SHELF 1" should be "SHELF A"**
+
+Root cause: CutPointEditor heading used `String.fromCharCode(64 + unitId)` inline but
+CubesGrid used the raw `unitId` number. No shared helper existed.
+Fix: created `frontend/src/lib/shelf.ts` exporting `shelfLetter(unitId)` and `shelfName(unitId)`.
+Both components now import from `shelf.ts`. Force-added past root `.gitignore`'s `lib/` entry
+(same workaround as dom.ts in Task 1).
+
+**Issue 3 + 7 — Broken layout / unstyled buttons (CSS class-name drift)**
+
+Root cause: CutPointEditor was built with class names from the old Phase 3 CubeEditor
+(`cube-editor-header`, `bin-card-chip`, `bin-card-chip-label`, `bin-card-edit-btn`, etc.).
+admin.css was written with the correct Phase 5 names (`cut-point-editor-header`,
+`bin-number-chip`, `bin-number-chip-text`, `bin-edit-segments-btn`, etc.).
+Fix: renamed every JSX className in CutPointEditor and SegmentEditorPanel to match admin.css.
+The CSS file is the source of truth; no CSS was changed for this issue.
+
+**Issue 4 — No drag handle visible (no multi-label dev bin)**
+
+Root cause: All fixtures/boundaries.yaml cubes for unit 1 row 0 had aligned cut points that
+gave each bin a single label. cube (0,1) spanned Blue Note BST 84001 up to the next cut at
+ECM 1001 — which was also the first ECM record, leaving no overlap.
+Fix: moved the ECM cut point from ECM 1001 to ECM 1010. Cube (0,1) now spans
+BST 84001–84009 (Blue Note) + ECM 1001–1009 (ECM) = two segments, so navigating to
+`/admin/cubes/1/0/1` and opening EDIT SEGMENTS shows a drag handle between them.
+
+**Issue 5 — 16 "Not configured" placeholders**
+
+Root cause: CutPointEditor rendered a static 16-card grid (4×4) using a hardcoded loop,
+showing "Not configured" for any bin that lacked data.
+Fix: replaced the static grid with a data-driven list. Fetches all cubes via `adminGetCubes()`
+(already used by CubesGrid — no new endpoint), filters to `unit_id === unitId && !is_empty`,
+renders one card per configured bin, and shows a single compact "+ ADD CUT POINT (N unconfigured)"
+affordance at the bottom. Segments are fetched only for the currently-edited bin.
+
+**Issue 6 — Session timer counts down during active use**
+
+Root cause: AdminShell only polled GET /api/admin/session every 30 s. The backend slides
+`expires_at` on every authenticated request, so the polling was sufficient to keep the timer
+in sync but not to reflect user activity extending the session.
+Fix: added `pointerdown` and `keydown` document listeners that call `pollSession()` when:
+(a) at least 15 s have elapsed since the last activity-driven refresh, and
+(b) the hard-cap remaining time is > 5 minutes (hard cap cannot be extended by activity).
+The hard-cap ref is kept in sync via a `useEffect` to avoid stale closures in the
+long-lived event listener.
+
+### CSS Audit (Issue 3 extended scope)
+
+The className audit during fix commits also found pre-existing drift in RecordPickerSheet
+and DiffPreviewSheet — class names referenced in JSX with no matching CSS rule. Added
+the missing rule blocks in commit `e85f45a`:
+
+- `sheet-scrim`, `sheet-drag-pill`, `sheet-body`, `sheet-heading`, `sheet-error`,
+  `sheet-actions`, `sheet-commit-btn`, `sheet-cancel-btn`
+- `insert-cut-divider-label`
+- `bin-card--new` modifier (dashed border + yellow tint for pending new bins)
+- `seg-chip--drifted` (warning color)
+- DiffPreviewSheet: `diff-field-before`, `diff-seg-change`, `diff-seg-change-label`,
+  `diff-seg-change-before`, `diff-seg-change-after`, `diff-seg-change-value`,
+  `diff-seg-change--{cut,override,insert,orphan}`
+- Settings: `settings-actions`, `settings-section--overrides`, `settings-heading--xl`,
+  `settings-number-input--mono`
+- `cut-point-editor-loading`, `cut-point-add-affordance`
+
+All design tokens only — no hardcoded hex values added.
+
+### Phase Exit Gate Results (post-fix)
+
+| Gate | Status |
+|------|--------|
+| `cd frontend && npm run lint` | PASS |
+| `cd frontend && npx tsc --noEmit` | PASS |
+| `cd frontend && npm run build` | PASS |
+| `grep -rn "cube-editor" src/` returns empty | PASS |
+| No hardcoded hex in modified files | PASS |
+| No inner-HTML assignment in modified files | PASS |
+| `just lint` (backend ruff) | PASS |
+| `just typecheck` (backend mypy) | PASS |
+| `uv run pytest` (159 passed) | PASS |
+
+### Self-Check (round 1 fixes)
+
+- [x] `c00c22a` exists in git log
+- [x] `de8e318` exists in git log
+- [x] `335b2b2` exists in git log
+- [x] `56a472f` exists in git log
+- [x] `e85f45a` exists in git log
+- [x] `frontend/src/lib/shelf.ts` exists
+- [x] `fixtures/boundaries.yaml` col 2 first_catalog is "ECM 1010"
+- [x] CutPointEditor filters on `!c.is_empty` (no static 16-card loop)
+- [x] AdminShell has `pointerdown` + `keydown` activity listeners
