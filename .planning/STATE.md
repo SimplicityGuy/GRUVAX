@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-last_updated: 2026-05-23T04:38:15.659Z
+status: executing
+last_updated: "2026-05-23T20:09:37.715Z"
 progress:
-  total_phases: 8
+  total_phases: 9
   completed_phases: 4
-  total_plans: 22
+  total_plans: 24
   completed_plans: 22
-  percent: 50
-stopped_at: Phase 05 REOPENED — UAT found SEG-05 contiguity not enforced on live edit paths (05-UAT.md gap); gap-closure pending
+  percent: 44
 ---
 
 # State: GRUVAX
@@ -21,7 +20,7 @@ stopped_at: Phase 05 REOPENED — UAT found SEG-05 contiguity not enforced on li
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 6 — led contract over mqtt (hardware stubbed)
+**Current Focus:** Phase 05 — segment-aware-position-precision
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -30,11 +29,11 @@ stopped_at: Phase 05 REOPENED — UAT found SEG-05 contiguity not enforced on li
 ## Current Position
 
 Phase: 05 (segment-aware-position-precision) — EXECUTING
-Plan: 1 of 5
+Plan: 1 of 6
 
 - **Phase:** 6
 - **Plan:** Not started
-- **Status:** Ready to plan
+- **Status:** Executing Phase 05
 - **Progress:** Phase 05: 1/5 plans complete
 
 ```
