@@ -141,8 +141,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-23 (Phase 05 COMPLETE — 5/5 plans; insert-cut auto-refresh + settle animation, backend cascade data-loss fix, label/catalog autocomplete endpoints wired, code review 0 blockers; quick task 260522-u48 renamed the compose service gruvax-api → api)
-**Next action:** Phase 6 (LED Contract over MQTT, hardware-stubbed) — `/clear` then `/gsd:discuss-phase 6` or `/gsd:plan-phase 6`. Phase 05 left 4 interactive UAT items (drag feel, drift-chip resync, diff→commit→revert, UI contiguity block) tracked in `05-HUMAN-UAT.md` — surface via `/gsd:progress` or run `/gsd:verify-work 5` to close them.
+**Last touched:** 2026-05-23 (Phase 05 gap-closure 05-06 COMPLETE — 6/6 plans; SEG-05 label-contiguity now enforced on the LIVE admin write paths PUT /cut + POST /insert-cut (400 type=contiguity_error before any DB write) via build_proposed_cuts→validate_contiguity, surfaced in RecordPickerSheet, orphaned /admin/preview + DiffPreviewSheet/RollbackToast removed, direct-path regression test passes. Re-verification 8/8 (human_needed: 1 visual SPA confirmation). Code review 0 blockers / 4 warnings (advisory: WR-01 validate_contiguity ignores segment_cache + only checks bin-START labels; WR-02 build_proposed_cuts unit-scoped; WR-04 contiguity message shows casefolded label). 05-UAT test-6 gap marked resolved.)
+**Next action:** Phase 05 is code-complete + verified; ONE human visual UAT item remains — on the running SPA, attempt a label-scattering cut and confirm RecordPickerSheet stays open showing the plain-language contiguity error (05-VERIFICATION.md human_verification, mirrors 05-UAT test 6). Other interactive UAT items from 05-05 (drag feel, drift-chip resync, straddle caption, diff→commit→revert) also remain — run `/gsd:verify-work 5` to close them. Then Phase 6 (LED Contract over MQTT, hardware-stubbed) — `/clear` then `/gsd:discuss-phase 6` or `/gsd:plan-phase 6`. Optional advisory follow-up: `/gsd-code-review 05 --fix` for WR-02/WR-04.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
