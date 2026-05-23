@@ -1,8 +1,8 @@
 ---
 phase: 05-segment-aware-position-precision
-verified: 2026-05-23T04:05:00Z
-status: human_needed
-score: 8/8 must-haves verified (code) — 1 blocking human-verify checkpoint outstanding
+verified: 2026-05-23T18:59:54Z
+status: gaps_found
+score: 8/8 must-haves verified (code) — UAT found 1 gap (SEG-05 contiguity not enforced on live edit paths); see 05-UAT.md
 overrides_applied: 0
 human_verification:
   - test: "Drag a segment handle in BinWidthEditor (a multi-label bin, e.g. /admin/cubes/1/0/1 → EDIT SEGMENTS)"

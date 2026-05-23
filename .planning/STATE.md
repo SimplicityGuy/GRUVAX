@@ -6,11 +6,11 @@ status: ready_to_plan
 last_updated: 2026-05-23T04:38:15.659Z
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 4
   total_plans: 22
   completed_plans: 22
-  percent: 62
-stopped_at: Phase 05 complete (5/5) — ready to discuss Phase 6
+  percent: 50
+stopped_at: Phase 05 REOPENED — UAT found SEG-05 contiguity not enforced on live edit paths (05-UAT.md gap); gap-closure pending
 ---
 
 # State: GRUVAX
