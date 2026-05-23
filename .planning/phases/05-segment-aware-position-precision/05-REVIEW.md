@@ -1,238 +1,264 @@
 ---
 phase: 05-segment-aware-position-precision
-reviewed: 2026-05-22T00:00:00Z
+reviewed: 2026-05-23T00:00:00Z
 depth: standard
-files_reviewed: 6
+files_reviewed: 5
 files_reviewed_list:
-  - frontend/src/routes/admin/ShelfBinList.tsx
-  - frontend/src/api/adminClient.ts
-  - frontend/src/routes/admin/BinWidthEditor.tsx
-  - frontend/src/routes/admin/admin.css
   - src/gruvax/api/admin/segments.py
+  - src/gruvax/api/admin/validation.py
   - tests/integration/test_segment_api.py
+  - frontend/src/routes/admin/RecordPickerSheet.tsx
+  - frontend/src/App.tsx
 findings:
   critical: 0
-  warning: 5
-  info: 4
-  total: 9
+  warning: 4
+  info: 3
+  total: 7
 status: issues_found
 ---
 
-# Phase 5: Code Review Report
+# Phase 5: Code Review Report (gap-closure plan 05-06)
 
-**Reviewed:** 2026-05-22T00:00:00Z
+**Reviewed:** 2026-05-23
 **Depth:** standard
-**Files Reviewed:** 6
+**Files Reviewed:** 5
 **Status:** issues_found
+
+> Scope: gap-closure plan 05-06 only (commits `0f88d7b..3877e88`). Earlier
+> 05-01..05-05 work was reviewed in a prior pass (this file previously held that
+> review, dated 05-22, file set: ShelfBinList/adminClient/BinWidthEditor/
+> admin.css/segments/test_segment_api). This pass supersedes it for the 05-06
+> change set.
 
 ## Summary
 
-Reviewed the Phase 05 human-verify checkpoint changes: the frontend insert-cut auto-refresh
-(`ShelfBinList.tsx`), the corrected `insertCut` return type (`adminClient.ts`), the discoverability
-caption (`BinWidthEditor.tsx`), the settle-animation CSS (`admin.css`), the cascade off-by-one fix
-(`segments.py insert_cut`), and the cascade regression test (`test_segment_api.py`).
+Plan 05-06 wires SEG-05 label-contiguity enforcement onto the two live admin
+write paths (`PUT /cut`, `POST /insert-cut`) via a new `build_proposed_cuts`
+helper in `validation.py`, surfaces the resulting 400 `contiguity_error` in
+`RecordPickerSheet.tsx`, and removes the orphaned `/admin/preview` route from
+`App.tsx`.
 
-The headline cascade fix is **correct**: breaking on `nxt.is_empty` (the moment the empty absorber is
-filled) instead of `curr.is_empty` (one step too late, which copied the empty cube's blank value onto
-the next real bin) genuinely closes the data-loss bug. Reading ORIGINAL values from `boundaries` and
-writing `is_empty=False` on every shifted cube is sound. The `boundaries[insert_after_idx + 1]` direct
-index (line 545) is provably guarded by `validate_shelf_overflow`, which 400s before reaching it when no
-trailing empty cube exists. The `insertCut` return-type correction (`{segments}` → `InsertCutResult`)
-matches the backend's actual JSON shape and fixes a latent `undefined`-access bug for any consumer.
+The core wiring is correct on the points the scope note flagged:
 
-No BLOCKER-severity defects were found in the changed lines. However, there are five WARNING-level
-issues: a percentage-rounding invariant that breaks on over-sum input, an unguarded cross-unit cascade,
-incomplete test cleanup that pollutes shared `cube_boundaries`, a non-awaited segment invalidation that
-can leave the new bin's mini-strip stale, and a re-seed effect that silently discards in-progress drag
-edits after save.
+- **Ordering is right.** On both write paths the contiguity check runs strictly
+  BEFORE the `async with pool.connection() ... conn.transaction()` block, so a
+  rejected cut never produces a partial DB write. The integration test
+  `test_put_cut_scatter_rejected_contiguity_error` asserts post-rejection state
+  and confirms `(1,0,3)` is unchanged.
+- **SQL safety holds.** No new SQL on the rejection path; existing
+  DELETE/UPSERT/SELECT statements use `%s` placeholders with parameter tuples,
+  zero f-string interpolation.
+- **No injection in the frontend change.** The `BulkSaveError` branch routes the
+  server's plain-language message through `setSaveError(...)`, rendered as JSX
+  `{saveError}` (textContent). The sheet correctly stays open on error (no
+  `onCommit`/`onCancel` call in the error branch).
+- **`build_proposed_cuts` produces the six-key dict** (`unit_id, row, col,
+  first_label, first_catalog, is_empty`) that `validate_contiguity` consumes;
+  both `replace` and `cascade` modes overwrite matching entries correctly.
+
+No BLOCKER-tier defects were found in the reviewed change. The findings below are
+correctness/robustness gaps (WARNING) and quality issues (INFO). The most
+material is WR-01: `validate_contiguity` only inspects bin-START labels and its
+documented SegmentCache cross-check (step 5) is never implemented, so a class of
+real scatters slips through — the new wiring inherits that blind spot.
 
 ## Warnings
 
-### WR-01: `roundPercents` violates its own "sum to exactly 100" invariant on over-sum input
+### WR-01: `validate_contiguity` ignores its `segment_cache` argument — documented step-5 cross-check is unimplemented; scatter-by-continuation is not detected
 
-**File:** `frontend/src/routes/admin/BinWidthEditor.tsx:57-71`
-**Issue:** The Hamilton/largest-remainder rounding only corrects a **positive** deficit (under-sum).
-When the input fractions sum to **more than 1.0**, `deficit` is negative, the loop guard `deficit > 0`
-is false immediately, and no surplus is removed. Verified empirically:
-`roundPercents([0.55, 0.55])` returns `[55, 55]` (sums to 110), and `roundPercents([0.52, 0.52])`
-returns `[52, 52]` (sums to 104). The docstring explicitly promises the integers "sum to exactly 100,
-so the displayed numbers never read 99 or 101" — that guarantee is broken for over-sum (and the
-under-distributed remainder case stays below 100 too). This is the very invariant commit `8a863bf`
-("largest-remainder rounding so displayed widths sum to exactly 100%") was meant to enforce.
+**File:** `src/gruvax/api/admin/validation.py:173-259`
 
-Trigger paths: floating-point drift accumulated across many drag operations; a server bin whose applied
-fractions sum slightly above 1.0; and notably the legend's **auto** row
-(`roundPercents(segs.map((s) => s.auto_fraction ?? s.fraction))` at line 300) which uses raw
-count-derived `auto_fraction` values that are not guaranteed to sum to exactly 1.0 once any label is
-overridden.
+**Issue:** The docstring (lines 198-201, "Step 5") promises:
 
-**Fix:** Handle the negative-deficit (surplus) branch symmetrically — subtract from the smallest
-remainders when `deficit < 0`:
-```typescript
-function roundPercents(fractions: number[]): number[] {
-  if (fractions.length === 0) return []
-  const raw = fractions.map((f) => f * 100)
-  const floors = raw.map((v) => Math.floor(v))
-  let deficit = 100 - floors.reduce((a, b) => a + b, 0)
-  const result = [...floors]
-  const byRemainder = raw
-    .map((v, i) => ({ i, rem: v - floors[i] }))
-    .sort((a, b) => b.rem - a.rem)
-  // Distribute a positive deficit to the largest remainders…
-  for (let k = 0; deficit > 0 && k < byRemainder.length; k++) {
-    result[byRemainder[k].i] += 1
-    deficit -= 1
-  }
-  // …and reclaim a negative deficit (surplus) from the smallest remainders.
-  for (let k = byRemainder.length - 1; deficit < 0 && k >= 0; k--) {
-    if (result[byRemainder[k].i] > 0) {
-      result[byRemainder[k].i] -= 1
-      deficit += 1
-    }
-  }
-  return result
-}
-```
+> "Also cross-check against SegmentCache: if a label appears in the current
+> SegmentCache in bins outside the proposed update set, and the proposed update
+> would create a gap in that label's span, return an error."
 
-### WR-02: insert-cut cascade silently flows records across a physical shelf-unit boundary
+The implementation never reads `segment_cache`. The identifier appears only in
+the signature and docstring, never in executable code. The algorithm builds
+`label_start_positions` solely from each bin's `first_label` (the bin-START
+label).
 
-**File:** `src/gruvax/api/admin/segments.py:504-587` (cascade) and
-`src/gruvax/api/admin/validation.py:262-267` (overflow check)
-**Issue:** Both `insert_cut` and `validate_shelf_overflow` sort **all** boundaries globally by
-`(unit_id, row, col)` and treat the entire collection as one continuous tape. `validate_shelf_overflow`
-returns "safe" on the **first empty cube anywhere after the insertion point, regardless of unit**.
-Consequence: inserting a cut in unit 1 when unit 1 is full but unit 2 has a free cube will cascade
-unit 1's trailing record into unit 2 (e.g. across "Left Kallax" → "Right Kallax"). The fixture's units
-("Left Kallax", "Right Kallax") are distinct physical shelves, and unit 2 does not alphabetically
-continue unit 1 (unit 1 ends Columbia/Tamla/Impulse; unit 2 starts Riverside/Atlantic), so the global
-tape model is not obviously the product intent. A spill into the wrong physical shelf would put a record
-in a cube the kiosk lights up on the wrong unit.
+Consequence: a label that physically *continues* into a later bin without
+*starting* it is invisible to the check. Concrete gap — suppose Blue Note's
+records overflow from bin 0 into bin 1 (Blue Note STARTS only at index 0 but
+spans index 1, whose `first_label` is ECM). If an edit re-cuts a later bin so
+Blue Note resumes at a non-adjacent position, the physical scatter exists but the
+start-only check sees Blue Note starting at exactly one position and returns
+`None` (valid). The estimator's `derive()` assigns records to bins by global
+ordering (segment_cache.py:229-238), so the true span IS knowable — it is simply
+never consulted. This is the gap step 5 was meant to close, and the new
+write-path enforcement is only as strong as `validate_contiguity`.
 
-This is classified WARNING rather than BLOCKER because the cut-insert change-set is undoable via history
-revert and the cross-unit model may be deliberate; it must be confirmed before shipping.
+**Fix:** Either implement the cross-check or correct the contract. To implement,
+after the start-position loop, determine which labels actually OCCUPY each
+proposed interval (via SegmentCache / re-derive) and apply the same gap test to
+*occupancy* rather than *start* positions:
 
-**Fix:** If units are independent shelves, scope both the overflow check and the cascade stop to the
-insertion cube's `unit_id` (only treat trailing empty cubes within the same unit as absorbers, and
-404/overflow when the unit has no trailing free cube). If cross-unit flow is intentional, document the
-invariant explicitly in the `insert_cut` docstring and add a test asserting the cross-unit spill is the
-desired behavior.
-
-### WR-03: cascade regression test leaves `cube_boundaries` mutated — incomplete cleanup pollutes the shared dev DB
-
-**File:** `tests/integration/test_segment_api.py:457-468`
-**Issue:** `test_insert_cut_cascade_preserves_bin_after_empty` performs a real insert-cut that rewrites
-4+ rows in `gruvax.cube_boundaries`, but the `finally` cleanup only deletes from
-`gruvax.boundary_history` (`DELETE FROM gruvax.boundary_history WHERE change_set_id = %s`). The mutated
-`cube_boundaries` rows are never restored. The module fixture re-seeds boundaries exactly **once** at
-module setup (`scope="module"`, before any test), and the suite "shares the dev DB and does not
-otherwise reset it" (per the fixture docstring). So after this module runs, `cube_boundaries` is left in
-a shifted state for any subsequent module/run that assumes the canonical fixture — a latent
-cross-module test-isolation defect of exactly the kind the fixture docstring warns about for history
-rows.
-
-**Fix:** Restore `cube_boundaries` in the `finally` block too, e.g. re-run
-`load_boundaries(_BOUNDARIES_YAML)` (or invert the recorded `boundary_history` rows before deleting
-them) so the table is returned to its canonical state:
 ```python
-finally:
-    from gruvax.db.seed_boundaries import load_boundaries
-    if change_set_id:
-        async with db_pool.connection() as conn:
-            await conn.execute(
-                "DELETE FROM gruvax.boundary_history WHERE change_set_id = %s",
-                (change_set_id,),
-            )
-            await conn.commit()
-    await load_boundaries(_BOUNDARIES_YAML)  # restore cube_boundaries the cascade mutated
+# Pseudocode for the missing step 5:
+# For each proposed cut interval [cut_i, cut_{i+1}), determine the set of labels
+# whose records fall in that interval (reuse the global-ordering assignment in
+# SegmentCache.derive). Build label -> occupied_bin_indices, then run the same
+# contiguity gap test on occupancy rather than on first_label start positions.
 ```
 
-### WR-04: new bin's mini-strip can render stale — segment invalidation is not awaited before the diff completes
+If full re-derivation is out of scope for this phase, at minimum delete the
+step-5 paragraph from the docstring and rename the parameter to `_segment_cache`
+so the unimplemented promise does not mislead maintainers and the unused argument
+threaded through both new call sites is honestly marked.
 
-**File:** `frontend/src/routes/admin/ShelfBinList.tsx:128-138`
-**Issue:** `handleInsertCommit` awaits the `['admin','cubes']` invalidation but fires the
-`['admin','segments', unitId]` invalidation with `void` (not awaited). The diff that discovers the
-newly-created bin and the subsequent render of its `BinCard` therefore proceed before that bin's
-segment query has refetched. The new `BinCard` mounts and immediately fetches its own
-`['admin','segments', unitId, row, col]` (a brand-new key with no cache entry), so the strip will fill
-in — but for cubes whose segments shifted but whose `cubeKey` already existed, the prefix-invalidation
-is still in flight, so their mini-strips can momentarily show pre-cascade proportions. Functionally
-recoverable, but the "settle from yellow → normal" animation is supposed to signal "this is now
-correct," and the strip underneath it may briefly contradict that.
+### WR-02: `build_proposed_cuts` scopes contiguity to a single unit, narrowing the invariant the original bulk path enforced
 
-**Fix:** Await the segment invalidation as well so the diff and animation only fire once both caches are
-fresh:
-```typescript
-await Promise.all([
-  queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] }),
-  queryClient.invalidateQueries({ queryKey: ['admin', 'segments', unitId] }),
-])
+**File:** `src/gruvax/api/admin/validation.py:66-85`; callers `segments.py:230, 622`
+
+**Issue:** `build_proposed_cuts` filters the proposed list to only the target
+unit (`if target_unit_id is None or b.unit_id == target_unit_id`, line 84). The
+original bulk caller (`cubes.py:457-468`) passed *all* proposed updates to
+`validate_contiguity` without unit filtering. The docstring (lines 43-47)
+justifies single-unit scope ("bins in different units are never adjacent"), which
+is a defensible design position — but it is a behavioral *narrowing* relative to
+the pre-existing bulk path, and the two now feed `validate_contiguity` differently
+shaped inputs.
+
+Risk: if collection organization spans a label across the boundary between the
+last bin of unit N and the first bin of unit N+1 (alphabetical continuity across
+shelves — plausible for a 3,000-record deterministic layout), the per-unit scope
+cannot detect a scatter that crosses the unit boundary. The "never adjacent"
+assumption is asserted, not enforced anywhere in the reviewed code.
+
+**Fix:** Confirm with the data model that cross-unit label spans are impossible by
+design. If possible, drop the unit filter or treat (last bin of unit N, first bin
+of unit N+1) as adjacent. If genuinely impossible, add a unit test pinning the
+invariant so a future reorg cannot silently break enforcement.
+
+### WR-03: Contiguity decision trusts the in-app `BoundaryCache` to be fresh; the new test has to force a reload to make the assertion deterministic
+
+**File:** `src/gruvax/api/admin/segments.py:230-242` (PUT) and `617-628` (insert)
+
+**Issue:** The contiguity check uses the live in-app `cache` (BoundaryCache) for
+`build_proposed_cuts` and the live `segment_cache` for `validate_contiguity`. If a
+prior request mutated the DB but the in-app `BoundaryCache` was not reloaded,
+`build_proposed_cuts` builds the proposed set from a stale boundary view, so the
+contiguity decision is made against possibly-stale data — it could reject a valid
+cut or accept a scattering one.
+
+The integration test masks this: lines 564-582 issue a no-op cache-sync PUT
+*before* the real assertion specifically to force `cache.invalidate() +
+cache.load()`, with a comment acknowledging the cache "may be stale if a prior
+mutating test ... restored the DB without triggering a cache reload." That
+test-side workaround is direct evidence the production validation path is
+sensitive to cache freshness, and there is no guarantee the cache is fresh when a
+real admin PUT arrives (e.g., during an SSE-driven reload race).
+
+**Fix:** Document the freshness contract in `put_bin_cut`/`insert_cut` (promote
+the test comment at test lines 564-573 into a code comment), and ensure the
+`boundary_changed` SSE handler reloads the cache before serving the next admin
+write — or read boundaries for the validation step from a guaranteed-fresh source.
+
+### WR-04: `validate_contiguity` emits the casefolded label in the user-facing error message
+
+**File:** `src/gruvax/api/admin/validation.py:246-257`
+
+**Issue:** The error is formatted with `lk` (the casefolded key), not the
+original-case label:
+
+```python
+for lk, positions in label_start_positions.items():
+    ...
+    return _CONTIGUITY_MSG_TEMPLATE.format(label=lk)
 ```
 
-### WR-05: save re-seed silently discards in-progress local drag edits
+For label "Blue Note" the owner sees "This cut would split blue note across
+non-adjacent bins." This breaks the CLAUDE.md design-language voice (labels are
+proper nouns from the collection) and reads as a bug to the user. The integration
+test only asserts the message contains "split"/"non-adjacent" (test line 607), so
+the mangled casing is uncaught.
 
-**File:** `frontend/src/routes/admin/BinWidthEditor.tsx:124-129` and `403-434`
-**Issue:** After `handleSave`, `void queryClient.invalidateQueries({ queryKey: ['admin','segments',
-unitId, rowNum, colNum] })` triggers a refetch that produces a **new** `segsData.segments` array
-reference. The seeding effect compares by reference (`segsData.segments !== seededRef.current`), so any
-refetch re-seeds `segments` from server data, overwriting whatever the user has dragged since. If the
-user drags, saves, then keeps dragging while the refetch is in flight, the in-flight refetch completing
-will wipe the post-save drag edits with no indication. The seeding effect's "once per load" comment
-implies it should not clobber active local state, but reference-equality re-seeding makes every server
-refresh authoritative over local edits.
-
-**Fix:** Only re-seed when there are no unsaved local changes, or gate seeding on a "dirty" flag that is
-set on drag/reset and cleared on save/initial-load, so a background refetch cannot silently discard
-edits the user is still making.
+**Fix:** Track the original-case label alongside the casefold key —
+`label_display: dict[str, str]` mapping casefold → first-seen original-case label
+— and format with `label=label_display[lk]`.
 
 ## Info
 
-### IN-01: `insertCut` return value is computed by the server but ignored by the only consumer
+### IN-01: Inconsistent key-coercion between `replace` and `cascade` branches in `build_proposed_cuts`
 
-**File:** `frontend/src/routes/admin/ShelfBinList.tsx:254` and `RecordPickerSheet.tsx:242-243`
-**Issue:** `RecordPickerSheet` calls `onCommit(result)` with the full `InsertCutResult`
-(`affected`, `change_set_id`, `inserted_after`, `new_cut`), but `ShelfBinList`'s handler is
-`onCommit={() => void handleInsertCommit()}` — the argument is dropped, and `handleInsertCommit` re-diffs
-from the cube cache instead. The newly-corrected return type is therefore dead relative to its only
-caller. Not a defect, but the cache-diff could be replaced by trusting `result.inserted_after` /
-`result.new_cut` to locate the changed bin deterministically, avoiding the snapshot-and-diff dance.
-**Fix:** Either consume `result` to flag the changed cube directly, or document that the return value is
-retained only for history/debugging.
+**File:** `src/gruvax/api/admin/validation.py:89-107`
 
-### IN-02: `validate_no_empty_bin` only checks the after-bin, not that the NEW bin is non-empty
+**Issue:** The `replace` branch compares coordinates directly
+(`entry["unit_id"] == r_uid`, line 90); the `cascade` branch wraps them in
+`int(str(entry[...]))` (line 102). Both work because `BoundaryRow` fields are
+already `int`, but the divergent styles invite confusion, and the `int(str(x))`
+double-conversion is defensive with no demonstrated need (values originate from
+typed `BoundaryRow` fields three lines above).
 
-**File:** `src/gruvax/api/admin/validation.py:180-221` (called from `segments.py:490-497`)
-**Issue:** `validate_no_empty_bin` is passed `(after_uid, after_row, after_col)` and only rejects the
-case where the proposed cut equals the after-bin's own cut point (which would empty the after-bin). It
-does not verify that the newly created bin (the new cut → the next existing cut) actually contains at
-least one record. A new cut placed between two records that resolve to the same position relative to the
-next cut could still create a zero-record new bin. This is a pre-existing limitation (not introduced in
-this phase's diff) but is adjacent to the cascade logic under review.
-**Fix:** Extend the empty-bin guard to also confirm the span from the new cut to the next existing cut
-contains ≥1 record, or document the narrower guarantee.
+**Fix:** Use direct integer comparison in both branches.
 
-### IN-03: `affected` count includes the absorber but the docstring says "rewrote" — count includes a formerly-empty cube
+### IN-02: Duplicated inline `SELECT ... FROM gruvax.segment_overrides` re-read across two handlers
 
-**File:** `src/gruvax/api/admin/segments.py:543-608, 644`
-**Issue:** `affected` = `len(affected_cubes)` counts every cube written, including the trailing empty
-cube that absorbed the shift (now non-empty). The `InsertCutResult.affected` doc comment
-("Number of cubes the cascade rewrote") is accurate, but a UI surfacing "N cubes changed" would include
-the absorber, which a user may not consider "changed" (it was empty). Minor wording/semantics nit.
-**Fix:** If the count is ever shown to the user, clarify whether it includes the absorber, or expose the
-new-bin count separately.
+**File:** `src/gruvax/api/admin/segments.py:417-426` and `657-666`
 
-### IN-04: `seededRef` comparison relies on referential identity that TanStack Query does not guarantee to preserve
+**Issue:** The post-commit override re-read block (open `conn2`, run the overrides
+SELECT, build `new_overrides` with `int()/float()` coercion) is duplicated
+verbatim between `set_bin_overrides` and `insert_cut`. Pre-existing (not
+introduced by 05-06) but adjacent to the change; drift between copies would cause
+divergent re-derive behavior.
 
-**File:** `frontend/src/routes/admin/BinWidthEditor.tsx:121-129`
-**Issue:** The "seed once per load" guard depends on `segsData.segments` keeping a stable reference
-between renders for the same data and changing reference on refetch. TanStack Query's
-`structuralSharing` (on by default) can preserve the previous reference when refetched data is deeply
-equal — meaning a genuine no-op refetch will *not* re-seed (good), but it also means the guard's
-behavior is coupled to a Query internal that could change. This compounds WR-05.
-**Fix:** Seed from an explicit data version/key (e.g. include a fetch timestamp or query `dataUpdatedAt`
-in the dependency), or drive seeding off `unitId/row/col` route params rather than array identity.
+**Fix:** Extract `async def _load_all_overrides(pool) -> dict[...]` and call from
+both. Out of strict 05-06 scope; record for cleanup.
+
+### IN-03: `RecordPickerSheet` discards `BulkSaveError.errorType`, so contiguity and phantom errors render identically
+
+**File:** `frontend/src/routes/admin/RecordPickerSheet.tsx:250-252`
+
+**Issue:** The error branch surfaces only `err.serverMessage ?? err.message` and
+discards `err.errorType` (`'contiguity_error'` vs `'phantom_boundary'`).
+Functionally fine for v1 (the server message is self-describing), but both error
+types land in the same generic `.sheet-error` block with no type-specific
+affordance. The comment at lines 247-249 acknowledges the shared path is
+intentional.
+
+**Fix:** Optional — branch on `err.errorType` later if contiguity-specific UI is
+desired. No action required this phase; noted so the discarded discriminant is a
+conscious choice.
 
 ---
 
-_Reviewed: 2026-05-22T00:00:00Z_
+## Narrative Findings (AI reviewer)
+
+No `<structural_findings>` block was provided; all findings above are narrative
+findings from direct code review.
+
+Verified-clean items (explicitly checked, no defect):
+
+- **Contiguity check is pre-transaction on both paths** — `put_bin_cut`
+  (segments.py:221-242, before the transaction at line 250) and `insert_cut`
+  (segments.py:617-628, before the transaction at line 633). No partial write
+  possible on rejection.
+- **SQL placeholders** — DELETE (382), UPSERT (393), overrides SELECT (423, 663)
+  all use `%s` with parameter tuples. No f-string interpolation in any SQL.
+- **`build_proposed_cuts` dict shape** matches `validate_contiguity` consumption
+  exactly (validator reads `is_empty`, `first_label`, `unit_id`, `row`, `col`).
+- **Empty-cube handling** — cascade entries with `is_empty=True` are filtered out
+  by `validate_contiguity`'s `if not u.get("is_empty")` (validation.py:215); the
+  `replace` path forces `is_empty=False` (validation.py:93), correct since a
+  replaced cut always has a record.
+- **Frontend output safety** — server message rendered via JSX `{saveError}`
+  (textContent), no raw-HTML injection sink used. Honors the file-header hard
+  constraint T-05-05-01.
+- **Sheet stays open on error** — error branch (RecordPickerSheet.tsx:250-256)
+  calls neither `onCommit` nor `onCancel`.
+- **`/admin/preview` route removal** (App.tsx) — import and `<Route>` both
+  removed; deleted `DiffPreviewSheet.tsx`/`.test.tsx`/`RollbackToast.tsx` confirm
+  the orphaned subtree was excised. No dangling `DiffPreviewSheet` references
+  remain.
+- **`adminClient` 400 handling** — `setCutPoint` (456-463) and `insertCut`
+  (519-526) both throw `BulkSaveError` carrying `type` and `message` on 400, so
+  the `instanceof BulkSaveError` branch in the sheet correctly intercepts
+  contiguity errors.
+
+---
+
+_Reviewed: 2026-05-23_
 _Reviewer: Claude (gsd-code-reviewer)_
 _Depth: standard_
