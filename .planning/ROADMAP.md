@@ -165,7 +165,7 @@ Plans:
   4. The segment-aware estimator **supersedes §4.1** as the sole v1 default index estimator (with §4.8 cube-only retained as the timeout/low-confidence fallback), and `estimator_version` reflects the change. *(Amended 2026-05-22 — Phase 5 decision D-01: the prior A/B "meet-or-beat §4.1" proof gate via the extended `run_all_algorithms.py` harness is dropped; §4.1 is retired and the estimator ships on trust, covered by ordinary unit/Hypothesis-invariant tests rather than an A/B comparison.)*
   5. Admin can **view, edit, and add cut points** and set per-label **width overrides** for a bin (the cut-point editor / override UI), with the shared parser validating saves and the existing diff-preview + change-set undo path (Phase 3) covering the new mutations; the locate latency budget (p95 ≤ 50 ms, CPU-only, no DB on the hot path) is preserved.
 
-**Plans:** 4/5 plans executed
+**Plans:** 6 plans (5 executed + 1 gap-closure pending — SEG-05 UAT gap)
 Plans:
 **Wave 1** *(done + merged)*
 
@@ -186,6 +186,10 @@ Plans:
 **Wave 5** *(blocked on Wave 4)*
 
 - [x] 05-05-PLAN.md — Frontend editor assembly: el() helper + adminClient + SegmentStrip/Legend/LocatorHeader + RecordPickerSheet + SegmentEditorPanel + CutPointEditor + DiffPreview/Settings extensions + route swap + human-verify (SEG-04, SEG-08) [has human-verify checkpoint]
+
+**Gap closure** *(UAT — SEG-05 not enforced on live edit paths)*
+
+- [ ] 05-06-PLAN.md — Enforce SEG-05 contiguity on the live PUT /cut + POST /insert-cut write paths (server 400 type=contiguity_error before any DB write), surface it in RecordPickerSheet, remove the orphaned /admin/preview + DiffPreviewSheet, add a direct-path regression test (SEG-05)
 **UI hint:** yes
 
 ### Phase 6: LED Contract over MQTT (Hardware Stubbed)
