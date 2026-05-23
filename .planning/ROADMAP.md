@@ -279,3 +279,23 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
 
 ---
 *Roadmap created: 2026-05-19 from PROJECT.md, REQUIREMENTS.md, and research/{SUMMARY,STACK,ARCHITECTURE,PITFALLS,INTERPOLATION}.md*
+
+## Backlog
+
+### Phase 999.1: Shelf-overview mini-Kallax shows per-cube fill/occupancy (BACKLOG)
+
+**Goal:** [Captured for future planning]
+**Requirements:** TBD
+**Plans:** 0 plans
+
+On the admin **ShelfBinList** screen ("EDIT SHELF {letter}", route `/admin/cubes/:unit`),
+the `LocatorHeader` mini 4×4 Kallax overview renders every cube as a uniform empty/dim
+tile, so it conveys nothing about the shelf's contents. It should show per-cube
+fill/occupancy at a glance — e.g. a fill-level shade or occupied-vs-empty state per cube
+(and/or a shelf-level fill summary). Data already exists: `GET /api/admin/cubes` returns
+`is_empty` and `fill_level` per cube. Cosmetic/discoverability enhancement; not blocking.
+Relates to Phase 5 (segment editor) and the CUBE-05 empty-cube desaturated state in the
+design language.
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
