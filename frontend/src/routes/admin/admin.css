@@ -3250,30 +3250,37 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 0;
+  width: 26px;                 /* generous touch/hit target (sketch 001 .handle) */
   display: flex;
   align-items: center;
   justify-content: center;
-  cursor: col-resize;
+  cursor: ew-resize;
   z-index: 10;
   transform: translateX(-50%);
+  touch-action: none;
 }
 
 .bwe-grip {
   width: 6px;
   height: 46px;
   background: var(--gruvax-white);
+  border: 1.5px solid var(--gruvax-blue);   /* blue border = visible on any segment fill */
   border-radius: var(--gruvax-radius-pill);
-  box-shadow: 0 1px 4px color-mix(in srgb, var(--gruvax-blue-darker) 40%, transparent);
+  box-shadow: var(--gruvax-shadow-md);
   transition:
     background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+    border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard),
     transform var(--gruvax-duration-fast) var(--gruvax-ease-standard);
   pointer-events: none;
 }
 
+/* Hover + active: white pill → yellow with LED glow (sketch 001) */
+.bwe-handle:hover .bwe-grip,
 .bwe-handle--dragging .bwe-grip {
   background: var(--gruvax-yellow);
-  transform: scaleX(1.4);
+  border-color: var(--gruvax-yellow-dark);
+  box-shadow: var(--gruvax-shadow-led);
+  transform: scaleY(1.08);
 }
 
 /* Continue caption (↪ label continues in BIN n+1) */
