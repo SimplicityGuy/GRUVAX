@@ -287,10 +287,24 @@ async def update_settings(
 
     logger.info("Admin settings updated: %s", updated)
 
-    # WR-02 / D-15: Refresh the in-process settings cache so the publisher (Plan 01)
+    # D-15 / WR-01: Refresh the in-process settings cache so the publisher (Plan 01)
     # and lifecycle (Plan 02) see new LED values immediately without a restart.
+    #
+    # WR-01: MUTATE the existing dict in place (clear + update) rather than REBINDING
+    # the attribute to a fresh dict.  Fire-and-forget tasks (fan_out_illuminate,
+    # illuminate_with_lifecycle, in-flight schedule_revert that runs 180–900s later)
+    # capture the settings_cache dict REFERENCE at spawn time.  Rebinding the
+    # attribute would leave those tasks reading the stale OLD dict; mutating the
+    # same object in place means every holder of the reference sees the new values
+    # immediately (D-15 "see new LED values immediately").
     try:
-        request.app.state.settings_cache = await load_settings_cache(pool)
+        fresh = await load_settings_cache(pool)
+        existing = getattr(request.app.state, "settings_cache", None)
+        if isinstance(existing, dict):
+            existing.clear()
+            existing.update(fresh)
+        else:
+            request.app.state.settings_cache = fresh
     except Exception as exc:
         logger.warning("Settings cache refresh failed after PUT /settings: %s", exc)
         # Non-fatal — the DB write succeeded; the cache will be stale until restart.
