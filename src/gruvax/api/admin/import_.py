@@ -1,7 +1,8 @@
 """Admin import endpoints for GRUVAX.
 
 Endpoints:
-  POST /api/admin/import/boundaries — atomic CSV/YAML boundary import (ADMN-05, D-09, D-11)
+  POST /api/admin/import/boundaries — atomic CSV/YAML boundary import, with optional
+    dry_run preview (ADMN-05, D-09, D-11, BAK-01)
   POST /api/admin/import/settings   — validated settings import (BAK-02, D-13, D-14)
 
 Both endpoints accept raw request body bytes. The format is determined from
@@ -11,15 +12,41 @@ from the Content-Disposition filename extension (.csv, .yaml, .yml).
 Security:
   T-07-YAML-BOMB: yaml.safe_load ONLY — never yaml.load (would allow arbitrary code execution).
   T-07-YAML-BOMB: 100 KB upload size cap enforced before parse (→ 413 on oversize).
+    The size cap runs BEFORE dry_run branching — it applies to both paths equally.
   T-07-PARTIAL: ALL edits are validated BEFORE any DB write. A single phantom or contiguity
     error returns 400 with ZERO partial state (Pitfall 7). The DB is unchanged on error.
+  T-07-DRYRUN-WRITE: dry_run performs NO INSERT/UPDATE/DELETE, DOES NOT invalidate caches or
+    publish on the bus, and DOES NOT mint or consume an Idempotency-Key. The preview shares the
+    same parse + validation code path as the commit so it is byte-for-byte equivalent.
+  T-07-CSRF: require_admin enforces session + double-submit CSRF for POST endpoints; dry_run is
+    still a POST through require_admin (a GET would drop CSRF and allow cross-site reads of diff).
+  T-07-IDENTITY-BYPASS: phantom check is SKIPPED only for rows byte-equal to the current
+    committed cut point (G3 decision — Pitfall 22). New/changed rows keep full phantom + near-miss;
+    contiguity always runs across ALL rows. test_phantom_row_rejected + test_contiguity_violation
+    guard against over-broad skip.
   T-07-SETTINGS-KEY: auth.* keys are rejected with 422 before any settings write (D-14).
     Unknown keys (not in _ALLOWED_SETTINGS_KEYS) are also rejected with 422.
     The entire file is rejected on first bad key — no partial settings write.
-  T-07-CSRF: require_admin enforces session + double-submit CSRF for POST endpoints.
   T-07-DOUBLE-COMMIT: Idempotency-Key header deduplication (same pattern as cubes/bulk).
 
 All SQL uses ``%s`` placeholders — no f-string interpolation.
+
+dry_run preview contract (POST /api/admin/import/boundaries?dry_run=true):
+  - Runs the identical parse + fill + validation pipeline (steps 1–6) with NO DB write.
+  - On validation pass → 200 preview body:
+      {
+        "total_cubes":    <int — count of all addresses in cube_boundaries>,
+        "file_cube_count": <int — cubes present in the uploaded file>,
+        "diff_preview":   [
+          {unit_id, row, col, delta, will_be_empty},
+          ...  (only cubes that DIFFER from committed state — empty list for identity re-import)
+        ]
+      }
+  - On validation error → same 400 bodies as the commit path (phantom_boundary /
+    contiguity_violation), so the gated COMMIT button logic is unaffected.
+  - W5: cubes EQUAL to the current committed state are OMITTED entirely from diff_preview
+    (NOT carried as delta 0). An identity re-import therefore has diff_preview == [].
+  - Idempotency-Key is IGNORED in dry_run (no change_set_id minted; no key stored).
 """
 
 from __future__ import annotations
@@ -30,7 +57,7 @@ from typing import Any
 
 import yaml
 
-from fastapi import APIRouter, Depends, HTTPException, Request, status
+from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 
 from gruvax.api.deps import (
@@ -77,9 +104,22 @@ def _detect_format(request: Request) -> str | None:
     return None
 
 
+def _normalize_label_or_catalog(value: str | None) -> str:
+    """Normalize a label or catalog string for committed-state comparison.
+
+    Empty-cube rows store None in the DB; import entries may supply "" or None.
+    Treat None and "" as equivalent empty (the write_boundary path stores None
+    for empty cubes — Pitfall 22 / G3 identity-skip normalization).
+    """
+    if value is None:
+        return ""
+    return value
+
+
 @router.post("/import/boundaries")
 async def import_boundaries(
     request: Request,
+    dry_run: bool = Query(default=False, description="Preview import without writing to DB"),
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
@@ -87,13 +127,13 @@ async def import_boundaries(
     bus: EventBus = Depends(get_event_bus),
     _admin: dict[str, str] = Depends(require_admin),
 ) -> JSONResponse:
-    """Atomic CSV/YAML boundary import (ADMN-05, D-09, D-11, Pitfall 7).
+    """Atomic CSV/YAML boundary import with optional dry_run preview (ADMN-05, D-09, D-11, BAK-01).
 
     Accepts raw request body. Format detected from Content-Type header or
     Content-Disposition filename. Supports CSV (text/csv) and YAML
     (application/x-yaml, text/yaml).
 
-    Protocol (ALL-or-nothing, zero partial state):
+    dry_run=false (default) — ALL-or-nothing commit:
       1. Read and size-cap the upload.
       2. Detect format from Content-Type / Content-Disposition.
       3. Parse (parse_yaml_boundaries or parse_csv_boundaries).
@@ -101,7 +141,10 @@ async def import_boundaries(
       5. FULL ADDRESS SPACE fill (D-09 replace-all): any cube in cube_boundaries but
          absent from the file is added as is_empty=True.
       6. Validate ALL edits BEFORE any write:
-         - Per non-empty, non-force edit: phantom check via cube_exact_match.
+         - Build current_index from committed state (one SELECT — no per-row query).
+         - Per non-empty edit: SKIP phantom check if the row equals the current committed
+           cut point (G3 decision — Pitfall 22: stored catalog-string state is authoritative
+           for an unchanged committed row). New/changed rows get full phantom + near-miss.
          - On phantom miss: collect near_misses, return 400 (ZERO writes).
          - After all phantom checks pass: contiguity check via validate_contiguity.
          - On contiguity violation: return 400 (ZERO writes).
@@ -109,11 +152,19 @@ async def import_boundaries(
          + segment_overrides upsert + idempotency store.
       8. AFTER transaction commit: cache.invalidate(), cache.load(), segment_cache
          re-derive, bus.publish (Pitfall A — NEVER inside the transaction).
+    Returns: JSON ``{change_set_id, applied, source}``
 
-    Idempotency-Key header: same semantics as cubes/bulk (replay returns cached response).
+    dry_run=true — NO-write preview (T-07-DRYRUN-WRITE):
+      Runs steps 1–6 identically (same parse + fill + validation), then:
+      - Returns 400 on any validation error (same bodies as commit path).
+      - On validation pass, returns 200 preview:
+          {total_cubes, file_cube_count, diff_preview: [{unit_id, row, col, delta, will_be_empty}]}
+      - diff_preview contains ONLY cubes that differ from the current committed state
+        (W5: equal cubes omitted entirely — identity re-import yields diff_preview==[]).
+      - Performs NO INSERT/UPDATE/DELETE. Does NOT invalidate caches or publish on the bus.
+      - Does NOT mint or consume an Idempotency-Key (preview has no change_set_id).
 
-    Returns:
-        JSON ``{change_set_id, applied, source}``
+    Idempotency-Key header (commit path only): same semantics as cubes/bulk.
     """
     from gruvax.api.admin.validation import validate_contiguity
     from gruvax.db.queries import (
@@ -129,7 +180,7 @@ async def import_boundaries(
     from gruvax.io.boundary_csv import parse_csv_boundaries
     from gruvax.io.boundary_yaml import parse_yaml_boundaries
 
-    # ── 1. Read + size cap ────────────────────────────────────────────────────
+    # ── 1. Read + size cap (runs before dry_run branching — both paths capped) ─
     content = await request.body()
     if len(content) > _MAX_UPLOAD_BYTES:
         raise HTTPException(
@@ -173,22 +224,38 @@ async def import_boundaries(
             ) from exc
         source = "csv"
 
-    # ── 4+5. Build edit list + full address space fill (D-09 replace-all) ────
+    # ── 4+5. Build edit list + full address space fill (D-09 replace-all) ─────
+    # Also fetch the committed cut-point state in the SAME query for current_index
+    # (G3 identity-skip: one SELECT — no per-row query). keyed by (unit_id, row, col).
     file_index: dict[tuple[int, int, int], Any] = {
         (e.unit_id, e.row, e.col): e for e in entries
     }
 
-    # Get the full address space from DB (replace-all requires all cubes to be written)
+    # Fetch full address space + committed cut-point columns in one SELECT.
+    # current_index is used for both the G3 phantom skip (step 6) and the
+    # dry_run diff-preview (W5: omit unchanged cubes from diff_preview).
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT unit_id, row, col FROM gruvax.cube_boundaries ORDER BY unit_id, row, col"
+            "SELECT unit_id, row, col, first_label, first_catalog, is_empty"
+            " FROM gruvax.cube_boundaries"
+            " ORDER BY unit_id, row, col"
         )
-        all_addresses = await cur.fetchall()
+        all_addresses_raw = await cur.fetchall()
+
+    # Build the committed-state index: (unit_id, row, col) → {first_label, first_catalog, is_empty}
+    current_index: dict[tuple[int, int, int], dict[str, Any]] = {}
+    for addr_row in all_addresses_raw:
+        key = (addr_row[0], addr_row[1], addr_row[2])
+        current_index[key] = {
+            "first_label": addr_row[3],
+            "first_catalog": addr_row[4],
+            "is_empty": addr_row[5],
+        }
 
     from gruvax.api.admin.cubes import BoundaryEdit
 
     all_edits: list[BoundaryEdit] = []
-    for addr_row in all_addresses:
+    for addr_row in all_addresses_raw:
         addr = (addr_row[0], addr_row[1], addr_row[2])
         if addr in file_index:
             entry = file_index[addr]
@@ -218,7 +285,7 @@ async def import_boundaries(
             )
 
     # If no DB addresses exist yet (empty setup), just use file entries directly
-    if not all_addresses:
+    if not all_addresses_raw:
         all_edits = [
             BoundaryEdit(
                 unit_id=e.unit_id,
@@ -232,19 +299,54 @@ async def import_boundaries(
             for e in entries
         ]
 
-    # ── Idempotency short-circuit ─────────────────────────────────────────────
-    idempotency_key = request.headers.get("Idempotency-Key")
-    if idempotency_key:
-        cached = await check_idempotency(pool, idempotency_key)
-        if cached is not None:
-            return JSONResponse(content=cached)
+    # ── Idempotency short-circuit (commit path only — dry_run skips entirely) ──
+    idempotency_key: str | None = None
+    if not dry_run:
+        idempotency_key = request.headers.get("Idempotency-Key")
+        if idempotency_key:
+            cached = await check_idempotency(pool, idempotency_key)
+            if cached is not None:
+                return JSONResponse(content=cached)
 
     # ── 6. Validate ALL edits BEFORE any write (Pitfall 7, D-11) ─────────────
+    #
+    # G3 identity-skip (BAK-01, SC4, Pitfall 22):
+    # A row that EQUALS the current committed cut point is SKIPPED from phantom
+    # re-validation. This guarantees export → re-import = identity even when a cube
+    # stores a (label, catalog) pair that no longer matches v_collection (the
+    # asymmetry root cause: write/force paths can persist such state, but naive
+    # import always re-validated it). New/changed rows still get full phantom +
+    # near-miss collection. contiguity always runs across ALL rows.
+    #
+    # SKIP condition: all of (first_label, first_catalog, is_empty) equal the
+    # current committed row (None and "" treated as equal-empty per _normalize_*).
     phantom_errors: list[dict[str, Any]] = []
 
     for edit in all_edits:
         if edit.is_empty:
             continue  # empty cubes need no phantom check
+
+        # G3: check if this row equals the current committed cut point.
+        addr_key = (edit.unit_id, edit.row, edit.col)
+        committed = current_index.get(addr_key)
+        if committed is not None:
+            committed_label = _normalize_label_or_catalog(committed["first_label"])
+            committed_catalog = _normalize_label_or_catalog(committed["first_catalog"])
+            committed_empty = bool(committed["is_empty"])
+            proposed_label = _normalize_label_or_catalog(edit.first_label)
+            proposed_catalog = _normalize_label_or_catalog(edit.first_catalog)
+            proposed_empty = bool(edit.is_empty)
+            if (
+                proposed_label == committed_label
+                and proposed_catalog == committed_catalog
+                and proposed_empty == committed_empty
+            ):
+                # Row equals the current committed cut point — skip phantom re-validation.
+                # (G3 decision, Pitfall 22: stored catalog-string state is authoritative
+                # for an unchanged committed row; re-validating it is the bug that broke
+                # export → re-import identity.)
+                continue
+
         first_label = edit.first_label or ""
         first_catalog = edit.first_catalog or ""
 
@@ -280,7 +382,9 @@ async def import_boundaries(
             },
         )
 
-    # Contiguity check across ALL proposed edits (D-11, SEG-05)
+    # Contiguity check across ALL proposed edits (D-11, SEG-05).
+    # Runs regardless of the G3 identity-skip — contiguity is a cross-cube invariant
+    # that must hold on the FULL resulting set (not just changed rows).
     updates_as_dicts: list[dict[str, object]] = [
         {
             "unit_id": e.unit_id,
@@ -300,6 +404,73 @@ async def import_boundaries(
                 "type": "contiguity_violation",
                 "message": contiguity_error,
             },
+        )
+
+    # ── dry_run: return preview, NO DB write (T-07-DRYRUN-WRITE) ─────────────
+    if dry_run:
+        from gruvax.api.admin.cubes import _compute_movement_counts
+
+        nominal_capacity = 95  # default; no request.app.state access needed here
+        try:
+            from gruvax.api.admin.cubes import _get_nominal_capacity
+
+            nominal_capacity = _get_nominal_capacity(request)
+        except Exception:
+            pass  # fall back to default — not critical for preview delta
+
+        total_cubes = len(all_addresses_raw)
+        file_cube_count = len(file_index)
+
+        # W5: include ONLY cubes that differ from the current committed state.
+        # Cubes equal to committed state are OMITTED entirely (not delta 0).
+        # An identity re-import yields diff_preview == [].
+        diff_preview: list[dict[str, Any]] = []
+        for edit in all_edits:
+            addr_key = (edit.unit_id, edit.row, edit.col)
+            committed = current_index.get(addr_key)
+            if committed is not None:
+                committed_label = _normalize_label_or_catalog(committed["first_label"])
+                committed_catalog = _normalize_label_or_catalog(committed["first_catalog"])
+                committed_empty = bool(committed["is_empty"])
+                proposed_label = _normalize_label_or_catalog(edit.first_label)
+                proposed_catalog = _normalize_label_or_catalog(edit.first_catalog)
+                proposed_empty = bool(edit.is_empty)
+                if (
+                    proposed_label == committed_label
+                    and proposed_catalog == committed_catalog
+                    and proposed_empty == committed_empty
+                ):
+                    # Equal to committed state — omit from diff_preview (W5)
+                    continue
+
+            # Cube differs (or is new) — compute approximate delta
+            movement = _compute_movement_counts(edit, segment_cache, nominal_capacity)
+            delta = movement[0]["delta"] if movement else 0
+            will_be_empty = bool(edit.is_empty) and (
+                committed is None or not bool(committed.get("is_empty"))
+            )
+            diff_preview.append(
+                {
+                    "unit_id": edit.unit_id,
+                    "row": edit.row,
+                    "col": edit.col,
+                    "delta": delta,
+                    "will_be_empty": will_be_empty,
+                }
+            )
+
+        logger.info(
+            "Admin boundaries dry_run preview: total_cubes=%d, file_cube_count=%d, diff=%d",
+            total_cubes,
+            file_cube_count,
+            len(diff_preview),
+        )
+        return JSONResponse(
+            content={
+                "total_cubes": total_cubes,
+                "file_cube_count": file_cube_count,
+                "diff_preview": diff_preview,
+            }
         )
 
     # ── 7. Atomic DB transaction: write all boundaries + history + overrides ──
@@ -370,13 +541,18 @@ async def import_boundaries(
             if seg_bin is not None:
                 for seg in seg_bin.segments:
                     if seg.is_override:
-                        key = (edit.unit_id, edit.row, edit.col, seg.label)
-                        overrides[key] = seg.applied_fraction
+                        override_key: tuple[int, int, int, str] = (
+                            edit.unit_id,
+                            edit.row,
+                            edit.col,
+                            str(seg.label),
+                        )
+                        overrides[override_key] = seg.applied_fraction
         # Also include any overrides from the imported file entries
         for entry in entries:
             if entry.overrides and not entry.is_empty:
                 for label, fraction in entry.overrides.items():
-                    overrides[(entry.unit_id, entry.row, entry.col, label)] = fraction
+                    overrides[(entry.unit_id, entry.row, entry.col, str(label))] = fraction
         segment_cache.invalidate()
         segment_cache.derive(cache, snapshot, overrides)
     finally:
