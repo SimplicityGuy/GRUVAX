@@ -4017,6 +4017,41 @@
   margin: 0;
 }
 
+/* ── Wizard entry choice landing ─────────────────────────────────────────── */
+
+/* Modifier on .wizard-route — centred column layout for the landing */
+.wizard-route.wizard-entry {
+  align-items: center;
+  text-align: center;
+  padding-top: var(--gruvax-space-7);
+}
+
+.wizard-entry-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-label);
+  color: var(--gruvax-blue);
+  margin: 0 0 var(--gruvax-space-4);
+  text-transform: uppercase;
+}
+
+.wizard-entry-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  color: var(--gruvax-text-secondary);
+  margin: 0 0 var(--gruvax-space-5);
+  max-width: 360px;
+}
+
+.wizard-entry-actions {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  width: 100%;
+  max-width: 320px;
+}
+
 /* ── ReshuffleBanner ──────────────────────────────────────────────────────── */
 
 .reshuffle-banner {

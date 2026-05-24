@@ -5,6 +5,11 @@
  * existing cut points pre-loaded).  The ?mode= query param or an existing reshuffleDraft
  * in the store determines which mode activates on mount.
  *
+ * Entry choice (gap G1): when neither a ?mode= param nor a reshuffleDraft is present,
+ * the route renders a mode-choice landing (WizardEntryChoice) instead of jumping
+ * straight into setup.  Both CTA buttons navigate to the canonical URL with ?mode=
+ * so there is ONE source of truth for mode and no drift vs. D-01.
+ *
  * Design constraints (CLAUDE.md + 07-UI-SPEC.md):
  * - All colors via --gruvax-* CSS variables; NO hardcoded hex.
  * - All user-supplied strings via JSX {} interpolation; never innerHTML.
@@ -51,6 +56,42 @@ interface CubeStep {
   is_empty: boolean
 }
 
+// ── Entry choice landing ──────────────────────────────────────────────────────
+
+/**
+ * WizardEntryChoice — shown when /admin/wizard is visited with no ?mode= param and
+ * no in-progress reshuffleDraft.  Both buttons navigate to the canonical ?mode= URL
+ * so the wizard engine resolves mode from one place only (D-01).
+ */
+function WizardEntryChoice() {
+  const navigate = useNavigate()
+
+  return (
+    <div className="wizard-route wizard-entry">
+      <h1 className="wizard-entry-heading">{'WIZARD'}</h1>
+      <p className="wizard-entry-body">
+        {'Choose how you want to update your cube boundaries. Set up from scratch if this is your first time, or run a reshuffle to re-walk existing shelves after a haul.'}
+      </p>
+      <div className="wizard-entry-actions">
+        <button
+          type="button"
+          className="wizard-btn wizard-btn--primary"
+          onClick={() => { void navigate('/admin/wizard?mode=setup') }}
+        >
+          {'START SETUP WIZARD'}
+        </button>
+        <button
+          type="button"
+          className="wizard-btn wizard-btn--outline"
+          onClick={() => { void navigate('/admin/wizard?mode=reshuffle') }}
+        >
+          {'START RESHUFFLE'}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function stepKey(step: { unit_id: number; row: number; col: number }): string {
@@ -77,9 +118,29 @@ function buildUpdates(
   })
 }
 
-// ── Wizard component ─────────────────────────────────────────────────────────
+// ── Wizard outer (entry gate) ─────────────────────────────────────────────────
 
+/**
+ * Wizard — exported component.  Renders the mode-choice landing when neither a
+ * ?mode= query param nor a reshuffleDraft is present (gap G1); otherwise renders
+ * the full wizard walk engine.  Splitting into outer + inner ensures all hooks in
+ * WizardWalk are always called (React Rules of Hooks).
+ */
 export function Wizard() {
+  const [searchParams] = useSearchParams()
+  const { reshuffleDraft } = useAdminStore()
+
+  const modeParam = searchParams.get('mode')
+  if (!reshuffleDraft && !modeParam) {
+    return <WizardEntryChoice />
+  }
+
+  return <WizardWalk />
+}
+
+// ── Wizard walk engine ────────────────────────────────────────────────────────
+
+function WizardWalk() {
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { reshuffleDraft, setReshuffleDraft } = useAdminStore()
