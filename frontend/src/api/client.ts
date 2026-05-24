@@ -84,3 +84,25 @@ export async function fetchCubeContents(
   }
   return res.json() as Promise<CubeContentsResponse>
 }
+
+/**
+ * POST /api/illuminate — fire-and-forget LED fan-out after a locate.
+ *
+ * Phase 6: sends the LocateResult the kiosk already holds to the server so it
+ * can fan out MQTT messages to the physical LED strips.
+ *
+ * D-03: public endpoint — no auth header, no CSRF, no adminFetch.
+ * The caller should .catch(() => {}) because the broker may be in degraded mode.
+ *
+ * Throws Error on non-2xx so the caller can decide whether to swallow it.
+ */
+export async function illuminateRecord(result: LocateResult): Promise<void> {
+  const res = await fetch(`${BASE}/api/illuminate`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(result),
+  })
+  if (!res.ok) {
+    throw new Error(`Illuminate failed: ${res.status}`)
+  }
+}
