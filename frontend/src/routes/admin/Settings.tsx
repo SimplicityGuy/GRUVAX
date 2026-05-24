@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { changePin, getAdminSettings, ledsAllOff, ledsDiagnostic, putAdminSettings } from '../../api/adminClient'
+import { changePin, downloadBoundariesYaml, downloadSettingsYaml, getAdminSettings, ledsAllOff, ledsDiagnostic, putAdminSettings, uploadImportSettings } from '../../api/adminClient'
 import { ColorBlindPreview } from '../../components/ColorBlindPreview'
 import './admin.css'
 
@@ -61,6 +61,11 @@ export function Settings() {
   const [ledsError, setLedsError] = useState('')
   // Phase 6 (06-04): All-off and diagnostic action status messages
   const [ledsActionMsg, setLedsActionMsg] = useState('')
+
+  // Phase 7: BACKUP & RESTORE section state (BAK-02)
+  type BackupImportStatus = 'idle' | 'applying' | 'success' | 'error'
+  const [backupImportStatus, setBackupImportStatus] = useState<BackupImportStatus>('idle')
+  const [backupImportError, setBackupImportError] = useState('')
 
   // Load current settings on mount — use backend key names (WR-01)
   useEffect(() => {
@@ -192,6 +197,21 @@ export function Settings() {
       setTimeout(() => setLedsActionMsg(''), 5000)
     } catch {
       setLedsError('Diagnostic failed. Please try again.')
+    }
+  }
+
+  // Phase 7: Settings import handler (BAK-02)
+  const handleSettingsImport = async (file: File) => {
+    setBackupImportStatus('applying')
+    setBackupImportError('')
+    try {
+      await uploadImportSettings(file)
+      setBackupImportStatus('success')
+      // Success inline message; auto-reset after 4s to allow re-import
+      setTimeout(() => setBackupImportStatus('idle'), 4000)
+    } catch {
+      setBackupImportStatus('error')
+      setBackupImportError('Settings could not be applied. Check that the file is a valid GRUVAX settings export.')
     }
   }
 
@@ -538,6 +558,108 @@ export function Settings() {
             REVIEW OVERRIDES
           </button>
         </div>
+      </section>
+
+      {/* ── BACKUP & RESTORE (Phase 7, BAK-02) ──────────────────────────────── */}
+      <section className="settings-section" aria-labelledby="backup-restore-heading">
+        <h2 id="backup-restore-heading" className="settings-heading">BACKUP &amp; RESTORE</h2>
+
+        <div className="settings-backup-actions">
+          {/* Export boundaries */}
+          <button
+            type="button"
+            className="settings-backup-btn"
+            onClick={() => { void downloadBoundariesYaml() }}
+          >
+            {/* Lucide Download icon */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14" height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            EXPORT BOUNDARIES
+          </button>
+
+          {/* Export settings */}
+          <button
+            type="button"
+            className="settings-backup-btn"
+            onClick={() => { void downloadSettingsYaml() }}
+          >
+            {/* Lucide Download icon */}
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14" height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+              <polyline points="7 10 12 15 17 10" />
+              <line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            EXPORT SETTINGS
+          </button>
+        </div>
+
+        {/* Import settings — label triggers hidden file input */}
+        <label
+          className="settings-backup-import-label"
+          htmlFor="settings-import-input"
+        >
+          {/* Lucide Upload icon */}
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="14" height="14"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden="true"
+          >
+            <polyline points="16 16 12 12 8 16" />
+            <line x1="12" y1="12" x2="12" y2="21" />
+            <path d="M20.39 18.39A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.3" />
+          </svg>
+          {backupImportStatus === 'applying' ? 'APPLYING…' : 'IMPORT SETTINGS'}
+        </label>
+        <input
+          id="settings-import-input"
+          type="file"
+          accept=".yaml,.yml"
+          className="import-file-input-hidden"
+          onChange={(e) => {
+            if (e.target.files?.[0]) void handleSettingsImport(e.target.files[0])
+          }}
+        />
+
+        {/* Inline result — success or error (Copywriting Contract) */}
+        {backupImportStatus === 'success' && (
+          <p className="settings-backup-result settings-backup-result--success" role="status">
+            Settings applied.
+          </p>
+        )}
+        {backupImportStatus === 'error' && (
+          <p className="settings-backup-result settings-backup-result--error" role="alert">
+            {backupImportError}
+          </p>
+        )}
       </section>
     </div>
   )
