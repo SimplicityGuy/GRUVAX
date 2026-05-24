@@ -238,7 +238,24 @@ Plans:
   4. Owner can download current boundaries as YAML (or JSON) via `GET /api/admin/export/boundaries.yaml`; the export schema matches the import schema (round-trip identity); a separate endpoint exports/imports LED color and brightness settings under the same schema convention.
   5. Every wizard commit, CSV/YAML import, and reshuffle ends with the admin seeing a confirmation that names the `change_set_id` and offers a "Revert this change set" tap — the keystone undo path from Phase 3 covers all multi-cube admin operations uniformly.
 
-**Plans:** TBD
+**Plans:** 5/5 plans planned (4 waves)
+Plans:
+**Wave 1** *(parallel — no file overlap)*
+
+- [ ] 07-01-PLAN.md — Migration 0007 source CHECK + BulkWriteRequest.source field + full Wave-0 RED test scaffold + synthetic fixtures (ADMN-04, ADMN-05, ADMN-10)
+- [ ] 07-02-PLAN.md — io transform layer: CutPointEntry model + YAML parse/serialize (safe_load) + flat CSV parser; SC4 round-trip identity substrate (ADMN-05, BAK-01)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 07-03-PLAN.md — Backend endpoints: boundaries.yaml + settings.yaml export (PIN hard-excluded), atomic CSV/YAML boundary import, validated settings import, router registration (ADMN-05, BAK-01, BAK-02)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 07-04-PLAN.md — Frontend foundation + wizard slice: types/adminStore reshuffle draft/adminClient calls + Wizard (setup+reshuffle) + ReshuffleBanner + ConfirmationScreen + AdminShell/App/CSS (ADMN-04, ADMN-10, BAK-01, BAK-02)
+
+**Wave 4** *(blocked on Wave 3)*
+
+- [ ] 07-05-PLAN.md — Frontend import/export surfaces: Import page (upload+diff+gated commit) + History badges + CubesGrid export + Settings BACKUP & RESTORE + human-verify checkpoint (ADMN-05, BAK-01, BAK-02)
 **UI hint:** yes
 
 ### Phase 8: Observability + Deployment Hardening
@@ -267,7 +284,7 @@ Plans:
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
 | 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete    | 2026-05-24 |
-| 7. Wizards + Import/Export | 0/? | Not started | - |
+| 7. Wizards + Import/Export | 0/5 | Planned | - |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
 ## Critical-Path Notes (carried from research)
