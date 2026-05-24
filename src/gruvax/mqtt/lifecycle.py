@@ -64,6 +64,15 @@ from gruvax.settings import settings
 
 logger = logging.getLogger(__name__)
 
+# WR-02: hard cap on concurrently-retained highlights in retain mode.  Without a
+# cap, retain mode is bounded only by the TTL — a fast typist can register
+# hundreds of highlight tasks before any TTL fires, each holding an asyncio task
+# and a cubes list (a memory/task-leak risk on the constrained Pi/lux host).
+# When the cap is reached, the oldest retained highlight is cancelled + reverted
+# before the new one is added, so the registry never exceeds this bound while
+# preserving normal retain-mode UX.
+_RETAIN_MODE_MAX_HIGHLIGHTS = 64
+
 
 # ── HighlightRegistry ─────────────────────────────────────────────────────────
 
@@ -241,6 +250,33 @@ async def illuminate_with_lifecycle(
             except Exception as exc:
                 logger.warning(
                     "Best-effort ambient revert for cancelled highlight %s failed: %s",
+                    hid,
+                    exc,
+                )
+    else:
+        # ── Retain mode: enforce the hard cap by evicting oldest (WR-02) ──────
+        # registry.items() preserves insertion order (dict ordering), so the
+        # leading entries are the oldest.  Evict just enough of them to make room
+        # for the new highlight, cancelling + reverting each before removal.
+        while len(registry) >= _RETAIN_MODE_MAX_HIGHLIGHTS:
+            oldest = registry.items()
+            if not oldest:
+                break
+            hid, entry = oldest[0]
+            entry.task.cancel()
+            registry.pop(hid)
+            try:
+                await publish_ambient(client, None, settings_cache, cubes=entry.cubes)
+                logger.warning(
+                    "Retain-mode highlight cap (%d) reached; evicted oldest highlight %s "
+                    "(reverted %d cubes to ambient) to bound registry growth (WR-02)",
+                    _RETAIN_MODE_MAX_HIGHLIGHTS,
+                    hid,
+                    len(entry.cubes),
+                )
+            except Exception as exc:
+                logger.warning(
+                    "Best-effort ambient revert for evicted highlight %s failed: %s",
                     hid,
                     exc,
                 )
