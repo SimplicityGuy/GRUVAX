@@ -256,6 +256,17 @@ Plans:
 **Wave 4** *(blocked on Wave 3)*
 
 - [x] 07-05-PLAN.md — Frontend import/export surfaces: Import page (upload+diff+gated commit) + History badges + CubesGrid export + Settings BACKUP & RESTORE + human-verify checkpoint (ADMN-05, BAK-01, BAK-02)
+
+**Gap closure** *(from 07-UAT.md — 4 diagnosed gaps)*
+
+**Wave 1** *(parallel — no file overlap)*
+
+- [ ] 07-06-PLAN.md — G1: discoverable reshuffle entry point on /admin/wizard (START SETUP / START RESHUFFLE landing) — frontend only (ADMN-10, ADMN-04)
+- [ ] 07-07-PLAN.md — G2+G3: dry_run preview branch on /import/boundaries (no write) + skip phantom re-validation for unchanged rows (export→re-import identity, SC4) + synthetic round-trip test (ADMN-05, BAK-01)
+
+**Wave 2** *(blocked on 07-07)*
+
+- [ ] 07-08-PLAN.md — G2+G4: wire Import preview to dry_run (commit only on COMMIT IMPORT) + raw-body upload contract (fixes settings import) + SC5 re-verify (D-04 badges + D-15 revert) — frontend (ADMN-05, BAK-02, BAK-01)
 **UI hint:** yes
 
 ### Phase 8: Observability + Deployment Hardening
