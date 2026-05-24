@@ -238,7 +238,7 @@ Plans:
   4. Owner can download current boundaries as YAML (or JSON) via `GET /api/admin/export/boundaries.yaml`; the export schema matches the import schema (round-trip identity); a separate endpoint exports/imports LED color and brightness settings under the same schema convention.
   5. Every wizard commit, CSV/YAML import, and reshuffle ends with the admin seeing a confirmation that names the `change_set_id` and offers a "Revert this change set" tap — the keystone undo path from Phase 3 covers all multi-cube admin operations uniformly.
 
-**Plans:** 3/5 plans executed
+**Plans:** 4/5 plans executed
 Plans:
 **Wave 1** *(parallel — no file overlap)*
 
@@ -251,7 +251,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 07-04-PLAN.md — Frontend foundation + wizard slice: types/adminStore reshuffle draft/adminClient calls + Wizard (setup+reshuffle) + ReshuffleBanner + ConfirmationScreen + AdminShell/App/CSS (ADMN-04, ADMN-10, BAK-01, BAK-02)
+- [x] 07-04-PLAN.md — Frontend foundation + wizard slice: types/adminStore reshuffle draft/adminClient calls + Wizard (setup+reshuffle) + ReshuffleBanner + ConfirmationScreen + AdminShell/App/CSS (ADMN-04, ADMN-10, BAK-01, BAK-02)
 
 **Wave 4** *(blocked on Wave 3)*
 
@@ -284,7 +284,7 @@ Plans:
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
 | 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete    | 2026-05-24 |
-| 7. Wizards + Import/Export | 3/5 | In Progress|  |
+| 7. Wizards + Import/Export | 4/5 | In Progress|  |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
 ## Critical-Path Notes (carried from research)
