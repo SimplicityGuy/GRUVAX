@@ -206,7 +206,21 @@ Plans:
   4. Every retained publish sets MQTT 5 `message_expiry_interval` (default 4h for state, configurable); MQTT topics are versioned as `gruvax/v1/...`; per-environment topic prefix (`gruvax/v1/dev/...` vs `gruvax/v1/...`) is configurable via `MQTT_TOPIC_PREFIX`; the documented Pydantic schema lives alongside the contract in the repo.
   5. The Mosquitto broker runs in Compose with `persistence true` + named volume, NO host `ports:` exposure in v1, an LWT on `gruvax/v1/server/hello` retained, and the publish wrapper times out at ~250 ms so a broker hiccup never blocks `/api/illuminate`.
 
-**Plans:** TBD
+**Plans:** 3 plans
+Plans:
+**Wave 1**
+
+- [ ] 06-01-PLAN.md — MQTT 5 publish spine: topics + Pydantic payload schemas + publishers + client V5 upgrade + settings prefix/expiry knobs + LED-defaults seed migration + public POST /api/illuminate fan-out + kiosk wire-up (LED-01/02/03/08/09/10, DEP-03)
+
+**Wave 2** *(blocked on Wave 1)*
+
+- [ ] 06-02-PLAN.md — Admin LED color/brightness settings: extend /api/admin/settings GET/PUT for LED keys + LEDs section in Settings.tsx with per-state color pickers, token presets, brightness sliders, and an in-SPA color-blind preview (LED-04, LED-05)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [ ] 06-03-PLAN.md — All-off + diagnostic admin slice: idempotent clear-retained publish_all_off (units-enumerated) + background run_diagnostic (cube×state cycle + status subscribe) + admin/leds.py off/diagnostic endpoints + Settings buttons (LED-06, LED-07, DEP-03)
+
+**UI hint:** yes (settings-shaped — extends existing admin Settings page, no new route)
 
 ### Phase 7: Wizards + Import/Export
 
@@ -250,7 +264,7 @@ Plans:
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
-| 6. LED Contract over MQTT (Hardware Stubbed) | 0/? | Not started | - |
+| 6. LED Contract over MQTT (Hardware Stubbed) | 0/3 | Planned | - |
 | 7. Wizards + Import/Export | 0/? | Not started | - |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
