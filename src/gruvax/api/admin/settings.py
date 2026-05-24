@@ -87,6 +87,17 @@ _BOOL_KEYS = frozenset({
     "led_highlight.retain_mode",
 })
 
+# WR-03: brightness keys must be within the 8-bit hardware range [0, 255].
+# Without this, a value like 999 is persisted verbatim, echoed back by GET, and
+# only clamped at publish time — the stored value and the published value disagree.
+# Validate on the PUT path (422 on out-of-range) so the persisted value is always
+# one the publisher will honour, consistent with the hex validation for colours.
+_BRIGHTNESS_KEYS = frozenset({
+    "led_brightness.span",
+    "led_brightness.active",
+    "led_brightness.ambient",
+})
+
 
 @router.get("/settings")
 async def get_settings(
@@ -198,7 +209,7 @@ async def update_settings(
         "led_highlight_retain_ttl_seconds": "led_highlight.retain_ttl_seconds",
     }
 
-    # Validate color values before any writes (fail-fast, T-06-08)
+    # Validate color + brightness values before any writes (fail-fast, T-06-08 / WR-03)
     for body_key, db_key in key_map.items():
         if body_key not in body:
             continue
@@ -214,6 +225,29 @@ async def update_settings(
                             f"Color value must be a valid #RRGGBB hex string. "
                             f"Got: {value!r}"
                         ),
+                    },
+                )
+        elif db_key in _BRIGHTNESS_KEYS:
+            # WR-03: brightness must be an integer in the 8-bit hardware range.
+            value = body[body_key]
+            try:
+                int_value = int(value)
+            except (TypeError, ValueError):
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={
+                        "type": "invalid_brightness",
+                        "field": body_key,
+                        "message": f"Brightness must be an integer in [0, 255]. Got: {value!r}",
+                    },
+                ) from None
+            if not 0 <= int_value <= 255:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={
+                        "type": "invalid_brightness",
+                        "field": body_key,
+                        "message": f"Brightness must be in [0, 255]. Got: {int_value}",
                     },
                 )
 
