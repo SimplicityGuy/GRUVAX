@@ -29,6 +29,11 @@ class Settings(BaseSettings):
     MQTT_PORT: int = 1883
     MQTT_USERNAME: str = "gruvax"
     MQTT_PASSWORD: str = "gruvax"
+    # Topic prefix separates dev and prod retained messages (D-14, Pitfall 3).
+    # Dev: "gruvax/v1/dev/leds"  Prod: "gruvax/v1/leds"
+    MQTT_TOPIC_PREFIX: str = "gruvax/v1/dev/leds"
+    # Default retained-state expiry in seconds (D-12 — 4h default, "no expiry" rejected).
+    MQTT_STATE_EXPIRY_SECONDS: int = 14400  # 4 * 3600
 
     # ── Admin auth (Phase 3) ──────────────────────────────────────────────────
     # SESSION_SECRET has no default — a missing value crashes at startup rather

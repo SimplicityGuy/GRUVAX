@@ -201,6 +201,7 @@ def create_app() -> FastAPI:
     # Import here (not at module level) to avoid circular imports:
     # app.py → api/*.py → deps.py → (no back-reference to app.py)
     from gruvax.api.health import router as health_router
+    from gruvax.api.illuminate import router as illuminate_router
     from gruvax.api.locate import router as locate_router
     from gruvax.api.search import router as search_router
     from gruvax.api.units import router as units_router
@@ -209,6 +210,7 @@ def create_app() -> FastAPI:
     app.include_router(search_router, prefix="/api")
     app.include_router(locate_router, prefix="/api")
     app.include_router(units_router, prefix="/api")
+    app.include_router(illuminate_router, prefix="/api")  # Phase 6: public LED fan-out (D-03)
 
     # ── Admin router (Phase 3) — BEFORE StaticFiles mount (Pitfall 3) ──────────
     from gruvax.api.admin.router import create_admin_router

@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { locateRelease } from '../../api/client'
+import { illuminateRecord, locateRelease } from '../../api/client'
 import type { SearchResult } from '../../api/types'
 import { useGruvaxStore } from '../../state/store'
 import { DidYouMean } from './DidYouMean'
@@ -71,6 +71,10 @@ export function ResultsList({
     void locateRelease(top.release_id)
       .then((result) => {
         setLocateResult(result)
+        // Phase 6: fire-and-forget illuminate — never block locate path (D-01)
+        void illuminateRecord(result).catch(() => {
+          // Swallow — broker may be in degraded mode
+        })
       })
       .catch(() => {
         setHighlightCube(null)
@@ -87,6 +91,10 @@ export function ResultsList({
     void locateRelease(result.release_id)
       .then((located) => {
         setLocateResult(located)
+        // Phase 6: fire-and-forget illuminate after explicit select (D-01)
+        void illuminateRecord(located).catch(() => {
+          // Swallow — broker may be in degraded mode
+        })
       })
       .catch(() => {
         setHighlightCube(null)
