@@ -169,10 +169,33 @@ export interface CubeBoundaryEdit {
   col: number
   first_label: string
   first_catalog: string
-  last_label: string
-  last_catalog: string
+  /** Optional — wizard/reshuffle paths set these to ""; single-cube edit keeps them. */
+  last_label?: string
+  /** Optional — wizard/reshuffle paths set these to ""; single-cube edit keeps them. */
+  last_catalog?: string
   is_empty?: boolean
   force?: boolean
+}
+
+// ── Phase 7: Wizard + Import/Export types (plan 07-04) ──────────────────────
+
+/**
+ * In-progress reshuffle/setup draft persisted to localStorage via Zustand.
+ * Keyed by `${unit_id}/${row}/${col}` for O(1) step lookup.
+ * null = no draft in progress.
+ */
+export interface ReshuffleDraft {
+  mode: 'setup' | 'reshuffle'
+  completedSteps: number
+  cuts: Record<string, {
+    first_label: string | null
+    first_catalog: string | null
+    is_empty: boolean
+  }>
+  /** crypto.randomUUID() generated before network call; reused on retry (D-04, Pattern 4). */
+  idempotencyKey: string | null
+  /** ISO-8601 timestamp — used for relative-time display in ReshuffleBanner. */
+  startedAt: string
 }
 
 /**
@@ -298,7 +321,8 @@ export interface CommitResponse {
 /** One entry in the GET /api/admin/history response. */
 export interface ChangeSetHistoryItem {
   change_set_id: string
-  source: 'manual' | 'bulk' | 'revert'
+  /** Source widened in Phase 7 to include wizard/import sources (D-04). */
+  source: 'manual' | 'bulk' | 'revert' | 'cut_insert' | 'wizard' | 'reshuffle' | 'csv' | 'yaml'
   changed_at: string   // ISO-8601 timestamp
   cube_count: number
 }

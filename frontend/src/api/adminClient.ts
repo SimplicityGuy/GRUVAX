@@ -49,7 +49,12 @@ function getCsrfToken(): string {
   return useAdminStore.getState().csrfToken ?? ''
 }
 
-/** Central fetch wrapper: adds credentials + optional CSRF header. */
+/** Central fetch wrapper: adds credentials + optional CSRF header.
+ *
+ * When ``body`` is a ``FormData`` instance, the ``Content-Type`` default is
+ * intentionally omitted so the browser can set the multipart boundary
+ * automatically (file upload pattern — PATTERNS.md §adminClient.ts).
+ */
 async function adminFetch(
   path: string,
   options: RequestInit = {},
@@ -57,8 +62,11 @@ async function adminFetch(
   const method = (options.method ?? 'GET').toUpperCase()
   const isMutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
 
+  // Skip the application/json default when body is FormData so the browser
+  // sets the multipart Content-Type + boundary automatically.
+  const isFormData = options.body instanceof FormData
   const headers: Record<string, string> = {
-    'Content-Type': 'application/json',
+    ...(isFormData ? {} : { 'Content-Type': 'application/json' }),
     ...(options.headers as Record<string, string>),
   }
 
@@ -260,17 +268,21 @@ export async function getCatalogsForLabel(label: string): Promise<CatalogOption[
  * Generate a UUID per commit attempt with `crypto.randomUUID()`, persist it
  * alongside the pendingChangeSet so retries reuse the same key.
  *
+ * Phase 7 (D-04): ``source`` widens from the legacy 'bulk' default to include
+ * 'wizard' and 'reshuffle' so HistoryView can render legible source badges.
+ *
  * On 400, throws ``BulkSaveError`` carrying the server's ``message`` and
  * ``type`` fields so callers can surface structured error text to the user.
  */
 export async function adminBulkSave(
   updates: CubeBoundaryEdit[],
   idempotencyKey: string,
+  source: 'bulk' | 'wizard' | 'reshuffle' | 'csv' | 'yaml' = 'bulk',
 ): Promise<CommitResponse> {
   const res = await adminFetch('/api/admin/cubes/bulk', {
     method: 'POST',
     headers: { 'Idempotency-Key': idempotencyKey },
-    body: JSON.stringify({ updates }),
+    body: JSON.stringify({ updates, source }),
   })
   if (!res.ok) {
     // Attempt to parse structured error body (boundary_order_error / phantom_boundary)
@@ -564,6 +576,111 @@ export async function ledsDiagnostic(): Promise<{ run_id: string; started_at: st
     throw new Error(`LED diagnostic failed: ${res.status}`)
   }
   return res.json() as Promise<{ run_id: string; started_at: string }>
+}
+
+// ── Phase 7: Export / Import endpoints ───────────────────────────────────────
+
+/**
+ * GET /api/admin/export/boundaries.yaml — download boundaries as YAML.
+ *
+ * Fetches via adminFetch (CSRF read-only GET), converts the response to a
+ * Blob, creates an object URL, and triggers a browser download via a hidden
+ * ``<a download>`` element.  No external dependency — browser builtin only.
+ */
+export async function downloadBoundariesYaml(): Promise<void> {
+  const res = await adminFetch('/api/admin/export/boundaries.yaml')
+  if (!res.ok) {
+    throw new Error(`Boundaries export failed: ${res.status}`)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'boundaries.yaml'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * GET /api/admin/export/settings.yaml — download settings as YAML.
+ *
+ * Same browser-anchor download pattern as downloadBoundariesYaml (no popup blockers).
+ */
+export async function downloadSettingsYaml(): Promise<void> {
+  const res = await adminFetch('/api/admin/export/settings.yaml')
+  if (!res.ok) {
+    throw new Error(`Settings export failed: ${res.status}`)
+  }
+  const blob = await res.blob()
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = 'settings.yaml'
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+/**
+ * POST /api/admin/import/boundaries — upload a CSV or YAML boundaries file.
+ *
+ * Posts multipart FormData.  Content-Type header is intentionally omitted so
+ * the browser sets the multipart boundary automatically.  ``adminFetch`` still
+ * injects X-CSRF-Token for the POST (CSRF safe, Pitfall 2).
+ *
+ * On non-OK, throws ``BulkSaveError`` with the server's ``type`` and optional
+ * ``message`` fields parsed from the JSON body.
+ */
+export async function uploadImportBoundaries(
+  file: File,
+  idempotencyKey: string,
+): Promise<CommitResponse> {
+  const form = new FormData()
+  form.append('file', file)
+  // Content-Type intentionally omitted — browser sets multipart boundary.
+  // adminFetch injects X-CSRF-Token for POST automatically.
+  const res = await adminFetch('/api/admin/import/boundaries', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: form,
+  })
+  if (!res.ok) {
+    let errorType: string | undefined
+    let errorMessage: string | undefined
+    try {
+      const b = await res.json() as Record<string, unknown>
+      if (typeof b.type === 'string') errorType = b.type
+      if (typeof b.message === 'string') errorMessage = b.message
+    } catch { /* ignore */ }
+    throw new BulkSaveError(res.status, errorType, errorMessage)
+  }
+  return res.json() as Promise<CommitResponse>
+}
+
+/**
+ * POST /api/admin/import/settings — upload a YAML settings file.
+ *
+ * Same multipart FormData pattern as uploadImportBoundaries but without
+ * an Idempotency-Key (settings import is idempotent by nature).
+ * On non-OK, throws ``BulkSaveError`` (same error-parsing pattern).
+ */
+export async function uploadImportSettings(file: File): Promise<{ applied: string[] }> {
+  const form = new FormData()
+  form.append('file', file)
+  const res = await adminFetch('/api/admin/import/settings', {
+    method: 'POST',
+    body: form,
+  })
+  if (!res.ok) {
+    let errorType: string | undefined
+    let errorMessage: string | undefined
+    try {
+      const b = await res.json() as Record<string, unknown>
+      if (typeof b.type === 'string') errorType = b.type
+      if (typeof b.message === 'string') errorMessage = b.message
+    } catch { /* ignore */ }
+    throw new BulkSaveError(res.status, errorType, errorMessage)
+  }
+  return res.json() as Promise<{ applied: string[] }>
 }
 
 // ── Error types ───────────────────────────────────────────────────────────────

@@ -15,7 +15,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ChangeSet } from '../api/types'
+import type { ChangeSet, ReshuffleDraft } from '../api/types'
 
 interface AdminStore {
   /** Whether the admin session is currently authenticated. */
@@ -61,6 +61,16 @@ interface AdminStore {
 
   /** Replace the entire pending change-set (or clear it with null). */
   setPendingChangeSet: (cs: ChangeSet | null) => void
+
+  /**
+   * In-progress wizard/reshuffle draft persisted to localStorage (D-05, D-06, D-07).
+   * Set to null when the wizard commits successfully or the user discards.
+   * Intentionally survives setAdminLoggedOut so the owner can resume after re-auth (Pitfall 2).
+   */
+  reshuffleDraft: ReshuffleDraft | null
+
+  /** Replace the reshuffle draft (or clear it with null). */
+  setReshuffleDraft: (draft: ReshuffleDraft | null) => void
 }
 
 export const useAdminStore = create<AdminStore>()(
@@ -93,13 +103,19 @@ export const useAdminStore = create<AdminStore>()(
         set({ sessionExpiresAt: new Date(expiresAt).getTime() }),
 
       setPendingChangeSet: (cs) => set({ pendingChangeSet: cs }),
+
+      reshuffleDraft: null,
+      setReshuffleDraft: (draft) => set({ reshuffleDraft: draft }),
     }),
     {
       name: 'gruvax-admin',
-      // Persist ONLY the pending change-set — auth state must not survive a page
-      // reload (the HttpOnly cookie handles session continuity; the store's
-      // isLoggedIn is derived on mount by polling /api/admin/session).
-      partialize: (state) => ({ pendingChangeSet: state.pendingChangeSet }),
+      // Persist ONLY the pending change-set and reshuffle draft — auth state must not survive
+      // a page reload (the HttpOnly cookie handles session continuity; the store's isLoggedIn
+      // is derived on mount by polling /api/admin/session).
+      partialize: (state) => ({
+        pendingChangeSet: state.pendingChangeSet,
+        reshuffleDraft: state.reshuffleDraft,
+      }),
     },
   ),
 )
