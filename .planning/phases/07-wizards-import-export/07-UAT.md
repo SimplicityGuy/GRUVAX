@@ -103,7 +103,7 @@ blocked: 0
     - path: "src/gruvax/api/admin/cubes.py"
       issue: "force-commit / write path can persist (label,catalog) pairs that don't match v_collection, creating un-re-importable state"
   missing:
-    - "Decide the round-trip contract: either (a) import treats a row identical to the current committed cut point as valid without phantom re-validation, or (b) round-trip via a stable record identity instead of label+catalog strings, or (c) write paths reject non-v_collection pairs so committed state is always re-importable. Then export→re-import is guaranteed identity (SC4)."
+    - "DECISION (user-chosen): import SKIPS phantom re-validation for any row that equals the current committed cut point (unit,row,col,first_label,first_catalog,is_empty). New/changed rows still get full phantom + contiguity validation. This guarantees export→re-import = identity (SC4) with the smallest, safest change. (Rejected alternatives: stable-record-id round-trip; reject-non-matching-pairs on write.)"
   debug_session: ""
 
 - truth: "IMPORT SETTINGS of a freshly exported settings.yaml applies the settings (BAK-02 round-trip)"
