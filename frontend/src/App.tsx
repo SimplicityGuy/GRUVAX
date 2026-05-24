@@ -2,10 +2,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes } from 'react-router'
 import { AdminShell } from './routes/admin/AdminShell'
 import { BinWidthEditor } from './routes/admin/BinWidthEditor'
+import { ConfirmationRoute } from './routes/admin/ConfirmationScreen'
 import { CubesGrid } from './routes/admin/CubesGrid'
 import { HistoryView } from './routes/admin/HistoryView'
+import Import from './routes/admin/Import'
 import { Settings } from './routes/admin/Settings'
 import { ShelfBinList } from './routes/admin/ShelfBinList'
+import { Wizard } from './routes/admin/Wizard'
 import { KioskView } from './routes/kiosk/KioskView'
 
 const queryClient = new QueryClient({
@@ -28,6 +31,9 @@ const queryClient = new QueryClient({
  *   /admin/cubes/:unit          → ShelfBinList (bin-card list for one shelf, sketch 002)
  *   /admin/cubes/:unit/:row/:col → BinWidthEditor (focused single-bin width editor, sketch 001)
  *   /admin/history              → HistoryView
+ *   /admin/wizard               → Wizard (setup + reshuffle modes, D-01)
+ *   /admin/wizard/done          → ConfirmationRoute (post-commit confirmation, D-15)
+ *   /admin/import               → Import (stub — 07-05 replaces with real page)
  *
  * Design tokens are imported in main.tsx (single entry point).
  */
@@ -44,6 +50,9 @@ function App() {
             <Route path="cubes/:unit" element={<ShelfBinList />} />
             <Route path="cubes/:unit/:row/:col" element={<BinWidthEditor />} />
             <Route path="history" element={<HistoryView />} />
+            <Route path="wizard" element={<Wizard />} />
+            <Route path="wizard/done" element={<ConfirmationRoute />} />
+            <Route path="import" element={<Import />} />
           </Route>
         </Routes>
       </BrowserRouter>
