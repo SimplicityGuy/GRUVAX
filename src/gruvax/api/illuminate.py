@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections.abc import Coroutine
 from datetime import UTC, datetime
 from typing import Any
 
@@ -32,6 +33,31 @@ from gruvax.mqtt import lifecycle, publishers
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["illuminate"])
+
+# CR-01: module-scoped fallback strong-reference set for fire-and-forget tasks.
+# The asyncio event loop holds only a WEAK reference to a task created via
+# asyncio.create_task; a discarded task can be garbage-collected mid-execution,
+# silently cancelling an in-flight publish.  Tasks are normally tracked on
+# ``app.state.background_tasks`` (created in the lifespan), but this module-level
+# set is used as a fallback for tests/early-startup paths that bypass the
+# lifespan, so the strong-reference guarantee holds in every path.
+_background_tasks: set[asyncio.Task[Any]] = set()
+
+
+def _spawn(coro: Coroutine[Any, Any, Any], request: Request) -> None:
+    """Schedule *coro* as a fire-and-forget task with a strong reference (CR-01).
+
+    The task is added to ``request.app.state.background_tasks`` when that set
+    exists (the production path, populated by the lifespan), otherwise to the
+    module-level fallback set.  A done-callback discards the task from whichever
+    set held it once it completes, so the set stays O(in-flight tasks).
+    """
+    task_set: set[asyncio.Task[Any]] = getattr(
+        request.app.state, "background_tasks", _background_tasks
+    )
+    task = asyncio.create_task(coro)
+    task_set.add(task)
+    task.add_done_callback(task_set.discard)
 
 
 class IlluminateRequest(BaseModel):
@@ -78,13 +104,17 @@ async def illuminate(
     registry = getattr(request.app.state, "highlight_registry", None)
 
     if client is not None and registry is not None:
-        asyncio.create_task(
-            lifecycle.illuminate_with_lifecycle(registry, client, settings_cache, body)
+        # CR-01: _spawn keeps a strong reference so the task is not GC-cancelled.
+        _spawn(
+            lifecycle.illuminate_with_lifecycle(registry, client, settings_cache, body),
+            request,
         )
     elif client is not None:
         # Fallback: registry not initialised yet (very early startup edge case).
-        asyncio.create_task(
-            publishers.fan_out_illuminate(client, body, settings_cache)
+        # CR-01: _spawn keeps a strong reference so the task is not GC-cancelled.
+        _spawn(
+            publishers.fan_out_illuminate(client, body, settings_cache),
+            request,
         )
         logger.warning(
             "highlight_registry not found on app.state — falling back to plain fan_out_illuminate "

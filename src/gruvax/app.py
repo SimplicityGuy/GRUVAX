@@ -171,16 +171,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     app.state.highlight_registry = HighlightRegistry()
 
+    # CR-01: the asyncio event loop holds only a WEAK reference to a task created
+    # via asyncio.create_task.  A fire-and-forget task whose return value is
+    # discarded can be garbage-collected mid-execution, silently cancelling an
+    # in-flight publish.  Keep a strong reference in this app-scoped set until the
+    # task completes, then discard via add_done_callback.  The illuminate endpoint
+    # reuses this same set (see gruvax.api.illuminate).
+    app.state.background_tasks = set()
+
     # Publish ambient baseline for every cube — best-effort.  Never blocks startup.
     # Guard: only attempt when MQTT is connected (degraded mode → mqtt is None).
     try:
-        asyncio.create_task(
+        ambient_task = asyncio.create_task(
             publish_ambient(
                 app.state.mqtt,
                 app.state.db_pool,
                 app.state.settings_cache,
             )
         )
+        # CR-01: strong-reference the task so the GC cannot cancel it mid-flight.
+        app.state.background_tasks.add(ambient_task)
+        ambient_task.add_done_callback(app.state.background_tasks.discard)
         logger.info("Ambient baseline publish task scheduled at startup (LED-11/D-20)")
     except Exception as exc:
         logger.warning("Failed to schedule ambient baseline publish at startup: %s", exc)
