@@ -696,20 +696,44 @@ async def run_diagnostic(
     # Subscribe to status/# for 5 s to capture any firmware status responses.
     # Expected result: nothing (no hardware in v1).  This wires the future seam.
     # Pitfall G: status/# is disjoint from illuminate/* — no cross-traffic risk.
-    status_topic = topics.status_wildcard(prefix)
-    await client.subscribe(status_topic, qos=1)
-    try:
-        async with asyncio.timeout(5.0):
-            async for msg in client.messages:
-                logger.info(
-                    "LED status from firmware: topic=%s payload=%s",
-                    msg.topic,
-                    msg.payload,
-                )
-    except TimeoutError:
-        pass  # expected — no hardware in v1
-    finally:
-        await client.unsubscribe(status_topic)
+    #
+    # CR-03: ``client.messages`` is a SINGLE shared incoming-message iterator in
+    # aiomqtt 2.5.x.  If two diagnostics ran concurrently they would BOTH iterate
+    # it and race for inbound messages.  Guard with a flag on the client so only
+    # one diagnostic owns ``client.messages`` at a time; a second concurrent
+    # diagnostic skips the subscribe window entirely rather than fighting over the
+    # shared queue.  The ``asyncio.timeout(5.0)`` bound already makes the window
+    # finite and cancelable: at shutdown the surrounding task is cancelled, the
+    # ``async with asyncio.timeout`` block propagates CancelledError, and the
+    # ``finally`` still unsubscribes and clears the guard.
+    # Use ``is True`` (not truthiness) so the guard only trips on the explicit
+    # boolean flag we set below — never on an auto-created mock attribute or any
+    # other truthy value that may live on the client object.
+    if getattr(client, "_gruvax_diag_active", False) is True:
+        logger.warning(
+            "LED diagnostic run_id=%s: another diagnostic already owns status/#; "
+            "skipping the status-subscribe window to avoid draining the shared "
+            "message iterator (CR-03)",
+            run_id,
+        )
+    else:
+        status_topic = topics.status_wildcard(prefix)
+        # Mark the client as the sole status/# consumer for this window.
+        client._gruvax_diag_active = True  # type: ignore[attr-defined]
+        await client.subscribe(status_topic, qos=1)
+        try:
+            async with asyncio.timeout(5.0):
+                async for msg in client.messages:
+                    logger.info(
+                        "LED status from firmware: topic=%s payload=%s",
+                        msg.topic,
+                        msg.payload,
+                    )
+        except TimeoutError:
+            pass  # expected — no hardware in v1
+        finally:
+            await client.unsubscribe(status_topic)
+            client._gruvax_diag_active = False  # type: ignore[attr-defined]
 
     # ── Restore the idle ambient baseline (CR-04 / LED-11 / D-20) ──────────────
     # The diagnostic's final "off" frame deletes each cube's retained state/* via
