@@ -20,6 +20,7 @@ Router registration order (CRITICAL — Pitfall 3):
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
@@ -163,6 +164,27 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # ── 4. MQTT (non-blocking best-effort; DEP-01) ───────────────────────────
     await connect_mqtt(app)
 
+    # ── 5. Highlight registry + ambient baseline (Phase 6 / LED-11/D-20) ─────
+    # Import here to avoid circular imports (mirrors the pattern for other routers).
+    from gruvax.mqtt.lifecycle import HighlightRegistry, cancel_and_revert_all
+    from gruvax.mqtt.publishers import publish_ambient
+
+    app.state.highlight_registry = HighlightRegistry()
+
+    # Publish ambient baseline for every cube — best-effort.  Never blocks startup.
+    # Guard: only attempt when MQTT is connected (degraded mode → mqtt is None).
+    try:
+        asyncio.create_task(
+            publish_ambient(
+                app.state.mqtt,
+                app.state.db_pool,
+                app.state.settings_cache,
+            )
+        )
+        logger.info("Ambient baseline publish task scheduled at startup (LED-11/D-20)")
+    except Exception as exc:
+        logger.warning("Failed to schedule ambient baseline publish at startup: %s", exc)
+
     yield  # ── App serves requests here ──────────────────────────────────────
 
     # ── Teardown ─────────────────────────────────────────────────────────────
@@ -171,6 +193,17 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     with contextlib.suppress(Exception):
         await event_bus.publish("server_shutdown", {})
+
+    # Cancel all pending highlight revert tasks (T-06-22 leak guard).
+    try:
+        registry: HighlightRegistry = getattr(app.state, "highlight_registry", HighlightRegistry())
+        await cancel_and_revert_all(
+            registry,
+            getattr(app.state, "mqtt", None),
+            getattr(app.state, "settings_cache", {}),
+        )
+    except Exception as exc:
+        logger.warning("cancel_and_revert_all on shutdown raised (ignored): %s", exc)
 
     await disconnect_mqtt(app)
     await pool.close()
