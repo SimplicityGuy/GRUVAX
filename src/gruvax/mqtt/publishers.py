@@ -589,13 +589,38 @@ async def run_diagnostic(
         )
         return
 
+    # WR-07: guard against a missing pool (broker connected but DB unavailable).
+    # Unlike publish_ambient this function unconditionally opens a connection to
+    # enumerate cubes; without this guard a None pool raises AttributeError inside
+    # the BackgroundTask, which FastAPI logs but never surfaces (the endpoint
+    # already returned 200 {run_id}).
+    if pool is None:
+        logger.warning(
+            "run_diagnostic run_id=%s: pool is None; cannot enumerate cubes — skipping",
+            run_id,
+        )
+        return
+
     prefix = settings.MQTT_TOPIC_PREFIX
     expiry_seconds = settings.MQTT_STATE_EXPIRY_SECONDS
 
     # ── Read diagnostic parameters ────────────────────────────────────────────
-    inter_cube_delay_s: float = (
-        int(settings_cache.get("led_diagnostic.inter_cube_ms", 200)) / 1000.0
-    )
+    # WR-09: clamp inter-cube delay to a sane bounded range and tolerate a
+    # non-numeric / hostile value.  Without this, a large or non-integer
+    # led_diagnostic.inter_cube_ms makes the diagnostic loop sleep for an
+    # arbitrary duration per cube (or raise ValueError) inside the BackgroundTask
+    # while holding the status/# subscription open.
+    try:
+        inter_cube_ms = int(settings_cache.get("led_diagnostic.inter_cube_ms", 200))
+    except (TypeError, ValueError):
+        logger.warning(
+            "run_diagnostic run_id=%s: invalid led_diagnostic.inter_cube_ms %r; using 200ms",
+            run_id,
+            settings_cache.get("led_diagnostic.inter_cube_ms"),
+        )
+        inter_cube_ms = 200
+    inter_cube_ms = min(max(inter_cube_ms, 0), 2000)  # clamp to [0, 2000] ms
+    inter_cube_delay_s: float = inter_cube_ms / 1000.0
 
     # Resolve state colors (strip JSON string quotes — stored as '"#RRGGBB"')
     color_span: str = str(
