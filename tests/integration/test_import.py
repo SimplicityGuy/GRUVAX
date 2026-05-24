@@ -276,6 +276,74 @@ async def test_contiguity_violation(client) -> None:  # type: ignore[no-untyped-
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_unchanged_unmatchable_row_skips_phantom(client, four_cube_boundaries) -> None:  # type: ignore[no-untyped-def]
+    """G3 identity-skip: a committed row whose (label, catalog) is absent from v_collection
+    is SKIPPED from phantom re-validation on re-import (BAK-01, SC4, Pitfall 22).
+
+    Without the G3 skip this test would return 400 phantom_boundary — proving the skip fires.
+
+    Steps:
+      1. Seed the four_cube_boundaries state via POST /api/admin/cubes/bulk with force=True on
+         each edit (bypass phantom — synthetic labels not in dev v_collection).
+      2. Build a YAML file equal to the EXACT seeded set (all four cubes — a full set, so the
+         D-09 replace-all fill does not turn untouched cubes into is_empty).
+      3. POST /api/admin/import/boundaries (plain, no dry_run) → assert 200 (identity-skip fired).
+
+    Synthetic data only (four_cube_boundaries uses made-up labels not in dev v_collection).
+    """
+    auth = await _login(client)
+    assert auth, "Login must be available for identity-skip test"
+
+    import uuid
+
+    # Step 1: Seed the committed state with force=True per edit (bypass phantom)
+    updates_with_force = [
+        {
+            "unit_id": c["unit_id"],
+            "row": c["row"],
+            "col": c["col"],
+            "first_label": c["first_label"],
+            "first_catalog": c["first_catalog"],
+            "is_empty": c.get("is_empty", False),
+            "force": True,  # bypass phantom — these labels are NOT in dev v_collection
+        }
+        for c in four_cube_boundaries
+    ]
+    seed_resp = await client.post(
+        "/api/admin/cubes/bulk",
+        json={"updates": updates_with_force, "source": "bulk"},
+        headers={
+            "X-CSRF-Token": auth["csrf_token"],
+            "Idempotency-Key": str(uuid.uuid4()),
+        },
+        cookies=auth["cookies"],
+    )
+    assert seed_resp.status_code == 200, (
+        f"Seed via bulk failed: {seed_resp.status_code}: {seed_resp.text}"
+    )
+
+    # Step 2: Build a YAML file that exactly matches the seeded state
+    yaml_bytes = _make_synthetic_yaml(four_cube_boundaries)
+
+    # Step 3: Import the file — identity-skip must fire, returning 200 (NOT 400 phantom_boundary)
+    response = await client.post(
+        "/api/admin/import/boundaries",
+        content=yaml_bytes,
+        headers={
+            "X-CSRF-Token": auth["csrf_token"],
+            "Content-Type": "application/x-yaml",
+        },
+        cookies=auth["cookies"],
+    )
+    assert response.status_code == 200, (
+        f"Expected 200 from identity re-import (G3 skip), got {response.status_code}: "
+        f"{response.text}"
+    )
+    body = response.json()
+    assert "change_set_id" in body, f"Response missing change_set_id: {body}"
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_atomicity(client, four_cube_boundaries) -> None:  # type: ignore[no-untyped-def]
     """Failing row mid-import → ZERO partial state in DB (SC2, Pitfall 7).
 
