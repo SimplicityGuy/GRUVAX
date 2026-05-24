@@ -277,30 +277,64 @@ async def fan_out_illuminate(
     if sub_interval is not None and primary is not None:
         u, r, c = primary["unit_id"], primary["row"], primary["col"]
         # sub_cube_interval JSON has no `cube` field — use primary_cube's unit/row/col
-        interval_dict = {
-            "start": float(sub_interval.get("start", 0.0)),
-            "end": float(sub_interval.get("end", 1.0)),
-        }
-        sub_payload = SubIntervalPayload(
-            issued_at=now_iso,
-            unit_id=u,
-            row=r,
-            col=c,
-            interval=interval_dict,
-            color=pos_color,
-            brightness=brightness_active,
-        )
-        sub_bytes = sub_payload.model_dump_json(by_alias=True).encode()
-        publish_tasks.append(
-            safe_publish(
-                client,
-                topics.sub_topic(prefix, u, r, c),
-                sub_bytes,
-                qos=0,
-                retain=False,
-                timeout=0.25,
+        #
+        # WR-08: do NOT default missing start/end to [0.0, 1.0] (a full-cube span).
+        # A partial interval (e.g. start present, end absent) previously produced a
+        # misleading highlight covering the entire cube.  Require BOTH start and end
+        # and validate 0 <= start <= end <= 1; skip the sub publish otherwise so a
+        # malformed interval is a no-op rather than a wrong full-cube highlight.
+        raw_start = sub_interval.get("start")
+        raw_end = sub_interval.get("end")
+        sub_ok = True
+        if raw_start is None or raw_end is None:
+            logger.warning(
+                "illuminate: sub_cube_interval missing start/end (start=%r end=%r) — "
+                "skipping sub publish for cube %s/%s/%s (WR-08)",
+                raw_start, raw_end, u, r, c,
             )
-        )
+            sub_ok = False
+        else:
+            try:
+                start_f = float(raw_start)
+                end_f = float(raw_end)
+            except (TypeError, ValueError):
+                logger.warning(
+                    "illuminate: non-numeric sub_cube_interval (start=%r end=%r) — "
+                    "skipping sub publish for cube %s/%s/%s (WR-08)",
+                    raw_start, raw_end, u, r, c,
+                )
+                sub_ok = False
+            else:
+                if not (0.0 <= start_f <= end_f <= 1.0):
+                    logger.warning(
+                        "illuminate: out-of-range sub_cube_interval (start=%s end=%s) — "
+                        "skipping sub publish for cube %s/%s/%s (WR-08)",
+                        start_f, end_f, u, r, c,
+                    )
+                    sub_ok = False
+
+        if sub_ok:
+            interval_dict = {"start": start_f, "end": end_f}
+            sub_payload = SubIntervalPayload(
+                issued_at=now_iso,
+                unit_id=u,
+                row=r,
+                col=c,
+                interval=interval_dict,
+                color=pos_color,
+                brightness=brightness_active,
+            )
+            sub_bytes = sub_payload.model_dump_json(by_alias=True).encode()
+            publish_tasks.append(
+                safe_publish(
+                    client,
+                    topics.sub_topic(prefix, u, r, c),
+                    sub_bytes,
+                    qos=0,
+                    retain=False,
+                    timeout=0.25,
+                )
+            )
 
     # ── Publish command topics concurrently ───────────────────────────────────
     if publish_tasks:
