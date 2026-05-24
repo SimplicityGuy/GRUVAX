@@ -561,13 +561,22 @@ led_color.label_span        "#7C3AED"    (purple — label span)
 led_color.error             "#E63946"    (red-adjacent, color-blind safe)
 led_color.setup             "#0077B6"    (blue)
 led_color.all_off           "#000000"    (off / black)
-led_brightness.ambient      128          (0..255, ~50% — span dim)
+led_color.ambient           "#0051A2"    (idle/resting baseline color — D-20)
+led_brightness.span         128          (0..255, ~50% — label-span tier; RENAMED from the old/incorrect led_brightness.ambient per D-24)
 led_brightness.active       255          (0..255, 100% — position full)
+led_brightness.ambient       40          (0..255, low — idle/resting baseline brightness — D-20/D-24)
 led_transition.position_style   "pulse"
 led_transition.position_ms      800
 led_transition.span_style       "fade"
 led_transition.span_ms          500
+led_highlight.active_ttl_seconds   180   (active highlight TTL before revert-to-ambient — D-21)
+led_highlight.retain_mode          false (accumulate recently-found trail — D-23)
+led_highlight.retain_ttl_seconds   900   (per-highlight timeout in retain mode — D-23)
 ```
+
+> **Naming note (D-24):** "ambient" means ONLY the idle/resting state (`led_color.ambient`,
+> `led_brightness.ambient`). The label-span brightness tier is `led_brightness.span` — never
+> "ambient." This corrects the earlier draft that named the label-span tier `led_brightness.ambient`.
 
 ### Color-Blind Simulation Matrices (for D-18 in-SPA preview)
 
@@ -648,28 +657,28 @@ def status_wildcard(prefix: str) -> str:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Mosquitto MQTT5 connection upgrade — does it need mosquitto.conf change?**
    - What we know: Mosquitto 2.x accepts all protocol versions by default; `accept_protocol_versions` defaults to all (3, 4, 5).
    - What's unclear: The current `mosquitto.conf` has no explicit `accept_protocol_versions` line. It should work without change.
-   - Recommendation: No conf change needed. Verify at integration test time with `mosquitto_sub -V mqttv5`.
+   - RESOLVED: No conf change needed. Verify at integration test time with `mosquitto_sub -V mqttv5`.
 
 2. **Per-call timeout vs global reconnect for the MQTT 5 upgrade**
    - What we know: The current client uses `keepalive=30` and `reconnect_on_failure=False` (via paho default in aiomqtt). The `reconnect` kwarg from ARCHITECTURE.md is not in aiomqtt 2.5.x; paho handles reconnect at lower level.
    - What's unclear: Whether the existing lifespan degraded-mode logic needs adjustment after adding `protocol=V5`.
-   - Recommendation: The `__aenter__`/`__aexit__` pattern in `client.py` is unchanged; only add the `protocol=` kwarg. Test degraded-mode (broker down) still works.
+   - RESOLVED: The `__aenter__`/`__aexit__` pattern in `client.py` is unchanged; only add the `protocol=` kwarg. Test degraded-mode (broker down) still works.
 
 3. **LED topic path in REQUIREMENTS vs ARCHITECTURE**
    - What we know: REQUIREMENTS LED-01 says `gruvax/v1/leds/{unit}/{cube}` but ARCHITECTURE uses `gruvax/v1/leds/illuminate/{unit_id}/{row}/{col}`. CONTEXT D-02 says ARCHITECTURE is authoritative.
-   - Recommendation: Use ARCHITECTURE topic tree. LED-01 in REQUIREMENTS uses simplified notation, not the exact path.
+   - RESOLVED: Use ARCHITECTURE topic tree. LED-01 in REQUIREMENTS uses simplified notation, not the exact path.
 
 4. **Diagnostic inter-cube delay**
-   - Recommendation: 200 ms between cubes. For 2 units × 4×4 = 32 cubes × 5 states = 160 publishes at ~200 ms each = ~32 s total. This is a diagnostic, not real-time. The admin sees progress via logs. Make the delay configurable as a setting (`led_diagnostic.inter_cube_ms`, default 200).
+   - RESOLVED: 200 ms between cubes. For 2 units × 4×4 = 32 cubes × 5 states = 160 publishes at ~200 ms each = ~32 s total. This is a diagnostic, not real-time. The admin sees progress via logs. Make the delay configurable as a setting (`led_diagnostic.inter_cube_ms`, default 200).
 
 5. **`run_id` persistence / polling**
    - What we know: Diagnostic returns `run_id` immediately. D-08 says "admin UI gets an instant ack." No further polling endpoint is specified.
-   - Recommendation: In v1, `run_id` is cosmetic — log it and return. The admin knows the diagnostic is done when the log shows the last cube. No status endpoint needed in Phase 6; add if the hardware milestone needs it.
+   - RESOLVED: In v1, `run_id` is cosmetic — log it and return. The admin knows the diagnostic is done when the log shows the last cube. No status endpoint needed in Phase 6; add if the hardware milestone needs it.
 
 ---
 
