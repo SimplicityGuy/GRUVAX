@@ -207,19 +207,20 @@ Plans:
   5. The Mosquitto broker runs in Compose with `persistence true` + named volume, NO host `ports:` exposure in v1, an LWT on `gruvax/v1/server/hello` retained, and the publish wrapper times out at ~250 ms so a broker hiccup never blocks `/api/illuminate`.
   6. Every cube shows a configurable **idle/ambient** baseline (color + brightness) when no record is highlighted; an active highlight illuminates for a configurable TTL (default 3 min) or until the next search, then a **server-scheduled revert** restores the ambient state; an optional **retain mode** (default off) accumulates a recently-found trail, each highlight reverting independently after a longer configurable timeout (default 15 min). (LED-11, LED-12, LED-13)
 
-**Plans:** 3 plans
+**Plans:** 4 plans
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — MQTT 5 publish spine: topics + Pydantic payload schemas + publishers + client V5 upgrade + settings prefix/expiry knobs + LED-defaults seed migration + public POST /api/illuminate fan-out + kiosk wire-up (LED-01/02/03/08/09/10, DEP-03)
+- [ ] 06-01-PLAN.md — MQTT 5 publish spine: topics + Pydantic payload schemas + publishers + client V5 upgrade + settings prefix/expiry knobs + full LED-defaults seed migration (colors incl. ambient, span/active/ambient brightness tiers, TTL/retain defaults) + public POST /api/illuminate fan-out + kiosk wire-up (LED-01/02/03/08/09/10, DEP-03)
 
-**Wave 2** *(blocked on Wave 1)*
+**Wave 2** *(blocked on Wave 1; 06-02 and 06-03 run in parallel — no file overlap)*
 
-- [ ] 06-02-PLAN.md — Admin LED color/brightness settings: extend /api/admin/settings GET/PUT for LED keys + LEDs section in Settings.tsx with per-state color pickers, token presets, brightness sliders, and an in-SPA color-blind preview (LED-04, LED-05)
+- [ ] 06-02-PLAN.md — Highlight-lifecycle slice: idle/ambient baseline on every cube + active-highlight TTL + server-scheduled revert via a cancelable in-process registry (default mode reverts prior on next search; retain mode accumulates with independent timeouts) wired into /api/illuminate + lifespan (LED-11, LED-12, LED-13)
+- [ ] 06-03-PLAN.md — Admin LED settings slice: extend /api/admin/settings GET/PUT for all LED keys (colors incl. ambient, span/active/ambient brightness, TTL, retain toggle, retain timeout) + LEDs section in Settings.tsx with per-state color pickers, token presets, three brightness sliders, TTL/retain controls, and an in-SPA color-blind preview (LED-04, LED-05)
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 06-03-PLAN.md — All-off + diagnostic admin slice: idempotent clear-retained publish_all_off (units-enumerated) + background run_diagnostic (cube×state cycle + status subscribe) + admin/leds.py off/diagnostic endpoints + Settings buttons (LED-06, LED-07, DEP-03)
+- [ ] 06-04-PLAN.md — All-off + diagnostic admin slice: idempotent clear-retained publish_all_off (units-enumerated) + background run_diagnostic (cube×state cycle with correct brightness tiers + status subscribe) + admin/leds.py off/diagnostic endpoints + Settings buttons (LED-06, LED-07, DEP-03)
 
 **UI hint:** yes (settings-shaped — extends existing admin Settings page, no new route)
 
@@ -265,7 +266,7 @@ Plans:
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
-| 6. LED Contract over MQTT (Hardware Stubbed) | 0/3 | Planned | - |
+| 6. LED Contract over MQTT (Hardware Stubbed) | 0/4 | Planned | - |
 | 7. Wizards + Import/Export | 0/? | Not started | - |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
