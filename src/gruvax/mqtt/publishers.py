@@ -407,9 +407,22 @@ async def publish_ambient(
             return 0
         sql = "SELECT id, rows, cols FROM gruvax.units ORDER BY ordering"
         cube_list = []
-        async with pool.connection() as conn, conn.cursor() as cur:
-            await cur.execute(sql)
-            unit_rows = await cur.fetchall()
+        # WR-05: this runs inside a detached asyncio task (scheduled at startup and
+        # on the revert path).  A DB failure during enumeration must be logged and
+        # turned into a no-op return — NOT allowed to raise into the detached task
+        # where it would be lost.  Mirrors the try/except + return 0 posture used
+        # elsewhere in the lifespan startup steps.
+        try:
+            async with pool.connection() as conn, conn.cursor() as cur:
+                await cur.execute(sql)
+                unit_rows = await cur.fetchall()
+        except Exception as exc:
+            logger.warning(
+                "publish_ambient: failed to enumerate cubes from gruvax.units "
+                "(returning 0): %s",
+                exc,
+            )
+            return 0
         # Connection closed — no long-held conn during the publish loop.
         for (unit_id, row_count, col_count) in unit_rows:
             for row in range(row_count):
