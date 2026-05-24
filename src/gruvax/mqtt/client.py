@@ -8,8 +8,9 @@ DEP-01 constraint: The MQTT connection is **non-blocking**. If the broker is
 unreachable (mosquitto may not be running in dev), startup continues with
 ``app.state.mqtt = None`` and ``app.state.mqtt_ok = False``.
 
-# Phase 5 seam: no publish path here.
-# Phase 5 adds mqtt/publishers.py for illuminate/span/sub-cube payloads.
+Phase 6: upgraded to MQTT 5 (ProtocolVersion.V5) so that paho Properties
+(MessageExpiryInterval) are wire-encoded on retained state/* publishes.
+The publish spine lives in mqtt/publishers.py (Phase 6 — fan_out_illuminate).
 """
 
 from __future__ import annotations
@@ -18,6 +19,7 @@ import logging
 from typing import TYPE_CHECKING
 
 import aiomqtt
+from aiomqtt import ProtocolVersion
 
 from gruvax.settings import settings
 
@@ -50,6 +52,7 @@ async def connect_mqtt(app: FastAPI) -> None:
             username=settings.MQTT_USERNAME,
             password=settings.MQTT_PASSWORD,
             identifier="gruvax-api",
+            protocol=ProtocolVersion.V5,  # Phase 6: enables MQTT 5 Properties wire encoding (D-12)
             will=aiomqtt.Will(
                 topic=_HELLO_TOPIC,
                 payload=_HELLO_DEAD,
