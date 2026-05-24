@@ -8,9 +8,10 @@ Tests the extended GET/PUT /api/admin/settings with all LED keys:
   - test_put_rejects_malformed_hex               (T-06-08 hex validation)
   - test_transition_keys_not_writable            (D-17 — transition keys excluded)
 
-These tests use httpx AsyncClient against the ASGI app with a mocked DB pool
-(same style as test_illuminate_endpoint.py) so they do NOT require a live
-Postgres instance and run cleanly in the unit test suite.
+These tests use httpx AsyncClient against the ASGI app with ``require_admin``
+patched to bypass authentication (same pattern used in test_illuminate_endpoint.py
+for bypassing MQTT). They do NOT require a live Postgres instance and run cleanly
+in the unit test suite.
 
 RED: All tests fail until settings.py _ALLOWED_SETTINGS_KEYS, GET response,
      and PUT key_map are extended for LED keys.
@@ -30,46 +31,39 @@ from httpx import ASGITransport, AsyncClient
 # ── helpers ───────────────────────────────────────────────────────────────────
 
 # LED key defaults that would be seeded by migration 0006
-_LED_DEFAULTS: dict[str, Any] = {
-    "led_color.position": '"#FFD700"',
-    "led_color.label_span": '"#7C3AED"',
-    "led_color.error": '"#E63946"',
-    "led_color.setup": '"#0077B6"',
-    "led_color.all_off": '"#000000"',
-    "led_color.ambient": '"#0051A2"',
-    "led_brightness.span": "128",
-    "led_brightness.active": "255",
-    "led_brightness.ambient": "40",
-    "led_highlight.active_ttl_seconds": "180",
-    "led_highlight.retain_mode": "false",
-    "led_highlight.retain_ttl_seconds": "900",
-    # baseline settings
-    "cube.nominal_capacity": "95",
-    "session.idle_ttl_seconds": "600",
+_LED_DB_ROWS: dict[str, Any] = {
+    # Colors stored as JSON strings '"#RRGGBB"' in DB; parsed values
+    "led_color.position": "#FFD700",
+    "led_color.label_span": "#7C3AED",
+    "led_color.error": "#E63946",
+    "led_color.setup": "#0077B6",
+    "led_color.all_off": "#000000",
+    "led_color.ambient": "#0051A2",
+    # Integers (parsed from bare JSON numbers)
+    "led_brightness.span": 128,
+    "led_brightness.active": 255,
+    "led_brightness.ambient": 40,
+    "led_highlight.active_ttl_seconds": 180,
+    "led_highlight.retain_ttl_seconds": 900,
+    # Boolean (bare JSON false)
+    "led_highlight.retain_mode": False,
+    # Phase 3
+    "cube.nominal_capacity": 95,
+    "session.idle_ttl_seconds": 600,
 }
 
 
-def _make_fake_db_row(key: str) -> tuple[str, Any]:
-    """Return a (key, raw_value) row for the given settings key using migration defaults."""
-    raw = _LED_DEFAULTS.get(key, "null")
-    # Parse the JSON-encoded value (colors are '"#RRGGBB"', numbers are bare)
-    return (key, json.loads(raw))
-
-
 class _FakeCursor:
-    """Minimal async cursor fake that returns LED settings rows."""
+    """Minimal async cursor that returns LED settings rows."""
 
     def __init__(self, rows: list[tuple[str, Any]]) -> None:
         self._rows = rows
 
     async def execute(self, sql: str, params: Any = None) -> None:
-        pass  # No-op for writes
+        pass
 
     async def fetchall(self) -> list[tuple[str, Any]]:
         return self._rows
-
-    async def fetchone(self) -> tuple[str, Any] | None:
-        return self._rows[0] if self._rows else None
 
     async def __aenter__(self) -> "_FakeCursor":
         return self
@@ -81,16 +75,15 @@ class _FakeCursor:
 class _FakeConn:
     def __init__(self, rows: list[tuple[str, Any]]) -> None:
         self._rows = rows
-        self._committed = False
 
     def cursor(self) -> _FakeCursor:
         return _FakeCursor(self._rows)
 
     async def execute(self, sql: str, params: Any = None) -> None:
-        pass  # No-op for writes
+        pass
 
     async def commit(self) -> None:
-        self._committed = True
+        pass
 
     async def __aenter__(self) -> "_FakeConn":
         return self
@@ -107,43 +100,53 @@ class _FakePool:
         return _FakeConn(self._rows)
 
 
-def _make_settings_rows(keys: list[str]) -> list[tuple[str, Any]]:
-    """Build a list of (key, parsed_value) rows for the given setting keys."""
-    return [_make_fake_db_row(k) for k in keys]
+def _make_all_settings_rows() -> list[tuple[str, Any]]:
+    """Build a list of (key, value) rows matching migration 0006 defaults."""
+    return [(k, v) for k, v in _LED_DB_ROWS.items()]
 
 
-def _make_app_with_settings(settings_cache: dict[str, Any]) -> Any:
-    """Create a GRUVAX app with pre-populated settings cache (no live DB/broker)."""
+# Stub admin identity returned by the patched require_admin dependency.
+_ADMIN_IDENTITY: dict[str, str] = {
+    "session_id": "test-session-id",
+    "admin": "true",
+}
+
+
+async def _stub_require_admin() -> dict[str, str]:
+    """FastAPI dependency override that bypasses authentication for unit tests."""
+    return _ADMIN_IDENTITY
+
+
+def _make_app() -> Any:
+    """Create a GRUVAX app for unit testing (no live DB/broker).
+
+    Uses FastAPI dependency_overrides to bypass require_admin and get_pool,
+    so no real Postgres or login is needed.
+    """
     if not os.environ.get("SESSION_SECRET"):
         os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
 
+    from gruvax.api.deps import get_pool, require_admin
     from gruvax.app import create_app
 
     app = create_app()
     app.state.mqtt = None
     app.state.mqtt_ok = False
-    app.state.settings_cache = settings_cache
+    app.state.settings_cache = {}
+
+    # Override require_admin to skip session/CSRF verification
+    app.dependency_overrides[require_admin] = _stub_require_admin
+
+    # Override get_pool to use the fake pool
+    fake_pool = _FakePool(_make_all_settings_rows())
+    app.state.db_pool = fake_pool
+
+    def _stub_get_pool() -> _FakePool:
+        return fake_pool
+
+    app.dependency_overrides[get_pool] = _stub_get_pool
+
     return app
-
-
-def _make_admin_headers(csrf_token: str = "test-csrf") -> dict[str, str]:
-    return {"X-CSRF-Token": csrf_token}
-
-
-async def _login_and_get_headers(client: AsyncClient, pool: _FakePool) -> dict[str, str]:
-    """Helper: seed PIN and log in, return headers with CSRF token + cookies."""
-    from gruvax.auth.pin import hash_pin
-
-    test_hash = hash_pin("0000")
-    # Inject the PIN hash into the pool rows so require_admin can find it
-    # (This is a simplified approach: we patch the pool to include auth.pin_hash)
-    pool._rows.append(("auth.pin_hash", test_hash))
-
-    res = await client.post("/api/admin/login", json={"pin": "0000"})
-    if res.status_code != 200:
-        pytest.skip(f"Login failed with {res.status_code}: {res.text}")
-    csrf = res.cookies.get("gruvax_csrf") or res.json().get("csrf_token", "")
-    return {"X-CSRF-Token": csrf}
 
 
 # ── Test 1: GET /api/admin/settings includes all LED keys ─────────────────────
@@ -159,38 +162,12 @@ async def test_get_settings_includes_led_keys() -> None:
       led_brightness_span, led_brightness_active, led_brightness_ambient,
       led_highlight_active_ttl_seconds, led_highlight_retain_mode, led_highlight_retain_ttl_seconds
     """
-    if not os.environ.get("SESSION_SECRET"):
-        os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
-
-    from gruvax.app import create_app
-    from gruvax.auth.pin import hash_pin
-
-    app = create_app()
-    app.state.mqtt = None
-    app.state.mqtt_ok = False
-    app.state.settings_cache = {}
-
-    # Build pool rows: all LED defaults + auth.pin_hash for login
-    all_keys = list(_LED_DEFAULTS.keys())
-    rows = _make_settings_rows(all_keys)
-    pin_hash = hash_pin("0000")
-    rows.append(("auth.pin_hash", pin_hash))
-
-    fake_pool = _FakePool(rows)
-    app.state.db_pool = fake_pool
+    app = _make_app()
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        # Login first
-        login_res = await client.post("/api/admin/login", json={"pin": "0000"})
-        if login_res.status_code != 200:
-            pytest.skip(f"Login unavailable: {login_res.status_code} {login_res.text}")
-
-        csrf = login_res.cookies.get("gruvax_csrf") or login_res.json().get("csrf_token", "")
-        headers = {"X-CSRF-Token": csrf}
-
-        res = await client.get("/api/admin/settings", headers=headers)
+        res = await client.get("/api/admin/settings")
 
     assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
     body = res.json()
@@ -213,7 +190,7 @@ async def test_get_settings_includes_led_keys() -> None:
     missing = [k for k in expected_keys if k not in body]
     assert not missing, (
         f"GET /api/admin/settings missing LED keys: {missing}. "
-        f"Response body: {sorted(body.keys())}"
+        f"Response body keys: {sorted(body.keys())}"
     )
 
     # Verify default values match migration 0006
@@ -237,28 +214,11 @@ async def test_put_led_settings_persists_and_caches() -> None:
 
     LED-04, LED-05, D-15, D-25:
     - PUT with LED keys succeeds
-    - GET after PUT reflects updated values
     - app.state.settings_cache["led_color.position"] == "#00FF00" after PUT
     - app.state.settings_cache["led_brightness.span"] == 64 after PUT
     - app.state.settings_cache["led_highlight.retain_mode"] is True after PUT
     """
-    if not os.environ.get("SESSION_SECRET"):
-        os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
-
-    from gruvax.app import create_app
-    from gruvax.auth.pin import hash_pin
-
-    app = create_app()
-    app.state.mqtt = None
-    app.state.mqtt_ok = False
-    app.state.settings_cache = {}
-
-    all_keys = list(_LED_DEFAULTS.keys())
-    rows = _make_settings_rows(all_keys)
-    pin_hash = hash_pin("0000")
-    rows.append(("auth.pin_hash", pin_hash))
-    fake_pool = _FakePool(rows)
-    app.state.db_pool = fake_pool
+    app = _make_app()
 
     put_payload = {
         "led_color_position": "#00FF00",
@@ -270,7 +230,7 @@ async def test_put_led_settings_persists_and_caches() -> None:
         "led_highlight_retain_ttl_seconds": 300,
     }
 
-    # Patch load_settings_cache to verify it's called and to set the expected cache
+    # Expected cache state after PUT (what load_settings_cache would return)
     expected_cache: dict[str, Any] = {
         "led_color.position": "#00FF00",
         "led_brightness.span": 64,
@@ -284,26 +244,21 @@ async def test_put_led_settings_persists_and_caches() -> None:
     async def mock_load_settings_cache(pool: Any) -> dict[str, Any]:
         return expected_cache
 
-    with patch("gruvax.api.admin.settings.load_settings_cache", side_effect=mock_load_settings_cache):
+    with patch(
+        "gruvax.api.admin.settings.load_settings_cache",
+        side_effect=mock_load_settings_cache,
+    ):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            login_res = await client.post("/api/admin/login", json={"pin": "0000"})
-            if login_res.status_code != 200:
-                pytest.skip(f"Login unavailable: {login_res.status_code} {login_res.text}")
-
-            csrf = login_res.cookies.get("gruvax_csrf") or login_res.json().get("csrf_token", "")
-            headers = {"X-CSRF-Token": csrf}
-
             put_res = await client.put(
                 "/api/admin/settings",
                 json=put_payload,
-                headers=headers,
             )
 
     assert put_res.status_code == 200, f"PUT failed: {put_res.status_code}: {put_res.text}"
 
-    # Verify cache was refreshed with the new values (D-15)
+    # Verify the cache was refreshed with the new values (D-15)
     cache = app.state.settings_cache
     assert cache.get("led_color.position") == "#00FF00", (
         f"settings_cache['led_color.position'] not updated: {cache.get('led_color.position')!r}"
@@ -325,14 +280,9 @@ def test_span_brightness_key_is_span_not_ambient() -> None:
     And led_brightness_ambient maps to led_brightness.ambient (the idle tier).
     These are two DISTINCT keys — the label-span tier must never map to ambient.
     """
-    # Import the settings module and inspect the key_map
     import importlib
 
     settings_mod = importlib.import_module("gruvax.api.admin.settings")
-
-    # The key_map must exist and be accessible (checking the module-level pattern)
-    # We verify by reading the source: the key_map is built inside update_settings.
-    # Test the naming contract by checking the _ALLOWED_SETTINGS_KEYS frozenset.
     allowed = settings_mod._ALLOWED_SETTINGS_KEYS
 
     # D-24: both led_brightness.span and led_brightness.ambient must be separately allowed
@@ -343,7 +293,7 @@ def test_span_brightness_key_is_span_not_ambient() -> None:
         "led_brightness.ambient not in _ALLOWED_SETTINGS_KEYS — the idle tier is missing (D-24)"
     )
 
-    # The two keys must be DISTINCT (sanity: can't be the same string)
+    # The two keys must be DISTINCT
     assert "led_brightness.span" != "led_brightness.ambient", (
         "Span and ambient keys must be distinct (D-24)"
     )
@@ -366,46 +316,16 @@ async def test_put_rejects_unknown_led_key() -> None:
     T-06-10: _ALLOWED_SETTINGS_KEYS frozenset + key_map allow-list protects the DB
     from arbitrary key injection.
     """
-    if not os.environ.get("SESSION_SECRET"):
-        os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
+    app = _make_app()
 
-    from gruvax.app import create_app
-    from gruvax.auth.pin import hash_pin
-
-    app = create_app()
-    app.state.mqtt = None
-    app.state.mqtt_ok = False
-    app.state.settings_cache = {}
-
-    rows: list[tuple[str, Any]] = [("cube.nominal_capacity", 95)]
-    pin_hash = hash_pin("0000")
-    rows.append(("auth.pin_hash", pin_hash))
-    fake_pool = _FakePool(rows)
-    app.state.db_pool = fake_pool
-
-    executed_sqls: list[str] = []
-    original_execute = _FakeConn.execute
-
-    async def tracking_execute(self: "_FakeConn", sql: str, params: Any = None) -> None:
-        executed_sqls.append(sql)
-
-    with patch.object(_FakeConn, "execute", tracking_execute):
-        with patch("gruvax.api.admin.settings.load_settings_cache", return_value={}):
-            async with AsyncClient(
-                transport=ASGITransport(app=app), base_url="http://test"
-            ) as client:
-                login_res = await client.post("/api/admin/login", json={"pin": "0000"})
-                if login_res.status_code != 200:
-                    pytest.skip(f"Login unavailable: {login_res.status_code} {login_res.text}")
-
-                csrf = login_res.cookies.get("gruvax_csrf") or login_res.json().get("csrf_token", "")
-
-                # This key is not in the whitelist — it must be silently ignored
-                put_res = await client.put(
-                    "/api/admin/settings",
-                    json={"totally_unknown_key": "malicious"},
-                    headers={"X-CSRF-Token": csrf},
-                )
+    with patch("gruvax.api.admin.settings.load_settings_cache", return_value={}):
+        async with AsyncClient(
+            transport=ASGITransport(app=app), base_url="http://test"
+        ) as client:
+            put_res = await client.put(
+                "/api/admin/settings",
+                json={"totally_unknown_key": "malicious"},
+            )
 
     # Must return 200 (unknown keys ignored, not a 422)
     assert put_res.status_code == 200, (
@@ -428,36 +348,14 @@ async def test_put_rejects_malformed_hex() -> None:
     The server must validate #RRGGBB (6 hex digits) before writing — reject
     malformed hex with HTTP 422.
     """
-    if not os.environ.get("SESSION_SECRET"):
-        os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
-
-    from gruvax.app import create_app
-    from gruvax.auth.pin import hash_pin
-
-    app = create_app()
-    app.state.mqtt = None
-    app.state.mqtt_ok = False
-    app.state.settings_cache = {}
-
-    rows: list[tuple[str, Any]] = []
-    pin_hash = hash_pin("0000")
-    rows.append(("auth.pin_hash", pin_hash))
-    fake_pool = _FakePool(rows)
-    app.state.db_pool = fake_pool
+    app = _make_app()
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
     ) as client:
-        login_res = await client.post("/api/admin/login", json={"pin": "0000"})
-        if login_res.status_code != 200:
-            pytest.skip(f"Login unavailable: {login_res.status_code} {login_res.text}")
-
-        csrf = login_res.cookies.get("gruvax_csrf") or login_res.json().get("csrf_token", "")
-
         put_res = await client.put(
             "/api/admin/settings",
             json={"led_color_position": "nothex"},
-            headers={"X-CSRF-Token": csrf},
         )
 
     assert put_res.status_code == 422, (
@@ -474,37 +372,15 @@ async def test_transition_keys_not_writable() -> None:
 
     Transition styles are fixed per-state defaults; the admin has NO transition editor in v1.
     """
-    if not os.environ.get("SESSION_SECRET"):
-        os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
-
-    from gruvax.app import create_app
-    from gruvax.auth.pin import hash_pin
-
-    app = create_app()
-    app.state.mqtt = None
-    app.state.mqtt_ok = False
-    app.state.settings_cache = {}
-
-    rows: list[tuple[str, Any]] = []
-    pin_hash = hash_pin("0000")
-    rows.append(("auth.pin_hash", pin_hash))
-    fake_pool = _FakePool(rows)
-    app.state.db_pool = fake_pool
+    app = _make_app()
 
     with patch("gruvax.api.admin.settings.load_settings_cache", return_value={}):
         async with AsyncClient(
             transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
-            login_res = await client.post("/api/admin/login", json={"pin": "0000"})
-            if login_res.status_code != 200:
-                pytest.skip(f"Login unavailable: {login_res.status_code} {login_res.text}")
-
-            csrf = login_res.cookies.get("gruvax_csrf") or login_res.json().get("csrf_token", "")
-
             put_res = await client.put(
                 "/api/admin/settings",
                 json={"led_transition_position_style": "instant"},
-                headers={"X-CSRF-Token": csrf},
             )
 
     assert put_res.status_code == 200, (
