@@ -1,10 +1,11 @@
 ---
 phase: 7
 slug: wizards-import-export
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-05-24
+reviewed_at: 2026-05-24
 ---
 
 # Phase 7 — UI Design Contract: Wizards + Import/Export
@@ -73,7 +74,7 @@ Rules: Barlow Condensed is ALL CAPS for every label. Space Grotesk is sentence c
 | Data readout | DM Mono | `--gruvax-font-mono` | `--gruvax-text-mono` (14px) | 400 | 0 | `--gruvax-leading-normal` (1.5) | Catalog numbers in RecordPickerSheet, `change_set_id` in confirmation, movement counts (e.g. "+12 records"), row numbers in import error list, step numbers ("14/32") |
 | change_set_id display | DM Mono | `--gruvax-font-mono` | `--gruvax-text-mono-lg` (16px) | 500 | 0 | `--gruvax-leading-tight` (1.1) | Confirmation surface — the UUID is prominent |
 
-Summary: 4 sizes in active use (16, 14, 12, 11px), 2 weights per font (400+700 for display; 400+500 for UI and mono).
+Summary: 4 sizes in active use (16, 14, 12, 11px). **Weights are capped at exactly 2 per typeface** — Barlow Condensed 700 (labels) + 900 (page-level display headings only, e.g. `IMPORT BOUNDARIES`, `BOUNDARIES COMMITTED`), Space Grotesk 400 + 500, DM Mono 400 + 500. The four distinct weight values (400/500/700/900) are required by the locked Nordic Grid design language (`design/gruvax-design-language.md`, CLAUDE.md): Barlow Condensed is a display font and uses 900 only for top-level headings, never in body or interactive copy. No single weight crosses typeface families.
 
 ---
 
@@ -163,7 +164,7 @@ A horizontal progress bar immediately below the LocatorHeader:
 Reuses existing `RecordPickerSheet` from Phase 5 without modification.
 - Trigger: a 44px-min-height tappable row inside a bordered card (`--gruvax-border-light` border, `--gruvax-radius-md` radius)
 - When a record is set for this step: show label + catalog in the card (DM Mono 14px for catalog, Space Grotesk 14px for label name)
-- Clear/change affordance: a small ✕ icon inside the card to reset the step's selection
+- Clear/change affordance: a small ✕ icon inside the card to reset the step's selection. Icon-only control — MUST carry `aria-label="Clear selected record"` (kiosk + screen-reader accessibility)
 
 **"This bin is empty / skip" control**
 
@@ -379,7 +380,7 @@ All headings: Barlow Condensed 900, `--gruvax-text-display-md` (24px), ALL CAPS,
 
 - Label: `Change set` — Space Grotesk 400 12px, `--gruvax-text-muted`, sentence case
 - Value: full UUID — DM Mono 500 16px, `--gruvax-text-primary`
-- Tap-to-copy affordance: a small copy icon (Lucide `Copy`, 14px, `--gruvax-text-muted`) next to the UUID; on tap, icon briefly changes to a checkmark (`--gruvax-success`) for 1500ms
+- Tap-to-copy affordance: a small copy icon (Lucide `Copy`, 14px, `--gruvax-text-muted`) next to the UUID; on tap, icon briefly changes to a checkmark (`--gruvax-success`) for 1500ms. Icon-only control — MUST carry `aria-label="Copy change set ID"`
 
 **Revert action**
 
@@ -562,14 +563,16 @@ No shadcn, no third-party component registries. Project uses vanilla DOM + exist
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+gsd-ui-checker, 2026-05-24 — **APPROVED, 0 blocking issues.** Three non-blocking FLAGs raised; two addressed in-spec, one accepted.
 
-**Approval:** pending
+- [x] Dimension 1 Copywriting: FLAG (accepted) — `CONTINUE` / `DISCARD` are single-word CTAs; kept per CONTEXT.md D-07 ("Discard draft") and always rendered under the `RESHUFFLE IN PROGRESS — N OF M STEPS DONE` heading, so intent is unambiguous.
+- [x] Dimension 2 Visuals: FLAG (fixed) — both icon-only controls (✕ clear-record, copy `change_set_id`) now carry explicit `aria-label`s.
+- [x] Dimension 3 Color: PASS — 60/30/10 declared; accent reserved-for list is 6 specific elements; destructive color declared.
+- [x] Dimension 4 Typography: FLAG (fixed/justified) — 4 weight values (400/500/700/900); each typeface capped at exactly 2 weights; 900 is display-only per locked Nordic Grid language. Justification added to Typography summary.
+- [x] Dimension 5 Spacing: PASS — spacing scale tokens all in the standard set; cell-size tokens + 44px touch-floor are justified exceptions.
+- [x] Dimension 6 Registry Safety: PASS — no shadcn, no third-party registries; vanilla DOM + design tokens only.
+
+**Approval:** approved 2026-05-24 (0 blocking; FLAGs resolved/accepted)
 
 ---
 
