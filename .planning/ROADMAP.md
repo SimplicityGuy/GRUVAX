@@ -207,7 +207,7 @@ Plans:
   5. The Mosquitto broker runs in Compose with `persistence true` + named volume, NO host `ports:` exposure in v1, an LWT on `gruvax/v1/server/hello` retained, and the publish wrapper times out at ~250 ms so a broker hiccup never blocks `/api/illuminate`.
   6. Every cube shows a configurable **idle/ambient** baseline (color + brightness) when no record is highlighted; an active highlight illuminates for a configurable TTL (default 3 min) or until the next search, then a **server-scheduled revert** restores the ambient state; an optional **retain mode** (default off) accumulates a recently-found trail, each highlight reverting independently after a longer configurable timeout (default 15 min). (LED-11, LED-12, LED-13)
 
-**Plans:** 1/4 plans executed
+**Plans:** 3/4 plans executed
 Plans:
 **Wave 1**
 
@@ -215,8 +215,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1; 06-02 and 06-03 run in parallel — no file overlap)*
 
-- [ ] 06-02-PLAN.md — Highlight-lifecycle slice: idle/ambient baseline on every cube + active-highlight TTL + server-scheduled revert via a cancelable in-process registry (default mode reverts prior on next search; retain mode accumulates with independent timeouts) wired into /api/illuminate + lifespan (LED-11, LED-12, LED-13)
-- [ ] 06-03-PLAN.md — Admin LED settings slice: extend /api/admin/settings GET/PUT for all LED keys (colors incl. ambient, span/active/ambient brightness, TTL, retain toggle, retain timeout) + LEDs section in Settings.tsx with per-state color pickers, token presets, three brightness sliders, TTL/retain controls, and an in-SPA color-blind preview (LED-04, LED-05)
+- [x] 06-02-PLAN.md — Highlight-lifecycle slice: idle/ambient baseline on every cube + active-highlight TTL + server-scheduled revert via a cancelable in-process registry (default mode reverts prior on next search; retain mode accumulates with independent timeouts) wired into /api/illuminate + lifespan (LED-11, LED-12, LED-13)
+- [x] 06-03-PLAN.md — Admin LED settings slice: extend /api/admin/settings GET/PUT for all LED keys (colors incl. ambient, span/active/ambient brightness, TTL, retain toggle, retain timeout) + LEDs section in Settings.tsx with per-state color pickers, token presets, three brightness sliders, TTL/retain controls, and an in-SPA color-blind preview (LED-04, LED-05)
 
 **Wave 3** *(blocked on Wave 2)*
 
@@ -266,7 +266,7 @@ Plans:
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
-| 6. LED Contract over MQTT (Hardware Stubbed) | 1/4 | In Progress|  |
+| 6. LED Contract over MQTT (Hardware Stubbed) | 3/4 | In Progress|  |
 | 7. Wizards + Import/Export | 0/? | Not started | - |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
