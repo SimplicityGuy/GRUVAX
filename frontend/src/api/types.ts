@@ -95,23 +95,58 @@ export interface AdminSession {
   hard_cap_at: string  // ISO-8601 UTC
 }
 
-/** Response from GET /api/admin/settings — nominal capacity + idle TTL.
+/** Response from GET /api/admin/settings — nominal capacity, idle TTL, and LED knobs.
  *
- * Key names match the backend response (WR-01):
- * cube_nominal_capacity / session_idle_ttl_seconds.
+ * Phase 3: cube_nominal_capacity / session_idle_ttl_seconds.
+ * Phase 6: LED color, brightness, and highlight lifecycle keys (LED-04, LED-05, D-24, D-25).
+ *
+ * Key names match the backend response (WR-01).
  */
 export interface AdminSettings {
   cube_nominal_capacity: number
   session_idle_ttl_seconds: number
+  // Phase 6 — LED colors (one per system state, LED-05)
+  led_color_position?: string        // default "#FFD700" (gold)
+  led_color_label_span?: string      // default "#7C3AED" (purple)
+  led_color_error?: string           // default "#E63946"
+  led_color_setup?: string           // default "#0077B6"
+  led_color_all_off?: string         // default "#000000"
+  led_color_ambient?: string         // default "#0051A2" — idle/resting baseline color
+  // Phase 6 — LED brightness tiers (LED-04, D-24)
+  led_brightness_span?: number       // 0..255, ~50% — label-span tier (D-24: NOT ambient)
+  led_brightness_active?: number     // 0..255, 100% — position/primary tier
+  led_brightness_ambient?: number    // 0..255, low — idle/resting baseline brightness
+  // Phase 6 — LED highlight lifecycle (D-25)
+  led_highlight_active_ttl_seconds?: number   // default 180s
+  led_highlight_retain_mode?: boolean         // default false
+  led_highlight_retain_ttl_seconds?: number   // default 900s
 }
 
 /** Payload for PUT /api/admin/settings.
+ *
+ * Phase 3: cube capacity + idle TTL.
+ * Phase 6: LED color/brightness/highlight fields (all optional; send only what changed).
  *
  * Key names match what the backend update_settings handler recognises (WR-01).
  */
 export interface AdminSettingsPut {
   cube_nominal_capacity?: number
   session_idle_ttl_seconds?: number
+  // Phase 6 — LED colors
+  led_color_position?: string
+  led_color_label_span?: string
+  led_color_error?: string
+  led_color_setup?: string
+  led_color_all_off?: string
+  led_color_ambient?: string
+  // Phase 6 — LED brightness tiers (D-24)
+  led_brightness_span?: number       // label-span tier — NEVER labeled ambient
+  led_brightness_active?: number     // position/primary tier
+  led_brightness_ambient?: number    // idle baseline — NEVER labeled span
+  // Phase 6 — LED highlight lifecycle
+  led_highlight_active_ttl_seconds?: number
+  led_highlight_retain_mode?: boolean
+  led_highlight_retain_ttl_seconds?: number
 }
 
 /** Payload for POST /api/admin/settings/pin — change PIN. */
