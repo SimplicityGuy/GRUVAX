@@ -8,6 +8,7 @@ Public surface:
   - _make_expiry_props(seconds)  — paho Properties with MessageExpiryInterval (D-12)
   - safe_publish(client, ...)    — fire-and-forget wrapper with native timeout (D-01)
   - fan_out_illuminate(client, body, settings_cache)  — main fan-out (LED-01/02/03)
+  - publish_ambient(client, pool, settings_cache, *, cubes=None)  — ambient baseline (LED-11/D-20)
 
 Degraded-mode posture (D-01, SC5):
   If ``client`` is None (broker unreachable at startup), every function that
@@ -314,3 +315,139 @@ async def fan_out_illuminate(
             properties=expiry_props,
             timeout=0.5,
         )
+
+
+# ── Ambient baseline publisher ────────────────────────────────────────────────
+
+
+async def publish_ambient(
+    client: aiomqtt.Client | None,
+    pool: Any,
+    settings_cache: dict[str, Any],
+    *,
+    cubes: list[dict[str, int]] | None = None,
+) -> int:
+    """Publish the retained idle/ambient state/* baseline.
+
+    LED-11 / D-20: every cube should show the idle ambient colour and brightness
+    (``led_color.ambient`` / ``led_brightness.ambient``) when no highlight is active.
+    This function re-publishes the retained ``state/*`` baseline for the specified
+    cubes (or ALL cubes when ``cubes`` is None).
+
+    Brightness-tier naming (D-24 — LOCKED):
+      Uses ``led_brightness.ambient`` (the idle key), NOT ``led_brightness.span``
+      (the label-span tier used during active highlights).
+
+    Args:
+        client:         aiomqtt.Client, or None in degraded mode.
+        pool:           psycopg AsyncConnectionPool used to enumerate units when
+                        ``cubes`` is None.  Ignored when ``cubes`` is provided
+                        (revert path passes specific cubes, no DB needed).
+        settings_cache: The gruvax.settings key/value dict.
+        cubes:          Optional explicit list of ``{unit_id, row, col}`` dicts.
+                        When None: enumerate all cubes via a SHORT-LIVED DB
+                        connection (close before publishing — no long-held conn).
+                        When provided: publish only those cubes (revert path).
+
+    Returns:
+        Number of cubes for which ambient state/* was published.
+
+    Degraded mode: if ``client`` is None, logs a warning and returns 0.
+    """
+    if client is None:
+        logger.warning(
+            "MQTT not connected — publish_ambient skipped (degraded mode)"
+        )
+        return 0
+
+    prefix = settings.MQTT_TOPIC_PREFIX
+    expiry_seconds = settings.MQTT_STATE_EXPIRY_SECONDS
+    now_iso = json.dumps({"ts": "ambient"})  # placeholder — not needed for state/* payload
+
+    # ── Resolve ambient settings ──────────────────────────────────────────────
+    # D-24: use led_brightness.ambient (idle key), NOT led_brightness.span.
+    ambient_hex: str = str(
+        settings_cache.get("led_color.ambient", '"#0051A2"')
+    ).strip('"')
+    ambient_brightness: int = clamp_brightness(
+        int(settings_cache.get("led_brightness.ambient", 40)), 255
+    )
+    r, g, b = hex_to_rgb(ambient_hex)
+
+    from datetime import UTC, datetime
+    now_iso = datetime.now(UTC).isoformat()
+
+    # Build the ambient payload dict (minimal — firmware only needs color + brightness).
+    # Re-use the IlluminatePayload schema shape for state/* compatibility.
+    from gruvax.mqtt.schemas import IlluminatePayload, RGBColor, TransitionSpec
+
+    def _make_ambient_bytes(unit_id: int, row: int, col: int) -> bytes:
+        payload = IlluminatePayload(
+            issued_at=now_iso,
+            unit_id=unit_id,
+            row=row,
+            col=col,
+            color=RGBColor(r=r, g=g, b=b),
+            brightness=ambient_brightness,
+            transition=TransitionSpec(style="instant", duration_ms=0),
+        )
+        return payload.model_dump_json(by_alias=True).encode()
+
+    # ── Resolve cubes list ────────────────────────────────────────────────────
+    cube_list: list[dict[str, int]]
+    if cubes is not None:
+        cube_list = cubes
+    else:
+        # Enumerate all cubes from the DB (short-lived connection, closed before publishing).
+        if pool is None:
+            logger.warning("publish_ambient: pool is None and no cubes provided; cannot enumerate")
+            return 0
+        sql = "SELECT id, rows, cols FROM gruvax.units ORDER BY ordering"
+        cube_list = []
+        async with pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(sql)
+            unit_rows = await cur.fetchall()
+        # Connection closed — no long-held conn during the publish loop.
+        for (unit_id, row_count, col_count) in unit_rows:
+            for row in range(row_count):
+                for col in range(col_count):
+                    cube_list.append({"unit_id": unit_id, "row": row, "col": col})
+
+    if not cube_list:
+        logger.warning("publish_ambient: no cubes to publish")
+        return 0
+
+    # ── Publish concurrently ──────────────────────────────────────────────────
+    expiry_props = _make_expiry_props(expiry_seconds)
+
+    async def _publish_one(unit_id: int, row: int, col: int) -> None:
+        state_t = topics.state_topic(prefix, unit_id, row, col)
+        payload_bytes = _make_ambient_bytes(unit_id, row, col)
+        await safe_publish(
+            client,
+            state_t,
+            payload_bytes,
+            qos=1,
+            retain=True,
+            properties=expiry_props,
+            timeout=0.5,
+        )
+
+    publish_coros = [
+        _publish_one(cube["unit_id"], cube["row"], cube["col"])
+        for cube in cube_list
+    ]
+    results = await asyncio.gather(*publish_coros, return_exceptions=True)
+
+    errors = [r for r in results if isinstance(r, Exception)]
+    if errors:
+        logger.warning(
+            "publish_ambient: %d of %d publishes failed: %s",
+            len(errors),
+            len(cube_list),
+            errors[0],
+        )
+
+    count = len(cube_list) - len(errors)
+    logger.info("publish_ambient: published ambient state/* for %d cubes", count)
+    return count

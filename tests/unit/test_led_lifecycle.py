@@ -343,16 +343,20 @@ async def test_retain_mode_accumulates() -> None:
     cache["led_highlight.retain_mode"] = "true"
     cache["led_highlight.retain_ttl_seconds"] = "900"
 
-    async def instant_sleep(_: float) -> None:
-        await asyncio.sleep(0)
+    # Use a never-yielding sleep so revert tasks do not fire during this test.
+    # The revert tasks are cancelled explicitly at the end.
+    async def blocking_sleep(_: float) -> None:
+        """Block without yielding — revert tasks will never fire on their own."""
+        # Use Event.wait() so cancellation works properly.
+        await asyncio.Event().wait()
 
     with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
          patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
         await illuminate_with_lifecycle(
-            registry, client, cache, LOCATE_BODY_A, sleep=instant_sleep
+            registry, client, cache, LOCATE_BODY_A, sleep=blocking_sleep
         )
         await illuminate_with_lifecycle(
-            registry, client, cache, LOCATE_BODY_B, sleep=instant_sleep
+            registry, client, cache, LOCATE_BODY_B, sleep=blocking_sleep
         )
 
     # Both highlights must remain registered.
@@ -376,6 +380,14 @@ async def test_retain_mode_accumulates() -> None:
         f"Retain mode: first highlight's cubes must NOT be reverted before TTL; "
         f"found {len(first_cube_ambient_calls)} ambient reverts for {first_cube_state!r}"
     )
+
+    # Cleanup: cancel the pending revert tasks to avoid asyncio warnings.
+    for _, entry in registry.items():
+        entry.task.cancel()
+        try:
+            await entry.task
+        except (asyncio.CancelledError, Exception):
+            pass
 
 
 # ── Registry leak guard (security) ───────────────────────────────────────────
