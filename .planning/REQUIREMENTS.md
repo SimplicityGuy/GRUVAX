@@ -77,13 +77,16 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 - [ ] **LED-01**: `POST /api/leds/illuminate` publishes a Pydantic-validated JSON message to `gruvax/v1/leds/{unit}/{cube}` on the internal MQTT broker
 - [ ] **LED-02**: A multi-cube label-span illumination message can be published as a single payload listing the affected cubes
 - [ ] **LED-03**: A sub-cube interval illumination message includes `pixel_start`/`pixel_end` so future firmware can light a range of LEDs within a cube
-- [ ] **LED-04**: Admin can configure a brightness ceiling, separated into ambient (label-span) and active (position) settings
+- [ ] **LED-04**: Admin can configure a brightness ceiling for the active highlight, separated into span (label-span) and active (position) settings
 - [ ] **LED-05**: Admin can configure colors per system state (label-span, position, error, setup, all-off); defaults are accessibility-respecting (not red/green for active/error)
 - [ ] **LED-06**: A visible "All off" admin button publishes a clear-retained-state message on `gruvax/v1/leds/all`
 - [ ] **LED-07**: A test/diagnostic endpoint cycles every cube through a known color sequence and logs any status responses
 - [ ] **LED-08**: MQTT topics are versioned (`gruvax/v1/...`); payloads are validated against a documented Pydantic schema
 - [ ] **LED-09**: A layered illuminate command can specify both label-span and precise-position parameters in a single API call
 - [ ] **LED-10**: Illuminate payloads accept an optional `transition: {style, duration_ms}` field declaring intent (fade / pulse / instant)
+- [ ] **LED-11**: An idle/ambient LED state is the resting baseline shown on every cube when no record highlight is active; its color and brightness are admin-configurable
+- [ ] **LED-12**: An active record highlight illuminates for a configurable TTL (default 3 min) or until the next successful search, after which the affected cube(s) revert to the idle/ambient state — server-scheduled, not firmware-dependent
+- [ ] **LED-13**: An optional "retain" mode accumulates recent search highlights (a recently-found trail); each highlight persists independently until a longer configurable timeout (default 15 min) instead of being replaced by the next search
 
 ### Realtime / Multi-Device
 
@@ -146,7 +149,7 @@ Tracked but not in the current roadmap. Items move to v1 only via explicit roadm
 - **Service-worker cached search results** for graceful offline degradation (R1)
 - **Per-visitor PIN** with isolated session history (R2)
 - **Animated reshuffle preview** with cube-by-cube diff visualization (R3)
-- **Always-on ambient LED mode** — fast-follow after v1 (moved from anti-features into backlog per scoping)
+- ~~**Always-on ambient LED mode** — fast-follow after v1~~ → **promoted to Phase 6 (v1)** as LED-11/12/13 (idle/ambient baseline + timed highlight revert + retain mode)
 
 ### From FEATURES.md future-tier surfacing
 
@@ -170,6 +173,8 @@ Tracked but not in the current roadmap. Items move to v1 only via explicit roadm
 - Power-budget enforcement (post-hardware) — max simultaneous lit cubes
 - Per-cube LED count auto-detection
 - Status reporting back from firmware
+- **LED "party" mode** — animated multi-cube color show (post-v1 flourish)
+- **LED "sound-reactive" mode** — LEDs react to ambient audio / music (post-v1 flourish)
 - Search-history opt-in for admin (defaults off)
 - Queue admin edits in IndexedDB when mobile loses connectivity
 
@@ -268,6 +273,9 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | LED-08 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-09 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-10 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-11 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-12 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-13 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | RTM-01 | Phase 4 — Realtime + Offline Resilience | Complete |
 | RTM-02 | Phase 4 — Realtime + Offline Resilience | Complete |
 | RTM-03 | Phase 4 — Realtime + Offline Resilience | Complete |
@@ -296,7 +304,7 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | DEP-05 | Phase 8 — Observability + Deployment Hardening | Pending |
 
 **Coverage:**
-- v1 requirements: 81 total (73 original + 8 SEG)
+- v1 requirements: 84 total (73 original + 8 SEG + 3 LED idle/ambient: LED-11/12/13)
 - Mapped to phases: 81 (100%)
 - Unmapped: 0
 

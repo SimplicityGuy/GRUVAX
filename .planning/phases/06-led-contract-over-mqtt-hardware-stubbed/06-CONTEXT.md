@@ -55,10 +55,11 @@ listener, TLS. The broker stays internal to the Compose network; nobody subscrib
   configured settings. Firmware stays dumb; admin color changes take effect with no
   firmware update. (ARCHITECTURE default; the `color_name`-resolved-by-firmware variant is
   rejected.)
-- **D-07:** **Two brightness ceilings** (LED-04): ambient (label-span) ~30–50% and active
-  (position) 100%. The **server clamps every payload's brightness** to the relevant
-  ceiling so nothing exceeds it. Brightness-as-information (Pitfall 18): span stays dimmer
-  than primary even for a viewer who can't perceive hue.
+- **D-07:** **Two active-highlight brightness ceilings** (LED-04): **span** (label-span)
+  ~30–50% and **active** (position) 100%. The **server clamps every payload's brightness**
+  to the relevant ceiling so nothing exceeds it. Brightness-as-information (Pitfall 18):
+  span stays dimmer than primary even for a viewer who can't perceive hue. **NOTE: the
+  label-span tier is named `span`, NOT "ambient" — "ambient" is the idle state (D-20, D-24).**
 
 ### Diagnostic & all-off
 - **D-08:** The diagnostic endpoint (LED-07) runs as a **background task that returns a
@@ -77,9 +78,11 @@ listener, TLS. The broker stays internal to the Compose network; nobody subscrib
   clears retained ghosts.
 
 ### Retained-state hygiene, topics & settings
-- **D-12:** Every retained `state/*` publish sets **MQTT 5 `message_expiry_interval` = 4h
-  by default**, overridable via setting/env. The broker auto-drops stale retained payloads
-  (Pitfall 3). "No expiry" is rejected.
+- **D-12:** Every retained `state/*` publish sets **MQTT 5 `message_expiry_interval`
+  (default 4h, configurable)** as a **safety backstop** so the broker auto-drops orphaned
+  retained payloads (Pitfall 3); "no expiry" is rejected. NOTE: for **active highlights**
+  the primary revert mechanism is the **server-scheduled task** (D-22), not expiry; the
+  **ambient** baseline (D-20) is the persistent desired state, republished on every revert.
 - **D-13:** The **v1 stub DOES publish retained `state/*`** topics (with no hardware
   listening). ARCHITECTURE: "costs nothing" and lets the hardware milestone work
   end-to-end with no later contract change. Each illuminate also writes the retained
@@ -89,7 +92,8 @@ listener, TLS. The broker stays internal to the Compose network; nobody subscrib
   junk never pollutes prod topics.
 - **D-15:** Settings are split by precedence: **topology/connection knobs** (MQTT host,
   creds, `MQTT_TOPIC_PREFIX`, default expiry) live in `settings.py`/env; **presentation
-  knobs** (per-state colors, the two brightness ceilings, transition defaults) live in the
+  knobs** (per-state colors incl. ambient, the three brightness tiers span/active/ambient,
+  transition defaults, highlight TTL + retain-mode toggle/timeout — see D-25) live in the
   `gruvax.settings` DB table (admin-editable via the settings cache + `Settings.tsx`). The
   admin can tune the look but cannot break broker connectivity.
 
@@ -110,6 +114,39 @@ listener, TLS. The broker stays internal to the Compose network; nobody subscrib
   `Settings.tsx`** (color swatches + brightness sliders + All-off + Diagnostic buttons) —
   **no new route**. Phase 6 has no roadmap "UI hint"; this is a settings-shaped concern
   that reuses the Settings shell + settings cache.
+
+### Idle/ambient state & highlight lifecycle (added 2026-05-23 — post-plan scope expansion; supersedes the "highlight lingers until 4h expiry" model)
+- **D-20:** "Ambient" means ONE thing: the **idle/resting LED state** — the baseline shown
+  on every cube when no record highlight is active. Its **color and brightness are
+  admin-configurable** (`led_color.ambient`, `led_brightness.ambient`). (LED-11. This is the
+  ONLY meaning of "ambient" — it is NOT the label-span brightness tier; see D-24.)
+- **D-21:** An active record highlight illuminates for a **configurable TTL — default 3 min
+  (`led_highlight.active_ttl_seconds` = 180)** — OR until the **next successful search**,
+  whichever comes first; then the affected cube(s) **revert to the ambient state** (D-20).
+  (LED-12.)
+- **D-22:** Revert is **server-scheduled**, not firmware-dependent: ambient is the baseline
+  retained `state/*` on every cube; on select the server overrides the chosen cubes, then a
+  **background task re-publishes the ambient state** to them after the TTL (or immediately
+  on the next search). An **in-process registry of cancelable per-highlight revert tasks**
+  keys this; in default mode the next search cancels+reverts the prior highlight. Works
+  end-to-end in the stub and is fully testable. (LED-12.)
+- **D-23:** An optional **"retain" mode** (`led_highlight.retain_mode`, default off)
+  **accumulates** highlights — each search **adds** a lit location, and each reverts
+  **independently** after a longer **configurable timeout — default 15 min
+  (`led_highlight.retain_ttl_seconds` = 900)**. A "recently-found trail." In retain mode the
+  next search does NOT clear prior highlights. (LED-13.)
+- **D-24:** **Brightness tiers renamed** (corrects D-07's old misuse of "ambient"):
+  **span brightness** (`led_brightness.span`, label-span tier ~30–50% during an active
+  highlight), **active brightness** (`led_brightness.active`, position tier 100%), and
+  **ambient brightness** (`led_brightness.ambient`, the idle state, low/configurable).
+  "Ambient" no longer names the label-span tier anywhere in the contract.
+- **D-25:** New admin-editable `gruvax.settings` keys (presentation, per D-15):
+  `led_color.ambient`, `led_brightness.ambient`, `led_brightness.span` (renamed from the
+  old/incorrect `led_brightness.ambient`), `led_highlight.active_ttl_seconds` (180),
+  `led_highlight.retain_mode` (false), `led_highlight.retain_ttl_seconds` (900). Surfaced in
+  the admin LEDs section (D-19).
+- **D-26:** **Party mode** and **sound-reactive mode** are explicitly **out of Phase 6
+  scope** → backlog (post-v1 flourishes). Not built now.
 
 ### Claude's Discretion
 - Exact Pydantic model layout for the per-topic payload schemas (`gruvax.illuminate.v1`,
@@ -230,8 +267,12 @@ listener, TLS. The broker stays internal to the Compose network; nobody subscrib
   surface waits until firmware makes transitions observable.
 - **Firmware-published status consumption beyond logging** — the diagnostic subscribes to
   `status/#` and logs (D-10); acting on status is a hardware-milestone concern.
+- **LED "party" mode** and **"sound-reactive" mode** (D-26) — post-v1 flourishes; in the
+  v2/backlog, not Phase 6.
 
-None of the discussion strayed outside the phase domain.
+The idle/ambient + timed-highlight + retain-mode scope (D-20..D-25 / LED-11/12/13) was
+added 2026-05-23 after initial planning, replacing the original "highlight lingers until 4h
+expiry" behavior.
 </deferred>
 
 ---
