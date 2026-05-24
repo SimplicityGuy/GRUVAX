@@ -207,11 +207,11 @@ Plans:
   5. The Mosquitto broker runs in Compose with `persistence true` + named volume, NO host `ports:` exposure in v1, an LWT on `gruvax/v1/server/hello` retained, and the publish wrapper times out at ~250 ms so a broker hiccup never blocks `/api/illuminate`.
   6. Every cube shows a configurable **idle/ambient** baseline (color + brightness) when no record is highlighted; an active highlight illuminates for a configurable TTL (default 3 min) or until the next search, then a **server-scheduled revert** restores the ambient state; an optional **retain mode** (default off) accumulates a recently-found trail, each highlight reverting independently after a longer configurable timeout (default 15 min). (LED-11, LED-12, LED-13)
 
-**Plans:** 4 plans
+**Plans:** 1/4 plans executed
 Plans:
 **Wave 1**
 
-- [ ] 06-01-PLAN.md — MQTT 5 publish spine: topics + Pydantic payload schemas + publishers + client V5 upgrade + settings prefix/expiry knobs + full LED-defaults seed migration (colors incl. ambient, span/active/ambient brightness tiers, TTL/retain defaults) + public POST /api/illuminate fan-out + kiosk wire-up (LED-01/02/03/08/09/10, DEP-03)
+- [x] 06-01-PLAN.md — MQTT 5 publish spine: topics + Pydantic payload schemas + publishers + client V5 upgrade + settings prefix/expiry knobs + full LED-defaults seed migration (colors incl. ambient, span/active/ambient brightness tiers, TTL/retain defaults) + public POST /api/illuminate fan-out + kiosk wire-up (LED-01/02/03/08/09/10, DEP-03)
 
 **Wave 2** *(blocked on Wave 1; 06-02 and 06-03 run in parallel — no file overlap)*
 
@@ -266,7 +266,7 @@ Plans:
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
-| 6. LED Contract over MQTT (Hardware Stubbed) | 0/4 | Planned | - |
+| 6. LED Contract over MQTT (Hardware Stubbed) | 1/4 | In Progress|  |
 | 7. Wizards + Import/Export | 0/? | Not started | - |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
