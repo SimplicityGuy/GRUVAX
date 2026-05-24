@@ -451,3 +451,259 @@ async def publish_ambient(
     count = len(cube_list) - len(errors)
     logger.info("publish_ambient: published ambient state/* for %d cubes", count)
     return count
+
+
+# ── All-off retained-clear publisher ─────────────────────────────────────────
+
+
+async def publish_all_off(
+    client: aiomqtt.Client | None,
+    pool: Any,
+    settings_cache: dict[str, Any],
+) -> int:
+    """Publish an empty retained payload to every state/{unit_id}/{r}/{c} topic.
+
+    LED-06 / D-11: An empty retained payload (payload=b'', retain=True) is the
+    MQTT 3.1.1/5.0 protocol mechanism for deleting a retained message.  This
+    is the authoritative retained-cleanup mechanism given Mosquitto's
+    expiry-cleanup limitation (RESEARCH Pitfall B).
+
+    Also publishes a non-retained command to ``all/off`` so firmware knows a
+    global off was requested.
+
+    Args:
+        client:         aiomqtt.Client, or None in degraded mode.
+        pool:           psycopg AsyncConnectionPool used to enumerate units.
+        settings_cache: The gruvax.settings key/value dict (unused in v1 but
+                        kept for API symmetry with other publisher functions).
+
+    Returns:
+        Number of cube state-clear publishes made (NOT counting the all/off command).
+
+    Degraded mode: if ``client`` is None, logs a warning and returns 0.
+
+    Idempotent: calling this function multiple times produces the same effect —
+    retained messages are cleared (or were already cleared), no error raised.
+    """
+    if client is None:
+        logger.warning(
+            "MQTT not connected — publish_all_off skipped (degraded mode)"
+        )
+        return 0
+
+    prefix = settings.MQTT_TOPIC_PREFIX
+
+    # ── Enumerate all cubes (short-lived connection — close before publishing) ──
+    sql = "SELECT id, rows, cols FROM gruvax.units ORDER BY ordering"
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql)
+        unit_rows = await cur.fetchall()
+    # Connection closed here — no long-held conn during the publish loop (Pitfall B).
+
+    # ── Build a clear task per cube: empty payload, retain=True (D-11) ──────────
+    clear_tasks = []
+    cube_count = 0
+    for unit_id, rows, cols in unit_rows:
+        for r in range(rows):
+            for c in range(cols):
+                clear_tasks.append(
+                    safe_publish(
+                        client,
+                        topics.state_topic(prefix, unit_id, r, c),
+                        b'',
+                        qos=1,
+                        retain=True,
+                        timeout=0.5,
+                    )
+                )
+                cube_count += 1
+
+    # Publish all state clears concurrently
+    if clear_tasks:
+        await asyncio.gather(*clear_tasks, return_exceptions=True)
+
+    # ── Publish the all/off command topic (non-retained) ────────────────────────
+    # QoS 1 so firmware that is online receives it reliably; retain=False so
+    # firmware that boots AFTER the command is not replayed the off command
+    # (it will see the cleared state/* retained messages instead).
+    await safe_publish(
+        client,
+        topics.all_off_topic(prefix),
+        b'{}',
+        qos=1,
+        retain=False,
+        timeout=0.5,
+    )
+
+    logger.info("LED all-off: published %d clear-retained payloads", cube_count)
+    return cube_count
+
+
+# ── Diagnostic sequence publisher ────────────────────────────────────────────
+
+
+async def run_diagnostic(
+    client: aiomqtt.Client | None,
+    pool: Any,
+    settings_cache: dict[str, Any],
+    run_id: str,
+) -> None:
+    """Cycle every cube through the configured state color sequence for diagnostics.
+
+    LED-07 / D-08/09/10: Publishes a ``state/*`` payload per cube per state in
+    the sequence: label-span → position → error → setup → off (5 states).
+    After the cube loop, transiently subscribes to ``status/#`` for 5 s to log
+    any firmware status responses (expected: nothing in v1 — wires the future
+    hardware status seam).
+
+    The background task runs asynchronously; the API endpoint returns a run_id
+    immediately (D-08 — instant ack).
+
+    Color sequence per cube (D-09):
+      label-span  → led_color.label_span  / led_brightness.span   (span tier)
+      position    → led_color.position    / led_brightness.active  (active tier)
+      error       → led_color.error       / led_brightness.active  (active tier)
+      setup       → led_color.setup       / led_brightness.active  (active tier)
+      off         → #000000               / brightness=0
+
+    D-24 brightness-tier correctness (LOCKED):
+      Span state uses ``led_brightness.span``   (label-span tier, ~50%).
+      All other active states use ``led_brightness.active`` (100%).
+      The idle ``led_brightness.ambient`` key is NEVER used in this function.
+
+    Args:
+        client:         aiomqtt.Client, or None in degraded mode.
+        pool:           psycopg AsyncConnectionPool.
+        settings_cache: The gruvax.settings key/value dict.
+        run_id:         Cosmetic run identifier (logged, returned to caller).
+
+    Degraded mode: if ``client`` is None, logs a warning and returns.
+    """
+    if client is None:
+        logger.warning(
+            "MQTT not connected — run_diagnostic run_id=%s skipped (degraded mode)",
+            run_id,
+        )
+        return
+
+    prefix = settings.MQTT_TOPIC_PREFIX
+    expiry_seconds = settings.MQTT_STATE_EXPIRY_SECONDS
+
+    # ── Read diagnostic parameters ────────────────────────────────────────────
+    inter_cube_delay_s: float = (
+        int(settings_cache.get("led_diagnostic.inter_cube_ms", 200)) / 1000.0
+    )
+
+    # Resolve state colors (strip JSON string quotes — stored as '"#RRGGBB"')
+    color_span: str = str(
+        settings_cache.get("led_color.label_span", '"#7C3AED"')
+    ).strip('"')
+    color_position: str = str(
+        settings_cache.get("led_color.position", '"#FFD700"')
+    ).strip('"')
+    color_error: str = str(
+        settings_cache.get("led_color.error", '"#E63946"')
+    ).strip('"')
+    color_setup: str = str(
+        settings_cache.get("led_color.setup", '"#0077B6"')
+    ).strip('"')
+    color_off: str = "#000000"
+
+    # D-24: span state uses led_brightness.span; active states use led_brightness.active.
+    # led_brightness.ambient is the IDLE key — never used here.
+    brightness_span: int = clamp_brightness(
+        int(settings_cache.get("led_brightness.span", 128)), 128
+    )
+    brightness_active: int = clamp_brightness(
+        int(settings_cache.get("led_brightness.active", 255)), 255
+    )
+    # brightness_off is always 0
+    brightness_off: int = 0
+
+    # State sequence: (color_hex, brightness, state_label)
+    state_sequence = [
+        (color_span,     brightness_span,   "label-span"),
+        (color_position, brightness_active, "position"),
+        (color_error,    brightness_active, "error"),
+        (color_setup,    brightness_active, "setup"),
+        (color_off,      brightness_off,    "off"),
+    ]
+
+    # ── Enumerate all cubes (short-lived connection — close before loop) ──────
+    sql = "SELECT id, rows, cols FROM gruvax.units ORDER BY ordering"
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql)
+        unit_rows = await cur.fetchall()
+    # Connection closed here — no long-held conn during the publish loop.
+
+    now_iso = datetime.now(UTC).isoformat()
+    expiry_props = _make_expiry_props(expiry_seconds)
+
+    # ── Cube loop ─────────────────────────────────────────────────────────────
+    for unit_id, rows, cols in unit_rows:
+        for r in range(rows):
+            for c in range(cols):
+                state_t = topics.state_topic(prefix, unit_id, r, c)
+
+                for color_hex, brightness, state_label in state_sequence:
+                    if brightness == 0 or color_hex == "#000000":
+                        # Off state: publish empty retained payload to clear state
+                        payload_bytes = b''
+                        await safe_publish(
+                            client,
+                            state_t,
+                            payload_bytes,
+                            qos=1,
+                            retain=True,
+                            timeout=0.5,
+                        )
+                    else:
+                        r_val, g_val, b_val = hex_to_rgb(color_hex)
+                        color_obj = RGBColor(r=r_val, g=g_val, b=b_val)
+                        ill_payload = IlluminatePayload(
+                            issued_at=now_iso,
+                            unit_id=unit_id,
+                            row=r,
+                            col=c,
+                            color=color_obj,
+                            brightness=brightness,
+                            transition=TransitionSpec(style="instant", duration_ms=0),
+                        )
+                        payload_bytes = ill_payload.model_dump_json(by_alias=True).encode()
+                        await safe_publish(
+                            client,
+                            state_t,
+                            payload_bytes,
+                            qos=1,
+                            retain=True,
+                            properties=expiry_props,
+                            timeout=0.5,
+                        )
+                    logger.info(
+                        "LED diagnostic run_id=%s cube=%s/%d/%d state=%s brightness=%d",
+                        run_id, unit_id, r, c, state_label, brightness,
+                    )
+
+                # Yield the event loop between cubes (D-08 — don't block)
+                await asyncio.sleep(inter_cube_delay_s)
+
+    # ── Transient status subscribe (D-10) ─────────────────────────────────────
+    # Subscribe to status/# for 5 s to capture any firmware status responses.
+    # Expected result: nothing (no hardware in v1).  This wires the future seam.
+    # Pitfall G: status/# is disjoint from illuminate/* — no cross-traffic risk.
+    status_topic = topics.status_wildcard(prefix)
+    await client.subscribe(status_topic, qos=1)
+    try:
+        async with asyncio.timeout(5.0):
+            async for msg in client.messages:
+                logger.info(
+                    "LED status from firmware: topic=%s payload=%s",
+                    msg.topic,
+                    msg.payload,
+                )
+    except TimeoutError:
+        pass  # expected — no hardware in v1
+    finally:
+        await client.unsubscribe(status_topic)
+
+    logger.info("LED diagnostic run_id=%s complete", run_id)
