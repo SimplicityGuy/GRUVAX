@@ -711,4 +711,16 @@ async def run_diagnostic(
     finally:
         await client.unsubscribe(status_topic)
 
-    logger.info("LED diagnostic run_id=%s complete", run_id)
+    # ── Restore the idle ambient baseline (CR-04 / LED-11 / D-20) ──────────────
+    # The diagnostic's final "off" frame deletes each cube's retained state/* via
+    # an empty payload, which leaves every cube DARK after the sweep.  D-20 / LED-11
+    # require every cube to show the idle ambient colour when no highlight is
+    # active, so re-publish the ambient baseline as the last step.  This keeps the
+    # post-diagnostic state consistent with startup ambient and the revert path,
+    # rather than leaving the kiosk/firmware without an idle baseline until the
+    # next search or restart.
+    await publish_ambient(client, pool, settings_cache)
+
+    logger.info(
+        "LED diagnostic run_id=%s complete; ambient baseline restored", run_id
+    )

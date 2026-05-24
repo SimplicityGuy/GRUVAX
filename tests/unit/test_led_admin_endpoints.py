@@ -206,9 +206,11 @@ async def test_all_off_uses_units_table() -> None:
 
 @pytest.mark.asyncio
 async def test_diagnostic_sequence() -> None:
-    """run_diagnostic publishes the 5-state color sequence for each cube.
+    """run_diagnostic publishes the 5-state color sequence for each cube, then
+    restores the ambient baseline (CR-04 / LED-11 / D-20).
 
-    For units=[(1, 2, 2)] → 4 cubes × 5 states = 20 state publishes.
+    For units=[(1, 2, 2)] → 4 cubes × 5 states = 20 diagnostic state publishes,
+    plus 4 ambient-restore state publishes (one per cube) = 24 state publishes.
     Plus 1 subscribe + 1 unsubscribe to status/# (LED-07, D-09).
     """
     from gruvax.mqtt import publishers
@@ -223,10 +225,15 @@ async def test_diagnostic_sequence() -> None:
     publish_calls = client.publish.call_args_list
     state_publishes = [c for c in publish_calls if f"{TEST_PREFIX}/state/" in c[0][0]]
 
-    # 4 cubes × 5 states = 20 state publishes
-    expected_publish_count = 4 * 5  # cubes × states
-    assert len(state_publishes) == expected_publish_count, (
-        f"Expected {expected_publish_count} state publishes; got {len(state_publishes)}"
+    # 4 cubes × 5 states = 20 diagnostic publishes + 4 ambient-restore publishes
+    # (CR-04: run_diagnostic ends by republishing the idle ambient baseline so the
+    # final "off" frame does not leave every cube dark).
+    expected_diagnostic = 4 * 5  # cubes × states
+    expected_ambient = 4  # one ambient-restore publish per cube
+    assert len(state_publishes) == expected_diagnostic + expected_ambient, (
+        f"Expected {expected_diagnostic + expected_ambient} state publishes "
+        f"({expected_diagnostic} diagnostic + {expected_ambient} ambient-restore); "
+        f"got {len(state_publishes)}"
     )
 
 
@@ -236,6 +243,12 @@ async def test_diagnostic_uses_correct_brightness_tiers() -> None:
     state uses led_brightness.active — never led_brightness.ambient (D-24).
 
     Uses distinct values so we can verify which tier is used per state.
+
+    CR-04 note: run_diagnostic now restores the ambient baseline at the end, which
+    legitimately publishes led_brightness.ambient.  Those ambient-restore frames
+    are identified by the ambient colour (led_color.ambient) and excluded from the
+    diagnostic-sequence brightness check below — the D-24 invariant applies only to
+    the diagnostic *sequence* frames, not the closing ambient restore.
     """
     from gruvax.mqtt import publishers
     import json as _json
@@ -247,7 +260,12 @@ async def test_diagnostic_uses_correct_brightness_tiers() -> None:
     cache = dict(SETTINGS_CACHE)
     cache["led_brightness.span"] = "111"    # label-span tier — only used for span state
     cache["led_brightness.active"] = "222"  # position/active tier — used for position state
-    cache["led_brightness.ambient"] = "9"   # idle baseline — must NOT appear in diagnostic
+    cache["led_brightness.ambient"] = "9"   # idle baseline — only used by ambient restore
+    # Ambient colour used by the closing ambient-restore frames (CR-04).
+    ambient_hex = str(cache["led_color.ambient"]).strip('"').lstrip("#").lower()
+
+    def _hex_from_rgb(color: dict[str, int]) -> str:
+        return f"{color['r']:02x}{color['g']:02x}{color['b']:02x}"
 
     with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
          patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
@@ -263,12 +281,16 @@ async def test_diagnostic_uses_correct_brightness_tiers() -> None:
             continue  # off state has empty or brightness=0 payload
         try:
             payload = _json.loads(payload_bytes)
-            b = payload.get("brightness", -1)
-            brightnesses_seen.append(b)
         except Exception:
-            pass
+            continue
+        # Exclude the closing ambient-restore frames (CR-04): they legitimately
+        # carry led_brightness.ambient and are identified by the ambient colour.
+        color = payload.get("color")
+        if isinstance(color, dict) and _hex_from_rgb(color) == ambient_hex:
+            continue
+        brightnesses_seen.append(payload.get("brightness", -1))
 
-    # ambient tier value (9) must NOT appear in any diagnostic publish
+    # ambient tier value (9) must NOT appear in any diagnostic-SEQUENCE publish
     assert 9 not in brightnesses_seen, (
         f"D-24 violation: led_brightness.ambient (9) must not be used in diagnostic sequence; "
         f"brightnesses seen: {brightnesses_seen}"
