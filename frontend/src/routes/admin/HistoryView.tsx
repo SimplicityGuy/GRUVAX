@@ -147,7 +147,19 @@ export function HistoryView() {
           const revertError = revertState.errorById[item.change_set_id]
           const isLoading = revertState.loadingId === item.change_set_id
           const isConfirming = revertState.confirmingId === item.change_set_id
-          const sourceLabel = item.source === 'revert' ? 'UNDO' : 'EDIT'
+
+          // Phase 7: Extended source badge map (D-04)
+          const SOURCE_BADGE_MAP: Record<string, string> = {
+            manual:     'EDIT',
+            bulk:       'BULK EDIT',
+            revert:     'UNDO',
+            cut_insert: 'CUT EDIT',
+            wizard:     'WIZARD SETUP',
+            reshuffle:  'RESHUFFLE',
+            csv:        'CSV IMPORT',
+            yaml:       'YAML IMPORT',
+          }
+          const sourceLabel = SOURCE_BADGE_MAP[item.source] ?? item.source.toUpperCase()
 
           return (
             <li key={item.change_set_id} className="history-card">
