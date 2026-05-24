@@ -92,7 +92,7 @@ def _make_expiry_props(seconds: int) -> Properties:
     "No expiry" (seconds=0 or omitted) is rejected by the retained-message
     hygiene rules in PITFALLS.md §3.
     """
-    props = Properties(PacketTypes.PUBLISH)
+    props = Properties(PacketTypes.PUBLISH)  # type: ignore[no-untyped-call]
     props.MessageExpiryInterval = seconds
     return props
 
@@ -191,8 +191,8 @@ async def fan_out_illuminate(
     pos_color = RGBColor(r=pos_r, g=pos_g, b=pos_b)
     span_color = RGBColor(r=span_r, g=span_g, b=span_b)
 
-    pos_transition = TransitionSpec(style=pos_style, duration_ms=pos_ms)  # type: ignore[arg-type]
-    span_transition = TransitionSpec(style=span_style, duration_ms=span_ms)  # type: ignore[arg-type]
+    pos_transition = TransitionSpec(style=pos_style, duration_ms=pos_ms)
+    span_transition = TransitionSpec(style=span_style, duration_ms=span_ms)
 
     primary = body.primary_cube  # dict or None
     label_span = body.label_span or []  # list[dict]
