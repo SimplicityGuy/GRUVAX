@@ -87,12 +87,18 @@ async def illuminate(
 ) -> dict[str, Any]:
     """Accept a LocateResult and schedule LED fan-out to the MQTT broker.
 
-    Returns immediately with ``{"published": true, "accepted_at": ...}`` when
-    the broker is connected, or ``{"published": false, "accepted_at": ...}``
+    Returns immediately with ``{"published": true, "accepted": true, "accepted_at": ...}``
+    when the broker is connected, or ``{"published": false, "accepted": false, ...}``
     in degraded mode (broker unreachable).
 
-    The MQTT publish is fire-and-forget: any broker hiccup surfaces only as a
-    log warning and does not affect the HTTP response.
+    WR-04 — response field semantics (IMPORTANT for diagnostics):
+      ``published``/``accepted`` mean "the broker is connected and the fan-out was
+      SCHEDULED" — NOT "the message was delivered to firmware".  The publish is
+      fire-and-forget (D-01): it runs in a detached task and any broker hiccup
+      surfaces only as a server-side log warning, never in this response.  Callers
+      cannot distinguish "scheduled" from "delivered" from this field; do not treat
+      ``published: true`` as a delivery guarantee.  ``accepted`` is the clearer
+      alias; ``published`` is retained for backward compatibility.
 
     LED-09: fans out to three locked command topics (illuminate/{u}/{r}/{c},
     span/{change_id}, sub/{u}/{r}/{c}) plus retained state/* topics.
@@ -129,6 +135,9 @@ async def illuminate(
         )
 
     return {
+        # WR-04: "scheduled", NOT "delivered".  ``accepted`` is the clearer name;
+        # ``published`` is kept as a backward-compatible alias with identical meaning.
         "published": client is not None,
+        "accepted": client is not None,
         "accepted_at": datetime.now(UTC).isoformat(),
     }
