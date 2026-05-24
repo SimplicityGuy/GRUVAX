@@ -27,7 +27,7 @@ import aiomqtt
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
-from gruvax.mqtt import publishers
+from gruvax.mqtt import lifecycle, publishers
 
 logger = logging.getLogger(__name__)
 
@@ -75,10 +75,21 @@ async def illuminate(
     """
     client: aiomqtt.Client | None = getattr(request.app.state, "mqtt", None)
     settings_cache: dict[str, Any] = getattr(request.app.state, "settings_cache", {})
+    registry = getattr(request.app.state, "highlight_registry", None)
 
-    if client is not None:
+    if client is not None and registry is not None:
+        asyncio.create_task(
+            lifecycle.illuminate_with_lifecycle(registry, client, settings_cache, body)
+        )
+    elif client is not None:
+        # Fallback: registry not initialised yet (very early startup edge case).
         asyncio.create_task(
             publishers.fan_out_illuminate(client, body, settings_cache)
+        )
+        logger.warning(
+            "highlight_registry not found on app.state — falling back to plain fan_out_illuminate "
+            "for release_id=%s",
+            body.release_id,
         )
     else:
         logger.warning(
