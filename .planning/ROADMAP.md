@@ -19,7 +19,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 - [x] **Phase 4: Realtime + Offline Resilience** - Admin edits reach the kiosk live via SSE; kiosk gracefully degrades on connectivity loss; privacy floors and recently-pulled land here. (completed 2026-05-22)
 - [x] **Phase 5: Segment-Aware Position Precision** - A bin holds an ordered list of per-label segments; store only cut points + optional physical-width overrides and derive segments/counts/fractions from `v_collection`; a segment-aware estimator supersedes §4.1 via two-level interpolation so a record's position is precise even when multiple labels share a bin. (completed 2026-05-23)
 - [x] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness; a configurable idle/ambient baseline with timed highlight revert (server-scheduled) and an optional recently-found retain mode. (completed 2026-05-24)
-- [ ] **Phase 7: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable.
+- [x] **Phase 7: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable. (completed 2026-05-24)
 - [ ] **Phase 8: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof.
 
 ## Phase Details
@@ -238,7 +238,7 @@ Plans:
   4. Owner can download current boundaries as YAML (or JSON) via `GET /api/admin/export/boundaries.yaml`; the export schema matches the import schema (round-trip identity); a separate endpoint exports/imports LED color and brightness settings under the same schema convention.
   5. Every wizard commit, CSV/YAML import, and reshuffle ends with the admin seeing a confirmation that names the `change_set_id` and offers a "Revert this change set" tap — the keystone undo path from Phase 3 covers all multi-cube admin operations uniformly.
 
-**Plans:** 4/5 plans executed
+**Plans:** 5/5 plans complete
 Plans:
 **Wave 1** *(parallel — no file overlap)*
 
@@ -255,7 +255,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3)*
 
-- [ ] 07-05-PLAN.md — Frontend import/export surfaces: Import page (upload+diff+gated commit) + History badges + CubesGrid export + Settings BACKUP & RESTORE + human-verify checkpoint (ADMN-05, BAK-01, BAK-02)
+- [x] 07-05-PLAN.md — Frontend import/export surfaces: Import page (upload+diff+gated commit) + History badges + CubesGrid export + Settings BACKUP & RESTORE + human-verify checkpoint (ADMN-05, BAK-01, BAK-02)
 **UI hint:** yes
 
 ### Phase 8: Observability + Deployment Hardening
@@ -284,7 +284,7 @@ Plans:
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
 | 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete    | 2026-05-24 |
-| 7. Wizards + Import/Export | 4/5 | In Progress|  |
+| 7. Wizards + Import/Export | 5/5 | Complete   | 2026-05-24 |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
 ## Critical-Path Notes (carried from research)
