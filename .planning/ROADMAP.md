@@ -3,7 +3,7 @@
 **Created:** 2026-05-19
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 **Granularity:** standard (8 phases)
-**Requirements covered:** 81 / 81 v1 (100%)
+**Requirements covered:** 84 / 84 v1 (100%)
 
 ## Core Value (north star for every phase)
 
@@ -18,7 +18,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 - [x] **Phase 3: Admin Loop (PIN + Manual Entry + Undo)** - Owner can sign in (mobile or kiosk-with-in-app-keypad), enter boundaries, preview diffs, and undo mistakes — boundaries become a living artifact, not a fixture. (completed 2026-05-21)
 - [x] **Phase 4: Realtime + Offline Resilience** - Admin edits reach the kiosk live via SSE; kiosk gracefully degrades on connectivity loss; privacy floors and recently-pulled land here. (completed 2026-05-22)
 - [x] **Phase 5: Segment-Aware Position Precision** - A bin holds an ordered list of per-label segments; store only cut points + optional physical-width overrides and derive segments/counts/fractions from `v_collection`; a segment-aware estimator supersedes §4.1 via two-level interpolation so a record's position is precise even when multiple labels share a bin. (completed 2026-05-23)
-- [ ] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness.
+- [x] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness; a configurable idle/ambient baseline with timed highlight revert (server-scheduled) and an optional recently-found retain mode. (completed 2026-05-24)
 - [ ] **Phase 7: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable.
 - [ ] **Phase 8: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof.
 
@@ -197,16 +197,32 @@ Plans:
 **Goal:** Every search highlight publishes a versioned, Pydantic-validated MQTT payload to `gruvax/v1/leds/...` on an internal Mosquitto broker (no host port exposure); admin tunes colors and brightness; "all off" and diagnostic sequences work end-to-end — the contract is hardware-ready.
 **Mode:** mvp
 **Depends on:** Phase 1 (Compose), Phase 2 (sub-cube interval data), Phase 3 (admin settings UI), Phase 5 (segment-aware sub-span data for precise per-label LED illumination)
-**Requirements:** LED-01, LED-02, LED-03, LED-04, LED-05, LED-06, LED-07, LED-08, LED-09, LED-10, DEP-03
+**Requirements:** LED-01, LED-02, LED-03, LED-04, LED-05, LED-06, LED-07, LED-08, LED-09, LED-10, LED-11, LED-12, LED-13, DEP-03
 **Success Criteria** (what must be TRUE):
 
   1. A search-and-select on the kiosk causes `gruvax-api` to publish a Pydantic-validated payload on `gruvax/v1/leds/illuminate/{unit}/{row}/{col}` (and, for label-span, on `.../span/{change_id}`; for sub-cube, on `.../sub/{unit}/{row}/{col}` with normalized `pixel_start`/`pixel_end`); a single layered command can carry both label-span and precise-position in one call, with optional `transition: {style, duration_ms}` declaring intent.
-  2. Admin can tune label-span color, position color, error color, setup color, and "all off" via the admin Settings page; defaults are accessibility-respecting (NOT red/green for active/error, brightness-as-information per Pitfall 18); ambient (label-span) and active (position) brightness ceilings are separately configurable.
+  2. Admin can tune label-span color, position color, error color, setup color, and "all off" via the admin Settings page; defaults are accessibility-respecting (NOT red/green for active/error, brightness-as-information per Pitfall 18); span (label-span) and active (position) brightness ceilings are separately configurable.
   3. An "All off" admin button publishes a `retain=True, payload=b''` clear-retained message on `gruvax/v1/leds/all` plus per-cube `state/*` clears (Pitfall 3), idempotently; a diagnostic admin endpoint cycles every cube through a documented color sequence and logs any status responses.
   4. Every retained publish sets MQTT 5 `message_expiry_interval` (default 4h for state, configurable); MQTT topics are versioned as `gruvax/v1/...`; per-environment topic prefix (`gruvax/v1/dev/...` vs `gruvax/v1/...`) is configurable via `MQTT_TOPIC_PREFIX`; the documented Pydantic schema lives alongside the contract in the repo.
   5. The Mosquitto broker runs in Compose with `persistence true` + named volume, NO host `ports:` exposure in v1, an LWT on `gruvax/v1/server/hello` retained, and the publish wrapper times out at ~250 ms so a broker hiccup never blocks `/api/illuminate`.
+  6. Every cube shows a configurable **idle/ambient** baseline (color + brightness) when no record is highlighted; an active highlight illuminates for a configurable TTL (default 3 min) or until the next search, then a **server-scheduled revert** restores the ambient state; an optional **retain mode** (default off) accumulates a recently-found trail, each highlight reverting independently after a longer configurable timeout (default 15 min). (LED-11, LED-12, LED-13)
 
-**Plans:** TBD
+**Plans:** 4/4 plans complete
+Plans:
+**Wave 1**
+
+- [x] 06-01-PLAN.md — MQTT 5 publish spine: topics + Pydantic payload schemas + publishers + client V5 upgrade + settings prefix/expiry knobs + full LED-defaults seed migration (colors incl. ambient, span/active/ambient brightness tiers, TTL/retain defaults) + public POST /api/illuminate fan-out + kiosk wire-up (LED-01/02/03/08/09/10, DEP-03)
+
+**Wave 2** *(blocked on Wave 1; 06-02 and 06-03 run in parallel — no file overlap)*
+
+- [x] 06-02-PLAN.md — Highlight-lifecycle slice: idle/ambient baseline on every cube + active-highlight TTL + server-scheduled revert via a cancelable in-process registry (default mode reverts prior on next search; retain mode accumulates with independent timeouts) wired into /api/illuminate + lifespan (LED-11, LED-12, LED-13)
+- [x] 06-03-PLAN.md — Admin LED settings slice: extend /api/admin/settings GET/PUT for all LED keys (colors incl. ambient, span/active/ambient brightness, TTL, retain toggle, retain timeout) + LEDs section in Settings.tsx with per-state color pickers, token presets, three brightness sliders, TTL/retain controls, and an in-SPA color-blind preview (LED-04, LED-05)
+
+**Wave 3** *(blocked on Wave 2)*
+
+- [x] 06-04-PLAN.md — All-off + diagnostic admin slice: idempotent clear-retained publish_all_off (units-enumerated) + background run_diagnostic (cube×state cycle with correct brightness tiers + status subscribe) + admin/leds.py off/diagnostic endpoints + Settings buttons (LED-06, LED-07, DEP-03)
+
+**UI hint:** yes (settings-shaped — extends existing admin Settings page, no new route)
 
 ### Phase 7: Wizards + Import/Export
 
@@ -250,7 +266,7 @@ Plans:
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
-| 6. LED Contract over MQTT (Hardware Stubbed) | 0/? | Not started | - |
+| 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete    | 2026-05-24 |
 | 7. Wizards + Import/Export | 0/? | Not started | - |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
@@ -276,10 +292,10 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
 | 3 | ADMN (1,2,3,6,7,8,9,12), CUBE (7,9) | 10 |
 | 4 | ADMN (11), RTM (1–4), OFF (1–4), SRCH (9), PRIV (1–4) | 14 |
 | 5 | SEG (1–8) | 8 |
-| 6 | LED (1–10), DEP (3) | 11 |
+| 6 | LED (1–13), DEP (3) | 14 |
 | 7 | ADMN (4,5,10), BAK (1,2) | 5 |
 | 8 | OBS (1–7), DEP (4,5) | 9 |
-| **Total** | | **81** |
+| **Total** | | **84** |
 
 ---
 *Roadmap created: 2026-05-19 from PROJECT.md, REQUIREMENTS.md, and research/{SUMMARY,STACK,ARCHITECTURE,PITFALLS,INTERPOLATION}.md*
@@ -300,6 +316,22 @@ fill/occupancy at a glance — e.g. a fill-level shade or occupied-vs-empty stat
 `is_empty` and `fill_level` per cube. Cosmetic/discoverability enhancement; not blocking.
 Relates to Phase 5 (segment editor) and the CUBE-05 empty-cube desaturated state in the
 design language.
+
+### Phase 999.2: LED "party" mode + "sound-reactive" mode (BACKLOG)
+
+**Goal:** [Captured for future planning]
+**Requirements:** TBD
+**Plans:** 0 plans
+
+Post-v1 LED flourishes deferred from Phase 6 (the LED contract). **Party mode** = an
+animated multi-cube color show (button- or schedule-triggered); **sound-reactive mode** =
+LEDs respond to ambient audio / music. Both build on the Phase 6 LED contract + the future
+hardware milestone (real WS2812B firmware) to be observable, and are configurable like the
+other LED modes. Not blocking; pure-delight features. (Captured 2026-05-23 during Phase 6
+scope expansion.)
+
+Plans:
+- [ ] TBD (promote with /gsd:review-backlog when ready)
 
 Plans:
 - [ ] TBD (promote with /gsd:review-backlog when ready)

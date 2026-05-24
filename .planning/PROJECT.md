@@ -12,7 +12,8 @@ Type artist, title, label, or catalog number → see the right cube (and a sub-c
 
 ### Validated
 
-(None yet — ship to validate)
+- [x] Admin-configurable color settings for LED/UI output (label-span color, position-estimate color, etc.) — *Validated in Phase 6: LED Contract over MQTT*
+- [x] LED illumination endpoint with hardware integration stubbed (publishes to an MQTT topic); contract finalized so hardware can land in a later milestone without changing the API — *Validated in Phase 6: LED Contract over MQTT (illuminate/span/sub/all-off/diagnostic over Mosquitto; live-broker behavior pending hardware in 06-HUMAN-UAT.md)*
 
 ### Active
 
@@ -25,8 +26,6 @@ Type artist, title, label, or catalog number → see the right cube (and a sub-c
   - Mobile-first admin web UI (typing-friendly, used at desk)
   - Kiosk admin fallback (touchscreen, used at the shelf)
   - Boundary entry supports manual, guided wizard, and CSV/YAML seed file workflows
-- [ ] Admin-configurable color settings for LED/UI output (label-span color, position-estimate color, etc.)
-- [ ] LED illumination endpoint with hardware integration stubbed (publishes to an MQTT topic or no-op handler in v1); contract finalized so hardware can land in a later milestone without changing the API
 - [ ] Offline behavior: kiosk detects loss of connectivity to the GRUVAX backend on `lux` and shows an offline banner; search is disabled until reachable
 - [ ] Docker Compose deployment alongside discogsography on `lux`; shared Postgres instance, dedicated `gruvax` schema
 
@@ -113,4 +112,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-18 after initialization*
+*Last updated: 2026-05-24 after Phase 6 (LED Contract over MQTT) completion*

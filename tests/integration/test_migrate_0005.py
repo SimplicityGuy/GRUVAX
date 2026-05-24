@@ -306,7 +306,7 @@ async def test_source_check_rejects_unknown_source(migrate_pool) -> None:  # typ
     )
 
 
-# ── Round-trip test: downgrade -1 → upgrade head ─────────────────────────────
+# ── Round-trip test: downgrade to 0004 → upgrade head ────────────────────────
 
 
 @pytest.mark.asyncio(loop_scope="module")
@@ -320,19 +320,25 @@ async def test_0005_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no
 
     Note: 'alembic downgrade base' is NOT used here because downgrade of migration
     0001 has a pre-existing dependency issue (pg_trgm in gruvax schema) unrelated
-    to migration 0005. The 0005-specific round-trip (downgrade -1 / upgrade head)
-    is the meaningful test for this plan.
+    to migration 0005. The 0005-specific round-trip (downgrade to 0004 / upgrade
+    head) is the meaningful test for this plan.
+
+    Target the absolute revision 0004 rather than a relative ``-1`` step so the
+    test stays correct when later migrations (e.g. 0006) are added on top of
+    0005 — ``-1`` from a newer head would only land on 0005 and leave
+    segment_overrides in place.
     """
     import subprocess
     import sys
 
-    # Downgrade one step (0005 → 0004)
+    # Downgrade to 0004 (drops migration 0005's segment model, independent of any
+    # newer migrations layered above 0005).
     result = subprocess.run(
-        [sys.executable, "-m", "alembic", "downgrade", "-1"],
+        [sys.executable, "-m", "alembic", "downgrade", "0004"],
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, f"alembic downgrade -1 failed:\n{result.stdout}\n{result.stderr}"
+    assert result.returncode == 0, f"alembic downgrade 0004 failed:\n{result.stdout}\n{result.stderr}"
 
     # Verify segment_overrides is gone after downgrade
     exists_after_down = await _table_exists(migrate_pool, "segment_overrides")

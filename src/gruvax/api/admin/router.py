@@ -25,6 +25,7 @@ def create_admin_router() -> APIRouter:
     from gruvax.api.admin.editing import router as editing_router
     from gruvax.api.admin.history import router as history_router
     from gruvax.api.admin.labels import router as labels_router
+    from gruvax.api.admin.leds import router as leds_router
     from gruvax.api.admin.login import router as login_router
     from gruvax.api.admin.segments import router as segments_router
     from gruvax.api.admin.settings import router as settings_router
@@ -37,4 +38,5 @@ def create_admin_router() -> APIRouter:
     router.include_router(editing_router)
     router.include_router(segments_router)
     router.include_router(labels_router)
+    router.include_router(leds_router)
     return router

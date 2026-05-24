@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "Phase 05 shipped — PR #8"
-last_updated: "2026-05-24T00:06:33.758Z"
+status: "Phase 6 shipped — PR #10"
+last_updated: "2026-05-24T04:40:56.584Z"
 progress:
-  total_phases: 9
-  completed_phases: 4
-  total_plans: 24
-  completed_plans: 23
-  percent: 44
+  total_phases: 10
+  completed_phases: 5
+  total_plans: 28
+  completed_plans: 27
+  percent: 50
 ---
 
 # State: GRUVAX
@@ -20,7 +20,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 05 — segment-aware-position-precision
+**Current Focus:** Phase 7 — wizards + import/export
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -28,13 +28,13 @@ progress:
 
 ## Current Position
 
-Phase: 05 (segment-aware-position-precision) — EXECUTING
-Plan: 1 of 6
+Phase: 06 (led-contract-over-mqtt-hardware-stubbed) — EXECUTING
+Plan: 1 of 4
 
-- **Phase:** 6
+- **Phase:** 7
 - **Plan:** Not started
-- **Status:** Phase 05 shipped — PR #8
-- **Progress:** Phase 05: 1/5 plans complete
+- **Status:** Phase 6 shipped — PR #10
+- **Progress:** [██████████] 100%
 
 ```
 Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
@@ -62,6 +62,7 @@ Phase 8: Observability + Deployment Hardening       [ ] Not started
 | Phase 02-real-position-estimation P01 | 19 | 4 tasks | 15 files |
 | Phase 02-real-position-estimation P02 | 14 | 3 tasks | 9 files |
 | Phase 02-real-position-estimation P04 | 5min | 2 tasks | 3 files |
+| Phase 06 P04 | 9min | 3 tasks | 6 files |
 
 ## Accumulated Context
 
@@ -105,6 +106,9 @@ Phase 8: Observability + Deployment Hardening       [ ] Not started
 - [Phase 02-02]: **onTap calls setQuery (not direct locate)** — D-10 explicit user confirmation; no silent auto-correct; user sees corrected term in search box.
 - [Phase 02-04]: **CUBE_ONLY_NULL_MIDPOINT=0.5** — §4.8 null sub_cube_interval scored as midpoint of cube for MAE comparison; worst-case analysis per plan spec.
 - [Phase 02-04]: **session-scoped harness_results fixture** — run_all_algorithms(ci=True) called once per pytest session; all CI tests consume shared per-shape {index, cube_only} dict.
+- [Phase 06-04]: **publish_all_off retained-clear mechanism** — publishes `b''` with `retain=True` to delete retained messages (MQTT protocol; Mosquitto expiry-cleanup is unreliable, D-11). The all-off clear is idempotent by MQTT spec.
+- [Phase 06-04]: **Endpoint tests use dependency_overrides, not patch** — FastAPI resolves `Depends(require_admin)` by function reference at route registration; patching the module-level name does not intercept the dependency. Use `app.dependency_overrides[require_admin] = stub` (canonical pattern from test_admin_led_settings.py).
+- [Phase 06-04]: **run_diagnostic uses asyncio.timeout(5.0)** — pure stdlib (Python 3.11+), no new deps; 5-second window for status/# subscribe covers firmware boot latency in v1 (D-10).
 - [Phase 05-01]: **BoundaryRow contract change under-scoped at plan time** — dropping `last_label`/`last_catalog` (migration 0005) ripples through more consumers than 05-02..05-05 covered. Post-merge gate caught ~40 RED tests + 12 mypy errors. 05-01's work is correct and merged; Waves 2–5 are being re-planned to add orphan coverage (`api/units.py`, `db/seed_boundaries.py`, `db/queries.py`, `boundary_cache.py:100`, ~11 test files). **Lesson:** plans that change a shared dataclass/DDL contract must include an explicit consumer-sweep (grep audit) covering every construction/SQL/test site, and each wave must leave the suite green. Full inventory: `05-REPLAN-NOTES.md`.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
@@ -141,7 +145,8 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-23 (Phase 05 FULLY VERIFIED — gap-closure 05-06 complete (6/6 plans) + all 6 UAT items pass. SEG-05 label-contiguity enforced on the LIVE admin write paths PUT /cut + POST /insert-cut (400 type=contiguity_error before any DB write) via build_proposed_cuts→validate_contiguity, surfaced in RecordPickerSheet (sheet stays open), orphaned /admin/preview + DiffPreviewSheet/RollbackToast removed. UAT test 6 RE-VERIFIED LIVE via Playwright on the rebuilt stack — the container image predated 05-06 so it was rebuilt (docker compose up -d --build api) and the dev DB was DROPPED + RE-SEEDED from fixtures (which also cleared the cut_insert pollution → test_migrate_0005 now passes → full backend suite exits 0). 05-VERIFICATION.md status=passed. Admin PIN re-seeded to 0000 after the DB drop.)
+**Last touched:** 2026-05-24 (Phase 06 Plan 04 complete — all-off/diagnostic admin vertical slice. 318 tests passing. Phase 06 4/4 plans complete — all LED contract plans done.)
+**Prev:** 2026-05-23 (Phase 05 FULLY VERIFIED — gap-closure 05-06 complete (6/6 plans) + all 6 UAT items pass. SEG-05 label-contiguity enforced on the LIVE admin write paths PUT /cut + POST /insert-cut (400 type=contiguity_error before any DB write) via build_proposed_cuts→validate_contiguity, surfaced in RecordPickerSheet (sheet stays open), orphaned /admin/preview + DiffPreviewSheet/RollbackToast removed. UAT test 6 RE-VERIFIED LIVE via Playwright on the rebuilt stack — the container image predated 05-06 so it was rebuilt (docker compose up -d --build api) and the dev DB was DROPPED + RE-SEEDED from fixtures (which also cleared the cut_insert pollution → test_migrate_0005 now passes → full backend suite exits 0). 05-VERIFICATION.md status=passed. Admin PIN re-seeded to 0000 after the DB drop.)
 **Next action:** Phase 05 is COMPLETE across every gate — 6/6 plans, UAT 6/6 pass, 05-VERIFICATION.md status=passed, 05-SECURITY.md SECURED (24/24, threats_open=0), and code-review fixes applied (05-REVIEW-FIX.md: WR-04 fixed — contiguity message now shows proper-case "Blue Note", confirmed live; WR-01 docstring marked deferred; WR-03 freshness comment added; WR-02 deliberately deferred — real cross-unit gap needing its own plan; INFO items out of scope). Container rebuilt so the live stack carries the WR-04 fix. Ready for Phase 6 (LED Contract over MQTT, hardware-stubbed): `/clear` then `/gsd-discuss-phase 6` or `/gsd-plan-phase 6`. REMAINING DEFERRED (future hardening, own plan): WR-02 cross-unit contiguity (build_proposed_cuts is unit-scoped) and WR-01 step-5 SegmentCache occupancy cross-check (validate_contiguity only checks bin-START labels) — both documented in 05-REVIEW.md / 05-REVIEW-FIX.md, beyond the SEG-05 must-haves.
 
 ---

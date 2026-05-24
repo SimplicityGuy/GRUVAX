@@ -74,16 +74,19 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 
 ### LED Control Surface (hardware stubbed in v1)
 
-- [ ] **LED-01**: `POST /api/leds/illuminate` publishes a Pydantic-validated JSON message to `gruvax/v1/leds/{unit}/{cube}` on the internal MQTT broker
-- [ ] **LED-02**: A multi-cube label-span illumination message can be published as a single payload listing the affected cubes
-- [ ] **LED-03**: A sub-cube interval illumination message includes `pixel_start`/`pixel_end` so future firmware can light a range of LEDs within a cube
-- [ ] **LED-04**: Admin can configure a brightness ceiling, separated into ambient (label-span) and active (position) settings
-- [ ] **LED-05**: Admin can configure colors per system state (label-span, position, error, setup, all-off); defaults are accessibility-respecting (not red/green for active/error)
-- [ ] **LED-06**: A visible "All off" admin button publishes a clear-retained-state message on `gruvax/v1/leds/all`
-- [ ] **LED-07**: A test/diagnostic endpoint cycles every cube through a known color sequence and logs any status responses
-- [ ] **LED-08**: MQTT topics are versioned (`gruvax/v1/...`); payloads are validated against a documented Pydantic schema
-- [ ] **LED-09**: A layered illuminate command can specify both label-span and precise-position parameters in a single API call
-- [ ] **LED-10**: Illuminate payloads accept an optional `transition: {style, duration_ms}` field declaring intent (fade / pulse / instant)
+- [x] **LED-01**: `POST /api/leds/illuminate` publishes a Pydantic-validated JSON message to `gruvax/v1/leds/{unit}/{cube}` on the internal MQTT broker
+- [x] **LED-02**: A multi-cube label-span illumination message can be published as a single payload listing the affected cubes
+- [x] **LED-03**: A sub-cube interval illumination message includes `pixel_start`/`pixel_end` so future firmware can light a range of LEDs within a cube
+- [x] **LED-04**: Admin can configure a brightness ceiling for the active highlight, separated into span (label-span) and active (position) settings
+- [x] **LED-05**: Admin can configure colors per system state (label-span, position, error, setup, all-off); defaults are accessibility-respecting (not red/green for active/error)
+- [x] **LED-06**: A visible "All off" admin button publishes a clear-retained-state message on `gruvax/v1/leds/all`
+- [x] **LED-07**: A test/diagnostic endpoint cycles every cube through a known color sequence and logs any status responses
+- [x] **LED-08**: MQTT topics are versioned (`gruvax/v1/...`); payloads are validated against a documented Pydantic schema
+- [x] **LED-09**: A layered illuminate command can specify both label-span and precise-position parameters in a single API call
+- [x] **LED-10**: Illuminate payloads accept an optional `transition: {style, duration_ms}` field declaring intent (fade / pulse / instant)
+- [x] **LED-11**: An idle/ambient LED state is the resting baseline shown on every cube when no record highlight is active; its color and brightness are admin-configurable
+- [x] **LED-12**: An active record highlight illuminates for a configurable TTL (default 3 min) or until the next successful search, after which the affected cube(s) revert to the idle/ambient state — server-scheduled, not firmware-dependent
+- [x] **LED-13**: An optional "retain" mode accumulates recent search highlights (a recently-found trail); each highlight persists independently until a longer configurable timeout (default 15 min) instead of being replaced by the next search
 
 ### Realtime / Multi-Device
 
@@ -125,7 +128,7 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 
 - [x] **DEP-01**: GRUVAX deploys via Docker Compose as a sibling of discogsography; services include `gruvax-api` and `mosquitto`; frontend is served via FastAPI `StaticFiles`
 - [x] **DEP-02**: The schema is named `gruvax` within the shared Postgres instance; reads from discogsography go exclusively through a `gruvax.v_collection` view contract
-- [ ] **DEP-03**: The Mosquitto broker has no Compose `ports:` exposure in v1 (internal-network-only until the hardware milestone); persistence is configured with explicit retained-message expiry semantics
+- [x] **DEP-03**: The Mosquitto broker has no Compose `ports:` exposure in v1 (internal-network-only until the hardware milestone); persistence is configured with explicit retained-message expiry semantics
 - [ ] **DEP-04**: Each Compose service declares log-size limits to prevent disk exhaustion on `lux`
 - [ ] **DEP-05**: Each Compose service declares a healthcheck integrated with `restart: unless-stopped` for self-healing on transient failure
 
@@ -146,7 +149,7 @@ Tracked but not in the current roadmap. Items move to v1 only via explicit roadm
 - **Service-worker cached search results** for graceful offline degradation (R1)
 - **Per-visitor PIN** with isolated session history (R2)
 - **Animated reshuffle preview** with cube-by-cube diff visualization (R3)
-- **Always-on ambient LED mode** — fast-follow after v1 (moved from anti-features into backlog per scoping)
+- ~~**Always-on ambient LED mode** — fast-follow after v1~~ → **promoted to Phase 6 (v1)** as LED-11/12/13 (idle/ambient baseline + timed highlight revert + retain mode)
 
 ### From FEATURES.md future-tier surfacing
 
@@ -170,6 +173,8 @@ Tracked but not in the current roadmap. Items move to v1 only via explicit roadm
 - Power-budget enforcement (post-hardware) — max simultaneous lit cubes
 - Per-cube LED count auto-detection
 - Status reporting back from firmware
+- **LED "party" mode** — animated multi-cube color show (post-v1 flourish)
+- **LED "sound-reactive" mode** — LEDs react to ambient audio / music (post-v1 flourish)
 - Search-history opt-in for admin (defaults off)
 - Queue admin edits in IndexedDB when mobile loses connectivity
 
@@ -258,16 +263,19 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | ADMN-10 | Phase 7 — Wizards + Import/Export | Pending |
 | ADMN-11 | Phase 4 — Realtime + Offline Resilience | Complete |
 | ADMN-12 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
-| LED-01 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-02 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-04 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-05 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-06 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-07 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-08 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-09 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-10 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-01 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-02 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-04 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-05 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-06 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-07 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-08 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-09 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-10 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-11 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-12 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-13 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
 | RTM-01 | Phase 4 — Realtime + Offline Resilience | Complete |
 | RTM-02 | Phase 4 — Realtime + Offline Resilience | Complete |
 | RTM-03 | Phase 4 — Realtime + Offline Resilience | Complete |
@@ -291,12 +299,12 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | BAK-02 | Phase 7 — Wizards + Import/Export | Pending |
 | DEP-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-02 | Phase 1 — First Search → Cube Highlight | Complete |
-| DEP-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| DEP-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
 | DEP-04 | Phase 8 — Observability + Deployment Hardening | Pending |
 | DEP-05 | Phase 8 — Observability + Deployment Hardening | Pending |
 
 **Coverage:**
-- v1 requirements: 81 total (73 original + 8 SEG)
+- v1 requirements: 84 total (73 original + 8 SEG + 3 LED idle/ambient: LED-11/12/13)
 - Mapped to phases: 81 (100%)
 - Unmapped: 0
 

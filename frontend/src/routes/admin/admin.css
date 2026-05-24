@@ -2405,6 +2405,142 @@
   /* Inherits .settings-number-input — DM Mono already applied */
 }
 
+/* ── Phase 6: Settings — LEDs section (LED-04, LED-05, D-18, D-19) ──────────── */
+
+/* Color picker row: native picker + preset swatches + colorblind preview */
+.settings-color-row {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--gruvax-space-2);
+  margin-top: var(--gruvax-space-1);
+}
+
+/* Native <input type="color"> — touch-friendly minimum tap target */
+.settings-color-input {
+  width: 48px;
+  height: 44px;
+  padding: 2px;
+  border: 1px solid var(--gruvax-border);
+  border-radius: var(--gruvax-radius-sm);
+  background: var(--gruvax-white);
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.settings-color-input:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* Nordic Grid preset swatch buttons */
+.settings-color-presets {
+  display: flex;
+  gap: var(--gruvax-space-1);
+  flex-shrink: 0;
+}
+
+.settings-color-preset-btn {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--gruvax-radius-sm);
+  border: 1px solid var(--gruvax-border);
+  cursor: pointer;
+  flex-shrink: 0;
+  padding: 0;
+  transition: transform var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+              box-shadow var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.settings-color-preset-btn:hover {
+  transform: scale(1.15);
+  box-shadow: var(--gruvax-shadow-sm);
+}
+
+.settings-color-preset-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* ColorBlindPreview swatches (D-18) */
+.colorblind-preview {
+  display: flex;
+  gap: var(--gruvax-space-2);
+  flex-wrap: wrap;
+}
+
+.colorblind-preview__swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+}
+
+.colorblind-preview__color {
+  width: 28px;
+  height: 28px;
+  border-radius: var(--gruvax-radius-sm);
+  border: 1px solid var(--gruvax-border);
+}
+
+.colorblind-preview__label {
+  font-family: var(--gruvax-font-mono);
+  font-size: 9px;
+  color: var(--gruvax-text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+/* Brightness range slider row */
+.settings-range-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  margin-top: var(--gruvax-space-1);
+}
+
+.settings-range-input {
+  flex: 1;
+  height: 6px;
+  accent-color: var(--gruvax-blue);
+  cursor: pointer;
+}
+
+/* Numeric value badge next to range input */
+.settings-value-mono {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-primary);
+  min-width: 2.5ch;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* Toggle checkbox (retain mode) */
+.settings-label--toggle {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+}
+
+.settings-toggle {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--gruvax-blue);
+  cursor: pointer;
+  margin-top: var(--gruvax-space-1);
+}
+
+/* LED section variant — inherits .settings-section */
+.settings-section--leds {
+  /* No extra layout — inherits .settings-section flex column */
+}
+
+/* LED action row — plan 06-04 will add buttons here */
+.settings-actions--leds {
+  /* Inherits .settings-actions flex column */
+}
+
 /* ── Phase 5: RecordPickerSheet (sheet-* variant names) ─────────────────────── */
 /* RecordPickerSheet uses sheet-* class names distinct from record-picker-*.   */
 
