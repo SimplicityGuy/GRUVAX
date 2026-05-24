@@ -44,11 +44,18 @@ def _make_app_with_mqtt(mqtt_client: Any | None) -> Any:
     so the lifespan doesn't try to connect a real broker in tests.
     """
     from gruvax.app import create_app
+    from gruvax.mqtt.lifecycle import HighlightRegistry
 
     app = create_app()
     # Patch lifespan-managed state directly so tests don't need a real DB/broker.
     app.state.mqtt = mqtt_client
     app.state.mqtt_ok = mqtt_client is not None
+    # WR-06: ASGITransport does NOT run the lifespan, so highlight_registry is never
+    # created automatically.  Set it explicitly so the illuminate endpoint takes the
+    # REAL illuminate_with_lifecycle path (the shipping path) rather than the
+    # registry-None fallback branch — otherwise test_fan_out_count covers only the
+    # fallback, not the primary lifecycle code.
+    app.state.highlight_registry = HighlightRegistry()
     app.state.settings_cache = {
         "led_color.position": '"#FFD700"',
         "led_color.label_span": '"#7C3AED"',
