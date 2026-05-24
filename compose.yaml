@@ -142,10 +142,53 @@ services:
       start_period: 10s
     restart: unless-stopped
 
+  # ── Dev / diagnostics only ──────────────────────────────────────────────────
+  # MQTT Explorer (web UI) for inspecting broker traffic while building the LED
+  # contract (Phase 6). It reaches the broker over the `internal` Compose network
+  # (host `mosquitto`, port 1883), so mosquitto STILL has no host `ports:` mapping
+  # — DEP-03 (broker not exposed to the host/LAN in v1) is preserved.
+  #
+  # Gated behind the `debug` profile so a plain `docker compose up` / `just up`
+  # does NOT start it. Launch on demand with:
+  #     docker compose --profile debug up -d mqtt-explorer
+  # Then open http://localhost:3000, log in (MQTT_EXPLORER_USERNAME/PASSWORD), and
+  # add a connection to host `mosquitto`, port 1883 (anonymous in dev unless a
+  # mosquitto passwd file is mounted). Change MQTT_EXPLORER_PASSWORD before using
+  # this on a shared LAN.
+  mqtt-explorer:
+    image: ghcr.io/thomasnordquist/mqtt-explorer:latest
+    profiles: ["debug"]
+    environment:
+      MQTT_EXPLORER_USERNAME: "${MQTT_EXPLORER_USERNAME:-admin}"
+      MQTT_EXPLORER_PASSWORD: "${MQTT_EXPLORER_PASSWORD:-changeme}"
+      # Uncomment to disable the Explorer web login (LAN dev only, behind no proxy):
+      # MQTT_EXPLORER_SKIP_AUTH: "true"
+    ports:
+      - "${MQTT_EXPLORER_PORT:-3000}:3000"
+    volumes:
+      - mqtt-explorer-data:/app/data
+    networks:
+      - internal
+    depends_on:
+      mosquitto:
+        condition: service_healthy
+    healthcheck:
+      test:
+        - "CMD"
+        - "node"
+        - "-e"
+        - "require('http').get('http://localhost:3000', (r) => process.exit(r.statusCode === 200 ? 0 : 1)).on('error', () => process.exit(1))"
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    restart: unless-stopped
+
 volumes:
   gruvax-dev-pg-data:
   mosquitto-data:
   mosquitto-log:
+  mqtt-explorer-data:
 
 networks:
   internal:
