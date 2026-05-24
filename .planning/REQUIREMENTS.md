@@ -79,8 +79,8 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 - [ ] **LED-03**: A sub-cube interval illumination message includes `pixel_start`/`pixel_end` so future firmware can light a range of LEDs within a cube
 - [ ] **LED-04**: Admin can configure a brightness ceiling for the active highlight, separated into span (label-span) and active (position) settings
 - [ ] **LED-05**: Admin can configure colors per system state (label-span, position, error, setup, all-off); defaults are accessibility-respecting (not red/green for active/error)
-- [ ] **LED-06**: A visible "All off" admin button publishes a clear-retained-state message on `gruvax/v1/leds/all`
-- [ ] **LED-07**: A test/diagnostic endpoint cycles every cube through a known color sequence and logs any status responses
+- [x] **LED-06**: A visible "All off" admin button publishes a clear-retained-state message on `gruvax/v1/leds/all`
+- [x] **LED-07**: A test/diagnostic endpoint cycles every cube through a known color sequence and logs any status responses
 - [ ] **LED-08**: MQTT topics are versioned (`gruvax/v1/...`); payloads are validated against a documented Pydantic schema
 - [ ] **LED-09**: A layered illuminate command can specify both label-span and precise-position parameters in a single API call
 - [ ] **LED-10**: Illuminate payloads accept an optional `transition: {style, duration_ms}` field declaring intent (fade / pulse / instant)
@@ -128,7 +128,7 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 
 - [x] **DEP-01**: GRUVAX deploys via Docker Compose as a sibling of discogsography; services include `gruvax-api` and `mosquitto`; frontend is served via FastAPI `StaticFiles`
 - [x] **DEP-02**: The schema is named `gruvax` within the shared Postgres instance; reads from discogsography go exclusively through a `gruvax.v_collection` view contract
-- [ ] **DEP-03**: The Mosquitto broker has no Compose `ports:` exposure in v1 (internal-network-only until the hardware milestone); persistence is configured with explicit retained-message expiry semantics
+- [x] **DEP-03**: The Mosquitto broker has no Compose `ports:` exposure in v1 (internal-network-only until the hardware milestone); persistence is configured with explicit retained-message expiry semantics
 - [ ] **DEP-04**: Each Compose service declares log-size limits to prevent disk exhaustion on `lux`
 - [ ] **DEP-05**: Each Compose service declares a healthcheck integrated with `restart: unless-stopped` for self-healing on transient failure
 
@@ -268,8 +268,8 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | LED-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-04 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-05 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-06 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
-| LED-07 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| LED-06 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
+| LED-07 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
 | LED-08 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-09 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
 | LED-10 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
@@ -299,7 +299,7 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | BAK-02 | Phase 7 — Wizards + Import/Export | Pending |
 | DEP-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-02 | Phase 1 — First Search → Cube Highlight | Complete |
-| DEP-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Pending |
+| DEP-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
 | DEP-04 | Phase 8 — Observability + Deployment Hardening | Pending |
 | DEP-05 | Phase 8 — Observability + Deployment Hardening | Pending |
 

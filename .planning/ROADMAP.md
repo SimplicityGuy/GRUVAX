@@ -18,7 +18,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 - [x] **Phase 3: Admin Loop (PIN + Manual Entry + Undo)** - Owner can sign in (mobile or kiosk-with-in-app-keypad), enter boundaries, preview diffs, and undo mistakes — boundaries become a living artifact, not a fixture. (completed 2026-05-21)
 - [x] **Phase 4: Realtime + Offline Resilience** - Admin edits reach the kiosk live via SSE; kiosk gracefully degrades on connectivity loss; privacy floors and recently-pulled land here. (completed 2026-05-22)
 - [x] **Phase 5: Segment-Aware Position Precision** - A bin holds an ordered list of per-label segments; store only cut points + optional physical-width overrides and derive segments/counts/fractions from `v_collection`; a segment-aware estimator supersedes §4.1 via two-level interpolation so a record's position is precise even when multiple labels share a bin. (completed 2026-05-23)
-- [ ] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness; a configurable idle/ambient baseline with timed highlight revert (server-scheduled) and an optional recently-found retain mode.
+- [x] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness; a configurable idle/ambient baseline with timed highlight revert (server-scheduled) and an optional recently-found retain mode. (completed 2026-05-24)
 - [ ] **Phase 7: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable.
 - [ ] **Phase 8: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof.
 
@@ -207,7 +207,7 @@ Plans:
   5. The Mosquitto broker runs in Compose with `persistence true` + named volume, NO host `ports:` exposure in v1, an LWT on `gruvax/v1/server/hello` retained, and the publish wrapper times out at ~250 ms so a broker hiccup never blocks `/api/illuminate`.
   6. Every cube shows a configurable **idle/ambient** baseline (color + brightness) when no record is highlighted; an active highlight illuminates for a configurable TTL (default 3 min) or until the next search, then a **server-scheduled revert** restores the ambient state; an optional **retain mode** (default off) accumulates a recently-found trail, each highlight reverting independently after a longer configurable timeout (default 15 min). (LED-11, LED-12, LED-13)
 
-**Plans:** 3/4 plans executed
+**Plans:** 4/4 plans complete
 Plans:
 **Wave 1**
 
@@ -220,7 +220,7 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2)*
 
-- [ ] 06-04-PLAN.md — All-off + diagnostic admin slice: idempotent clear-retained publish_all_off (units-enumerated) + background run_diagnostic (cube×state cycle with correct brightness tiers + status subscribe) + admin/leds.py off/diagnostic endpoints + Settings buttons (LED-06, LED-07, DEP-03)
+- [x] 06-04-PLAN.md — All-off + diagnostic admin slice: idempotent clear-retained publish_all_off (units-enumerated) + background run_diagnostic (cube×state cycle with correct brightness tiers + status subscribe) + admin/leds.py off/diagnostic endpoints + Settings buttons (LED-06, LED-07, DEP-03)
 
 **UI hint:** yes (settings-shaped — extends existing admin Settings page, no new route)
 
@@ -266,7 +266,7 @@ Plans:
 | 3. Admin Loop (PIN + Manual Entry + Undo) | 5/5 | Complete   | 2026-05-21 |
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
-| 6. LED Contract over MQTT (Hardware Stubbed) | 3/4 | In Progress|  |
+| 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete   | 2026-05-24 |
 | 7. Wizards + Import/Export | 0/? | Not started | - |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
