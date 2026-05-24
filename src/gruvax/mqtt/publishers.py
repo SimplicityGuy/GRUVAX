@@ -177,8 +177,11 @@ async def fan_out_illuminate(
     brightness_active: int = clamp_brightness(
         int(settings_cache.get("led_brightness.active", "255")), 255
     )
+    # CR-02: clamp to the 8-bit hardware ceiling (255), NOT the tier default (128).
+    # The admin slider exposes span brightness up to 255; using 128 as the ceiling
+    # silently discarded any admin value above 128.  The default value remains 128.
     brightness_span: int = clamp_brightness(
-        int(settings_cache.get("led_brightness.span", "128")), 128
+        int(settings_cache.get("led_brightness.span", "128")), 255
     )
 
     pos_style: str = str(settings_cache.get("led_transition.position_style", '"pulse"')).strip('"')
@@ -611,8 +614,10 @@ async def run_diagnostic(
 
     # D-24: span state uses led_brightness.span; active states use led_brightness.active.
     # led_brightness.ambient is the IDLE key — never used here.
+    # CR-02: clamp to the 8-bit hardware ceiling (255), NOT the tier default (128),
+    # so the diagnostic honours an admin-configured span brightness above 128.
     brightness_span: int = clamp_brightness(
-        int(settings_cache.get("led_brightness.span", 128)), 128
+        int(settings_cache.get("led_brightness.span", 128)), 255
     )
     brightness_active: int = clamp_brightness(
         int(settings_cache.get("led_brightness.active", 255)), 255
