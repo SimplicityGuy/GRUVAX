@@ -42,9 +42,9 @@ created: 2026-05-24
 
 ## Per-Task Verification Map
 
-> Task IDs (`7-NN-NN`) are TBD until the planner emits PLAN.md. Rows below are the
-> requirement-level verification contract from research; the planner MUST attach each
-> to a concrete task and fill the Task ID + Wave columns.
+> Task IDs (`7-NN-NN`) are filled below — each requirement-level verification row is
+> attached to the concrete task that authors/exercises it. Rows are the verification
+> contract from research, now bound to plan tasks.
 
 | Task ID | Req | Behavior | Threat Ref | Secure Behavior | Test Type | Automated Command | Status |
 |---------|-----|----------|------------|-----------------|-----------|-------------------|--------|
@@ -63,7 +63,7 @@ created: 2026-05-24
 | 7-03-01 | BAK-02 | Settings export includes all `_ALLOWED_SETTINGS_KEYS` | — | N/A | unit | `pytest tests/unit/test_settings_export.py::test_all_allowed_keys -x` | ⬜ pending |
 | 7-03-02 | BAK-02 | Settings import unknown key → 422, no DB write | T-SETTINGS-KEY | Key whitelist (`_ALLOWED_SETTINGS_KEYS`) | pytest-asyncio API | `pytest tests/integration/test_settings_import.py::test_unknown_key_rejected -x` | ⬜ pending |
 | 7-03-02 | BAK-02 | Settings import `auth.*` key → rejected | T-PIN-LEAK | Explicit `auth.*` rejection (D-14) | pytest-asyncio API | `pytest tests/integration/test_settings_import.py::test_auth_key_rejected -x` | ⬜ pending |
-| 7-01-02 | SC2 | Idempotency: same Idempotency-Key replay → cached response, no dup history row | T-DOUBLE-COMMIT | `idempotency_keys` dedup (existing pattern, extend to wizard/import) | pytest-asyncio API | `pytest tests/integration/test_bulk.py::test_idempotency_replay -x` | ⬜ pending |
+| 7-01-02 | SC2 | Idempotency: same Idempotency-Key replay → cached response, no dup history row | T-DOUBLE-COMMIT | `idempotency_keys` dedup (existing pattern, extend to wizard/import) | pytest-asyncio API | `pytest tests/integration/test_wizard.py::test_idempotency_replay -x` | ⬜ pending |
 | 7-03-02 | SC2 | Failing row mid-import: ZERO partial state in DB | — | Single-transaction atomic commit (Pitfall 7) | pytest-asyncio API | `pytest tests/integration/test_import.py::test_atomicity -x` | ⬜ pending |
 | 7-01-01 | D-04 | Migration 0007 round-trips upgrade→downgrade→upgrade clean | — | N/A | shell-invoked | `alembic upgrade head && alembic downgrade 0006 && alembic upgrade head` | ⬜ pending |
 
