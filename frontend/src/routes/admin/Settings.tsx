@@ -19,7 +19,7 @@
 
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { changePin, getAdminSettings, putAdminSettings } from '../../api/adminClient'
+import { changePin, getAdminSettings, ledsAllOff, ledsDiagnostic, putAdminSettings } from '../../api/adminClient'
 import { ColorBlindPreview } from '../../components/ColorBlindPreview'
 import './admin.css'
 
@@ -59,6 +59,8 @@ export function Settings() {
   const [ledRetainTtl, setLedRetainTtl] = useState(900)
   const [ledsStatus, setLedsStatus] = useState<SaveStatus>('idle')
   const [ledsError, setLedsError] = useState('')
+  // Phase 6 (06-04): All-off and diagnostic action status messages
+  const [ledsActionMsg, setLedsActionMsg] = useState('')
 
   // Load current settings on mount — use backend key names (WR-01)
   useEffect(() => {
@@ -164,6 +166,32 @@ export function Settings() {
     } catch {
       setLedsStatus('error')
       setLedsError('Failed to save LED settings. Please try again.')
+    }
+  }
+
+  // Phase 6 (06-04): All-off button handler — idempotent retained-clear (LED-06, D-11)
+  const handleLedsAllOff = async () => {
+    setLedsError('')
+    setLedsActionMsg('')
+    try {
+      const result = await ledsAllOff()
+      setLedsActionMsg(`All off sent. ${result.published} cube(s) cleared.`)
+      setTimeout(() => setLedsActionMsg(''), 3000)
+    } catch {
+      setLedsError('All off command failed. Please try again.')
+    }
+  }
+
+  // Phase 6 (06-04): Diagnostic button handler — starts background sweep (LED-07, D-08)
+  const handleLedsDiagnostic = async () => {
+    setLedsError('')
+    setLedsActionMsg('')
+    try {
+      const result = await ledsDiagnostic()
+      setLedsActionMsg(`Diagnostic started (${result.run_id.slice(0, 8)}…).`)
+      setTimeout(() => setLedsActionMsg(''), 5000)
+    } catch {
+      setLedsError('Diagnostic failed. Please try again.')
     }
   }
 
@@ -425,6 +453,10 @@ export function Settings() {
           <p className="settings-success" role="status">LED settings saved.</p>
         )}
 
+        {ledsActionMsg && (
+          <p className="settings-success" role="status">{ledsActionMsg}</p>
+        )}
+
         <div className="settings-actions settings-actions--leds">
           <button
             type="button"
@@ -434,7 +466,20 @@ export function Settings() {
           >
             {ledsStatus === 'saving' ? 'SAVING…' : 'SAVE LED SETTINGS'}
           </button>
-          {/* Plan 06-04 will add All-off + Run Diagnostic buttons here */}
+          <button
+            type="button"
+            className="settings-btn-secondary"
+            onClick={() => { void handleLedsAllOff() }}
+          >
+            ALL OFF
+          </button>
+          <button
+            type="button"
+            className="settings-btn-secondary"
+            onClick={() => { void handleLedsDiagnostic() }}
+          >
+            RUN DIAGNOSTIC
+          </button>
         </div>
       </section>
 

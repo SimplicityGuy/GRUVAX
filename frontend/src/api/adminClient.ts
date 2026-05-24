@@ -528,6 +528,44 @@ export async function insertCut(body: InsertCutBody): Promise<InsertCutResult> {
   return res.json() as Promise<InsertCutResult>
 }
 
+// ── Phase 6: LED admin endpoints ─────────────────────────────────────────────
+
+/**
+ * POST /api/admin/leds/off — idempotent all-off.
+ *
+ * Clears every retained state/* topic by publishing an empty payload.
+ * Safe to call repeatedly (D-11).  Returns {published: N} where N is the
+ * number of cube state-clear publishes made.
+ *
+ * Degraded mode (broker offline): returns {published: 0}, no error thrown.
+ *
+ * CSRF handled by adminFetch (T-06-13).
+ */
+export async function ledsAllOff(): Promise<{ published: number }> {
+  const res = await adminFetch('/api/admin/leds/off', { method: 'POST' })
+  if (!res.ok) {
+    throw new Error(`LEDs all-off failed: ${res.status}`)
+  }
+  return res.json() as Promise<{ published: number }>
+}
+
+/**
+ * POST /api/admin/leds/diagnostic — start a diagnostic sweep.
+ *
+ * Returns {run_id, started_at} immediately (D-08 — instant ack).
+ * The diagnostic runs in a background task on the server; observe results
+ * via ``mosquitto_sub`` or the server logs.
+ *
+ * CSRF handled by adminFetch (T-06-13).
+ */
+export async function ledsDiagnostic(): Promise<{ run_id: string; started_at: string }> {
+  const res = await adminFetch('/api/admin/leds/diagnostic', { method: 'POST' })
+  if (!res.ok) {
+    throw new Error(`LED diagnostic failed: ${res.status}`)
+  }
+  return res.json() as Promise<{ run_id: string; started_at: string }>
+}
+
 // ── Error types ───────────────────────────────────────────────────────────────
 
 /** Thrown when the server returns 401 — wrong PIN or expired session. */

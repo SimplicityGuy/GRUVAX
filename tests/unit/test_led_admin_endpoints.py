@@ -332,23 +332,42 @@ async def test_publishers_degraded() -> None:
 
 # ── App factory for endpoint tests ───────────────────────────────────────────
 
+import os
+
+
+async def _stub_require_admin() -> dict[str, str]:
+    """FastAPI dependency override that bypasses authentication for endpoint tests."""
+    return {"session_id": "test-session-id"}
+
 
 def _make_app_with_mqtt(mqtt_client: Any | None) -> Any:
     """Create a fresh app instance with the given MQTT client on state.
 
-    Overrides all lifespan-managed state so the leds router can be tested
-    without a real DB or broker.
+    Uses FastAPI dependency_overrides (not patch) to bypass require_admin and
+    get_pool — the canonical pattern from test_admin_led_settings.py.
     """
+    if not os.environ.get("SESSION_SECRET"):
+        os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
+
+    from gruvax.api.deps import get_pool, require_admin
     from gruvax.app import create_app
 
     app = create_app()
     app.state.mqtt = mqtt_client
     app.state.mqtt_ok = mqtt_client is not None
     app.state.settings_cache = dict(SETTINGS_CACHE)
-
-    # Provide a minimal db_pool mock so require_admin's pool dep resolves.
-    # The pool is never actually queried in these tests (admin session is mocked).
     app.state.db_pool = _make_pool()
+
+    # Override require_admin to skip session/CSRF verification
+    app.dependency_overrides[require_admin] = _stub_require_admin
+
+    # Override get_pool to return our mock pool
+    mock_pool = _make_pool()
+
+    async def _stub_get_pool() -> Any:
+        return mock_pool
+
+    app.dependency_overrides[get_pool] = _stub_get_pool
 
     return app
 
@@ -358,8 +377,20 @@ def _make_app_with_mqtt(mqtt_client: Any | None) -> Any:
 
 @pytest.mark.asyncio
 async def test_off_endpoint_requires_admin() -> None:
-    """POST /api/admin/leds/off without a session returns 401 (T-06-12, access control)."""
-    app = _make_app_with_mqtt(AsyncMock())
+    """POST /api/admin/leds/off without admin override returns 401 (T-06-12, access control).
+
+    Uses a fresh app with NO dependency overrides so require_admin is real.
+    """
+    if not os.environ.get("SESSION_SECRET"):
+        os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
+
+    from gruvax.app import create_app
+
+    app = create_app()
+    app.state.mqtt = AsyncMock()
+    app.state.mqtt_ok = True
+    app.state.settings_cache = {}
+    app.state.db_pool = _make_pool()
 
     async with AsyncClient(
         transport=ASGITransport(app=app), base_url="http://test"
@@ -373,23 +404,16 @@ async def test_off_endpoint_requires_admin() -> None:
 
 @pytest.mark.asyncio
 async def test_diagnostic_endpoint_returns_run_id() -> None:
-    """POST /api/admin/leds/diagnostic (with admin session) returns 200 with
+    """POST /api/admin/leds/diagnostic (with admin session via override) returns 200 with
     {"run_id": ..., "started_at": ...} immediately (D-08 — instant ack).
     """
     from gruvax.mqtt import publishers
 
     app = _make_app_with_mqtt(AsyncMock())
 
-    # Mock require_admin to simulate a valid admin session
-    async def _mock_require_admin(request: Any, pool: Any) -> dict[str, str]:
-        return {"session_id": "test-session-id"}
-
-    with patch("gruvax.api.admin.leds.require_admin", _mock_require_admin), \
-         patch.object(publishers, "run_diagnostic", new=AsyncMock(return_value=None)):
+    with patch.object(publishers, "run_diagnostic", new=AsyncMock(return_value=None)):
         async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test",
-            headers={"X-CSRF-Token": "test-csrf"},
-            cookies={"gruvax_csrf": "test-csrf"},
+            transport=ASGITransport(app=app), base_url="http://test"
         ) as client:
             res = await client.post("/api/admin/leds/diagnostic")
 
@@ -409,17 +433,10 @@ async def test_off_endpoint_degraded() -> None:
     """
     app = _make_app_with_mqtt(None)
 
-    # Mock require_admin to simulate a valid admin session
-    async def _mock_require_admin(request: Any, pool: Any) -> dict[str, str]:
-        return {"session_id": "test-session-id"}
-
-    with patch("gruvax.api.admin.leds.require_admin", _mock_require_admin):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test",
-            headers={"X-CSRF-Token": "test-csrf"},
-            cookies={"gruvax_csrf": "test-csrf"},
-        ) as client:
-            res = await client.post("/api/admin/leds/off")
+    async with AsyncClient(
+        transport=ASGITransport(app=app), base_url="http://test"
+    ) as client:
+        res = await client.post("/api/admin/leds/off")
 
     assert res.status_code == 200, (
         f"Expected 200 in degraded mode; got {res.status_code}: {res.text}"
