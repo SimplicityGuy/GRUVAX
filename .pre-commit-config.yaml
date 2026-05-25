@@ -108,7 +108,7 @@ repos:
         pass_filenames: false
       - id: tsc
         name: tsc (type check)
-        entry: npm --prefix frontend exec tsc -- --noEmit -p tsconfig.app.json
+        entry: npm --prefix frontend exec tsc -- --noEmit -p frontend/tsconfig.app.json
         language: system
         files: '^frontend/src/.*\.(ts|tsx)$'
         pass_filenames: false

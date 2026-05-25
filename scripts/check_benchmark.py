@@ -34,7 +34,10 @@ def _p95_ms(stats: dict[str, object]) -> tuple[float, str]:
         rank = max(0, min(len(samples) - 1, math.ceil(0.95 * len(samples)) - 1))
         return samples[rank] * 1000.0, "p95"
     mean_s = stats.get("mean", float("inf"))
-    return float(mean_s) * 1000.0 if isinstance(mean_s, (int, float)) else float("inf"), "mean(fallback)"
+    return float(mean_s) * 1000.0 if isinstance(mean_s, (int, float)) else float(
+        "inf"
+    ), "mean(fallback)"
+
 
 # SLO budgets in milliseconds (seconds * 1000 conversion is applied below)
 _BUDGETS: dict[str, float] = {

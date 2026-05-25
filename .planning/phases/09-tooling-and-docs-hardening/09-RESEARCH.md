@@ -877,7 +877,7 @@ from reading the codebase:
 ## Data Model
 
 ### Schemas
-- `gruvax` — owned schema; tables: units, cube_boundaries, cut_points, 
+- `gruvax` — owned schema; tables: units, cube_boundaries, cut_points,
   width_overrides, boundary_history, admin_sessions, settings, record_stats
 - `gruvax_dev` / `discogsography` — upstream schema (read-only)
 
@@ -919,7 +919,7 @@ Two-level interpolation (segment-aware, Phase 5):
 2. Offset by fractional widths of preceding labels in the bin
 3. Interpolate by row-rank within the segment
 
-Returns `LocateResult{primary_cube, label_span, sub_cube_interval, confidence, 
+Returns `LocateResult{primary_cube, label_span, sub_cube_interval, confidence,
 generated_at, estimator_version}`.
 
 Fallback: §4.8 cube-only when snapshot/segment unavailable.
