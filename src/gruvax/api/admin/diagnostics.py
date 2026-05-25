@@ -59,12 +59,8 @@ async def get_diagnostics(
         pool, phantom_boundary_count, recent_logs.
     """
     # ── Ring buffer reads (from app.state, set by Plan 01/03 lifespan) ──────
-    slow_ring: deque[dict[str, Any]] = getattr(
-        request.app.state, "slow_query_ring", deque()
-    )
-    log_ring: deque[dict[str, Any]] = getattr(
-        request.app.state, "log_ring_buffer", deque()
-    )
+    slow_ring: deque[dict[str, Any]] = getattr(request.app.state, "slow_query_ring", deque())
+    log_ring: deque[dict[str, Any]] = getattr(request.app.state, "log_ring_buffer", deque())
 
     # ── sync_age_seconds ────────────────────────────────────────────────────
     # Prefer the cached value on app.state (set by background task, Plan 01).

@@ -136,17 +136,14 @@ async def test_source_label(client, four_cube_boundaries, db_pool) -> None:  # t
     # Verify boundary_history rows have source='wizard'
     async with db_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT DISTINCT source FROM gruvax.boundary_history"
-            " WHERE change_set_id = %s",
+            "SELECT DISTINCT source FROM gruvax.boundary_history WHERE change_set_id = %s",
             (change_set_id,),
         )
         rows = await cur.fetchall()
 
     assert rows, f"No history rows found for change_set_id {change_set_id}"
     sources = {r[0] for r in rows}
-    assert sources == {"wizard"}, (
-        f"Expected source='wizard' in boundary_history, got: {sources}"
-    )
+    assert sources == {"wizard"}, f"Expected source='wizard' in boundary_history, got: {sources}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -187,8 +184,7 @@ async def test_reshuffle_source(client, four_cube_boundaries, db_pool) -> None: 
 
     async with db_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT DISTINCT source FROM gruvax.boundary_history"
-            " WHERE change_set_id = %s",
+            "SELECT DISTINCT source FROM gruvax.boundary_history WHERE change_set_id = %s",
             (change_set_id,),
         )
         rows = await cur.fetchall()

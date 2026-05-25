@@ -347,7 +347,9 @@ async def test_0005_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no
         capture_output=True,
         text=True,
     )
-    assert result.returncode == 0, f"alembic downgrade 0004 failed:\n{result.stdout}\n{result.stderr}"
+    assert result.returncode == 0, (
+        f"alembic downgrade 0004 failed:\n{result.stdout}\n{result.stderr}"
+    )
 
     # Verify segment_overrides is gone after downgrade
     exists_after_down = await _table_exists(migrate_pool, "segment_overrides")

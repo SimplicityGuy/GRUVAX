@@ -19,9 +19,6 @@ No real collection data — only made-up labels and catalog numbers.
 
 from __future__ import annotations
 
-import io
-import textwrap
-
 import pytest
 import pytest_asyncio
 from asgi_lifespan import LifespanManager
@@ -76,13 +73,13 @@ def _make_synthetic_yaml(cubes: list[dict]) -> bytes:
             f"    col: {c['col']}\n"
             f"    is_empty: {str(c.get('is_empty', False)).lower()}\n"
             + (
-                f"    first_label: \"{c['first_label']}\"\n"
-                f"    first_catalog: \"{c['first_catalog']}\"\n"
+                f'    first_label: "{c["first_label"]}"\n'
+                f'    first_catalog: "{c["first_catalog"]}"\n'
                 if not c.get("is_empty")
                 else ""
             )
         )
-    content = "version: \"1\"\ncubes:\n" + "".join(cube_lines)
+    content = 'version: "1"\ncubes:\n' + "".join(cube_lines)
     return content.encode()
 
 
@@ -275,9 +272,7 @@ async def test_phantom_row_rejected(client) -> None:  # type: ignore[no-untyped-
         f"Expected 400 from phantom row import, got {response.status_code}: {response.text}"
     )
     body = response.json()
-    assert body.get("type") == "phantom_boundary", (
-        f"Expected type='phantom_boundary', got: {body}"
-    )
+    assert body.get("type") == "phantom_boundary", f"Expected type='phantom_boundary', got: {body}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -424,7 +419,8 @@ async def test_atomicity(client, four_cube_boundaries) -> None:  # type: ignore[
     assert auth, "Login must be available for atomicity test"
 
     # Valid cubes followed by one phantom — the phantom should roll back all writes
-    mixed_cubes = list(four_cube_boundaries) + [
+    mixed_cubes = [
+        *list(four_cube_boundaries),
         {
             "unit_id": 1,
             "row": 3,
@@ -432,7 +428,7 @@ async def test_atomicity(client, four_cube_boundaries) -> None:  # type: ignore[
             "first_label": "Phantom Mid Import ZZZZ",
             "first_catalog": "PHANTOM-MID-9999",
             "is_empty": False,
-        }
+        },
     ]
     yaml_bytes = _make_synthetic_yaml(mixed_cubes)
     response = await client.post(

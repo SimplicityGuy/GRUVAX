@@ -16,7 +16,6 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-
 # ── Synthetic data strategy ───────────────────────────────────────────────────
 #
 # Labels and catalog prefixes are entirely made-up.
@@ -60,7 +59,7 @@ def synthetic_yaml_import(draw: st.DrawFn) -> str:  # type: ignore[type-arg]
     )
 
     cube_entries = []
-    for (uid, row, col), (lbl_name, lbl_prefix) in zip(addresses, label_choices):
+    for (uid, row, col), (lbl_name, lbl_prefix) in zip(addresses, label_choices, strict=False):
         idx = uid * 100 + row * 10 + col
         cube_entries.append(
             {
@@ -74,7 +73,10 @@ def synthetic_yaml_import(draw: st.DrawFn) -> str:  # type: ignore[type-arg]
         )
 
     return yaml.dump(
-        {"version": "1", "cubes": sorted(cube_entries, key=lambda c: (c["unit_id"], c["row"], c["col"]))},
+        {
+            "version": "1",
+            "cubes": sorted(cube_entries, key=lambda c: (c["unit_id"], c["row"], c["col"])),
+        },
         default_flow_style=False,
         allow_unicode=True,
         sort_keys=True,
@@ -164,7 +166,7 @@ def test_yaml_import_parse_idempotent(yaml_str: str) -> None:
         f"{len(first_sorted)} → {len(second_sorted)}"
     )
 
-    for f, s in zip(first_sorted, second_sorted):
+    for f, s in zip(first_sorted, second_sorted, strict=False):
         assert (f["unit_id"], f["row"], f["col"]) == (s["unit_id"], s["row"], s["col"]), (
             f"Address changed across parse cycles: {f} vs {s}"
         )

@@ -17,7 +17,6 @@ import yaml
 
 from gruvax.io.boundary_yaml import CutPointEntry, parse_yaml_boundaries, serialize_boundaries_yaml
 
-
 # ── Fixture data ──────────────────────────────────────────────────────────────
 
 VALID_YAML = textwrap.dedent("""\
@@ -40,6 +39,7 @@ VALID_YAML = textwrap.dedent("""\
 
 
 # ── Parse correctness tests ───────────────────────────────────────────────────
+
 
 def test_parse_known_document() -> None:
     """parse_yaml_boundaries returns CutPointEntry list with correct types."""
@@ -100,12 +100,19 @@ def test_parse_empty_cubes_list() -> None:
 
 # ── Serialize correctness tests ───────────────────────────────────────────────
 
+
 def test_serialize_produces_valid_yaml() -> None:
     """serialize_boundaries_yaml output is valid YAML with version field."""
     entries = [
-        CutPointEntry(unit_id=1, row=0, col=0,
-                      first_label="ECM", first_catalog="ECM 1001",
-                      is_empty=False, overrides={}),
+        CutPointEntry(
+            unit_id=1,
+            row=0,
+            col=0,
+            first_label="ECM",
+            first_catalog="ECM 1001",
+            is_empty=False,
+            overrides={},
+        ),
     ]
     result = serialize_boundaries_yaml(entries)
     data = yaml.safe_load(result)
@@ -116,9 +123,15 @@ def test_serialize_produces_valid_yaml() -> None:
 def test_serialize_empty_entry_omits_label_catalog_overrides() -> None:
     """is_empty=True entries omit first_label, first_catalog, overrides in YAML."""
     entries = [
-        CutPointEntry(unit_id=1, row=0, col=0,
-                      first_label=None, first_catalog=None,
-                      is_empty=True, overrides={}),
+        CutPointEntry(
+            unit_id=1,
+            row=0,
+            col=0,
+            first_label=None,
+            first_catalog=None,
+            is_empty=True,
+            overrides={},
+        ),
     ]
     result = serialize_boundaries_yaml(entries)
     data = yaml.safe_load(result)
@@ -132,12 +145,33 @@ def test_serialize_empty_entry_omits_label_catalog_overrides() -> None:
 def test_serialize_sorts_by_unit_row_col() -> None:
     """Serialized cubes are sorted by (unit_id, row, col)."""
     entries = [
-        CutPointEntry(unit_id=2, row=1, col=0, first_label="A", first_catalog="A-001",
-                      is_empty=False, overrides={}),
-        CutPointEntry(unit_id=1, row=0, col=3, first_label="B", first_catalog="B-001",
-                      is_empty=False, overrides={}),
-        CutPointEntry(unit_id=1, row=0, col=1, first_label="C", first_catalog="C-001",
-                      is_empty=False, overrides={}),
+        CutPointEntry(
+            unit_id=2,
+            row=1,
+            col=0,
+            first_label="A",
+            first_catalog="A-001",
+            is_empty=False,
+            overrides={},
+        ),
+        CutPointEntry(
+            unit_id=1,
+            row=0,
+            col=3,
+            first_label="B",
+            first_catalog="B-001",
+            is_empty=False,
+            overrides={},
+        ),
+        CutPointEntry(
+            unit_id=1,
+            row=0,
+            col=1,
+            first_label="C",
+            first_catalog="C-001",
+            is_empty=False,
+            overrides={},
+        ),
     ]
     result = serialize_boundaries_yaml(entries)
     data = yaml.safe_load(result)
@@ -148,8 +182,11 @@ def test_serialize_sorts_by_unit_row_col() -> None:
 def test_overrides_survive_roundtrip() -> None:
     """Overrides {"Atlantic": 0.45, "Blue Note": 0.55} survive serialize → parse."""
     entry = CutPointEntry(
-        unit_id=1, row=0, col=0,
-        first_label="Atlantic", first_catalog="SD 8001",
+        unit_id=1,
+        row=0,
+        col=0,
+        first_label="Atlantic",
+        first_catalog="SD 8001",
         is_empty=False,
         overrides={"Atlantic": 0.45, "Blue Note": 0.55},
     )
@@ -160,6 +197,7 @@ def test_overrides_survive_roundtrip() -> None:
 
 
 # ── Security test (yaml.safe_load rejects arbitrary tags) ────────────────────
+
 
 def test_safe_load_rejects_python_object_tag() -> None:
     """YAML with !!python/object tag is rejected (safe_load does not execute it)."""

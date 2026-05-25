@@ -19,7 +19,6 @@ from __future__ import annotations
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
-
 # ── Synthetic data strategy ───────────────────────────────────────────────────
 #
 # Labels and catalog prefixes are entirely made-up.
@@ -73,8 +72,13 @@ def synthetic_cut_set(draw: st.DrawFn) -> list[dict]:  # type: ignore[type-arg]
             unique=True,
         )
     )
-    label_choices = draw(st.lists(_LABEL_STRATEGY, min_size=len(addresses), max_size=len(addresses)))
-    return [_make_cube_entry(uid, row, col, lbl) for (uid, row, col), lbl in zip(addresses, label_choices)]
+    label_choices = draw(
+        st.lists(_LABEL_STRATEGY, min_size=len(addresses), max_size=len(addresses))
+    )
+    return [
+        _make_cube_entry(uid, row, col, lbl)
+        for (uid, row, col), lbl in zip(addresses, label_choices, strict=False)
+    ]
 
 
 # ── Round-trip identity helper ────────────────────────────────────────────────
@@ -169,7 +173,7 @@ def test_export_roundtrip_identity(cubes: list[dict]) -> None:
         f"Round-trip changed cube count: {len(original_sorted)} → {len(restored_sorted)}"
     )
 
-    for orig, rest in zip(original_sorted, restored_sorted):
+    for orig, rest in zip(original_sorted, restored_sorted, strict=False):
         assert (orig["unit_id"], orig["row"], orig["col"]) == (
             rest["unit_id"],
             rest["row"],

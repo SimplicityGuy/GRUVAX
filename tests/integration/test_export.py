@@ -69,6 +69,7 @@ async def test_export_returns_yaml(client) -> None:  # type: ignore[no-untyped-d
     )
     # Body must be parseable YAML with a 'cubes' key
     import yaml
+
     data = yaml.safe_load(response.text)
     assert isinstance(data, dict), f"Export body must be a YAML dict, got: {type(data)}"
     assert "cubes" in data, f"Export YAML missing 'cubes' key: {data}"
@@ -93,6 +94,7 @@ async def test_overrides_in_export(client) -> None:  # type: ignore[no-untyped-d
         f"Expected 200 from export/boundaries.yaml, got {response.status_code}: {response.text}"
     )
     import yaml
+
     data = yaml.safe_load(response.text)
     # If any cube has overrides, they must be serialized under an 'overrides' key
     # (this assertion checks the shape contract; GREEN when export endpoint lands)

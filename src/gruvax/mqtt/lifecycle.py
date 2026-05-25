@@ -58,9 +58,7 @@ from typing import Any
 
 import aiomqtt
 
-from gruvax.mqtt import topics
 from gruvax.mqtt.publishers import fan_out_illuminate, publish_ambient
-from gruvax.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -76,10 +74,11 @@ _RETAIN_MODE_MAX_HIGHLIGHTS = 64
 
 # ── HighlightRegistry ─────────────────────────────────────────────────────────
 
+
 class _RegistryEntry:
     """Internal: one registered highlight."""
 
-    __slots__ = ("task", "cubes")
+    __slots__ = ("cubes", "task")
 
     def __init__(self, task: asyncio.Task[None], cubes: list[dict[str, int]]) -> None:
         self.task = task
@@ -126,6 +125,7 @@ class HighlightRegistry:
 
 # ── schedule_revert ───────────────────────────────────────────────────────────
 
+
 async def schedule_revert(
     registry: HighlightRegistry,
     client: aiomqtt.Client | None,
@@ -169,6 +169,7 @@ async def schedule_revert(
 
 
 # ── illuminate_with_lifecycle ─────────────────────────────────────────────────
+
 
 async def illuminate_with_lifecycle(
     registry: HighlightRegistry,
@@ -231,7 +232,9 @@ async def illuminate_with_lifecycle(
         key = (cube_dict["unit_id"], cube_dict["row"], cube_dict["col"])
         if key not in seen:
             seen.add(key)
-            affected.append({"unit_id": cube_dict["unit_id"], "row": cube_dict["row"], "col": cube_dict["col"]})
+            affected.append(
+                {"unit_id": cube_dict["unit_id"], "row": cube_dict["row"], "col": cube_dict["col"]}
+            )
 
     # ── Default mode: cancel prior + immediate ambient revert ─────────────────
     if not retain_mode:
@@ -299,7 +302,7 @@ async def illuminate_with_lifecycle(
 
     try:
         delay_seconds = int(str(ttl_raw).strip('"'))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         delay_seconds = 900 if retain_mode else 180
         logger.warning(
             "Invalid TTL value %r; falling back to %d seconds",
@@ -330,6 +333,7 @@ async def illuminate_with_lifecycle(
 
 
 # ── cancel_and_revert_all ─────────────────────────────────────────────────────
+
 
 async def cancel_and_revert_all(
     registry: HighlightRegistry,

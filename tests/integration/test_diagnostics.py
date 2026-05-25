@@ -135,9 +135,7 @@ async def test_counters(diag_client) -> None:  # type: ignore[no-untyped-def]
         "phantom_boundary_count",
         "recent_logs",
     }
-    assert required_keys.issubset(body.keys()), (
-        f"Missing keys: {required_keys - body.keys()}"
-    )
+    assert required_keys.issubset(body.keys()), f"Missing keys: {required_keys - body.keys()}"
 
     # pool sub-dict shape
     pool_val = body["pool"]
@@ -157,9 +155,7 @@ async def test_counters(diag_client) -> None:  # type: ignore[no-untyped-def]
     )
 
     # phantom_boundary_count is a non-negative int
-    assert isinstance(body["phantom_boundary_count"], int), (
-        "phantom_boundary_count must be an int"
-    )
+    assert isinstance(body["phantom_boundary_count"], int), "phantom_boundary_count must be an int"
     assert body["phantom_boundary_count"] >= 0, "phantom_boundary_count must be >= 0"
 
     # recent_logs is a list
@@ -213,9 +209,7 @@ async def test_reset_stats(diag_client, db_pool) -> None:  # type: ignore[no-unt
 
     # Find a release_id that exists in v_collection (for the JOIN to work)
     async with db_pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            "SELECT release_id FROM gruvax.v_collection LIMIT 1"
-        )
+        await cur.execute("SELECT release_id FROM gruvax.v_collection LIMIT 1")
         row = await cur.fetchone()
 
     if row is None:
