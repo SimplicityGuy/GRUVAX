@@ -1,10 +1,11 @@
 ---
 phase: 9
 slug: tooling-and-docs-hardening
-status: draft
+status: validated
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-05-25
+validated: 2026-05-25
 ---
 
 # Phase 9 — Validation Strategy
@@ -41,28 +42,28 @@ created: 2026-05-25
 
 | Concern | Plan/Wave | Threat Ref | Secure/Correct Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|-----------|------------|--------------------------|-----------|-------------------|-------------|--------|
-| Log ring shape preserved | structlog wave | — | `GET /api/admin/diagnostics` returns `recent_logs` of `{ts, level, logger, msg}` dicts | Integration | `uv run pytest tests/integration/test_diagnostics.py -q` | ✅ exists | ⬜ pending |
-| Ring scoping (no leak) | structlog wave | T-9 (secret leak to admin UI) | Third-party loggers do NOT appear in `recent_logs` | Integration | Same test + new assertion on logger names | ❌ W0 (add assertion) | ⬜ pending |
-| Env-driven log level | structlog wave | — | `LOG_LEVEL=DEBUG` env raises effective level on `gruvax` logger | Unit | `uv run pytest tests/unit/ -q -k log_level` | ❌ W0 (add test if absent) | ⬜ pending |
-| Alembic round-trip gate | CI wave | — | `alembic upgrade head && downgrade base && upgrade head` clean | CI gate | preserved verbatim in new `test.yml` | ✅ exists in ci.yml | ⬜ pending |
-| Benchmark SLO gate | CI wave | — | `scripts/check_benchmark.py` passes p95 SLO | CI gate | preserved verbatim in new `test.yml` | ✅ exists in ci.yml | ⬜ pending |
-| Local dev build (deploy flip) | deploy wave | — | `compose.override.yaml` shadows GHCR image; `just up`/`just build` build locally | Smoke | `just demo` / manual | n/a | ⬜ pending |
-| pre-commit honest-green | lint+tooling wave | — | `pre-commit run --all-files` exits 0 (all 69 ruff + infra-linter findings fixed) | pre-commit | `uv run pre-commit run --all-files` | ❌ W0 (config + cleanup) | ⬜ pending |
+| Log ring shape preserved | 09-01 / W1 | T-9-SHAPE | `GET /api/admin/diagnostics` returns `recent_logs` of `{ts, level, logger, msg}` dicts | Integration | `uv run pytest tests/integration/test_diagnostics.py::test_recent_logs_shape -q` | ✅ `test_diagnostics.py:248` | ✅ green |
+| Ring scoping (no leak) | 09-01 / W1 | T-9-IL (secret leak to admin UI) | Third-party loggers (psycopg/uvicorn/…) do NOT appear in `recent_logs` | Integration | `uv run pytest tests/integration/test_diagnostics.py::test_recent_logs_ring_scoping -q` | ✅ `test_diagnostics.py:290` | ✅ green |
+| Env-driven log level | 09-01 / W1 | — | `LOG_LEVEL` env raises/lowers effective level on `gruvax` logger | Unit | `uv run pytest tests/unit/test_logging_config.py -q` | ✅ `test_logging_config.py` (Wave-0 regression) | ✅ green |
+| Handler idempotency (re-config) | 09-08 / fix | — | `configure_logging()` twice does NOT duplicate ring entries (WR-02 fix) | Unit | `uv run pytest tests/unit/test_logging_config.py -q` | ✅ added in 09-08 | ✅ green |
+| Alembic round-trip gate | 09-02 / W1 | — | `alembic upgrade head && downgrade base && upgrade head` clean | CI gate | preserved verbatim in `test.yml:83-85` (OBS-03) | ✅ `test.yml` | ✅ in CI |
+| Benchmark SLO gate | 09-02 / W1 | — | `scripts/check_benchmark.py` passes p95 SLO | CI gate | preserved verbatim in `test.yml` (SC5) | ✅ `test.yml` | ✅ in CI |
+| Local dev build (deploy flip) | 09-05 / W3 | T-9-OVERRIDE | `compose.override.yaml` shadows GHCR image; `just up`/`just build` build locally | Smoke | `just demo` / manual | n/a (manual) | ☐ manual-only |
+| pre-commit honest-green | 09-03+09-04 / W2 | T-9-GATEHOLE | `pre-commit run --all-files` exits 0 (all 65 ruff + infra-linter findings fixed) | pre-commit | `uv run pre-commit run --all-files` | ✅ `.pre-commit-config.yaml` | ✅ green (exit 0) |
 
-*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
+*Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky · ☐ manual-only*
 
 ---
 
 ## Wave 0 Requirements
 
-- [ ] Add ring-scoping assertion to `tests/integration/test_diagnostics.py` — covers
-      "third-party logger records must NOT appear in `recent_logs`" (the secret-leak guard).
-- [ ] Ensure an env-driven log-level test exists (`tests/unit/`) — covers D-02; add if absent.
-- [ ] Prettier config (`frontend/.prettierrc.json` or `prettier` key in `package.json`) must
-      exist before the `prettier --check` pre-commit hook can run (D-03 — prettier not yet installed).
+- [x] Add ring-scoping assertion to `tests/integration/test_diagnostics.py` — covers
+      "third-party logger records must NOT appear in `recent_logs`" (the secret-leak guard). → `test_recent_logs_ring_scoping` (09-01).
+- [x] Ensure an env-driven log-level test exists (`tests/unit/`) → `tests/unit/test_logging_config.py` Wave-0 regression (09-01).
+- [x] Prettier config (`frontend/.prettierrc.json`) exists before the `prettier --check` hook runs (09-03).
 
-*No new test files needed for the structlog migration — the ring-shape integration test
-already exists; Wave 0 only adds assertions and the prettier config prerequisite.*
+*All Wave-0 prerequisites landed in Wave 1 / Wave 2; the structlog ring-shape integration
+test already existed and was extended with the scoping assertion.*
 
 ---
 
@@ -79,11 +80,27 @@ already exists; Wave 0 only adds assertions and the prettier config prerequisite
 
 ## Validation Sign-Off
 
-- [ ] All regression-prevention concerns have an automated verify or a Wave 0 dependency
-- [ ] Sampling continuity: no 3 consecutive tasks without automated verify
-- [ ] Wave 0 covers all MISSING references (ring-scoping assertion, log-level test, prettier config)
-- [ ] No watch-mode flags in any verify command
-- [ ] Feedback latency < ~10s (quick) per task commit
-- [ ] `nyquist_compliant: true` set in frontmatter (set by planner once per-task verify map is complete)
+- [x] All regression-prevention concerns have an automated verify or a Wave 0 dependency
+- [x] Sampling continuity: no 3 consecutive tasks without automated verify
+- [x] Wave 0 covers all MISSING references (ring-scoping assertion, log-level test, prettier config) — all landed
+- [x] No watch-mode flags in any verify command
+- [x] Feedback latency < ~10s (quick) per task commit
+- [x] `nyquist_compliant: true` set in frontmatter
+
+**Approval:** approved 2026-05-25 (post-execution audit — all automated concerns COVERED + green; deploy smoke is manual-only by nature)
+
+---
+
+## Validation Audit 2026-05-25
+
+| Metric | Count |
+|--------|-------|
+| Concerns audited | 8 |
+| COVERED (automated, green) | 7 (5 unit/integration + 2 CI gates) |
+| Manual-only | 1 (pull-based deploy smoke on host) |
+| MISSING | 0 |
+| Resolved this audit | 0 (all closed during execution) |
+
+**Verdict:** NYQUIST-COMPLIANT. All regression-prevention concerns for this no-product-behavior-change phase have automated verification (or are CI gates preserved verbatim in `test.yml`). The single manual-only item (live-host pull-based deploy) cannot be automated without a deploy host. Regression tests verified green this audit: `test_recent_logs_shape`, `test_recent_logs_ring_scoping`, `test_logging_config.py` (incl. handler-idempotency), `pre-commit run --all-files` exit 0, `ruff check` 0. (Note: integration tests require the dev Postgres up + synthetic-seeded — see [[project_compose_flip_teardown_dev_db]].)
 
 **Approval:** pending
