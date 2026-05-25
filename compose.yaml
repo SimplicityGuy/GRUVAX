@@ -88,6 +88,11 @@ services:
       retries: 5
       start_period: 30s
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # Local dev Postgres. A single `just up` brings this up with data: on first
   # start the mounted fixtures/synth_collection.sql runs via initdb, creating the
@@ -119,6 +124,11 @@ services:
       retries: 20
       start_period: 10s
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   mosquitto:
     image: eclipse-mosquitto:2.1.2-alpine
@@ -141,6 +151,11 @@ services:
       retries: 3
       start_period: 10s
     restart: unless-stopped
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
 
   # ── Dev / diagnostics only ──────────────────────────────────────────────────
   # MQTT Explorer (web UI) for inspecting broker traffic while building the LED
