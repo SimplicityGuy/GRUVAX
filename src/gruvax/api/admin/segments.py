@@ -295,9 +295,8 @@ async def put_bin_cut(
         await bus.publish(
             "boundary_changed",
             {
-                "type": "boundary_changed",
+                "cube_ids": [{"unit": unit_id, "row": row, "col": col}],
                 "change_set_id": change_set_id,
-                "cubes": [{"unit_id": unit_id, "row": row, "col": col}],
             },
         )
 
@@ -438,9 +437,8 @@ FROM gruvax.segment_overrides
         await bus.publish(
             "boundary_changed",
             {
-                "type": "boundary_changed",
+                "cube_ids": [{"unit": unit_id, "row": row, "col": col}],
                 "change_set_id": None,
-                "cubes": [{"unit_id": unit_id, "row": row, "col": col}],
             },
         )
 
@@ -660,7 +658,7 @@ async def insert_cut(
                 new_is_empty=ie,
                 source="cut_insert",
             )
-            affected_cubes.append({"unit_id": uid, "row": r, "col": c})
+            affected_cubes.append({"unit": uid, "row": r, "col": c})
 
     # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
     cache.invalidate()
@@ -684,9 +682,8 @@ FROM gruvax.segment_overrides
         await bus.publish(
             "boundary_changed",
             {
-                "type": "boundary_changed",
+                "cube_ids": affected_cubes,
                 "change_set_id": change_set_id,
-                "cubes": affected_cubes,
             },
         )
 
