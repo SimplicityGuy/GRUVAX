@@ -3,10 +3,10 @@
  *
  * Full implementation replacing the 07-04 stub.
  *
- * Flow: file drop/upload → parse hint → validate per-row errors with
+ * Flow: file drop/upload → dry_run preview (no write) → per-row errors with
  * did-you-mean chips → partial-import warning → affected-cubes diff preview
  * (mini-Kallax at 40px cells) → COMMIT IMPORT gated until zero errors →
- * ConfirmationScreen with change_set_id + Revert tap (D-15).
+ * real atomic commit → ConfirmationScreen with change_set_id + Revert tap (D-15).
  *
  * Design constraints (CLAUDE.md + 07-UI-SPEC.md):
  * - All colors via --gruvax-* tokens; NO hardcoded hex.
@@ -14,6 +14,17 @@
  * - Movement counts MUST be suffixed "(approx.)" when non-zero (Pitfall 5).
  * - Partial-import warning MUST show when file cube count < total cubes (Pitfall 3).
  * - COMMIT IMPORT always visible, disabled (aria-disabled) until zero errors.
+ *
+ * G2/D-11 contract:
+ * - runValidation calls uploadImportBoundaries with dryRun=true → preview with NO write.
+ * - handleCommit calls uploadImportBoundaries with dryRun=false → atomic commit.
+ * - B1: runValidation NEVER assigns commitResult (the field is removed from ImportState).
+ *   The dry_run preview mints no change_set_id; storing a "pre-committed" result was
+ *   the exact no-op bug (T-0708-NOOP-COMMIT). handleCommit always posts for real.
+ * - W4: handleCommit always reaches the real uploadImportBoundaries(file, key, false)
+ *   call — it is NEVER short-circuited by an all-errors-fixed check.
+ * - W6: the 4xx error path reads err.body (the BulkSaveError parsed JSON) and feeds
+ *   it to parseServerErrors + parseDiff without re-parsing a stringified message.
  */
 
 import { useRef, useState } from 'react'
@@ -22,7 +33,6 @@ import {
   uploadImportBoundaries,
   BulkSaveError,
 } from '../../api/adminClient'
-import type { CommitResponse } from '../../api/types'
 import './admin.css'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -65,8 +75,9 @@ interface ImportState {
   totalCubes: number
   fileCubeCount: number
   commitError: string
+  /** Cleared on each new file selection. Only set inside handleCommit (non-dry-run).
+   *  Never set from runValidation (B1: dry_run mints no change_set_id). */
   idempotencyKey: string | null
-  commitResult: CommitResponse | null
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -135,7 +146,7 @@ function parseServerErrors(body: Record<string, unknown>): ImportError[] {
   return []
 }
 
-/** Parse diff preview from a 200 validate response (optional diff_preview field). */
+/** Parse diff preview from a 200 dry_run response (diff_preview + counts). */
 function parseDiff(body: Record<string, unknown>): { diff: DiffCube[]; fileCubeCount: number; totalCubes: number } {
   const diff: DiffCube[] = []
   let fileCubeCount = 0
@@ -317,7 +328,9 @@ export default function Import() {
     fileCubeCount: 0,
     commitError: '',
     idempotencyKey: null,
-    commitResult: null,
+    // Note: commitResult is intentionally absent from ImportState (B1).
+    // The dry_run preview mints no change_set_id; storing a pre-committed result
+    // was the no-op bug (T-0708-NOOP-COMMIT). handleCommit always posts for real.
   })
 
   const [isDragging, setIsDragging] = useState(false)
@@ -363,42 +376,28 @@ export default function Import() {
       diff: [],
       commitError: '',
       idempotencyKey: null,
-      commitResult: null,
     }))
 
-    // Upload for validation (a validate-only pass — server returns 400 with errors
-    // or 200 with diff preview; Import then gates the commit button).
+    // Run the dry_run preview — server validates + computes diff with NO write.
     void runValidation(file)
   }
 
   async function runValidation(file: File) {
-    // Use a temp idempotency key so we can detect if this is a retry;
-    // it is regenerated on actual commit to prevent replaying the validation call.
-    const tempKey = crypto.randomUUID()
+    // Call the dry_run preview endpoint: POST /api/admin/import/boundaries?dry_run=true
+    // This runs the full parse + validation pipeline server-side with NO DB write.
+    // On 200: diff preview body {total_cubes, file_cube_count, diff_preview}.
+    // On 400/422: validation error body (same shape as the commit path).
+    //
+    // B1 — NO-OP REGRESSION GUARD:
+    // runValidation MUST NOT assign idempotencyKey from this dry_run call and
+    // MUST NOT store any "commitResult". The dry_run preview mints no change_set_id.
+    // The ONLY idempotencyKey assignment is inside handleCommit (non-dry-run path).
     try {
-      // Call the import endpoint in validation-only mode by first sending without
-      // committing. The backend currently validates-then-writes atomically, so the
-      // UI's "validation" pass IS the commit. We use the gated COMMIT button to
-      // control when the user actually triggers the write.
-      // For this pre-commit preview, we call uploadImportBoundaries which goes through
-      // to the actual import route. If the server returns errors (400), we show them.
-      // If 200 is returned, we have a committed result — but per D-11 the user taps
-      // COMMIT IMPORT to confirm; we show the diff from the 400 body or a pre-flight.
-      //
-      // Implementation note: the import endpoint does validate-then-commit atomically.
-      // For the diff preview, we parse the 400 body if it exists. If no errors, we
-      // treat it as ready-to-commit (phase='validated'). The actual commit re-posts
-      // with the same file + a fresh idempotency key.
-      //
-      // A validate-only endpoint would be ideal here, but per RESEARCH Pattern 2
-      // the existing endpoint handles validate+write together. We call it here for
-      // the error preview, and calling it again on "COMMIT IMPORT" with a fresh key
-      // re-runs the same flow (idempotency key prevents duplicate writes).
-      const result = await uploadImportBoundaries(file, tempKey)
-      // If we got here, the server accepted the upload with zero errors.
-      // Diff data may be present on the 200 body if the endpoint supports it.
-      const diffBody = result as unknown as Record<string, unknown>
-      const { diff, fileCubeCount, totalCubes } = parseDiff(diffBody)
+      const previewResult = await uploadImportBoundaries(file, null, /*dryRun*/ true)
+      // 200 preview body — feed through parseDiff (same shape parseDiff already reads).
+      // Cast via unknown first since BoundariesDryRunPreview is a typed interface.
+      const previewBody = previewResult as unknown as Record<string, unknown>
+      const { diff, fileCubeCount, totalCubes } = parseDiff(previewBody)
       setState((prev) => ({
         ...prev,
         phase: 'validated',
@@ -406,34 +405,31 @@ export default function Import() {
         diff,
         fileCubeCount,
         totalCubes,
-        // Store the key so the commit step can detect the previous result
-        idempotencyKey: tempKey,
-        commitResult: result,
+        commitError: '',
+        // B1: do NOT assign idempotencyKey here. The commit will generate a fresh one.
       }))
     } catch (err) {
       if (err instanceof BulkSaveError) {
         if (err.status === 400 || err.status === 422) {
-          // Parse the structured error body for per-row display
-          try {
-            const body = JSON.parse(err.message.replace(/^.+?: /, '') || '{}') as Record<string, unknown>
-            const errors = parseServerErrors(body)
-            if (errors.length > 0) {
-              const { diff, fileCubeCount, totalCubes } = parseDiff(body)
-              setState((prev) => ({
-                ...prev,
-                phase: 'validated',
-                errors,
-                diff,
-                fileCubeCount,
-                totalCubes,
-              }))
-              return
-            }
-          } catch {
-            // JSON parse failed — fall through to generic error
+          // W6: read err.body (the full parsed JSON from BulkSaveError) — no re-parsing.
+          // Feed the same body object to both parseServerErrors and parseDiff.
+          const body = err.body
+          const errors = parseServerErrors(body)
+          if (errors.length > 0) {
+            const { diff, fileCubeCount, totalCubes } = parseDiff(body)
+            setState((prev) => ({
+              ...prev,
+              phase: 'validated',
+              errors,
+              diff,
+              fileCubeCount,
+              totalCubes,
+              commitError: '',
+            }))
+            return
           }
-          // Try to construct from BulkSaveError fields directly
-          const errors: ImportError[] = [{
+          // Fallback: no structured errors parsed — show generic error from BulkSaveError fields
+          const fallbackErrors: ImportError[] = [{
             row: 0,
             type: err.errorType ?? 'unknown',
             first_label: '',
@@ -446,8 +442,9 @@ export default function Import() {
           setState((prev) => ({
             ...prev,
             phase: 'validated',
-            errors,
+            errors: fallbackErrors,
             diff: [],
+            commitError: '',
           }))
         } else {
           setState((prev) => ({
@@ -478,7 +475,6 @@ export default function Import() {
       fileCubeCount: 0,
       commitError: '',
       idempotencyKey: null,
-      commitResult: null,
     })
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
@@ -519,31 +515,48 @@ export default function Import() {
   async function handleCommit() {
     if (!state.file || !canCommit) return
 
-    // If a previous validation call succeeded (idempotency key stored and commitResult present),
-    // navigate directly to confirmation without re-posting.
-    if (state.commitResult && state.idempotencyKey) {
-      const result = state.commitResult
-      setState((prev) => ({ ...prev, phase: 'done', commitResult: result }))
-      const ext = state.filename.split('.').pop()?.toLowerCase()
-      const source = ext === 'csv' ? 'csv' : 'yaml'
-      void navigate(
-        `/admin/wizard/done?change_set_id=${result.change_set_id}&applied=${result.applied}&source=${source}`,
-      )
-      return
-    }
+    // T-0708-NOOP-COMMIT + W4: The "skip re-post if we already have a commitResult"
+    // branch is REMOVED. This is the real atomic commit — it ALWAYS posts.
+    //
+    // W4 — chip-fixed path still posts: handleCommit MUST always call the real
+    // (non-dryRun) uploadImportBoundaries even when every error was chip-fixed.
+    // Applying did-you-mean chips only flips local `fixed` flags to enable the
+    // button; it does NOT pre-commit anything. The actual write always happens here.
+    //
+    // If the server still rejects (because file bytes were not actually edited),
+    // surface the returned errors again rather than silently committing.
 
-    // Otherwise post for real
     const key = crypto.randomUUID()
     setState((prev) => ({ ...prev, phase: 'committing', idempotencyKey: key, commitError: '' }))
     try {
-      const result = await uploadImportBoundaries(state.file, key)
-      setState((prev) => ({ ...prev, phase: 'done', commitResult: result }))
+      const result = await uploadImportBoundaries(state.file, key, /*dryRun*/ false)
+      // result is CommitResponse on the non-dry-run path
+      const commitData = result as { change_set_id: string; applied: number; source?: string }
       const ext = state.filename.split('.').pop()?.toLowerCase()
       const source = ext === 'csv' ? 'csv' : 'yaml'
       void navigate(
-        `/admin/wizard/done?change_set_id=${result.change_set_id}&applied=${result.applied}&source=${source}`,
+        `/admin/wizard/done?change_set_id=${commitData.change_set_id}&applied=${commitData.applied}&source=${source}`,
       )
-    } catch {
+    } catch (err) {
+      if (err instanceof BulkSaveError && (err.status === 400 || err.status === 422)) {
+        // Server rejected the commit (e.g. chip-fixes did not change file bytes) —
+        // surface the errors again so the user can edit the file directly.
+        const body = err.body
+        const errors = parseServerErrors(body)
+        if (errors.length > 0) {
+          const { diff, fileCubeCount, totalCubes } = parseDiff(body)
+          setState((prev) => ({
+            ...prev,
+            phase: 'validated',
+            errors,
+            diff,
+            fileCubeCount,
+            totalCubes,
+            commitError: '',
+          }))
+          return
+        }
+      }
       setState((prev) => ({
         ...prev,
         phase: 'error',
