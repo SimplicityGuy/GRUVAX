@@ -1,0 +1,100 @@
+# GRUVAX Test Suite — called by build.yml after the code-quality gate passes.
+#
+# Runs on every push and pull_request to main (via workflow_call from build.yml).
+# Uses the SYNTHETIC dataset only (fixtures/synth_collection.sql).
+# NEVER seeds the real collection CSV or background/ — those are gitignored
+# local-only references and must never enter CI or any Docker image.
+#
+# Key gates (hard-fail, no continue-on-error):
+#   1. Alembic round-trip (upgrade head -> downgrade base -> upgrade head) — OBS-03
+#   2. Benchmark SLO gate via scripts/check_benchmark.py — SC5
+#      search p95 <= 200 ms, locate p95 <= 50 ms on synthetic data
+
+name: Test
+
+on:
+  workflow_call:
+
+env:
+  CI: true
+  PYTHON_VERSION: "3.14"
+  NODE_VERSION: "26"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    services:
+      postgres:
+        image: postgres:18
+        env:
+          POSTGRES_USER: gruvax
+          POSTGRES_PASSWORD: gruvax
+          POSTGRES_DB: gruvax
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U gruvax -d gruvax"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+
+    env:
+      DATABASE_URL: "postgresql+psycopg://gruvax:gruvax@localhost:5432/gruvax"
+      OBSERVED_DISCOGSOGRAPHY_SCHEMA: "gruvax_dev"
+      SESSION_SECRET: "ci-test-secret-not-real"
+      LOG_LEVEL: "WARNING"
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Set up Just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3  # v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      # Seed ONLY the synthetic dataset — never the real collection CSV or background/
+      - name: Seed synthetic collection
+        run: psql postgresql://gruvax:gruvax@localhost:5432/gruvax < fixtures/synth_collection.sql
+
+      # OBS-03: Alembic round-trip — must exercise all migrations
+      # upgrade head -> downgrade base -> upgrade head confirms both paths are clean
+      - name: Alembic round-trip
+        run: |
+          uv run alembic upgrade head
+          uv run alembic downgrade base
+          uv run alembic upgrade head
+
+      # Full test suite (benchmarks are skipped by addopts --benchmark-disable)
+      - name: Test suite
+        run: uv run pytest tests/ -q --tb=short
+
+      # SC5: Benchmark SLO gate — HARD FAIL on regression (no continue-on-error)
+      # Runs locate benchmark (test_algorithm.py) + HTTP search benchmark (test_search_benchmark.py)
+      # then checks p95 via scripts/check_benchmark.py (search<=200ms, locate<=50ms)
+      - name: Benchmark SLO gate
+        run: |
+          uv run pytest \
+            tests/unit/test_algorithm.py::test_locate_benchmark \
+            tests/integration/test_search_benchmark.py::test_search_slo_benchmark \
+            --benchmark-only --benchmark-json=benchmark.json -q
+          uv run python scripts/check_benchmark.py benchmark.json
