@@ -21,7 +21,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 - [x] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness; a configurable idle/ambient baseline with timed highlight revert (server-scheduled) and an optional recently-found retain mode. (completed 2026-05-24)
 - [x] **Phase 7: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable. (completed 2026-05-24)
 - [x] **Phase 8: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof. (completed 2026-05-25)
-- [ ] **Phase 9: Tooling and docs hardening** - structlog + env-driven log level, GitHub Actions CI (incl. cleanup-cache + cleanup-images) + dependabot + pre-commit, update-project script, and a Phase 1–8 docs refresh (strip lux/nox). Closes out v1.x before the v2.0 multi-user milestone.
+- [x] **Phase 9: Tooling and docs hardening** - structlog + env-driven log level, GitHub Actions CI (incl. cleanup-cache + cleanup-images) + dependabot + pre-commit, update-project script, and a Phase 1–8 docs refresh (strip lux/nox). Closes out v1.x before the v2.0 multi-user milestone. (completed 2026-05-25)
 
 ## Phase Details
 
@@ -361,7 +361,7 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
   6. **`scripts/update-project.sh`** — adapt from `discogsography/scripts/update-project.sh` (justfile-delegating), specialized for GRUVAX.
   7. **Docs refresh** — capture the final Phase 1–8 design and **remove all `lux`/`nox` host references** from docs/CLAUDE.md.
 
-**Plans:** 5/6 plans executed
+**Plans:** 6/6 plans complete
 
 Plans:
 **Wave 1**
@@ -376,7 +376,7 @@ Plans:
 - [x] 09-05-PLAN.md — Pull-based deploy flip: compose.yaml->GHCR image + gitignored compose.override.yaml (+.example) + runbook lux-strip
 
 **Wave 4** *(blocked on 09-05)*
-- [ ] 09-06-PLAN.md — Docs refresh: new docs/ARCHITECTURE.md (Mermaid) + README/CLAUDE.md point at it + remaining lux-strip
+- [x] 09-06-PLAN.md — Docs refresh: new docs/ARCHITECTURE.md (Mermaid) + README/CLAUDE.md point at it + remaining lux-strip
 
 ## Backlog
 
