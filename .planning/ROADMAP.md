@@ -361,7 +361,7 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
   6. **`scripts/update-project.sh`** — adapt from `discogsography/scripts/update-project.sh` (justfile-delegating), specialized for GRUVAX.
   7. **Docs refresh** — capture the final Phase 1–8 design and **remove all `lux`/`nox` host references** from docs/CLAUDE.md.
 
-**Plans:** 2/6 plans executed
+**Plans:** 4/6 plans executed
 
 Plans:
 **Wave 1**
@@ -369,8 +369,8 @@ Plans:
 - [x] 09-02-PLAN.md — Six-workflow CI: build orchestrator gating code-quality -> test/security/build (GHCR publish) + cleanup-cache/cleanup-images; supersede ci.yml
 
 **Wave 2** *(09-03 blocked on 09-02; 09-04 blocked on 09-01)*
-- [ ] 09-03-PLAN.md — pre-commit (SHA-frozen, no cargo, +frontend/mypy hooks) + .yamllint + prettier install + dependabot + update-project.sh + just lint-precommit
-- [ ] 09-04-PLAN.md — Isolated lint cleanup (D-07): fix all 69 ruff errors (48 auto + 21 manual) -> honest-green gate, suite stays green
+- [x] 09-03-PLAN.md — pre-commit (SHA-frozen, no cargo, +frontend/mypy hooks) + .yamllint + prettier install + dependabot + update-project.sh + just lint-precommit
+- [x] 09-04-PLAN.md — Isolated lint cleanup (D-07): fix all 69 ruff errors (48 auto + 21 manual) -> honest-green gate, suite stays green
 
 **Wave 3** *(blocked on 09-02 + 09-03)*
 - [ ] 09-05-PLAN.md — Pull-based deploy flip: compose.yaml->GHCR image + gitignored compose.override.yaml (+.example) + runbook lux-strip
