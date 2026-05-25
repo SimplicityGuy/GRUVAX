@@ -1,6 +1,6 @@
-# GRUVAX CI — lint + type-check + test + Alembic round-trip + benchmark SLO gate
+# GRUVAX Test Suite — called by build.yml after the code-quality gate passes.
 #
-# Runs on every push and pull_request to main.
+# Runs on every push and pull_request to main (via workflow_call from build.yml).
 # Uses the SYNTHETIC dataset only (fixtures/synth_collection.sql).
 # NEVER seeds the real collection CSV or background/ — those are gitignored
 # local-only references and must never enter CI or any Docker image.
@@ -9,29 +9,22 @@
 #   1. Alembic round-trip (upgrade head -> downgrade base -> upgrade head) — OBS-03
 #   2. Benchmark SLO gate via scripts/check_benchmark.py — SC5
 #      search p95 <= 200 ms, locate p95 <= 50 ms on synthetic data
-#
-# Ruff lint/format and mypy are advisory-continue (continue-on-error: true)
-# because 64 pre-existing errors from Phase 1-7 source files exist. A follow-up
-# lint-debt cleanup is needed to make these hard-fail. The Alembic round-trip
-# and pytest-benchmark SLO gate remain the hard/blocking CI gates for this phase.
 
-name: CI
+name: Test
 
 on:
-  push:
-    branches: [main]
-  pull_request:
-    branches: [main]
+  workflow_call:
 
 env:
-  CI: "true"
+  CI: true
   PYTHON_VERSION: "3.14"
+  NODE_VERSION: "26"
 
 permissions:
   contents: read
 
 jobs:
-  ci:
+  test:
     runs-on: ubuntu-latest
     timeout-minutes: 15
 
@@ -58,42 +51,32 @@ jobs:
 
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
 
       - name: Set up uv
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
         with:
           version: "latest"
           enable-cache: true
 
       - name: Set up Python
-        uses: actions/setup-python@v5
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up Just
+        uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3  # v4
+        with:
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Install dependencies
         run: uv sync --frozen
-
-      # Lint and format checks are advisory for this phase due to 64 pre-existing
-      # ruff errors in Phase 1-7 source. A follow-up lint-debt cleanup will remove
-      # continue-on-error once the debt is cleared.
-      - name: Lint (ruff check)
-        run: uv run ruff check src/ tests/
-        continue-on-error: true
-
-      - name: Format check (ruff format)
-        run: uv run ruff format --check src/ tests/
-        continue-on-error: true
-
-      - name: Type check (mypy --strict)
-        run: uv run mypy --strict src/gruvax/
-        continue-on-error: true
 
       # Seed ONLY the synthetic dataset — never the real collection CSV or background/
       - name: Seed synthetic collection
         run: psql postgresql://gruvax:gruvax@localhost:5432/gruvax < fixtures/synth_collection.sql
 
-      # OBS-03: Alembic round-trip — must exercise migration 0008 (record_stats)
+      # OBS-03: Alembic round-trip — must exercise all migrations
       # upgrade head -> downgrade base -> upgrade head confirms both paths are clean
       - name: Alembic round-trip
         run: |

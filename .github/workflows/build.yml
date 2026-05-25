@@ -1,0 +1,112 @@
+# GRUVAX Build Orchestrator — code-quality gates test + build (D-01).
+#
+# Triggers on push/PR to main. Workflow-level permission is contents: read.
+# packages: write is scoped to the build job only (least privilege, T-9-PERM).
+#
+# Job graph:
+#   run-code-quality (gate)
+#     -> run-tests (needs: code-quality)
+#     -> run-security (needs: code-quality)
+#       -> build (needs: run-tests + run-security, packages: write)
+#         -> aggregate-results (always)
+
+name: Build
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+env:
+  CI: true
+  PYTHON_VERSION: "3.14"
+  NODE_VERSION: "26"
+  REGISTRY: ghcr.io
+
+permissions:
+  contents: read
+
+jobs:
+  run-code-quality:
+    uses: ./.github/workflows/code-quality.yml
+    secrets: inherit
+
+  run-tests:
+    needs: [run-code-quality]
+    uses: ./.github/workflows/test.yml
+    secrets: inherit
+
+  run-security:
+    needs: [run-code-quality]
+    uses: ./.github/workflows/security.yml
+    secrets: inherit
+    permissions:
+      contents: read
+      security-events: write
+
+  build:
+    needs: [run-tests, run-security]
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: read
+      packages: write
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set lowercase image name
+        run: echo "IMAGE_NAME=$(echo '${{ github.repository }}' | tr '[:upper:]' '[:lower:]')" >> "$GITHUB_ENV"
+
+      - name: Log in to GHCR
+        if: github.event_name != 'pull_request'
+        uses: docker/login-action@650006c6eb7dba73a995cc03b0b2d7f5ca915bee  # v4.2.0
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@d7f5e7f509e45cec5c76c4d5afdd7de93d0b3df5  # v4.1.0
+
+      - name: Extract Docker metadata
+        id: meta
+        uses: docker/metadata-action@80c7e94dd9b9319bd5eb7a0e0fe9291e23a2a2e9  # v6.1.0
+        with:
+          images: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}
+          tags: |
+            type=raw,value=latest,enable={{is_default_branch}}
+            type=sha
+
+      - name: Build and push
+        uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf  # v7.2.0
+        with:
+          context: .
+          push: ${{ github.event_name != 'pull_request' }}
+          tags: ${{ steps.meta.outputs.tags }}
+          labels: ${{ steps.meta.outputs.labels }}
+          build-args: |
+            GIT_SHA=${{ github.sha }}
+            BUILD_TIMESTAMP=${{ github.event.head_commit.timestamp }}
+
+  aggregate-results:
+    runs-on: ubuntu-latest
+    needs: [run-code-quality, run-tests, run-security, build]
+    if: always()
+    steps:
+      - name: Check all job results
+        run: |
+          if [[ "${{ needs.run-code-quality.result }}" != "success" ]] || \
+             [[ "${{ needs.run-tests.result }}" != "success" ]] || \
+             [[ "${{ needs.run-security.result }}" != "success" ]] || \
+             [[ "${{ needs.build.result }}" != "success" ]]; then
+            echo "One or more required jobs failed"
+            echo "code-quality: ${{ needs.run-code-quality.result }}"
+            echo "tests: ${{ needs.run-tests.result }}"
+            echo "security: ${{ needs.run-security.result }}"
+            echo "build: ${{ needs.build.result }}"
+            exit 1
+          fi
+          echo "All jobs passed"

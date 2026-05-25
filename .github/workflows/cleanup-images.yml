@@ -1,0 +1,35 @@
+# GRUVAX Cleanup Docker Images — prunes old/untagged GHCR versions on a schedule.
+#
+# Runs monthly on the 15th (or on manual dispatch). Keeps the 2 most recent tagged
+# images; deletes untagged and images older than 30 days. Single package: gruvax.
+# No matrix — this is a single-service repo.
+
+name: Cleanup Docker Images
+
+on:
+  workflow_dispatch:
+  schedule:
+    - cron: "0 0 15 * *"
+
+concurrency:
+  group: cleanup-images-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      packages: write
+      contents: read
+    steps:
+      - name: Cleanup Docker Images
+        uses: dataaxiom/ghcr-cleanup-action@374e2028c8fb93b7219f3771cd405fab95d3dec4  # v1.2.0
+        with:
+          delete-partial-images: true
+          delete-untagged: true
+          keep-n-tagged: 2
+          older-than: 30 days
+          token: ${{ secrets.GITHUB_TOKEN }}
+          package: gruvax
+          owner: ${{ github.repository_owner }}
