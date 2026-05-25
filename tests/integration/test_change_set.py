@@ -361,118 +361,174 @@ async def test_revert_is_undoable(client) -> None:  # type: ignore[no-untyped-de
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_revert_rederives_segment_cache(client) -> None:  # type: ignore[no-untyped-def]
-    """After revert_change_set, /api/locate returns a fresh result (SegmentCache re-derived).
+async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[no-untyped-def]
+    """After revert_change_set, SegmentCache is re-derived (GET /segments shows fresh state).
 
     INT-B regression guard (ADMN-09): previously, revert_change_set only reloaded
-    BoundaryCache but never re-derived SegmentCache, leaving /api/locate stale until
+    BoundaryCache but never re-derived SegmentCache, leaving segment data stale until
     the next admin write or restart.
 
     Strategy:
-      1. Record the current /api/locate result for Riverside release_id=136
-         (cube 2/0/0 in the fixture — Riverside label starts there).
-      2. Do a bulk write to cube (2, 0, 0) changing its cut point to a different
-         label so Riverside records are pushed to a different cube.
-      3. Record /api/locate again — must differ from step 1 (SegmentCache updated).
-      4. Revert the change_set.
-      5. Record /api/locate a third time — must differ from step 3 AND match step 1
-         (SegmentCache re-derived after revert, not stale-until-restart).
+      Uses a fresh app instance with boundaries reseeded from fixtures/boundaries.yaml so
+      the initial state is known (cube 1/0/1 has cut-point "Blue Note").  Uses
+      GET /api/admin/cubes/1/0/1/segments to directly read the SegmentCache state.
 
-    Teardown: the revert in step 4 restores cube (2, 0, 0) to its original state.
-    The test uses a cube (unit 2, row 0, col 0) not referenced by any other test in
-    this module — safe to mutate on the shared dev DB.
+      1. Record the labels present in the SegmentCache for cube (1, 0, 1).
+      2. Do a bulk write to cube (1, 0, 1) changing its cut point to "Riverside".
+         Verify the SegmentCache changed (step 2b: the bulk write handler already
+         re-derives SegmentCache, so segments must differ from step 1).
+      3. Revert the change_set.
+      4. Read /segments again — after the INT-B fix, SegmentCache was re-derived by
+         the revert, so labels must match the pre-write state (step 1 == step 4).
+         Without the fix, the stale post-write state persists (step 2b == step 4),
+         and the first assertion below fails.
+
+    Teardown: the revert in step 3 restores cube (1, 0, 1) to its pre-write state.
+    The fresh app instance ensures no shared-state contamination from other tests.
 
     This test is RED before the INT-B fix in history.py (revert never re-derives
-    SegmentCache, so step 5 returns the same stale result as step 3).
+    SegmentCache, so step 4 matches the stale post-write state, not the pre-write state).
     """
-    auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping revert re-derive test")
+    from pathlib import Path
 
-    # Step 1: Record locate result for Riverside release 136 before any mutation.
-    # release_id=136 is "Brilliant Corners" (Riverside RLP 12-226) — in the synthetic fixture.
-    pre_locate = await client.get("/api/locate", params={"release_id": 136})
-    if pre_locate.status_code == 404:
-        pytest.skip("Release 136 not in v_collection — skipping re-derive test")
-    assert pre_locate.status_code == 200, (
-        f"Expected 200 from /api/locate, got {pre_locate.status_code}: {pre_locate.text}"
-    )
-    pre_body = pre_locate.json()
-    pre_cube = pre_body.get("primary_cube")
+    from gruvax.app import create_app
+    from gruvax.db.seed_boundaries import load_boundaries
 
-    # Step 2: Bulk write cube (2, 0, 0) — change label away from Riverside to push
-    # Riverside records out of cube 2/0/0.  force=True bypasses phantom check.
-    bulk_res = await client.post(
-        "/api/admin/cubes/bulk",
-        json={
-            "updates": [
-                {
-                    "unit_id": 2,
-                    "row": 0,
-                    "col": 0,
-                    "first_label": "Zappa",
-                    "first_catalog": "ZAP-001",
-                    "is_empty": False,
-                    "force": True,
-                }
-            ]
-        },
-        cookies=auth["cookies"],
-        headers={
-            "X-CSRF-Token": auth["csrf_token"],
-            "Idempotency-Key": str(uuid.uuid4()),
-        },
-    )
-    if bulk_res.status_code == 404:
-        pytest.skip("Bulk endpoint not yet implemented — skipping re-derive test")
-    assert bulk_res.status_code == 200, (
-        f"Expected 200 from bulk write, got {bulk_res.status_code}: {bulk_res.text}"
-    )
-    change_set_id = bulk_res.json().get("change_set_id")
-    assert change_set_id, "Bulk write must return change_set_id"
+    _YAML = Path(__file__).parents[2] / "fixtures" / "boundaries.yaml"
 
-    # Step 3: Locate after bulk write — SegmentCache was re-derived by the bulk write handler.
-    post_write_locate = await client.get("/api/locate", params={"release_id": 136})
-    assert post_write_locate.status_code == 200
-    post_write_body = post_write_locate.json()
-    post_write_cube = post_write_body.get("primary_cube")
+    # Seed the test PIN so login works in the fresh app instance.
+    from gruvax.auth.pin import hash_pin
 
-    # Step 4: Revert the bulk write.
-    revert_res = await client.post(
-        f"/api/admin/history/{change_set_id}/revert",
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
-    )
-    if revert_res.status_code == 404:
-        pytest.skip("Revert endpoint not yet implemented — skipping re-derive test")
-    assert revert_res.status_code == 200, (
-        f"Expected 200 from revert, got {revert_res.status_code}: {revert_res.text}"
-    )
-    reverted = revert_res.json().get("reverted", [])
-    assert len(reverted) >= 1, "Revert must have reverted at least one cube"
+    test_pin_hash = hash_pin("0000")
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
+            " VALUES ('auth.pin_hash', %s, 'Test PIN hash seeded by INT-B re-derive test', now())"
+            " ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+            (f'"{test_pin_hash}"',),
+        )
+        await conn.commit()
 
-    # Step 5: Locate after revert — the INT-B fix makes revert re-derive SegmentCache,
-    # so /api/locate must return the same result as before the bulk write (step 1).
-    # Without the fix, this returns the stale post-write result (same as step 3).
-    post_revert_locate = await client.get("/api/locate", params={"release_id": 136})
-    assert post_revert_locate.status_code == 200
-    post_revert_body = post_revert_locate.json()
-    post_revert_cube = post_revert_body.get("primary_cube")
+    # Reseed boundaries to the canonical fixture BEFORE creating the app so the
+    # BoundaryCache (loaded once at lifespan startup) sees the known state.
+    # This prevents contamination from prior mutating tests on the shared dev DB.
+    await load_boundaries(_YAML)
 
-    # The revert must have changed the SegmentCache-derived result back.
-    # After revert: result must differ from the post-write result (step 3 ≠ step 5).
-    # If SegmentCache was NOT re-derived (INT-B bug), step 5 == step 3 and this fails.
-    assert post_revert_cube != post_write_cube, (
-        "After revert, /api/locate should return a different primary_cube than after the bulk "
-        f"write — got same cube {post_revert_cube!r} in both step 3 and step 5. "
-        "This means SegmentCache was NOT re-derived after revert (INT-B regression)."
-    )
-    # And the result after revert should match what it was before (step 1 == step 5).
-    assert post_revert_cube == pre_cube, (
-        f"After revert, /api/locate should return the same primary_cube as before the bulk "
-        f"write: expected {pre_cube!r}, got {post_revert_cube!r}. "
-        "SegmentCache was not fully restored by the revert."
-    )
+    app = create_app()
+
+    async with (
+        LifespanManager(app) as manager,
+        AsyncClient(
+            transport=ASGITransport(app=manager.app),
+            base_url="http://test",
+        ) as ac,
+    ):
+        # Log in
+        login_res = await ac.post("/api/admin/login", json={"pin": "0000"})
+        if login_res.status_code != 200:
+            pytest.skip("Login not implemented — skipping re-derive test")
+        auth_cookies = login_res.cookies
+        csrf_token = login_res.cookies.get("gruvax_csrf") or ""
+
+        # Step 1: Record current SegmentCache state for cube (1, 0, 1).
+        # Fixture: cube (1, 0, 1) has cut-point "Blue Note" BNL-001 — it has real
+        # Blue Note records in the collection, so segments is non-empty.
+        pre_seg_res = await ac.get(
+            "/api/admin/cubes/1/0/1/segments",
+            cookies=auth_cookies,
+        )
+        if pre_seg_res.status_code == 404:
+            pytest.skip("GET segments endpoint not implemented or cube (1,0,1) not in cache")
+        assert pre_seg_res.status_code == 200, (
+            f"Expected 200 from GET segments, got {pre_seg_res.status_code}: {pre_seg_res.text}"
+        )
+        pre_labels = {s["label"] for s in pre_seg_res.json().get("segments", [])}
+        assert pre_labels, (
+            "Fixture cube (1,0,1) should have non-empty segments (Blue Note has collection records)"
+        )
+
+        # Step 2: Bulk write cube (1, 0, 1) — change cut-point to "Riverside" RLP 12-226.
+        # "Riverside" is in v_collection.  force=True bypasses phantom check.
+        # This changes which label starts at cube (1,0,1), altering the SegmentCache.
+        bulk_res = await ac.post(
+            "/api/admin/cubes/bulk",
+            json={
+                "updates": [
+                    {
+                        "unit_id": 1,
+                        "row": 0,
+                        "col": 1,
+                        "first_label": "Riverside",
+                        "first_catalog": "RLP 12-226",
+                        "is_empty": False,
+                        "force": True,
+                    }
+                ]
+            },
+            cookies=auth_cookies,
+            headers={
+                "X-CSRF-Token": csrf_token,
+                "Idempotency-Key": str(uuid.uuid4()),
+            },
+        )
+        if bulk_res.status_code == 404:
+            pytest.skip("Bulk endpoint not yet implemented — skipping re-derive test")
+        assert bulk_res.status_code == 200, (
+            f"Expected 200 from bulk write, got {bulk_res.status_code}: {bulk_res.text}"
+        )
+        change_set_id = bulk_res.json().get("change_set_id")
+        assert change_set_id, "Bulk write must return change_set_id"
+
+        # Step 2b: Confirm SegmentCache changed after the bulk write.
+        post_write_seg_res = await ac.get(
+            "/api/admin/cubes/1/0/1/segments",
+            cookies=auth_cookies,
+        )
+        assert post_write_seg_res.status_code == 200
+        post_write_labels = {s["label"] for s in post_write_seg_res.json().get("segments", [])}
+        assert post_write_labels != pre_labels, (
+            f"Bulk write did not change SegmentCache for cube (1,0,1): "
+            f"pre={pre_labels!r}, post-write={post_write_labels!r}"
+        )
+
+        # Step 3: Revert the bulk write.
+        revert_res = await ac.post(
+            f"/api/admin/history/{change_set_id}/revert",
+            cookies=auth_cookies,
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        if revert_res.status_code == 404:
+            pytest.skip("Revert endpoint not yet implemented — skipping re-derive test")
+        assert revert_res.status_code == 200, (
+            f"Expected 200 from revert, got {revert_res.status_code}: {revert_res.text}"
+        )
+        reverted = revert_res.json().get("reverted", [])
+        assert len(reverted) >= 1, "Revert must have reverted at least one cube"
+
+        # Step 4: Read segments after revert.
+        # The INT-B fix makes revert re-derive SegmentCache → segments match pre-write state.
+        # Without the fix, SegmentCache is stale → segments still match post-write state.
+        post_revert_seg_res = await ac.get(
+            "/api/admin/cubes/1/0/1/segments",
+            cookies=auth_cookies,
+        )
+        assert post_revert_seg_res.status_code == 200
+        post_revert_labels = {s["label"] for s in post_revert_seg_res.json().get("segments", [])}
+
+        # The revert must have changed the SegmentCache back.
+        # After revert: segments must differ from post-write segments (step 4 ≠ step 2b).
+        # If SegmentCache was NOT re-derived (INT-B bug), step 4 == step 2b and this fails.
+        assert post_revert_labels != post_write_labels, (
+            "After revert, GET /segments must return different labels than after the bulk write. "
+            f"Post-write labels: {post_write_labels!r}, post-revert labels: {post_revert_labels!r}. "
+            "SegmentCache was NOT re-derived after revert (INT-B regression)."
+        )
+        # And the result after revert should match what it was before (step 1 == step 4).
+        assert post_revert_labels == pre_labels, (
+            "After revert, GET /segments must return the same labels as before the bulk write. "
+            f"Pre-write: {pre_labels!r}, post-revert: {post_revert_labels!r}. "
+            "SegmentCache was not fully restored by the revert."
+        )
 
 
 @pytest.mark.asyncio(loop_scope="session")
