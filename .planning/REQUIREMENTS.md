@@ -5,7 +5,7 @@
 
 ## v1 Requirements
 
-81 requirements (73 original v1 + 8 `SEG-*` added 2026-05-21 for the new Phase 5, Segment-Aware Position Precision). Table-stakes items are baseline expectations from FEATURES.md; differentiator items are the ones explicitly accepted into v1 during scoping.
+84 requirements (73 original v1 + 8 `SEG-*` added 2026-05-21 for Phase 5, Segment-Aware Position Precision + 3 LED idle/ambient `LED-11/12/13`). Table-stakes items are baseline expectations from FEATURES.md; differentiator items are the ones explicitly accepted into v1 during scoping.
 
 ### Search & Lookup
 
@@ -48,14 +48,14 @@ A bin holds an *ordered list of per-label segments*. The owner maintains only **
 derived from the globally-ordered `gruvax.v_collection`. Supersedes the one-span-per-cube model
 and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-boundaries.md`.)
 
-- [ ] **SEG-01**: Boundaries are stored as ordered **cut points** (the first record of each bin) plus optional per-label physical-width overrides; the legacy one-span-per-cube representation is migrated to this model via an Alembic migration that round-trips clean
-- [ ] **SEG-02**: Given the globally-ordered `gruvax.v_collection`, the system derives each bin's ordered per-label segments (label, first/last owned record) from the cut points with **zero additional manual input**, and re-derives automatically when the collection changes
-- [ ] **SEG-03**: Per-segment record counts and bin-fractions are computed by **row-counting `v_collection`** across each segment's catalog range (never catalog-number arithmetic), correctly including duplicate owned copies and variant releases (e.g. `AS 78` 2nd copy, `AS 78-r` remix)
-- [ ] **SEG-04**: An optional admin-set **physical-width override** per label-segment takes precedence over the count-derived fraction; segment widths within a bin always total 100%
-- [ ] **SEG-05**: The **label-contiguity invariant** is enforced — a label occupies one contiguous global run spanning at most adjacent bins; the boundary-save validator rejects any cut-point set that would scatter a label across non-adjacent bins
-- [ ] **SEG-06**: `GET /api/locate` returns a sub-cube interval produced by **two-level interpolation** (resolve bin+segment → offset by the fractions of preceding labels in the bin → interpolate by row-rank within the segment) behind the unchanged `LocateResult` contract; a label straddling a cut resolves to the correct bin without special-casing
-- [ ] **SEG-07**: The segment-aware estimator **supersedes §4.1** as the sole v1 default index estimator (with §4.8 cube-only retained as the timeout/low-confidence fallback), and `estimator_version` reflects the change. *(Amended 2026-05-22 — Phase 5 decision D-01: the prior "proven to meet-or-beat §4.1 via the extended `run_all_algorithms.py` A/B harness before cutover" gate is **dropped**. §4.1 is retired and the estimator ships on trust; ordinary unit + Hypothesis-invariant tests still apply, including the regression invariant that a single-segment bin reproduces §4.1 exactly.)*
-- [ ] **SEG-08**: Admin can **view, edit, and add cut points** (adding a cut splits a bin and renumbers subsequent bins) and set per-label **width overrides**; saves are parser-validated, flow through the existing diff-preview + change-set undo path, and keep `/api/locate` at p95 ≤ 50 ms (CPU-only, no DB on the hot path)
+- [x] **SEG-01**: Boundaries are stored as ordered **cut points** (the first record of each bin) plus optional per-label physical-width overrides; the legacy one-span-per-cube representation is migrated to this model via an Alembic migration that round-trips clean
+- [x] **SEG-02**: Given the globally-ordered `gruvax.v_collection`, the system derives each bin's ordered per-label segments (label, first/last owned record) from the cut points with **zero additional manual input**, and re-derives automatically when the collection changes
+- [x] **SEG-03**: Per-segment record counts and bin-fractions are computed by **row-counting `v_collection`** across each segment's catalog range (never catalog-number arithmetic), correctly including duplicate owned copies and variant releases (e.g. `AS 78` 2nd copy, `AS 78-r` remix)
+- [x] **SEG-04**: An optional admin-set **physical-width override** per label-segment takes precedence over the count-derived fraction; segment widths within a bin always total 100%
+- [x] **SEG-05**: The **label-contiguity invariant** is enforced — a label occupies one contiguous global run spanning at most adjacent bins; the boundary-save validator rejects any cut-point set that would scatter a label across non-adjacent bins
+- [x] **SEG-06**: `GET /api/locate` returns a sub-cube interval produced by **two-level interpolation** (resolve bin+segment → offset by the fractions of preceding labels in the bin → interpolate by row-rank within the segment) behind the unchanged `LocateResult` contract; a label straddling a cut resolves to the correct bin without special-casing
+- [x] **SEG-07**: The segment-aware estimator **supersedes §4.1** as the sole v1 default index estimator (with §4.8 cube-only retained as the timeout/low-confidence fallback), and `estimator_version` reflects the change. *(Amended 2026-05-22 — Phase 5 decision D-01: the prior "proven to meet-or-beat §4.1 via the extended `run_all_algorithms.py` A/B harness before cutover" gate is **dropped**. §4.1 is retired and the estimator ships on trust; ordinary unit + Hypothesis-invariant tests still apply, including the regression invariant that a single-segment bin reproduces §4.1 exactly.)*
+- [x] **SEG-08**: Admin can **view, edit, and add cut points** (adding a cut splits a bin and renumbers subsequent bins) and set per-label **width overrides**; saves are parser-validated, flow through the existing diff-preview + change-set undo path, and keep `/api/locate` at p95 ≤ 50 ms (CPU-only, no DB on the hot path)
 
 ### Admin / Data Management
 
@@ -243,14 +243,14 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | POS-04 | Phase 1 — First Search → Cube Highlight | Complete |
 | POS-05 | Phase 2 — Real Position Estimation | Complete |
 | POS-06 | Phase 2 — Real Position Estimation | Complete |
-| SEG-01 | Phase 5 — Segment-Aware Position Precision | Pending |
-| SEG-02 | Phase 5 — Segment-Aware Position Precision | Pending |
-| SEG-03 | Phase 5 — Segment-Aware Position Precision | Pending |
-| SEG-04 | Phase 5 — Segment-Aware Position Precision | Pending |
-| SEG-05 | Phase 5 — Segment-Aware Position Precision | Pending |
-| SEG-06 | Phase 5 — Segment-Aware Position Precision | Pending |
-| SEG-07 | Phase 5 — Segment-Aware Position Precision | Pending |
-| SEG-08 | Phase 5 — Segment-Aware Position Precision | Pending |
+| SEG-01 | Phase 5 — Segment-Aware Position Precision | Complete |
+| SEG-02 | Phase 5 — Segment-Aware Position Precision | Complete |
+| SEG-03 | Phase 5 — Segment-Aware Position Precision | Complete |
+| SEG-04 | Phase 5 — Segment-Aware Position Precision | Complete |
+| SEG-05 | Phase 5 — Segment-Aware Position Precision | Complete |
+| SEG-06 | Phase 5 — Segment-Aware Position Precision | Complete |
+| SEG-07 | Phase 5 — Segment-Aware Position Precision | Complete |
+| SEG-08 | Phase 5 — Segment-Aware Position Precision | Complete |
 | ADMN-01 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-02 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-03 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
