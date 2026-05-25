@@ -283,7 +283,24 @@ Plans:
   4. Compose declares per-service `logging:` directives (max-size + max-file) for `gruvax-api` and `mosquitto`; each service has a `healthcheck:` integrated with `restart: unless-stopped` for self-healing; volume permissions on a fresh host are documented and verified (Pitfall 14).
   5. A `pytest-benchmark` CI gate proves p95 `/api/search` end-to-end ≤200 ms and p95 `/api/locate` ≤50 ms against the synthetic CI dataset; a `just demo` (or equivalent) smoke script runs the Core Value flow against a fresh `docker compose up` to prove the SLO holds at the box level.
 
-**Plans:** TBD
+**Plans:** 6 plans
+Plans:
+**Wave 1** *(parallel — no file overlap)*
+
+- [ ] 08-01-PLAN.md — Backend spine: structured-JSON logging + log ring buffer (OBS-02) + slow-query timing path + ring buffer (OBS-05) + /api/version (OBS-04) + sync-age background refresh task (OBS-06); owns app.py
+- [ ] 08-02-PLAN.md — Counters DB substrate: migration 0008 gruvax.record_stats (release_id-keyed, no query text) + staleness/top-N/phantom/reset query functions (OBS-07)
+
+**Wave 2** *(blocked on Wave 1; 08-03 and 08-06 run in parallel — no file overlap)*
+
+- [ ] 08-03-PLAN.md — Surfacing slice: enrich /api/health (git-SHA version + sync_age_seconds) + search/locate counter increments + slow-query hooks + Dockerfile version injection (OBS-01/04/05/06/07)
+- [ ] 08-06-PLAN.md — Hardening + CI: Compose log limits (DEP-04) + healthcheck verify (DEP-05) + GitHub Actions Alembic round-trip (OBS-03) + pytest-benchmark SLO gate + just demo + fresh-host runbook
+
+**Wave 3** *(blocked on Wave 2; 08-04 and 08-05 run in parallel — no file overlap)*
+
+- [ ] 08-04-PLAN.md — Diagnostics surface: admin-gated /api/admin/diagnostics (7 SC#2 rows) + reset-stats + /admin/diagnostics page per UI-SPEC (OBS-05/06/07) [has human-verify checkpoint]
+- [ ] 08-05-PLAN.md — Kiosk staleness banner: StalenessBar (>14d) wired to /api/health; no-results stays generic (D-02 descope honored) (OBS-06) [has human-verify checkpoint]
+
+**UI hint:** yes (admin diagnostics page + kiosk banner; render to 08-UI-SPEC.md)
 
 ## Progress
 
