@@ -621,66 +621,120 @@ export async function downloadSettingsYaml(): Promise<void> {
 }
 
 /**
+ * Dry-run preview response from POST /api/admin/import/boundaries?dry_run=true.
+ *
+ * The backend returns this shape on a successful (zero-error) dry_run — no DB
+ * write is performed.  ``diff_preview`` is empty when the file is byte-equal
+ * to the committed state (W5 identity re-import).
+ */
+export interface BoundariesDryRunPreview {
+  total_cubes: number
+  file_cube_count: number
+  diff_preview: Array<{
+    unit_id: number
+    row: number
+    col: number
+    delta: number
+    will_be_empty: boolean
+  }>
+}
+
+/**
  * POST /api/admin/import/boundaries — upload a CSV or YAML boundaries file.
  *
- * Posts multipart FormData.  Content-Type header is intentionally omitted so
- * the browser sets the multipart boundary automatically.  ``adminFetch`` still
- * injects X-CSRF-Token for the POST (CSRF safe, Pitfall 2).
+ * Sends the raw file bytes with the correct Content-Type header derived from the
+ * file extension (.csv → ``text/csv``; .yaml / .yml → ``application/x-yaml``).
+ * Never wraps the file in FormData — the backend reads the RAW request body.
+ * ``adminFetch`` still injects X-CSRF-Token for the POST (CSRF safe, T-0708-CSRF).
  *
- * On non-OK, throws ``BulkSaveError`` with the server's ``type`` and optional
- * ``message`` fields parsed from the JSON body.
+ * ``dryRun=true``:  Calls ``POST /api/admin/import/boundaries?dry_run=true``.
+ *   The backend runs the full parse + validation pipeline with NO DB write and
+ *   returns a ``BoundariesDryRunPreview`` body (200) or a 400 validation-error
+ *   body.  No Idempotency-Key is sent (dry_run is stateless).
+ *
+ * ``dryRun=false`` (default):  Calls ``POST /api/admin/import/boundaries`` (no
+ *   query param).  The caller MUST supply an ``idempotencyKey`` — it is sent as
+ *   the ``Idempotency-Key`` header to prevent double-commits on retry.
+ *   Returns a ``CommitResponse`` on success.
+ *
+ * On 400/422, throws ``BulkSaveError`` with the full parsed JSON body attached
+ * as ``.body`` (W6 contract).  The caller can pass ``err.body`` directly to
+ * ``parseServerErrors`` / ``parseDiff`` without re-parsing a stringified message.
  */
 export async function uploadImportBoundaries(
   file: File,
-  idempotencyKey: string,
-): Promise<CommitResponse> {
-  const form = new FormData()
-  form.append('file', file)
-  // Content-Type intentionally omitted — browser sets multipart boundary.
-  // adminFetch injects X-CSRF-Token for POST automatically.
-  const res = await adminFetch('/api/admin/import/boundaries', {
+  idempotencyKey: string | null,
+  dryRun: boolean = false,
+): Promise<CommitResponse | BoundariesDryRunPreview> {
+  // Derive Content-Type from file extension; fall back to file.type if set.
+  const ext = file.name.split('.').pop()?.toLowerCase()
+  const contentType =
+    ext === 'csv' ? 'text/csv'
+    : (ext === 'yaml' || ext === 'yml') ? 'application/x-yaml'
+    : file.type || 'application/octet-stream'
+
+  const path = dryRun
+    ? '/api/admin/import/boundaries?dry_run=true'
+    : '/api/admin/import/boundaries'
+
+  const extraHeaders: Record<string, string> = { 'Content-Type': contentType }
+  // Idempotency-Key is only sent for the real commit (not dry_run).
+  if (!dryRun && idempotencyKey) {
+    extraHeaders['Idempotency-Key'] = idempotencyKey
+  }
+
+  const res = await adminFetch(path, {
     method: 'POST',
-    headers: { 'Idempotency-Key': idempotencyKey },
-    body: form,
+    headers: extraHeaders,
+    body: file,
   })
   if (!res.ok) {
+    let parsedBody: Record<string, unknown> = {}
     let errorType: string | undefined
     let errorMessage: string | undefined
     try {
-      const b = await res.json() as Record<string, unknown>
-      if (typeof b.type === 'string') errorType = b.type
-      if (typeof b.message === 'string') errorMessage = b.message
+      parsedBody = await res.json() as Record<string, unknown>
+      if (typeof parsedBody.type === 'string') errorType = parsedBody.type
+      if (typeof parsedBody.message === 'string') errorMessage = parsedBody.message
     } catch { /* ignore */ }
-    throw new BulkSaveError(res.status, errorType, errorMessage)
+    throw new BulkSaveError(res.status, errorType, errorMessage, parsedBody)
   }
-  return res.json() as Promise<CommitResponse>
+  return res.json() as Promise<CommitResponse | BoundariesDryRunPreview>
 }
 
 /**
  * POST /api/admin/import/settings — upload a YAML settings file.
  *
- * Same multipart FormData pattern as uploadImportBoundaries but without
- * an Idempotency-Key (settings import is idempotent by nature).
- * On non-OK, throws ``BulkSaveError`` (same error-parsing pattern).
+ * Sends the raw file bytes with ``Content-Type: application/x-yaml`` — the
+ * backend reads the raw request body and calls ``yaml.safe_load``.  Never
+ * wraps the file in FormData (which would cause a 422 from the raw-body reader).
+ * No Idempotency-Key (settings import is idempotent by nature).
+ *
+ * Returns ``{ updated: string[] }`` — the list of DB key names written.
+ * (The backend ``import_settings`` returns ``{"updated": [...]}``; there is no
+ * ``applied`` field server-side — B2 contract fix.)
+ *
+ * On non-OK, throws ``BulkSaveError`` with the full parsed JSON attached as
+ * ``.body`` (W6 contract) so Settings.tsx can show the locked failure copy.
  */
-export async function uploadImportSettings(file: File): Promise<{ applied: string[] }> {
-  const form = new FormData()
-  form.append('file', file)
+export async function uploadImportSettings(file: File): Promise<{ updated: string[] }> {
   const res = await adminFetch('/api/admin/import/settings', {
     method: 'POST',
-    body: form,
+    headers: { 'Content-Type': 'application/x-yaml' },
+    body: file,
   })
   if (!res.ok) {
+    let parsedBody: Record<string, unknown> = {}
     let errorType: string | undefined
     let errorMessage: string | undefined
     try {
-      const b = await res.json() as Record<string, unknown>
-      if (typeof b.type === 'string') errorType = b.type
-      if (typeof b.message === 'string') errorMessage = b.message
+      parsedBody = await res.json() as Record<string, unknown>
+      if (typeof parsedBody.type === 'string') errorType = parsedBody.type
+      if (typeof parsedBody.message === 'string') errorMessage = parsedBody.message
     } catch { /* ignore */ }
-    throw new BulkSaveError(res.status, errorType, errorMessage)
+    throw new BulkSaveError(res.status, errorType, errorMessage, parsedBody)
   }
-  return res.json() as Promise<{ applied: string[] }>
+  return res.json() as Promise<{ updated: string[] }>
 }
 
 // ── Error types ───────────────────────────────────────────────────────────────
@@ -706,22 +760,34 @@ export class RateLimitError extends Error {
 }
 
 /**
- * Thrown by ``adminBulkSave`` on a non-200 response.
+ * Thrown by ``adminBulkSave`` and the import upload functions on a non-200 response.
  *
  * ``errorType``    mirrors the server's ``type`` field (e.g. ``boundary_order_error``,
  *                  ``phantom_boundary``).  ``undefined`` for non-400 HTTP errors.
  * ``serverMessage`` mirrors the server's ``message`` field.  ``undefined`` when the
  *                  body was not JSON or contained no ``message`` key.
+ * ``body``         the FULL parsed JSON response object (W6 contract).  Callers such as
+ *                  ``Import.tsx`` pass ``err.body`` directly to ``parseServerErrors`` /
+ *                  ``parseDiff`` without re-parsing a stringified message.  Always set on
+ *                  throws from ``uploadImportBoundaries`` and ``uploadImportSettings``; may
+ *                  be an empty object ``{}`` when the server returned non-JSON.
  */
 export class BulkSaveError extends Error {
   readonly status: number
   readonly errorType: string | undefined
   readonly serverMessage: string | undefined
-  constructor(status: number, errorType?: string, serverMessage?: string) {
+  readonly body: Record<string, unknown>
+  constructor(
+    status: number,
+    errorType?: string,
+    serverMessage?: string,
+    body: Record<string, unknown> = {},
+  ) {
     super(serverMessage ?? `Bulk save failed: ${status}`)
     this.name = 'BulkSaveError'
     this.status = status
     this.errorType = errorType
     this.serverMessage = serverMessage
+    this.body = body
   }
 }
