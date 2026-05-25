@@ -21,6 +21,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 - [x] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness; a configurable idle/ambient baseline with timed highlight revert (server-scheduled) and an optional recently-found retain mode. (completed 2026-05-24)
 - [x] **Phase 7: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable. (completed 2026-05-24)
 - [x] **Phase 8: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof. (completed 2026-05-25)
+- [ ] **Phase 9: Tooling and docs hardening** - structlog + env-driven log level, GitHub Actions CI (incl. cleanup-cache + cleanup-images) + dependabot + pre-commit, update-project script, and a Phase 1–8 docs refresh (strip lux/nox). Closes out v1.x before the v2.0 multi-user milestone.
 
 ## Phase Details
 
@@ -344,6 +345,26 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
 
 ---
 *Roadmap created: 2026-05-19 from PROJECT.md, REQUIREMENTS.md, and research/{SUMMARY,STACK,ARCHITECTURE,PITFALLS,INTERPOLATION}.md*
+
+### Phase 9: Tooling and docs hardening
+
+**Goal:** Close out v1.x developer-experience debt before the v2.0 multi-user milestone — migrate logging to structlog (preserving the Phase 8 in-memory log ring buffer the diagnostics page reads), make the log level env-driven, stand up the GitHub Actions tooling pattern adapted from discogsography, and bring the docs in line with the final Phase 1–8 design.
+**Depends on:** Phase 8
+**Requirements:** TBD (developer-experience / tooling; not v1 product REQ-IDs)
+**Scope** (adapted from the sibling discogsography repo where noted):
+
+  1. **structlog** — replace the stdlib `JsonFormatter`/`LogRingHandler` wiring (Phase 8) with structlog while preserving the in-memory log ring buffer consumed by `/admin/diagnostics`.
+  2. **Env-driven log level** — ensure the debug/log level is settable via environment variable (extends the existing `LOG_LEVEL`).
+  3. **GitHub Actions workflows** (adapt from `discogsography/.github/workflows/`): `test`, `code-quality`, `security`, `build`, **`cleanup-cache`**, **`cleanup-images`**. Account for the 64 pre-existing ruff errors carried as `continue-on-error` in the Phase 8 CI (clean up or keep advisory).
+  4. **dependabot** — adapt `discogsography/.github/dependabot.yml` (multi-ecosystem, grouped, weekly).
+  5. **pre-commit** — adapt `discogsography/.pre-commit-config.yaml` (ruff, mypy, bandit, hadolint, actionlint, yamllint, shellcheck…).
+  6. **`scripts/update-project.sh`** — adapt from `discogsography/scripts/update-project.sh` (justfile-delegating), specialized for GRUVAX.
+  7. **Docs refresh** — capture the final Phase 1–8 design and **remove all `lux`/`nox` host references** from docs/CLAUDE.md.
+
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 9 to break down)
 
 ## Backlog
 
