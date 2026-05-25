@@ -1,0 +1,53 @@
+/**
+ * StalenessBar — kiosk sync-staleness persistent banner.
+ *
+ * Nordic Grid design contract (08-UI-SPEC.md Surface 2 §Kiosk sync-staleness banner):
+ * - Background: --gruvax-yellow (#FFDA00)
+ * - Text: --gruvax-blue-darker (#002855) — 3.1:1 contrast on yellow at 18px (WCAG large text)
+ * - Font: Space Grotesk 18px weight 400 — the ONLY 18px in Phase 8; accessibility floor
+ * - Padding: --gruvax-space-3 (12px) vertical × --gruvax-space-4 (16px) horizontal
+ * - Full-width, no border-radius (flush edge-to-edge — system notification bar style)
+ * - Icon gap: --gruvax-space-2 (8px)
+ * - Mount: opacity 0→1, max-height 0→48px over --gruvax-duration-base (250ms) ease-decelerate
+ * - Unmount condition: handled by StalenessBar returning null — CSS transition applies
+ *
+ * ENFORCEMENT: no hardcoded hex values — consume tokens only.
+ */
+
+.staleness-bar {
+  background: var(--gruvax-yellow);
+  color: var(--gruvax-blue-darker);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-lg);   /* 18px — accessibility floor for yellow-on-dark */
+  font-weight: 400;
+  line-height: var(--gruvax-leading-normal);
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  width: 100%;
+  border-radius: 0;
+
+  /* Mount animation: banner fades in and expands from 0 height */
+  overflow: hidden;
+  max-height: 48px;
+  opacity: 1;
+  animation: staleness-bar-enter var(--gruvax-duration-base) var(--gruvax-ease-decelerate) both;
+}
+
+@keyframes staleness-bar-enter {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 48px;
+  }
+}
+
+/* Ensure the SVG icon color inherits from the container (--gruvax-blue-darker via currentColor) */
+.staleness-bar svg {
+  flex-shrink: 0;
+  color: inherit;
+}
