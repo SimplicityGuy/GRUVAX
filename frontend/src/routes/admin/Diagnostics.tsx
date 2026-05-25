@@ -468,6 +468,8 @@ export function Diagnostics(): React.ReactElement {
 
   // Load on mount (D-11 — single useEffect, no polling)
   useEffect(() => {
+    // load is async; setState calls execute after the awaited fetch resolves, not synchronously.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
   }, [load])
 

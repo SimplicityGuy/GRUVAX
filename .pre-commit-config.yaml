@@ -13,6 +13,7 @@ repos:
       - id: check-added-large-files
       - id: check-executables-have-shebangs
       - id: check-json
+        exclude: '^frontend/(tsconfig|package).*\.json$'
       - id: check-merge-conflict
       - id: check-shebang-scripts-are-executable
       - id: check-toml
@@ -107,7 +108,7 @@ repos:
         pass_filenames: false
       - id: tsc
         name: tsc (type check)
-        entry: npm --prefix frontend exec tsc -- --noEmit
+        entry: npm --prefix frontend exec tsc -- --noEmit -p tsconfig.app.json
         language: system
         files: '^frontend/src/.*\.(ts|tsx)$'
         pass_filenames: false

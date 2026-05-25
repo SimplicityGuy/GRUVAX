@@ -205,6 +205,8 @@ function WizardWalk() {
           is_empty: cube.is_empty,
         }
       }
+      // One-time initialisation guarded by cuts.length === 0; cannot cascade further.
+      // eslint-disable-next-line react-hooks/set-state-in-effect
       setCuts(preloaded)
     }
   }, [mode, cubesData, cuts, reshuffleDraft])
