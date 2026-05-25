@@ -9,6 +9,8 @@ import { ResultsList } from './ResultsList'
 import { SearchBox } from './SearchBox'
 import { ShelfGrid } from './ShelfGrid'
 import { ShelfLabel } from './ShelfLabel'
+import { StalenessBar } from './StalenessBar'
+import './StalenessBar.css'
 import './kiosk.css'
 
 const SHELF_NAMES = ['SHELF A', 'SHELF B', 'SHELF C', 'SHELF D']
@@ -62,6 +64,17 @@ export function KioskView() {
     queryKey: ['cubes'],
     queryFn: fetchCubesWithFill,
     staleTime: Infinity,
+  })
+
+  // Health query — drives kiosk staleness banner (OBS-06, D-01).
+  // 60s refetch is allowed here: this is the banner data source, not admin telemetry;
+  // D-11's no-polling rule applies to the diagnostics page, not the kiosk health banner.
+  // When health is unavailable (offline), sync_age_seconds is null → banner hides.
+  const { data: healthData } = useQuery<{ sync_age_seconds?: number | null }>({
+    queryKey: ['health'],
+    queryFn: () => fetch('/api/health').then((r) => r.json()),
+    staleTime: 60_000,
+    refetchInterval: 60_000,
   })
 
   // Build a Set<"unitId-row-col"> of empty cubes for O(1) lookup in ShelfGrid
@@ -438,6 +451,10 @@ export function KioskView() {
             onDidYouMean={handleDidYouMean}
           />
         </div>
+
+        {/* Staleness banner (OBS-06, D-01) — above the grid, never overlaying it.
+            Hidden when offline (health null) or sync_age <= 14d. */}
+        <StalenessBar syncAgeSeconds={healthData?.sync_age_seconds ?? null} />
 
         {/* Shelf area — N×(4×4) grid — shelfAreaRef for GSAP selector scope */}
         <div className="shelf-area" ref={shelfAreaRef}>
