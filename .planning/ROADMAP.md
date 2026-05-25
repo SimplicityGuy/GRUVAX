@@ -238,7 +238,7 @@ Plans:
   4. Owner can download current boundaries as YAML (or JSON) via `GET /api/admin/export/boundaries.yaml`; the export schema matches the import schema (round-trip identity); a separate endpoint exports/imports LED color and brightness settings under the same schema convention.
   5. Every wizard commit, CSV/YAML import, and reshuffle ends with the admin seeing a confirmation that names the `change_set_id` and offers a "Revert this change set" tap — the keystone undo path from Phase 3 covers all multi-cube admin operations uniformly.
 
-**Plans:** 5/5 plans complete
+**Plans:** 7/8 plans executed
 Plans:
 **Wave 1** *(parallel — no file overlap)*
 
@@ -261,8 +261,8 @@ Plans:
 
 **Wave 1** *(parallel — no file overlap)*
 
-- [ ] 07-06-PLAN.md — G1: discoverable reshuffle entry point on /admin/wizard (START SETUP / START RESHUFFLE landing) — frontend only (ADMN-10, ADMN-04)
-- [ ] 07-07-PLAN.md — G2+G3: dry_run preview branch on /import/boundaries (no write) + skip phantom re-validation for unchanged rows (export→re-import identity, SC4) + synthetic round-trip test (ADMN-05, BAK-01)
+- [x] 07-06-PLAN.md — G1: discoverable reshuffle entry point on /admin/wizard (START SETUP / START RESHUFFLE landing) — frontend only (ADMN-10, ADMN-04)
+- [x] 07-07-PLAN.md — G2+G3: dry_run preview branch on /import/boundaries (no write) + skip phantom re-validation for unchanged rows (export→re-import identity, SC4) + synthetic round-trip test (ADMN-05, BAK-01)
 
 **Wave 2** *(blocked on 07-07)*
 
@@ -295,7 +295,7 @@ Plans:
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
 | 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete    | 2026-05-24 |
-| 7. Wizards + Import/Export | 5/5 | Complete   | 2026-05-24 |
+| 7. Wizards + Import/Export | 7/8 | In Progress|  |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
 ## Critical-Path Notes (carried from research)
