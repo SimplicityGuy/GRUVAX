@@ -332,7 +332,7 @@ These are roadmapper-level reminders surfaced from ARCHITECTURE.md, PITFALLS.md,
 
 ## Traceability
 
-The 73 v1 requirements map to phases as follows. The full per-requirement table lives in REQUIREMENTS.md `## Traceability`.
+The 84 v1 requirements (73 original + 8 SEG + 3 LED idle/ambient = 84) map to phases as follows. The full per-requirement table lives in REQUIREMENTS.md `## Traceability`.
 
 | Phase | Categories represented | Requirement count |
 |-------|------------------------|-------------------|
