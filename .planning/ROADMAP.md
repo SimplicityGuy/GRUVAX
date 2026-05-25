@@ -238,7 +238,7 @@ Plans:
   4. Owner can download current boundaries as YAML (or JSON) via `GET /api/admin/export/boundaries.yaml`; the export schema matches the import schema (round-trip identity); a separate endpoint exports/imports LED color and brightness settings under the same schema convention.
   5. Every wizard commit, CSV/YAML import, and reshuffle ends with the admin seeing a confirmation that names the `change_set_id` and offers a "Revert this change set" tap — the keystone undo path from Phase 3 covers all multi-cube admin operations uniformly.
 
-**Plans:** 7/8 plans executed
+**Plans:** 8/8 plans complete
 Plans:
 **Wave 1** *(parallel — no file overlap)*
 
@@ -266,7 +266,7 @@ Plans:
 
 **Wave 2** *(blocked on 07-07)*
 
-- [ ] 07-08-PLAN.md — G2+G4: wire Import preview to dry_run (commit only on COMMIT IMPORT) + raw-body upload contract (fixes settings import) + SC5 re-verify (D-04 badges + D-15 revert) — frontend (ADMN-05, BAK-02, BAK-01)
+- [x] 07-08-PLAN.md — G2+G4: wire Import preview to dry_run (commit only on COMMIT IMPORT) + raw-body upload contract (fixes settings import) + SC5 re-verify (D-04 badges + D-15 revert) — frontend (ADMN-05, BAK-02, BAK-01)
 **UI hint:** yes
 
 ### Phase 8: Observability + Deployment Hardening
@@ -295,7 +295,7 @@ Plans:
 | 4. Realtime + Offline Resilience | 4/4 | Complete   | 2026-05-22 |
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
 | 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete    | 2026-05-24 |
-| 7. Wizards + Import/Export | 7/8 | In Progress|  |
+| 7. Wizards + Import/Export | 8/8 | Complete   | 2026-05-25 |
 | 8. Observability + Deployment Hardening | 0/? | Not started | - |
 
 ## Critical-Path Notes (carried from research)

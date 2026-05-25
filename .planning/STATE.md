@@ -29,11 +29,11 @@ progress:
 ## Current Position
 
 Phase: 07 (wizards-import-export) — EXECUTING
-Plan: 1 of 8
+Plan: 8 of 8 (07-08 complete; awaiting orchestrator phase verification)
 
 - **Phase:** 7
-- **Plan:** Not started
-- **Status:** Executing Phase 07
+- **Plan:** 07-08 complete (frontend import wiring + SC5 human-verify APPROVED)
+- **Status:** Executing Phase 07 — all 8 plans have SUMMARYs; phase verification owned by orchestrator
 - **Progress:** [██████████] 100%
 
 ```
@@ -145,8 +145,9 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-24 (Phase 06 Plan 04 complete — all-off/diagnostic admin vertical slice. 318 tests passing. Phase 06 4/4 plans complete — all LED contract plans done.)
-**Prev:** 2026-05-23 (Phase 05 FULLY VERIFIED — gap-closure 05-06 complete (6/6 plans) + all 6 UAT items pass. SEG-05 label-contiguity enforced on the LIVE admin write paths PUT /cut + POST /insert-cut (400 type=contiguity_error before any DB write) via build_proposed_cuts→validate_contiguity, surfaced in RecordPickerSheet (sheet stays open), orphaned /admin/preview + DiffPreviewSheet/RollbackToast removed. UAT test 6 RE-VERIFIED LIVE via Playwright on the rebuilt stack — the container image predated 05-06 so it was rebuilt (docker compose up -d --build api) and the dev DB was DROPPED + RE-SEEDED from fixtures (which also cleared the cut_insert pollution → test_migrate_0005 now passes → full backend suite exits 0). 05-VERIFICATION.md status=passed. Admin PIN re-seeded to 0000 after the DB drop.)
+**Last touched:** 2026-05-24 (Phase 07 Plan 08 complete — frontend import wiring + SC5 re-verify. Gap-closure plan: G4 raw-body uploads (drop FormData; .csv→text/csv, .yaml/.yml→application/x-yaml) in adminClient.ts; G2/D-11 dry-run preview + gated atomic commit in Import.tsx; B1 commitResult removed from ImportState so the no-op CANNOT recur (T-0708-NOOP-COMMIT mitigated); W6 BulkSaveError.body carries full parsed JSON; B2 settings import returns {updated}. Human-verify checkpoint APPROVED — all 5 flows passed live on the rebuilt stack: import dry-run (cubes unchanged until COMMIT), export→re-import identity (zero diff), settings round-trip + bad-file rejection, SC5 history badges + REVERT THIS CHANGE SET, reshuffle entry. tsc + build clean. Commits c3ca4c7, d5539cf, 41342d7, 298bedb. ROADMAP 07 = 8/8 plans, status Complete. Phase verification + completion owned by the orchestrator.)
+**Prev:** 2026-05-24 (Phase 06 Plan 04 complete — all-off/diagnostic admin vertical slice. 318 tests passing. Phase 06 4/4 plans complete — all LED contract plans done.)
+**Prev2:** 2026-05-23 (Phase 05 FULLY VERIFIED — gap-closure 05-06 complete (6/6 plans) + all 6 UAT items pass. SEG-05 label-contiguity enforced on the LIVE admin write paths PUT /cut + POST /insert-cut (400 type=contiguity_error before any DB write) via build_proposed_cuts→validate_contiguity, surfaced in RecordPickerSheet (sheet stays open), orphaned /admin/preview + DiffPreviewSheet/RollbackToast removed. UAT test 6 RE-VERIFIED LIVE via Playwright on the rebuilt stack — the container image predated 05-06 so it was rebuilt (docker compose up -d --build api) and the dev DB was DROPPED + RE-SEEDED from fixtures (which also cleared the cut_insert pollution → test_migrate_0005 now passes → full backend suite exits 0). 05-VERIFICATION.md status=passed. Admin PIN re-seeded to 0000 after the DB drop.)
 **Next action:** Phase 05 is COMPLETE across every gate — 6/6 plans, UAT 6/6 pass, 05-VERIFICATION.md status=passed, 05-SECURITY.md SECURED (24/24, threats_open=0), and code-review fixes applied (05-REVIEW-FIX.md: WR-04 fixed — contiguity message now shows proper-case "Blue Note", confirmed live; WR-01 docstring marked deferred; WR-03 freshness comment added; WR-02 deliberately deferred — real cross-unit gap needing its own plan; INFO items out of scope). Container rebuilt so the live stack carries the WR-04 fix. Ready for Phase 6 (LED Contract over MQTT, hardware-stubbed): `/clear` then `/gsd-discuss-phase 6` or `/gsd-plan-phase 6`. REMAINING DEFERRED (future hardening, own plan): WR-02 cross-unit contiguity (build_proposed_cuts is unit-scoped) and WR-01 step-5 SegmentCache occupancy cross-check (validate_contiguity only checks bin-START labels) — both documented in 05-REVIEW.md / 05-REVIEW-FIX.md, beyond the SEG-05 must-haves.
 
 ---
