@@ -28,7 +28,6 @@ from gruvax.db.queries import (
     reset_record_stats,
 )
 
-
 # ── Privacy Gate (OBS-07 — no query/term/text column) ─────────────────────────
 
 
