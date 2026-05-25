@@ -2,15 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-last_updated: 2026-05-25T20:14:12.452Z
+status: executing
+last_updated: "2026-05-25T21:31:37.591Z"
 progress:
-  total_phases: 11
-  completed_phases: 7
-  total_plans: 48
+  total_phases: 12
+  completed_phases: 8
+  total_plans: 51
   completed_plans: 49
-  percent: 64
-stopped_at: Phase 09 complete (8/6) — ready to discuss Phase 999.1
+  percent: 67
 ---
 
 # State: GRUVAX
@@ -21,7 +20,7 @@ stopped_at: Phase 09 complete (8/6) — ready to discuss Phase 999.1
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 999.1 — shelf overview mini kallax shows per cube fill/occupancy (backlog)
+**Current Focus:** Phase 10 — Close Milestone Gaps (INT-A SSE payload + INT-B undo re-derive/publish + traceability reconcile); closes the v1.0 milestone audit
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -29,23 +28,25 @@ stopped_at: Phase 09 complete (8/6) — ready to discuss Phase 999.1
 
 ## Current Position
 
-Phase: 09 (tooling-and-docs-hardening) — EXECUTING
-Plan: 1 of 6
+Phase: 10 (close-milestone-gaps) — NOT STARTED (added 2026-05-25)
+Plan: Not planned yet
 
-- **Phase:** 999.1
+- **Phase:** 10 — Close Milestone Gaps
 - **Plan:** Not started
-- **Status:** Ready to plan
-- **Progress:** [██████████] 100%
+- **Status:** Ready to execute
+- **Progress:** [ ] 0% (Phases 1–9 complete)
 
 ```
-Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
-Phase 2: Real Position Estimation                   [ ] Not started
-Phase 3: Admin Loop (PIN + Manual Entry + Undo)     [ ] Not started
-Phase 4: Realtime + Offline Resilience              [ ] Not started
-Phase 5: Segment-Aware Position Precision           [ ] Not started
-Phase 6: LED Contract over MQTT (Hardware Stubbed)  [ ] Not started
-Phase 7: Wizards + Import/Export                    [ ] Not started
-Phase 8: Observability + Deployment Hardening       [ ] Not started
+Phase 1: First Search → Cube Highlight              [x] Complete
+Phase 2: Real Position Estimation                   [x] Complete
+Phase 3: Admin Loop (PIN + Manual Entry + Undo)     [x] Complete
+Phase 4: Realtime Live Updates                      [x] Complete
+Phase 5: Segment-Aware Position Precision           [x] Complete
+Phase 6: LED Contract over MQTT (Hardware Stubbed)  [x] Complete
+Phase 7: Wizards + Import/Export                    [x] Complete
+Phase 8: Observability + Deployment Hardening       [x] Complete
+Phase 9: Tooling and Docs Hardening                 [x] Complete
+Phase 10: Close Milestone Gaps                      [ ] Not started — NEXT
 ```
 
 ## Performance Metrics
@@ -74,6 +75,7 @@ None. (Reconcile gruvax/gruvax_app role naming → completed as quick task 26052
 ### Roadmap Evolution
 
 - Phase 5 inserted after Phase 4: Segment-Aware Position Precision — true integer insert; bumped LED→6, Wizards→7, Observability→8
+- Phase 10 added (integer append) at end of v1.0: Close Milestone Gaps — INT-A SSE payload shape + INT-B undo re-derive/publish + traceability reconcile; closes the v1.0 milestone-audit gaps (`.planning/v1.0-MILESTONE-AUDIT.md`). 9 deferred reqs (SRCH-09, OFF-01..04, PRIV-01..04) remain a separate scope decision (audit item 3), out of Phase 10 scope.
 
 ### Decisions Made (from PROJECT.md + research)
 
@@ -154,7 +156,7 @@ None.
 **Last touched:** 2026-05-25 (Phase 07 COMPLETE — all 8 plans; gap-closure 07-06/07/08 done; 07-VERIFICATION.md status=passed 18/18; owner-approved human-verify UAT. FINALIZATION this session: (1) fixed pre-existing test-isolation debt — promoted the login rate-limiter reset to a global autouse fixture in tests/conftest.py + made the import/locate/migrate tests self-contained → backend suite is now ORDER-INDEPENDENT and green twice back-to-back, even on a UAT-mutated DB [a26252d]; (2) code review found + fixed 1 critical + 2 warnings [03fb309]: CR-01 reshuffle resume Math.min(…,0)→Math.max (always resumed at step 0), WR-01 settings-import explicit conn.transaction(), WR-02 export download appended-anchor + deferred revoke (Firefox/mobile-Safari); (3) reconciled 07-UAT.md + 07-HUMAN-UAT.md + PROJECT.md. `uv run pytest tests/` exits 0, mypy --strict clean, frontend tsc+build clean. Stack rebuilt (docker compose up -d --build api), dev PIN=0000.)
 **Prev:** 2026-05-24 (Phase 06 Plan 04 complete — all-off/diagnostic admin vertical slice. 318 tests passing. Phase 06 4/4 plans complete — all LED contract plans done.)
 **Prev2:** 2026-05-23 (Phase 05 FULLY VERIFIED — gap-closure 05-06 complete (6/6 plans) + all 6 UAT items pass. SEG-05 label-contiguity enforced on the LIVE admin write paths PUT /cut + POST /insert-cut (400 type=contiguity_error before any DB write) via build_proposed_cuts→validate_contiguity, surfaced in RecordPickerSheet (sheet stays open), orphaned /admin/preview + DiffPreviewSheet/RollbackToast removed. UAT test 6 RE-VERIFIED LIVE via Playwright on the rebuilt stack — the container image predated 05-06 so it was rebuilt (docker compose up -d --build api) and the dev DB was DROPPED + RE-SEEDED from fixtures (which also cleared the cut_insert pollution → test_migrate_0005 now passes → full backend suite exits 0). 05-VERIFICATION.md status=passed. Admin PIN re-seeded to 0000 after the DB drop.)
-**Next action:** Phase 07 is COMPLETE across every gate (8/8 plans; 07-VERIFICATION.md passed 18/18; 07-REVIEW.md resolved). TWO non-blocking follow-ups remain: (1) ONE quick human re-verify — reshuffle resume-at-step after the CR-01 fix (07-HUMAN-UAT.md Test 1: start a reshuffle, complete ≥1 step, hard-reload, CONTINUE → should land on the SAVED step, not step 0); (2) optional `/gsd-secure-phase 7` (no 07-SECURITY.md yet; workflow.security_enforcement=true). Ready for Phase 8 (Observability + Deployment Hardening): `/clear` then `/gsd-discuss-phase 8` or `/gsd-plan-phase 8`.
+**Next action:** Phases 1–9 are complete; the v1.0 milestone audit (`.planning/v1.0-MILESTONE-AUDIT.md`, status `gaps_found`) surfaced 2 integration blockers + doc drift. Phase 10 (Close Milestone Gaps) has been added to absorb audit items 1, 2, and 4 (INT-A SSE payload shape, INT-B undo re-derive/publish, traceability reconcile). Next: `/clear` then `/gsd-plan-phase 10` (or `/gsd-discuss-phase 10` first). Separate open decisions NOT in Phase 10: scope the 9 deferred reqs (SRCH-09, OFF-01..04, PRIV-01..04 → v2/backlog vs close-in-v1, audit item 3); `/gsd-validate-phase 2` (stale VALIDATION.md draft); Phase 6/8 manual human-verify checkpoints (audit item 5).
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
