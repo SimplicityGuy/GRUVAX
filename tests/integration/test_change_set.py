@@ -355,3 +355,339 @@ async def test_revert_is_undoable(client) -> None:  # type: ignore[no-untyped-de
     assert revert_change_set_id in change_set_ids, (
         "The revert change-set must appear in history (append-only log, D-11)"
     )
+
+
+# ── INT-B: SegmentCache re-derive + boundary_changed publish after revert ────
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[no-untyped-def]
+    """After revert_change_set, SegmentCache is re-derived (GET /segments shows fresh state).
+
+    INT-B regression guard (ADMN-09): previously, revert_change_set only reloaded
+    BoundaryCache but never re-derived SegmentCache, leaving segment data stale until
+    the next admin write or restart.
+
+    Strategy:
+      Uses a fresh app instance with boundaries reseeded from fixtures/boundaries.yaml so
+      the initial state is known (cube 1/0/1 has cut-point "Blue Note").  Uses
+      GET /api/admin/cubes/1/0/1/segments to directly read the SegmentCache state.
+
+      1. Record the labels present in the SegmentCache for cube (1, 0, 1).
+      2. Do a bulk write to cube (1, 0, 1) changing its cut point to "Riverside".
+         Verify the SegmentCache changed (step 2b: the bulk write handler already
+         re-derives SegmentCache, so segments must differ from step 1).
+      3. Revert the change_set.
+      4. Read /segments again — after the INT-B fix, SegmentCache was re-derived by
+         the revert, so labels must match the pre-write state (step 1 == step 4).
+         Without the fix, the stale post-write state persists (step 2b == step 4),
+         and the first assertion below fails.
+
+    Teardown: the revert in step 3 restores cube (1, 0, 1) to its pre-write state.
+    The fresh app instance ensures no shared-state contamination from other tests.
+
+    This test is RED before the INT-B fix in history.py (revert never re-derives
+    SegmentCache, so step 4 matches the stale post-write state, not the pre-write state).
+    """
+    from pathlib import Path
+
+    from gruvax.app import create_app
+    from gruvax.db.seed_boundaries import load_boundaries
+
+    _YAML = Path(__file__).parents[2] / "fixtures" / "boundaries.yaml"
+
+    # Seed the test PIN so login works in the fresh app instance.
+    from gruvax.auth.pin import hash_pin
+
+    test_pin_hash = hash_pin("0000")
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
+            " VALUES ('auth.pin_hash', %s, 'Test PIN hash seeded by INT-B re-derive test', now())"
+            " ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+            (f'"{test_pin_hash}"',),
+        )
+        await conn.commit()
+
+    # Reseed boundaries to the canonical fixture BEFORE creating the app so the
+    # BoundaryCache (loaded once at lifespan startup) sees the known state.
+    # This prevents contamination from prior mutating tests on the shared dev DB.
+    await load_boundaries(_YAML)
+
+    app = create_app()
+
+    async with (
+        LifespanManager(app) as manager,
+        AsyncClient(
+            transport=ASGITransport(app=manager.app),
+            base_url="http://test",
+        ) as ac,
+    ):
+        # Log in
+        login_res = await ac.post("/api/admin/login", json={"pin": "0000"})
+        if login_res.status_code != 200:
+            pytest.skip("Login not implemented — skipping re-derive test")
+        auth_cookies = login_res.cookies
+        csrf_token = login_res.cookies.get("gruvax_csrf") or ""
+
+        # Step 1: Record current SegmentCache state for cube (1, 0, 1).
+        # Fixture: cube (1, 0, 1) has cut-point "Blue Note" BNL-001 — it has real
+        # Blue Note records in the collection, so segments is non-empty.
+        pre_seg_res = await ac.get(
+            "/api/admin/cubes/1/0/1/segments",
+            cookies=auth_cookies,
+        )
+        if pre_seg_res.status_code == 404:
+            pytest.skip("GET segments endpoint not implemented or cube (1,0,1) not in cache")
+        assert pre_seg_res.status_code == 200, (
+            f"Expected 200 from GET segments, got {pre_seg_res.status_code}: {pre_seg_res.text}"
+        )
+        pre_labels = {s["label"] for s in pre_seg_res.json().get("segments", [])}
+        assert pre_labels, (
+            "Fixture cube (1,0,1) should have non-empty segments (Blue Note has collection records)"
+        )
+
+        # Step 2: Bulk write cube (1, 0, 1) — change cut-point to "Riverside" RLP 12-226.
+        # "Riverside" is in v_collection.  force=True bypasses phantom check.
+        # This changes which label starts at cube (1,0,1), altering the SegmentCache.
+        bulk_res = await ac.post(
+            "/api/admin/cubes/bulk",
+            json={
+                "updates": [
+                    {
+                        "unit_id": 1,
+                        "row": 0,
+                        "col": 1,
+                        "first_label": "Riverside",
+                        "first_catalog": "RLP 12-226",
+                        "is_empty": False,
+                        "force": True,
+                    }
+                ]
+            },
+            cookies=auth_cookies,
+            headers={
+                "X-CSRF-Token": csrf_token,
+                "Idempotency-Key": str(uuid.uuid4()),
+            },
+        )
+        if bulk_res.status_code == 404:
+            pytest.skip("Bulk endpoint not yet implemented — skipping re-derive test")
+        assert bulk_res.status_code == 200, (
+            f"Expected 200 from bulk write, got {bulk_res.status_code}: {bulk_res.text}"
+        )
+        change_set_id = bulk_res.json().get("change_set_id")
+        assert change_set_id, "Bulk write must return change_set_id"
+
+        # Step 2b: Confirm SegmentCache changed after the bulk write.
+        post_write_seg_res = await ac.get(
+            "/api/admin/cubes/1/0/1/segments",
+            cookies=auth_cookies,
+        )
+        assert post_write_seg_res.status_code == 200
+        post_write_labels = {s["label"] for s in post_write_seg_res.json().get("segments", [])}
+        assert post_write_labels != pre_labels, (
+            f"Bulk write did not change SegmentCache for cube (1,0,1): "
+            f"pre={pre_labels!r}, post-write={post_write_labels!r}"
+        )
+
+        # Step 3: Revert the bulk write.
+        revert_res = await ac.post(
+            f"/api/admin/history/{change_set_id}/revert",
+            cookies=auth_cookies,
+            headers={"X-CSRF-Token": csrf_token},
+        )
+        if revert_res.status_code == 404:
+            pytest.skip("Revert endpoint not yet implemented — skipping re-derive test")
+        assert revert_res.status_code == 200, (
+            f"Expected 200 from revert, got {revert_res.status_code}: {revert_res.text}"
+        )
+        reverted = revert_res.json().get("reverted", [])
+        assert len(reverted) >= 1, "Revert must have reverted at least one cube"
+
+        # Step 4: Read segments after revert.
+        # The INT-B fix makes revert re-derive SegmentCache → segments match pre-write state.
+        # Without the fix, SegmentCache is stale → segments still match post-write state.
+        post_revert_seg_res = await ac.get(
+            "/api/admin/cubes/1/0/1/segments",
+            cookies=auth_cookies,
+        )
+        assert post_revert_seg_res.status_code == 200
+        post_revert_labels = {s["label"] for s in post_revert_seg_res.json().get("segments", [])}
+
+        # The revert must have changed the SegmentCache back.
+        # After revert: segments must differ from post-write segments (step 4 ≠ step 2b).
+        # If SegmentCache was NOT re-derived (INT-B bug), step 4 == step 2b and this fails.
+        assert post_revert_labels != post_write_labels, (
+            "After revert, GET /segments must return different labels than after the bulk write. "
+            f"Post-write labels: {post_write_labels!r}, post-revert labels: {post_revert_labels!r}. "
+            "SegmentCache was NOT re-derived after revert (INT-B regression)."
+        )
+        # And the result after revert should match what it was before (step 1 == step 4).
+        assert post_revert_labels == pre_labels, (
+            "After revert, GET /segments must return the same labels as before the bulk write. "
+            f"Pre-write: {pre_labels!r}, post-revert: {post_revert_labels!r}. "
+            "SegmentCache was not fully restored by the revert."
+        )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: ignore[no-untyped-def]
+    """After revert_change_set, a boundary_changed event is published with reverted cube_ids.
+
+    INT-B regression guard (RTM-01): previously, revert_change_set never called
+    bus.publish(), so the kiosk never received a live re-render event after an undo.
+
+    Strategy:
+      Uses a fresh app instance with a SpyEventBus injected via dependency_overrides
+      (avoids polluting the module-scoped client fixture and ensures we capture only
+      the events from this test's revert call).
+
+      1. Override get_event_bus with a SpyEventBus that records publish() calls.
+      2. Make a bulk write to cube (2, 0, 1) to create a change_set_id.
+      3. Call the revert endpoint.
+      4. Assert the SpyEventBus recorded a boundary_changed event with:
+           - cube_ids = [{"unit": 2, "row": 0, "col": 1}]  (key "unit", not "unit_id")
+           - change_set_id = the NEW revert change_set_id (from the revert response)
+
+    Teardown: the revert itself restores cube (2, 0, 1) to its original state.
+    Uses cube (unit 2, row 0, col 1) — not referenced by any other test in this module.
+
+    This test is RED before the INT-B fix in history.py (revert never publishes).
+    """
+    from gruvax.api.deps import get_event_bus
+
+    class SpyEventBus:
+        """Records all bus.publish() calls for assertion."""
+
+        def __init__(self) -> None:
+            self.published: list[tuple[str, dict]] = []
+
+        async def publish(self, event: str, payload: dict) -> None:  # type: ignore[override]
+            self.published.append((event, payload))
+
+    spy = SpyEventBus()
+
+    def _spy_get_event_bus() -> SpyEventBus:
+        return spy
+
+    # Seed the test PIN so login works in the fresh app instance.
+    from gruvax.auth.pin import hash_pin
+
+    test_pin_hash = hash_pin("0000")
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
+            " VALUES ('auth.pin_hash', %s, 'Test PIN hash seeded by INT-B publish test', now())"
+            " ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+            (f'"{test_pin_hash}"',),
+        )
+        await conn.commit()
+
+    # Build a fresh app instance with the SpyEventBus override.
+    from gruvax.app import create_app
+
+    app = create_app()
+    app.dependency_overrides[get_event_bus] = _spy_get_event_bus
+
+    try:
+        async with (
+            LifespanManager(app) as manager,
+            AsyncClient(
+                transport=ASGITransport(app=manager.app),
+                base_url="http://test",
+            ) as ac,
+        ):
+            # Log in
+            login_res = await ac.post("/api/admin/login", json={"pin": "0000"})
+            if login_res.status_code != 200:
+                pytest.skip("Login not implemented — skipping publish test")
+            auth_cookies = login_res.cookies
+            csrf_token = login_res.cookies.get("gruvax_csrf") or ""
+
+            # Make a bulk write to cube (2, 0, 1) — creates a change_set.
+            bulk_res = await ac.post(
+                "/api/admin/cubes/bulk",
+                json={
+                    "updates": [
+                        {
+                            "unit_id": 2,
+                            "row": 0,
+                            "col": 1,
+                            "first_label": "Zappa",
+                            "first_catalog": "ZAP-002",
+                            "is_empty": False,
+                            "force": True,
+                        }
+                    ]
+                },
+                cookies=auth_cookies,
+                headers={
+                    "X-CSRF-Token": csrf_token,
+                    "Idempotency-Key": str(uuid.uuid4()),
+                },
+            )
+            if bulk_res.status_code == 404:
+                pytest.skip("Bulk endpoint not yet implemented — skipping publish test")
+            assert bulk_res.status_code == 200, (
+                f"Bulk write failed: {bulk_res.status_code}: {bulk_res.text}"
+            )
+            change_set_id = bulk_res.json().get("change_set_id")
+            assert change_set_id, "Bulk write must return change_set_id"
+
+            # Clear spy events accumulated from the bulk write (we only want revert events).
+            spy.published.clear()
+
+            # Revert the change_set.
+            revert_res = await ac.post(
+                f"/api/admin/history/{change_set_id}/revert",
+                cookies=auth_cookies,
+                headers={"X-CSRF-Token": csrf_token},
+            )
+            if revert_res.status_code == 404:
+                pytest.skip("Revert endpoint not yet implemented — skipping publish test")
+            assert revert_res.status_code == 200, (
+                f"Revert failed: {revert_res.status_code}: {revert_res.text}"
+            )
+            revert_body = revert_res.json()
+            new_change_set_id = revert_body.get("change_set_id")
+            assert new_change_set_id, "Revert must return its own change_set_id"
+    finally:
+        app.dependency_overrides.pop(get_event_bus, None)
+
+    # Assert the SpyEventBus captured a boundary_changed event from the revert.
+    # Without the INT-B fix, revert never calls bus.publish(), so spy.published is empty.
+    assert spy.published, (
+        "Expected revert_change_set to publish at least one event via EventBus, "
+        "but spy.published is empty. INT-B: revert never calls bus.publish()."
+    )
+
+    # Find the boundary_changed event.
+    boundary_events = [(ev, pl) for (ev, pl) in spy.published if ev == "boundary_changed"]
+    assert boundary_events, (
+        f"Expected a 'boundary_changed' event, but spy captured: {spy.published}"
+    )
+
+    event_name, payload = boundary_events[-1]  # the revert's publish is the last one
+
+    # Verify cube_ids shape: must use "unit" (not "unit_id") to match ShimmerCube contract.
+    assert "cube_ids" in payload, (
+        f"boundary_changed payload must have 'cube_ids' key, got: {payload}"
+    )
+    cube_ids = payload["cube_ids"]
+    assert isinstance(cube_ids, list) and len(cube_ids) >= 1, (
+        f"cube_ids must be a non-empty list, got: {cube_ids}"
+    )
+
+    # At least one entry must be the reverted cube (2, 0, 1).
+    matching = [c for c in cube_ids if c.get("unit") == 2 and c.get("row") == 0 and c.get("col") == 1]
+    assert matching, (
+        f"Expected cube_ids to contain {{unit: 2, row: 0, col: 1}}, got: {cube_ids}. "
+        "Key 'unit' (not 'unit_id') is required by the ShimmerCube contract."
+    )
+
+    # Verify the change_set_id in the payload is the NEW revert change_set_id.
+    assert payload.get("change_set_id") == new_change_set_id, (
+        f"boundary_changed payload change_set_id must equal the revert's new change_set_id "
+        f"({new_change_set_id!r}), got: {payload.get('change_set_id')!r}"
+    )
