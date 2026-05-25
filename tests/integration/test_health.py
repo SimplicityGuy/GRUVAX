@@ -3,7 +3,13 @@
 Tests:
   - test_view_probe: health endpoint returns 200 with all expected keys
     and discogsography_view_check == "ok" against the seeded Postgres.
-  - test_health_keys: all required keys present in response.
+  - test_health_keys: all required keys present in response (including
+    sync_age_seconds added in Plan 03, OBS-06).
+  - test_version_is_git_sha: version field equals GIT_SHA from _version.py
+    (not the hardcoded "0.1.0" string) — OBS-01/OBS-04.
+  - test_sync_age_seconds_type: sync_age_seconds is a float or null.
+  - test_no_secrets_in_health: health body contains no session_secret,
+    database_url, or pin keys (T-08-09 mitigation).
   - test_degraded_view_path: simulate a failed v_collection probe by
     directly patching app.state.discogsography_view_ok = False and
     confirming status becomes "degraded".
@@ -18,6 +24,11 @@ from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 
 from gruvax.app import create_app
+
+try:
+    from gruvax._version import GIT_SHA as _GIT_SHA
+except ImportError:
+    _GIT_SHA = "dev"
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -72,13 +83,64 @@ async def test_index_html_no_store(client) -> None:  # type: ignore[no-untyped-d
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_health_keys(client) -> None:  # type: ignore[no-untyped-def]
-    """All required keys are present in the health response."""
+    """All required keys are present in the health response (OBS-06 adds sync_age_seconds)."""
     ac, _app = client
     response = await ac.get("/api/health")
     assert response.status_code == 200
     body = response.json()
-    required_keys = {"status", "db", "discogsography_view_check", "mqtt", "started_at", "version"}
+    required_keys = {
+        "status",
+        "db",
+        "discogsography_view_check",
+        "mqtt",
+        "started_at",
+        "version",
+        "sync_age_seconds",
+    }
     assert required_keys.issubset(body.keys()), f"Missing keys: {required_keys - body.keys()}"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_version_is_git_sha(client) -> None:  # type: ignore[no-untyped-def]
+    """version field equals GIT_SHA from _version.py — NOT the hardcoded "0.1.0" string.
+
+    In dev the placeholder is "dev"; in Docker builds it is the actual git SHA.
+    The critical invariant is that the hardcode is gone (OBS-01/OBS-04).
+    """
+    ac, _app = client
+    response = await ac.get("/api/health")
+    body = response.json()
+    assert body["version"] == _GIT_SHA, (
+        f"version should match _version.GIT_SHA ({_GIT_SHA!r}) but got {body['version']!r}"
+    )
+    assert body["version"] != "0.1.0", "version must not be the hardcoded '0.1.0' fallback"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sync_age_seconds_type(client) -> None:  # type: ignore[no-untyped-def]
+    """sync_age_seconds is a float (seconds since last sync) or null (OBS-06).
+
+    It may be null when the background staleness task has not yet run,
+    or when v_collection is empty. Both are valid states.
+    """
+    ac, _app = client
+    response = await ac.get("/api/health")
+    body = response.json()
+    value = body.get("sync_age_seconds")
+    assert value is None or isinstance(value, (int, float)), (
+        f"sync_age_seconds must be float or null but got {type(value).__name__!r}: {value!r}"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_no_secrets_in_health(client) -> None:  # type: ignore[no-untyped-def]
+    """Health body contains no session_secret, database_url, or pin keys (T-08-09)."""
+    ac, _app = client
+    response = await ac.get("/api/health")
+    body = response.json()
+    forbidden = {"session_secret", "database_url", "pin"}
+    leaked = forbidden & body.keys()
+    assert not leaked, f"Health response leaks secret keys: {leaked}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
