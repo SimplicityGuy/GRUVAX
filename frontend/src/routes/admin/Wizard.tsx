@@ -153,7 +153,7 @@ function WizardWalk() {
 
   const [phase, setPhase] = useState<WizardPhase>('walking')
   const [currentStepIndex, setCurrentStepIndex] = useState<number>(() => {
-    if (reshuffleDraft) return Math.min(reshuffleDraft.completedSteps, 0)
+    if (reshuffleDraft) return Math.max(reshuffleDraft.completedSteps, 0)
     return 0
   })
   const [cuts, setCuts] = useState<Record<string, CutEntry>>(() => {

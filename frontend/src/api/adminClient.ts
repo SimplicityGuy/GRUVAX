@@ -597,8 +597,14 @@ export async function downloadBoundariesYaml(): Promise<void> {
   const a = document.createElement('a')
   a.href = url
   a.download = 'boundaries.yaml'
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  // Defer cleanup: Firefox ignores clicks on a detached anchor and Safari
+  // revokes the object URL before the download starts if revoked synchronously.
+  setTimeout(() => {
+    a.remove()
+    URL.revokeObjectURL(url)
+  }, 0)
 }
 
 /**
@@ -616,8 +622,14 @@ export async function downloadSettingsYaml(): Promise<void> {
   const a = document.createElement('a')
   a.href = url
   a.download = 'settings.yaml'
+  document.body.appendChild(a)
   a.click()
-  URL.revokeObjectURL(url)
+  // Defer cleanup: Firefox ignores clicks on a detached anchor and Safari
+  // revokes the object URL before the download starts if revoked synchronously.
+  setTimeout(() => {
+    a.remove()
+    URL.revokeObjectURL(url)
+  }, 0)
 }
 
 /**

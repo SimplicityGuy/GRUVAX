@@ -708,7 +708,9 @@ async def import_settings(
     import json as _json
 
     updated: list[str] = []
-    async with pool.connection() as conn:
+    # Explicit transaction so the whole-file-reject guarantee is structural, not
+    # reliant on implicit rollback-on-release (matches the boundaries import path).
+    async with pool.connection() as conn, conn.transaction():
         for dotted_key, value in flat_keys.items():
             if dotted_key == "version":
                 continue
@@ -735,8 +737,6 @@ async def import_settings(
                 (json_value, dotted_key),
             )
             updated.append(dotted_key)
-
-        await conn.commit()
 
     logger.info("Admin settings imported: %s", updated)
 
