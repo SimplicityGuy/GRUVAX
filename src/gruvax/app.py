@@ -249,12 +249,14 @@ def create_app() -> FastAPI:
     from gruvax.api.locate import router as locate_router
     from gruvax.api.search import router as search_router
     from gruvax.api.units import router as units_router
+    from gruvax.api.version import router as version_router
 
     app.include_router(health_router, prefix="/api")
     app.include_router(search_router, prefix="/api")
     app.include_router(locate_router, prefix="/api")
     app.include_router(units_router, prefix="/api")
     app.include_router(illuminate_router, prefix="/api")  # Phase 6: public LED fan-out (D-03)
+    app.include_router(version_router, prefix="/api")  # Phase 8: build metadata (OBS-04)
 
     # ── Admin router (Phase 3) — BEFORE StaticFiles mount (Pitfall 3) ──────────
     from gruvax.api.admin.router import create_admin_router
