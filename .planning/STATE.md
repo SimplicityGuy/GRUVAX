@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-25T02:55:13.139Z"
+last_updated: "2026-05-25T03:25:25.883Z"
 progress:
   total_phases: 10
   completed_phases: 6
@@ -68,7 +68,7 @@ Phase 8: Observability + Deployment Hardening       [ ] Not started
 
 ### Pending Todos
 
-- [2026-05-25] Reconcile gruvax vs gruvax_app Postgres role naming (`database`) — app connects as `gruvax`, prod grant docs reference `gruvax_app`; pick canonical name + sync across .env/compose/migration 0002/justfile. → `.planning/todos/pending/2026-05-25-reconcile-gruvax-vs-gruvax-app-postgres-role-naming.md`
+None. (Reconcile gruvax/gruvax_app role naming → completed as quick task 260524-sd6.)
 
 ### Roadmap Evolution
 
@@ -139,6 +139,7 @@ None.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260524-sd6 | Reconcile gruvax vs gruvax_app Postgres role naming (canonical: gruvax) | 2026-05-25 | 250f7b9 | [260524-sd6-reconcile-gruvax-vs-gruvax-app-postgres-](./quick/260524-sd6-reconcile-gruvax-vs-gruvax-app-postgres-/) |
 | 260522-u48 | Rename docker compose service gruvax-api → api (container gruvax-api-1) | 2026-05-23 | b753bd2 | [260522-u48-rename-docker-compose-service-gruvax-api](./quick/260522-u48-rename-docker-compose-service-gruvax-api/) |
 | 260522-mwy | Fix Docker venv shebangs so console scripts (gruvax-set-pin) run directly | 2026-05-22 | 1695cd5 | [260522-mwy-fix-docker-cli-shebangs](./quick/260522-mwy-fix-docker-cli-shebangs/) |
 | 260521-jb3 | Replace eslint set-state-in-effect suppressions with real refactors in admin UI | 2026-05-21 | 9c26bbf | [260521-jb3-replace-eslint-set-state-in-effect-suppr](./quick/260521-jb3-replace-eslint-set-state-in-effect-suppr/) |
