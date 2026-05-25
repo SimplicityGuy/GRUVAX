@@ -192,3 +192,35 @@ def test_configure_logging_is_order_independent() -> None:
         "After the second configure_logging('WARNING') call, DEBUG must no longer be enabled."
     )
     assert gruvax_logger.isEnabledFor(logging.WARNING)
+
+
+def test_configure_logging_no_duplicate_ring_handlers() -> None:
+    """Calling configure_logging() twice must not duplicate ring entries (WR-02 regression).
+
+    Each log record must appear exactly once in the ring, not N times for N configure_logging calls.
+    """
+    from gruvax.logging_config import LogRingHandler
+
+    ring1: deque[dict[str, Any]] = deque(maxlen=50)
+    configure_logging("INFO", ring1)
+
+    ring2: deque[dict[str, Any]] = deque(maxlen=50)
+    configure_logging("INFO", ring2)
+
+    # After the second call there must be exactly ONE LogRingHandler on the gruvax logger.
+    gruvax_logger = logging.getLogger("gruvax")
+    ring_handlers = [h for h in gruvax_logger.handlers if isinstance(h, LogRingHandler)]
+    assert len(ring_handlers) == 1, (
+        f"Expected exactly 1 LogRingHandler after two configure_logging() calls, "
+        f"got {len(ring_handlers)}.  Duplicate handlers cause each record to be "
+        f"written to the ring buffer multiple times (WR-02)."
+    )
+
+    # Emit one record and verify ring2 receives it exactly once.
+    ring2.clear()
+    logging.getLogger("gruvax.test.dedup").info("dedup-marker")
+    dedup_entries = [e for e in ring2 if "dedup-marker" in e.get("msg", "")]
+    assert len(dedup_entries) == 1, (
+        f"Expected exactly 1 ring entry for 'dedup-marker', got {len(dedup_entries)}.  "
+        f"Duplicate LogRingHandler entries indicate WR-02 regression."
+    )

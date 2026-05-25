@@ -164,7 +164,16 @@ def configure_logging(log_level: str, ring: deque[dict[str, Any]]) -> None:
     # Third-party loggers (psycopg, uvicorn, etc.) may stringify a DSN or secret
     # in an error message; attaching to root would leak those records to the admin UI
     # via /api/admin/diagnostics.  This preserves the pre-Phase-9 security control.
-    logging.getLogger("gruvax").addHandler(LogRingHandler(ring, level=logging.INFO))
+    #
+    # Remove any existing LogRingHandlers before adding the new one, so that
+    # configure_logging() is idempotent and safe to call multiple times (tests,
+    # --reload).  Without this guard, each call appends a new handler and every
+    # log record is written to the ring buffer N times.
+    gruvax_logger = logging.getLogger("gruvax")
+    for h in list(gruvax_logger.handlers):
+        if isinstance(h, LogRingHandler):
+            gruvax_logger.removeHandler(h)
+    gruvax_logger.addHandler(LogRingHandler(ring, level=logging.INFO))
 
     # Suppress noisy access-log chatter (same suppression as the pre-migration setup).
     logging.getLogger("uvicorn.access").setLevel(logging.WARNING)
