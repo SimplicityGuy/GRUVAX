@@ -271,7 +271,7 @@ Plans:
 
 ### Phase 8: Observability + Deployment Hardening
 
-**Goal:** `/healthz` reports per-subsystem reachability, the slow-query log proves the 200 ms search SLO, sync staleness is surfaced to admin (and kiosk if stale > 7 days), Compose services declare log limits + healthchecks, and a `/version` endpoint reports the running build — the v1 is operable, observable, and self-healing.
+**Goal:** `/healthz` reports per-subsystem reachability, the slow-query log proves the 200 ms search SLO, sync staleness is surfaced to admin (and kiosk if stale > 14 days, per D-01), Compose services declare log limits + healthchecks, and a `/version` endpoint reports the running build — the v1 is operable, observable, and self-healing.
 **Mode:** mvp
 **Depends on:** All prior phases (everything needs to exist before its health can be reported)
 **Requirements:** OBS-01, OBS-02, OBS-03, OBS-04, OBS-05, OBS-06, OBS-07, DEP-04, DEP-05
@@ -279,7 +279,7 @@ Plans:
 
   1. `GET /api/health` returns overall status plus per-subsystem reachability (`postgres`, `mqtt`, `discogsography_view_check`), sync-staleness in seconds, version, and started-at; `GET /api/version` reports git SHA, build timestamp, and environment.
   2. Admin diagnostics page surfaces: discogsography sync staleness (max `collection_items.updated_at`), aggregate top-N most-searched records (no per-query text persisted), slow-query log (any search exceeding the 200 ms SLO is flagged), MQTT broker status, Postgres pool `size_used` / `size_min`, phantom-boundary count, recent log lines.
-  3. CI proves Alembic migrations round-trip (`upgrade head → downgrade base → upgrade head`) cleanly on every push; service logs are structured JSON with log level configurable via environment variable; the kiosk shows a sync-staleness banner if `sync_age_seconds > 7d` (Pitfall 15) and a no-results suggestion text references staleness when applicable.
+  3. CI proves Alembic migrations round-trip (`upgrade head → downgrade base → upgrade head`) cleanly on every push; service logs are structured JSON with log level configurable via environment variable; the kiosk shows a sync-staleness banner if `sync_age_seconds > 14d` (Pitfall 15, per D-01). *(The no-results staleness-suggestion clause is DESCOPED by D-02 — no-results page stays generic; kiosk banner is the staleness surface.)*
   4. Compose declares per-service `logging:` directives (max-size + max-file) for `gruvax-api` and `mosquitto`; each service has a `healthcheck:` integrated with `restart: unless-stopped` for self-healing; volume permissions on a fresh host are documented and verified (Pitfall 14).
   5. A `pytest-benchmark` CI gate proves p95 `/api/search` end-to-end ≤200 ms and p95 `/api/locate` ≤50 ms against the synthetic CI dataset; a `just demo` (or equivalent) smoke script runs the Core Value flow against a fresh `docker compose up` to prove the SLO holds at the box level.
 

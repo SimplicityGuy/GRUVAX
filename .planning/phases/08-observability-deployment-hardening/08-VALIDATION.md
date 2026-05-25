@@ -53,7 +53,7 @@ created: 2026-05-24
 - [ ] `tests/unit/test_logging.py` — assert log records serialize to JSON, `LOG_LEVEL` honored (OBS-02)
 - [ ] `tests/unit/test_slow_query.py` — assert ring buffer flags `/api/search` >200 ms and `/api/locate` >50 ms with request-total + DB-time (OBS-05)
 - [ ] `tests/unit/test_stats.py` — assert search/selection counters increment by release_id, no query text persisted, all-time + recent-7d, reset action (OBS-07)
-- [ ] `tests/unit/test_diagnostics.py` — assert `/api/admin/diagnostics` returns the 7 SC#2 rows; admin session + CSRF gated (OBS-05/06/07, SC2)
+- [ ] `tests/integration/test_diagnostics.py` — assert `/api/admin/diagnostics` returns the 7 SC#2 rows; admin session + CSRF gated (OBS-05/06/07, SC2)
 - [ ] `tests/benchmark/test_search_benchmark.py` — HTTP-level p95 `/api/search` ≤200 ms (new; locate benchmark already exists in `tests/unit/test_algorithm.py`) (SC5)
 - [ ] CI: `.github/workflows/*.yml` Alembic round-trip job (upgrade head → downgrade base → upgrade head) on synthetic data (OBS-03)
 
