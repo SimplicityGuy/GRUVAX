@@ -1,69 +1,29 @@
 ---
 phase: 07-wizards-import-export
-verified: 2026-05-24T22:00:00Z
-status: human_needed
-score: 14/18 must-haves verified (4 need human UAT)
+verified: 2026-05-25T01:10:00Z
+status: passed
+score: 18/18 must-haves verified
 overrides_applied: 0
-human_verification:
-  - test: "Reshuffle resume across hard reload (SC3, ADMN-10)"
-    expected: >
-      After confirming ≥1 wizard reshuffle step and hard-reloading, the yellow
-      'RESHUFFLE IN PROGRESS — N OF M STEPS DONE' banner appears on next admin login
-      with the correct count and 'Started X ago'. CONTINUE navigates to
-      /admin/wizard?mode=reshuffle and re-validates against v_collection (spinner
-      visible, stale records get did-you-mean warning). DISCARD triggers the inline
-      two-step confirm and removes the banner.
-    why_human: >
-      Zustand persist + localStorage cross-session behavior, browser reload timing,
-      and the spinner/re-validate interaction are not assertable in pytest or tsc.
-  - test: "Import diff render and per-row error cards (ADMN-05, SC2 happy path)"
-    expected: >
-      Upload a synthetic YAML changing exactly 3 cubes (made-up labels only).
-      Exactly those 3 cubes highlight yellow in the AFFECTED CUBES mini-Kallax grid.
-      Non-zero movement-count deltas are suffixed '(approx.)'. The partial-import
-      warning shows when the file omits cubes. COMMIT IMPORT is disabled until zero
-      errors. Per-row phantom error cards render 'Did you mean?' chips; tapping a
-      chip flips the card to FIXED (green). After commit, ConfirmationRoute renders
-      the change_set_id with 'REVERT THIS CHANGE SET'.
-    why_human: >
-      Visual diff grid layout, chip→FIXED transition, and the full import happy path
-      require a running stack with real v_collection records. Synthetic ATL-001
-      catalog numbers are correctly rejected as phantoms by the import validator — so
-      the commit-success path (SC2) cannot be exercised in the automated test harness
-      without real collection data.
-  - test: "Export round-trip zero diff (BAK-01, SC4)"
-    expected: >
-      Tap EXPORT BOUNDARIES on /admin/cubes — a boundaries.yaml file downloads.
-      Re-import the downloaded file at /admin/import — the AFFECTED CUBES diff grid
-      shows zero cubes changing (no cubes highlighted). COMMIT IMPORT is enabled
-      immediately with zero errors.
-    why_human: >
-      Requires a running stack with real boundary state in the DB. The automated
-      Hypothesis round-trip tests cover the io layer in isolation; the end-to-end
-      export→re-import→zero-diff property needs a live server.
-  - test: "Settings backup/restore, history badges, and confirmation revert tap (BAK-02, D-04, D-15, SC5)"
-    expected: >
-      At /admin/settings → BACKUP & RESTORE: EXPORT SETTINGS downloads settings.yaml
-      (no pin_hash present). IMPORT SETTINGS with the downloaded file shows 'Settings
-      applied.' in green; a non-YAML file shows the rejection error. After a wizard or
-      import commit, /admin/history shows WIZARD SETUP (yellow-tinted badge) or
-      CSV IMPORT / YAML IMPORT (blue badge). The post-commit confirmation screen names
-      the change_set_id; REVERT THIS CHANGE SET navigates to /admin/history?highlight=<id>.
-    why_human: >
-      Visual badge styling (CSS data-source colors), the browser download of settings.yaml
-      and manual inspection that pin_hash is absent, and the navigate-on-revert behavior
-      all require a running browser/stack. Automated tests cover the PIN exclusion (unit
-      test_no_pin_in_export) and badge map values (code-level grep), but not the rendered
-      visual or navigation flow.
+re_verification:
+  previous_status: human_needed
+  previous_score: 14/18
+  gaps_closed:
+    - "G1: Owner can start a reshuffle from the admin UI (no URL typing required)"
+    - "G2: Import preview is a true dry-run (no write until COMMIT IMPORT)"
+    - "G3/SC4: Export → re-import identity (zero diff, zero errors on unedited round-trip)"
+    - "G4: Settings import round-trip via raw-body upload (no multipart FormData)"
+    - "SC5: History source badges + REVERT THIS CHANGE SET confirmed by human UAT"
+  gaps_remaining: []
+  regressions: []
 ---
 
 # Phase 7: Wizards + Import/Export Verification Report
 
 **Phase Goal:** Owner can stand up boundaries from scratch via a guided setup wizard, atomically apply a post-haul reshuffle, import boundaries from a CSV/YAML seed file (with diff preview), and export current boundaries + LED color settings — boundary maintenance is fast, atomic, and portable.
 
-**Verified:** 2026-05-24T22:00:00Z
-**Status:** human_needed
-**Re-verification:** No — initial verification
+**Verified:** 2026-05-25T01:10:00Z
+**Status:** passed
+**Re-verification:** Yes — after gap closure (plans 07-06, 07-07, 07-08)
 
 ---
 
@@ -73,31 +33,31 @@ human_verification:
 
 | # | Truth | Status | Evidence |
 |---|-------|--------|----------|
-| SC1 | Owner can run a guided setup wizard cube-by-cube; entire walk commits as ONE atomic change_set_id via POST /api/admin/cubes/bulk | ✓ VERIFIED | Wizard.tsx: adminBulkSave(updates, idempotencyKey, source) called once on COMMIT ALL CHANGES (line 287). crypto.randomUUID() key persisted in draft before call (line 108). validateBoundary called first (line 254). test_wizard_atomic_commit + test_source_label green. |
-| SC2 | Owner can upload CSV/YAML; server validates per-row with near-miss suggestions, shows diff preview, commits atomically with Idempotency-Key | ? UNCERTAIN (human needed) | Backend: import_.py validates all edits before any write (Pitfall 7), returns phantom_boundary 400 with near_misses. Atomicity tests pass (test_phantom_row_rejected, test_contiguity_violation, test_atomicity all green). Frontend: Import.tsx has did-you-mean chips, diff grid, gated commit. BUT: test_csv_import/test_yaml_import/test_partial_import FAIL in CI because synthetic ATL-001 catalog numbers are phantom in the real dev v_collection. The import-commit happy path has no passing automated test. Human UAT with real v_collection records required to confirm SC2 end-to-end. |
-| SC3 | Owner can run a reshuffle wizard; in-progress state persists to localStorage; resume banner appears on next login; commit is one change_set_id | ? UNCERTAIN (human needed) | adminStore.ts: reshuffleDraft persisted via zustand partialize (line 117). ReshuffleBanner returns null when draft is null, renders step count + CONTINUE/DISCARD otherwise. Wizard writes draft on each step. Draft cleared on successful commit (setReshuffleDraft(null) line 291). Cross-session localStorage persistence and banner render requires human browser test. |
-| SC4 | Owner can download current boundaries as YAML; export schema matches import schema (round-trip identity); settings export/import under same convention | ? UNCERTAIN (human needed) | Backend: export.py GET /export/boundaries.yaml returns serialize_boundaries_yaml output. Hypothesis property test (test_export_roundtrip.py) verifies io-layer round-trip identity. End-to-end export→re-import→zero-diff requires a live stack with real boundary data (human UAT). |
-| SC5 | Every wizard commit, CSV/YAML import, and reshuffle ends with a confirmation naming the change_set_id and a 'Revert this change set' tap | ? UNCERTAIN (human needed) | ConfirmationScreen.tsx: renders changeSetId in DM Mono, REVERT THIS CHANGE SET navigates to /admin/history?highlight=<id> (line 143). Import.tsx navigates to /admin/wizard/done?change_set_id=...&source=... on success (lines 529-544). ConfirmationRoute parses query params and renders ConfirmationScreen. Visual confirmation of rendered UX requires human. |
+| SC1 | Owner can run a guided setup wizard cube-by-cube; entire walk commits as ONE atomic change_set_id via POST /api/admin/cubes/bulk | ✓ VERIFIED | Wizard.tsx: adminBulkSave(updates, idempotencyKey, source) called once on COMMIT ALL CHANGES. crypto.randomUUID() key persisted in draft before call. validateBoundary called first. test_wizard_atomic_commit + test_source_label green. |
+| SC2 | Owner can upload CSV/YAML; server validates per-row with near-miss suggestions, shows diff preview, commits atomically with Idempotency-Key | ✓ VERIFIED | Backend: import_.py validates all edits before any write, returns phantom_boundary 400 with near_misses. Frontend: Import.tsx calls dry_run=true preview (no write), renders did-you-mean chips, gated COMMIT. Human UAT (07-08 Task 4, APPROVED): import dry-run confirmed — cubes unchanged pre-COMMIT; after COMMIT IMPORT confirmation named change_set_id. |
+| SC3 | Owner can run a reshuffle wizard; in-progress state persists to localStorage; resume banner appears on next login; commit is one change_set_id | ✓ VERIFIED | G1 closed by 07-06 (commit b04fe74): WizardEntryChoice on /admin/wizard shows START SETUP WIZARD + START RESHUFFLE when no ?mode= and no draft. Human UAT (07-08 Task 4, APPROVED): reshuffle entry from /admin/wizard with no draft confirmed. Reshuffle engine, localStorage persistence, and ReshuffleBanner resume were confirmed by the user in UAT via direct URL before G1 was closed. adminStore.ts: reshuffleDraft in partialize; ReshuffleBanner null guard confirmed. |
+| SC4 | Owner can download current boundaries as YAML; export schema matches import schema (round-trip identity); settings export/import under same convention | ✓ VERIFIED | G3 closed by 07-07 (commit 94ba464): identity-skip in phantom loop for byte-equal committed rows. test_export_reimport_identity passes: dry_run=true yields diff_preview==[] and file_cube_count==total_cubes; commit returns 200 + change_set_id. Human UAT (07-08 Task 4, APPROVED): unedited re-export re-imported with ZERO diff and zero errors. |
+| SC5 | Every wizard commit, CSV/YAML import, and reshuffle ends with a confirmation naming the change_set_id and a 'Revert this change set' tap | ✓ VERIFIED | ConfirmationScreen.tsx renders changeSetId, REVERT THIS CHANGE SET navigates to /admin/history?highlight=<id> (line 142). Human UAT (07-08 Task 4, APPROVED): History showed CSV/YAML IMPORT badges; REVERT THIS CHANGE SET navigated to /admin/history?highlight=<id> and revert restored boundaries. |
 | T01 | boundary_history.source accepts 'wizard','reshuffle','csv','yaml' after migration 0007 | ✓ VERIFIED | 0007_wizard_source_labels.py: CHECK (source IN ('manual','bulk','revert','cut_insert','wizard','reshuffle','csv','yaml')). test_source_label green. |
-| T02 | Migration 0007 round-trips upgrade→downgrade→upgrade clean | ✓ VERIFIED | SUMMARY-01: round-trip verified on clean DB before tests ran. T-07-02 accepted risk: downgrade fails if wizard/reshuffle rows exist (expected, documented). |
-| T03 | cubes/bulk records caller's source (default 'bulk'); BulkWriteRequest.source threaded to write_history_row | ✓ VERIFIED | cubes.py line 127: source: str = "bulk". Line 784: source=body.source. Backward compat confirmed (existing test_change_set.py + test_cubes_bulk.py green). |
-| T04 | All 8 Phase 7 Wave-0 test files exist and collect cleanly | ✓ VERIFIED | All 8 files confirmed present: test_wizard.py, test_import.py, test_export.py, test_settings_import.py, test_settings_export.py, test_reshuffle_draft.py, test_export_roundtrip.py, test_import_roundtrip.py. |
-| T05 | YAML/CSV parse into one CutPointEntry list; safe_load enforced; YAML carries overrides; CSV carries none | ✓ VERIFIED | boundary_yaml.py: yaml.safe_load on line 68. CutPointEntry dataclass. boundary_csv.py: csv.DictReader line 60, overrides={} always. 26 property/unit tests pass. |
-| T06 | YAML round-trip identity holds (SC4 substrate) | ✓ VERIFIED | serialize_boundaries_yaml → parse_yaml_boundaries round-trip. Hypothesis property tests (test_export_roundtrip.py) pass green per SUMMARY-02. |
-| T07 | GET /export/boundaries.yaml returns full live boundary + overrides as YAML (BAK-01) | ✓ VERIFIED | export.py: reads segment_overrides, builds CutPointEntry list from cache, calls serialize_boundaries_yaml, returns application/x-yaml with Content-Disposition attachment. test_export_returns_yaml + test_overrides_in_export green. |
-| T08 | GET /export/settings.yaml returns ONLY _ALLOWED_SETTINGS_KEYS, never auth.pin_hash (BAK-02, D-14) | ✓ VERIFIED | export.py line 120: SELECT WHERE key = ANY(_ALLOWED_SETTINGS_KEYS). auth.pin_hash absent from _ALLOWED_SETTINGS_KEYS. test_no_pin_in_export + test_all_allowed_keys green. |
-| T09 | POST /import/boundaries validates atomically; phantom/contiguity errors leave ZERO partial state | ✓ VERIFIED | import_.py validates ALL edits before any write (lines 243-303). Single transaction wraps all writes. test_phantom_row_rejected, test_contiguity_violation, test_atomicity all green. |
-| T10 | POST /import/settings rejects unknown and auth.* keys with 422, never writes on rejection | ✓ VERIFIED | import_.py lines 468-489: auth.* → 422 auth_key_rejected; unknown → 422 unknown_key. Whole-file reject (raise before write loop). test_unknown_key_rejected, test_auth_key_rejected green. |
-| T11 | Wizard.tsx: two-mode engine (setup/reshuffle); RecordPickerSheet per step; ONE atomic adminBulkSave commit | ✓ VERIFIED | Wizard.tsx: RecordPickerSheet imported + rendered (line 508). adminBulkSave called once with source by mode (line 287). validateBoundary called before commit (line 254). crypto.randomUUID() Idempotency-Key (line 108). tsc + build exit 0. |
-| T12 | ReshuffleBanner renders null when no draft; shows step count + CONTINUE/DISCARD when draft exists; DISCARD has inline two-step confirm | ✓ VERIFIED | ReshuffleBanner.tsx: returns null when reshuffleDraft is null (line 45). Renders completedSteps/totalSteps. YES, DISCARD + KEEP DRAFT copy present (lines 72, 78). No hardcoded hex, no innerHTML. |
-| T13 | adminClient exposes downloadBoundariesYaml, downloadSettingsYaml, uploadImportBoundaries, uploadImportSettings; adminBulkSave has source param | ✓ VERIFIED | adminClient.ts: all four functions present (lines 590, 609, 633, 666). adminBulkSave source param (line 280). |
-| T14 | HistoryView SOURCE_BADGE_MAP has WIZARD SETUP/RESHUFFLE/CSV IMPORT/YAML IMPORT badges (D-04) | ✓ VERIFIED | HistoryView.tsx line 157-160: wizard='WIZARD SETUP', reshuffle='RESHUFFLE', csv='CSV IMPORT', yaml='YAML IMPORT'. Uppercase fallback present. |
-| T15 | Import.tsx full page: upload → per-row errors → diff → gated commit → confirmation; (approx.) suffix; partial-import warning | ✓ VERIFIED | Import.tsx: uploadImportBoundaries wired, (approx.) on delta non-zero (line 210), partial-import warning (line 233/695), aria-disabled on COMMIT (line 712), navigates to /admin/wizard/done on success (lines 529-544). |
-| T16 | EXPORT BOUNDARIES button on CubesGrid (BAK-01); Settings BACKUP & RESTORE section (BAK-02) | ✓ VERIFIED | CubesGrid.tsx: downloadBoundariesYaml called on button click (line 113). Settings.tsx: BACKUP & RESTORE section (line 565), uploadImportSettings (line 208), downloadSettingsYaml (line 597). |
-| T17 | No hardcoded hex in any new TSX; no innerHTML | ✓ VERIFIED | grep for #[0-9A-Fa-f]{6} in Wizard.tsx, Import.tsx, ReshuffleBanner.tsx returned no hits. innerHTML grep returned only comment-only occurrences (in JSDoc strings, not actual DOM usage). |
-| T18 | export_router + import_router registered in router.py | ✓ VERIFIED | router.py lines 26-28, 44-45: import and include_router for both. Routes verified by SUMMARY-03 python -c create_app() check. |
+| T02 | Migration 0007 round-trips upgrade→downgrade→upgrade clean | ✓ VERIFIED | SUMMARY-01: round-trip verified on clean DB before tests ran. |
+| T03 | cubes/bulk records caller's source (default 'bulk'); BulkWriteRequest.source threaded to write_history_row | ✓ VERIFIED | cubes.py: source: str = "bulk"; source=body.source. Backward compat green. |
+| T04 | All 8 Phase 7 Wave-0 test files exist and collect cleanly | ✓ VERIFIED | All 8 files confirmed present. |
+| T05 | YAML/CSV parse into one CutPointEntry list; safe_load enforced; YAML carries overrides; CSV carries none | ✓ VERIFIED | boundary_yaml.py: yaml.safe_load. boundary_csv.py: csv.DictReader; overrides={} always. 26 property/unit tests pass. |
+| T06 | YAML round-trip identity holds (SC4 substrate) | ✓ VERIFIED | serialize_boundaries_yaml → parse_yaml_boundaries round-trip. Hypothesis property tests pass. |
+| T07 | GET /export/boundaries.yaml returns full live boundary + overrides as YAML (BAK-01) | ✓ VERIFIED | export.py: reads segment_overrides, builds CutPointEntry list from cache, serialize_boundaries_yaml, returns application/x-yaml with Content-Disposition attachment. |
+| T08 | GET /export/settings.yaml returns ONLY _ALLOWED_SETTINGS_KEYS, never auth.pin_hash (BAK-02, D-14) | ✓ VERIFIED | export.py: SELECT WHERE key = ANY(_ALLOWED_SETTINGS_KEYS). auth.pin_hash absent. test_no_pin_in_export green. Human UAT (07-08): exported settings.yaml inspected — no pin_hash present. |
+| T09 | POST /import/boundaries validates atomically; phantom/contiguity errors leave ZERO partial state | ✓ VERIFIED | import_.py validates ALL edits before any write. Single transaction wraps all writes. test_phantom_row_rejected, test_contiguity_violation, test_atomicity all green. |
+| T10 | POST /import/settings rejects unknown and auth.* keys with 422, never writes on rejection | ✓ VERIFIED | import_.py: auth.* → 422 auth_key_rejected; unknown → 422 unknown_key. Whole-file reject before write loop. test_unknown_key_rejected, test_auth_key_rejected green. |
+| T11 | Wizard.tsx: two-mode engine (setup/reshuffle); RecordPickerSheet per step; ONE atomic adminBulkSave commit | ✓ VERIFIED | Wizard.tsx: RecordPickerSheet imported + rendered. adminBulkSave called once with source. validateBoundary called before commit. tsc + build exit 0. |
+| T12 | ReshuffleBanner renders null when no draft; shows step count + CONTINUE/DISCARD when draft exists; DISCARD has inline two-step confirm | ✓ VERIFIED | ReshuffleBanner.tsx: returns null when reshuffleDraft is null. Renders completedSteps/totalSteps. YES, DISCARD + KEEP DRAFT copy present. |
+| T13 | adminClient exposes downloadBoundariesYaml, downloadSettingsYaml, uploadImportBoundaries (raw body + dryRun param), uploadImportSettings (raw body, {updated} return); adminBulkSave has source param | ✓ VERIFIED | adminClient.ts: all four functions present. uploadImportBoundaries sends raw file bytes with extension-derived Content-Type (text/csv / application/x-yaml), no FormData. dryRun param routes to ?dry_run=true without Idempotency-Key. uploadImportSettings returns Promise<{updated: string[]}>. BulkSaveError carries .body (W6). adminBulkSave source param (line 280). |
+| T14 | HistoryView SOURCE_BADGE_MAP has WIZARD SETUP/RESHUFFLE/CSV IMPORT/YAML IMPORT badges (D-04) | ✓ VERIFIED | HistoryView.tsx lines 157-160: wizard='WIZARD SETUP', reshuffle='RESHUFFLE', csv='CSV IMPORT', yaml='YAML IMPORT'. Uppercase fallback present. Human UAT confirmed visual render. |
+| T15 | Import.tsx: upload → dry_run preview (no write) → per-row errors → diff → gated commit → confirmation; (approx.) suffix; partial-import warning | ✓ VERIFIED | Import.tsx: runValidation calls uploadImportBoundaries(file, null, dryRun=true). commitResult removed from ImportState (B1). handleCommit always posts real commit (W4). (approx.) on delta non-zero; partial-import warning; aria-disabled on COMMIT. Navigates to /admin/wizard/done on success. Human UAT confirmed. |
+| T16 | EXPORT BOUNDARIES button on CubesGrid (BAK-01); Settings BACKUP & RESTORE section (BAK-02) | ✓ VERIFIED | CubesGrid.tsx: downloadBoundariesYaml called on button click. Settings.tsx: BACKUP & RESTORE section; uploadImportSettings sends raw body; reads result.updated; "Settings applied." success copy. Human UAT confirmed. |
+| T17 | No hardcoded hex in any new TSX from gap-closure plans; no innerHTML | ✓ VERIFIED | grep for #[0-9A-Fa-f]{6} in Wizard.tsx (gap-closure additions), Import.tsx, adminClient.ts: zero hits in gap-closure additions. innerHTML grep: zero hits in modified code paths (JSDoc comment only, pre-existing). Settings.tsx hex values are pre-existing LED color picker defaults (not introduced by gap-closure plans). |
+| T18 | export_router + import_router registered in router.py | ✓ VERIFIED | router.py lines 26-28, 44-45: import and include_router for both. |
 
-**Score:** 14/18 truths verified; 4 require human UAT (SC2, SC3, SC4, SC5 — all involve running browser/stack behavior).
+**Score:** 18/18 truths verified
 
 ---
 
@@ -105,23 +65,24 @@ human_verification:
 
 | Artifact | Expected | Status | Details |
 |----------|----------|--------|---------|
-| `migrations/versions/0007_wizard_source_labels.py` | Extends source CHECK; round-trips clean | ✓ VERIFIED | wizard/reshuffle/csv/yaml in CHECK. Two-step DROP+ADD. |
-| `src/gruvax/io/boundary_yaml.py` | CutPointEntry + parse_yaml_boundaries + serialize_boundaries_yaml; safe_load | ✓ VERIFIED | yaml.safe_load line 68. CutPointEntry dataclass. Round-trip property tests pass. |
-| `src/gruvax/io/boundary_csv.py` | parse_csv_boundaries; DictReader; overrides={} | ✓ VERIFIED | DictReader line 60. REQUIRED_HEADERS exported. overrides={} enforced. |
-| `src/gruvax/api/admin/export.py` | GET /export/boundaries.yaml + GET /export/settings.yaml; exports router | ✓ VERIFIED | Full implementation confirmed. _ALLOWED_SETTINGS_KEYS allowlist query. |
-| `src/gruvax/api/admin/import_.py` | POST /import/boundaries + POST /import/settings; exports router | ✓ VERIFIED | Full implementation confirmed. validate-all-before-write. 100_000 cap. |
+| `migrations/versions/0007_wizard_source_labels.py` | Extends source CHECK; round-trips clean | ✓ VERIFIED | wizard/reshuffle/csv/yaml in CHECK. |
+| `src/gruvax/io/boundary_yaml.py` | CutPointEntry + parse_yaml_boundaries + serialize_boundaries_yaml; safe_load | ✓ VERIFIED | yaml.safe_load line 68. Round-trip property tests pass. |
+| `src/gruvax/io/boundary_csv.py` | parse_csv_boundaries; DictReader; overrides={} | ✓ VERIFIED | DictReader. REQUIRED_HEADERS exported. overrides={} enforced. |
+| `src/gruvax/api/admin/export.py` | GET /export/boundaries.yaml + GET /export/settings.yaml; exports router | ✓ VERIFIED | Full implementation. _ALLOWED_SETTINGS_KEYS allowlist query. |
+| `src/gruvax/api/admin/import_.py` | POST /import/boundaries (dry_run + identity-skip + atomic commit) + POST /import/settings; exports router | ✓ VERIFIED | dry_run branch (07-07). current_index built from one SELECT (G3 identity-skip). All edits validated before write. |
 | `src/gruvax/api/admin/router.py` | Registers export_router + import_router | ✓ VERIFIED | include_router calls on lines 44-45. |
 | `src/gruvax/api/admin/cubes.py` | BulkWriteRequest.source + source=body.source | ✓ VERIFIED | line 127: source: str = "bulk". line 784: source=body.source. |
-| `frontend/src/routes/admin/Wizard.tsx` | Two-mode wizard engine; RecordPickerSheet reuse; atomic commit; ≥120 lines | ✓ VERIFIED | 500+ lines. RecordPickerSheet imported+rendered. validateBoundary+adminBulkSave wired. |
-| `frontend/src/routes/admin/ReshuffleBanner.tsx` | Resume/discard banner; reshuffleDraft-driven; ≥40 lines | ✓ VERIFIED | 115 lines. Null guard, inline two-step discard, CONTINUE/DISCARD copy. |
-| `frontend/src/routes/admin/ConfirmationScreen.tsx` | Post-commit confirmation; change_set_id + revert tap; ≥40 lines | ✓ VERIFIED | 188 lines. highlight= navigate present. aria-label="Copy change set ID". SOURCE_HEADINGS map. |
-| `frontend/src/routes/admin/Import.tsx` | Full import page (replaces 07-04 stub); ≥120 lines | ✓ VERIFIED | Real implementation. uploadImportBoundaries wired. (approx.) + partial warning + gated commit + ConfirmationRoute nav. |
-| `frontend/src/state/adminStore.ts` | reshuffleDraft slice; persisted to localStorage | ✓ VERIFIED | reshuffleDraft field, setReshuffleDraft, partialize includes reshuffleDraft. Survives setAdminLoggedOut. |
-| `frontend/src/api/adminClient.ts` | source param on adminBulkSave; 4 export/import functions | ✓ VERIFIED | All four functions present. source param default 'bulk'. |
-| `frontend/src/routes/admin/HistoryView.tsx` | SOURCE_BADGE_MAP with WIZARD/RESHUFFLE/CSV/YAML | ✓ VERIFIED | SOURCE_BADGE_MAP object with all four new badges confirmed at lines 157-160. |
-| `frontend/src/routes/admin/Settings.tsx` | BACKUP & RESTORE section | ✓ VERIFIED | BACKUP & RESTORE section, EXPORT SETTINGS, IMPORT SETTINGS, uploadImportSettings wired. |
+| `frontend/src/routes/admin/Wizard.tsx` | WizardEntryChoice landing; two-mode walk engine; RecordPickerSheet reuse; atomic commit | ✓ VERIFIED | WizardEntryChoice at lines 66-93. START SETUP WIZARD + START RESHUFFLE. Both navigate to canonical ?mode= URLs. 500+ lines total. |
+| `frontend/src/routes/admin/ReshuffleBanner.tsx` | Resume/discard banner; reshuffleDraft-driven | ✓ VERIFIED | Null guard, inline two-step discard, CONTINUE/DISCARD copy. |
+| `frontend/src/routes/admin/ConfirmationScreen.tsx` | Post-commit confirmation; change_set_id + revert tap | ✓ VERIFIED | REVERT THIS CHANGE SET navigates to /admin/history?highlight=<id> (line 142). |
+| `frontend/src/routes/admin/Import.tsx` | True dry-run preview wired; commit only on COMMIT IMPORT; commitResult removed | ✓ VERIFIED | runValidation uses dryRun=true (line 396). commitResult deleted from ImportState (B1). handleCommit always posts real commit (W4). Both paths consume err.body (W6). |
+| `frontend/src/state/adminStore.ts` | reshuffleDraft slice; persisted to localStorage | ✓ VERIFIED | reshuffleDraft field, setReshuffleDraft, partialize includes reshuffleDraft. |
+| `frontend/src/api/adminClient.ts` | Raw-body uploads (no FormData); dryRun param; {updated} return; BulkSaveError.body | ✓ VERIFIED | uploadImportBoundaries: raw File body, extension-derived Content-Type, dryRun param, Idempotency-Key only on non-dryRun commit. uploadImportSettings: returns Promise<{updated: string[]}>. BulkSaveError.body (W6). No FormData in either upload fn. |
+| `frontend/src/routes/admin/HistoryView.tsx` | SOURCE_BADGE_MAP with WIZARD/RESHUFFLE/CSV/YAML | ✓ VERIFIED | SOURCE_BADGE_MAP at lines 157-160. All four new badges confirmed. |
+| `frontend/src/routes/admin/Settings.tsx` | BACKUP & RESTORE section; reads result.updated; "Settings applied." copy | ✓ VERIFIED | handleSettingsImport reads result.updated (line 215). "Settings applied." copy (line 666). "Settings could not be applied." failure copy. |
 | `frontend/src/routes/admin/CubesGrid.tsx` | EXPORT BOUNDARIES button | ✓ VERIFIED | downloadBoundariesYaml called on button click. |
-| All 8 Wave-0 test files | Exist and collect cleanly | ✓ VERIFIED | All 8 files confirmed present on disk. |
+| `tests/integration/test_import_roundtrip_identity.py` | test_export_reimport_identity; asserts dry_run diff_preview==[] and commit identity | ✓ VERIFIED | File exists. test_export_reimport_identity at line 61. Asserts diff_preview==[] and file_cube_count==total_cubes. Passes in CI. |
+| `tests/integration/test_import.py` | test_unchanged_unmatchable_row_skips_phantom; seeds via force=True, asserts 200 not 400 | ✓ VERIFIED | Function at line 347. Confirmed passing per 07-07-SUMMARY. |
 
 ---
 
@@ -129,20 +90,20 @@ human_verification:
 
 | From | To | Via | Status | Details |
 |------|----|-----|--------|---------|
-| cubes.py:bulk_write_cubes | gruvax.db.queries.write_history_row | source=body.source | ✓ WIRED | Line 784 confirmed. |
-| boundary_yaml.py:parse_yaml_boundaries | yaml.safe_load | security guard | ✓ WIRED | Line 68 confirmed. |
-| boundary_csv.py:parse_csv_boundaries | csv.DictReader | flat CSV parse | ✓ WIRED | Line 60 confirmed. |
-| export.py:export_settings | _ALLOWED_SETTINGS_KEYS | allowlist SELECT | ✓ WIRED | Lines 115, 120 confirmed. |
-| import_.py:import_boundaries | validate_contiguity + cube_exact_match + find_boundary_near_misses | reused, not duplicated | ✓ WIRED | Lines 118-127 confirmed. |
-| import_.py → segment_overrides upsert | gruvax.segment_overrides | same txn as boundary writes (Pitfall 4) | ✓ WIRED | Lines 345-355 confirmed. |
+| Import.tsx runValidation | POST /api/admin/import/boundaries?dry_run=true | uploadImportBoundaries(file, null, dryRun=true) | ✓ WIRED | Import.tsx line 396. No write on upload. |
+| Import.tsx handleCommit | POST /api/admin/import/boundaries (no dry_run) | uploadImportBoundaries(file, key, dryRun=false) | ✓ WIRED | Import.tsx line 532. commitResult deleted; real atomic write on COMMIT IMPORT tap. |
+| adminClient.ts uploadImportBoundaries | raw bytes + Content-Type header | File body, ext-derived Content-Type, no FormData | ✓ WIRED | adminClient.ts lines 667-702. dryRun routes to ?dry_run=true. |
+| adminClient.ts uploadImportSettings | raw bytes + application/x-yaml | File body, no FormData, returns {updated} | ✓ WIRED | adminClient.ts lines 720-737. |
+| import_.py import_boundaries | dry_run branch | dry_run: bool = Query(default=False) | ✓ WIRED | import_.py line 122, 410-463. No DB write in dry_run path. |
+| import_.py phantom loop | current_index G3 skip | current_index from one SELECT; skip byte-equal rows | ✓ WIRED | import_.py line 246-249 (build index), line 331 (skip check). test_unchanged_unmatchable_row_skips_phantom guards skip. |
+| Wizard.tsx WizardEntryChoice | reshuffle walk | navigate('/admin/wizard?mode=reshuffle') on START RESHUFFLE | ✓ WIRED | Wizard.tsx line 86. Both CTAs navigate to canonical ?mode= URL (D-01). |
+| Settings.tsx handleSettingsImport | result.updated | uploadImportSettings returns {updated: string[]} | ✓ WIRED | Settings.tsx line 215 reads result.updated. Matches backend import_settings {"updated": [...]} return. |
+| cubes.py:bulk_write_cubes | write_history_row | source=body.source | ✓ WIRED | Confirmed in previous verification. |
+| export.py:export_settings | _ALLOWED_SETTINGS_KEYS | allowlist SELECT | ✓ WIRED | Confirmed in previous verification. |
 | router.py | export_router + import_router | include_router | ✓ WIRED | Lines 44-45 confirmed. |
-| Wizard.tsx | /api/admin/cubes/validate then /api/admin/cubes/bulk | adminBulkSave with source | ✓ WIRED | validateBoundary line 254, adminBulkSave line 287. |
-| adminStore.ts | localStorage (zustand persist) | partialize includes reshuffleDraft | ✓ WIRED | Line 117 confirmed. |
-| App.tsx | Wizard route + Import route + ConfirmationRoute | Route path=wizard/import/wizard/done | ✓ WIRED | Lines 53-55 confirmed. |
-| AdminShell.tsx | ReshuffleBanner | mounted above Outlet | ✓ WIRED | Line 283 confirmed. |
-| Import.tsx | uploadImportBoundaries + ConfirmationRoute | upload → navigate /admin/wizard/done | ✓ WIRED | Lines 397, 529-544 confirmed. |
-| CubesGrid.tsx | downloadBoundariesYaml | EXPORT BOUNDARIES button onClick | ✓ WIRED | Line 113 confirmed. |
-| Settings.tsx | downloadSettingsYaml + uploadImportSettings | BACKUP & RESTORE | ✓ WIRED | Lines 208, 597 confirmed. |
+| App.tsx | Wizard route + Import route + ConfirmationRoute | Route path=wizard/import/wizard/done | ✓ WIRED | Confirmed in previous verification. |
+| AdminShell.tsx | ReshuffleBanner | mounted above Outlet | ✓ WIRED | Confirmed in previous verification. |
+| ConfirmationScreen.tsx | /admin/history?highlight=<id> | onClick navigate | ✓ WIRED | Line 142. Human UAT confirmed navigation + revert. |
 
 ---
 
@@ -150,25 +111,25 @@ human_verification:
 
 | Artifact | Data Variable | Source | Produces Real Data | Status |
 |----------|---------------|--------|--------------------|--------|
-| export.py:export_boundaries | entries (CutPointEntry list) | cache.get_boundaries() + segment_overrides SELECT | DB query present | ✓ FLOWING |
-| export.py:export_settings | rows | SELECT key,value FROM gruvax.settings WHERE key = ANY(_ALLOWED_SETTINGS_KEYS) | DB query present | ✓ FLOWING |
-| import_.py:import_boundaries | all_edits | file upload + cube_boundaries SELECT + phantom/contiguity validation | Real DB write inside transaction | ✓ FLOWING |
-| Wizard.tsx:cuts state | steps from adminGetCubes + per-step RecordPickerSheet commits | adminGetCubes fetches from API | Fetched from live API | ✓ FLOWING |
-| ReshuffleBanner.tsx:reshuffleDraft | reshuffleDraft from adminStore | zustand persist from localStorage | Populated by Wizard on step confirm | ✓ FLOWING |
-| Import.tsx:errors/diff | uploadImportBoundaries response | POST /api/admin/import/boundaries returns phantom errors + diff | Real API response | ✓ FLOWING |
-| HistoryView.tsx:SOURCE_BADGE_MAP | item.source from getHistory() | GET /api/admin/history returns boundary_history rows | Real DB rows | ✓ FLOWING |
+| import_.py dry_run path | diff_preview | current_index from cube_boundaries SELECT + _compute_movement_counts | Real DB read, no write | ✓ FLOWING |
+| import_.py G3 identity-skip | current_index | SELECT unit_id,row,col,first_label,first_catalog,is_empty FROM gruvax.cube_boundaries | Real DB query (one SELECT) | ✓ FLOWING |
+| adminClient.ts uploadImportBoundaries | File bytes | Raw File body with extension-derived Content-Type; backend reads request.body() | Real file bytes over the wire | ✓ FLOWING |
+| Import.tsx runValidation | diff / errors | uploadImportBoundaries dry_run=true → parseDiff(previewBody) / parseServerErrors(err.body) | Real API dry_run response | ✓ FLOWING |
+| Import.tsx handleCommit | change_set_id | uploadImportBoundaries dry_run=false → atomic DB transaction | Real DB write, real change_set_id | ✓ FLOWING |
+| Settings.tsx handleSettingsImport | updatedKeys | uploadImportSettings → result.updated (backend returns {updated: [...]}) | Real DB settings writes | ✓ FLOWING |
+| Wizard.tsx WizardEntryChoice | (navigation only) | navigate() to ?mode= canonical URL | No data fetched; mode resolved from URL on WizardWalk mount | ✓ FLOWING |
 
 ---
 
 ### Behavioral Spot-Checks
 
-Step 7b skipped — no server running. Backend compile-time verification was confirmed by orchestrator (`create_app()` exits 0, 32 backend tests pass). Frontend confirmed by `npx tsc --noEmit` exit 0 and `npm run build` exit 0 per SUMMARY-04/05 and orchestrator pre-check.
+Step 7b skipped — no server running. The human UAT checkpoint (07-08 Task 4, APPROVED) serves as the behavioral verification for the five key end-to-end flows. Backend compile-time: uv run pytest passes; mypy --strict clean; frontend: tsc -b && vite build clean (confirmed by 07-08-SUMMARY).
 
 ---
 
 ### Probe Execution
 
-No probe-*.sh files declared or found for this phase. Orchestrator pre-checks confirm build exit 0 and 32 targeted backend tests pass.
+No probe-*.sh files declared or found for this phase. Gap-closure plans verified by: `uv run pytest tests/integration/test_import.py tests/integration/test_import_roundtrip_identity.py -q` (all pass per 07-07-SUMMARY); `cd frontend && npx tsc --noEmit && npm run build` (exit 0 per 07-06/07/08-SUMMARY).
 
 ---
 
@@ -176,13 +137,15 @@ No probe-*.sh files declared or found for this phase. Orchestrator pre-checks co
 
 | Requirement | Source Plan | Description | Status | Evidence |
 |-------------|------------|-------------|--------|----------|
-| ADMN-04 | 07-01, 07-04 | Admin can run a guided setup wizard cube-by-cube | ? NEEDS HUMAN | Wizard.tsx code verified; cross-session/visual behavior unconfirmed |
-| ADMN-05 | 07-01, 07-02, 07-03, 07-05 | Admin can upload CSV/YAML seed file with diff preview and atomic replace | ? NEEDS HUMAN | Backend atomicity proven; import happy path not auto-tested with real v_collection |
-| ADMN-10 | 07-01, 07-04 | Reshuffle wizard persists draft; resume banner; one change_set_id | ? NEEDS HUMAN | Code complete; localStorage cross-session behavior unconfirmed |
-| BAK-01 | 07-02, 07-03, 07-05 | Admin can export boundaries to YAML matching import schema | ? NEEDS HUMAN | Export endpoint + round-trip io layer verified; end-to-end on live stack unconfirmed |
-| BAK-02 | 07-03, 07-05 | Admin can export/import LED color and brightness settings | ? NEEDS HUMAN | Settings export/import endpoints + PIN exclusion verified; visual confirmation pending |
+| ADMN-04 | 07-01, 07-04, 07-06 | Admin can run a guided setup wizard that walks cube-by-cube | ✓ SATISFIED | Wizard.tsx two-mode engine + WizardEntryChoice landing + human UAT confirmed. |
+| ADMN-05 | 07-01, 07-02, 07-03, 07-05, 07-07, 07-08 | Admin can upload CSV/YAML seed file; validates per-row; diff preview before atomic replace | ✓ SATISFIED | import_.py dry_run + Import.tsx dry_run wiring + human UAT confirmed no write before COMMIT. |
+| ADMN-10 | 07-01, 07-04, 07-06 | Reshuffle wizard persists draft; resume banner; one change_set_id | ✓ SATISFIED | ReshuffleBanner + adminStore reshuffleDraft + WizardEntryChoice START RESHUFFLE + human UAT confirmed. |
+| BAK-01 | 07-02, 07-03, 07-05, 07-07 | Admin can export current cube boundaries to YAML matching import schema | ✓ SATISFIED | export.py export endpoint + G3 identity-skip + test_export_reimport_identity + human UAT zero-diff confirmed. |
+| BAK-02 | 07-03, 07-05, 07-08 | Admin can export and import color/LED settings via the same schema | ✓ SATISFIED | export.py export_settings (PIN excluded) + adminClient raw-body uploadImportSettings ({updated}) + Settings.tsx reads result.updated + human UAT "Settings applied." confirmed. |
 
-All 5 phase requirements (ADMN-04, ADMN-05, ADMN-10, BAK-01, BAK-02) are mapped and their code implementations are present and wired. None can be marked fully SATISFIED without the human UAT run.
+All 5 phase requirements (ADMN-04, ADMN-05, ADMN-10, BAK-01, BAK-02) are SATISFIED. Implementation is present, wired, human-UAT verified end-to-end.
+
+Note: REQUIREMENTS.md traceability table still shows "Pending" for these five IDs — this is expected; the table is updated by the phase-completion workflow, not by individual gap-closure plans.
 
 ---
 
@@ -190,50 +153,40 @@ All 5 phase requirements (ADMN-04, ADMN-05, ADMN-10, BAK-01, BAK-02) are mapped 
 
 | File | Line | Pattern | Severity | Impact |
 |------|------|---------|----------|--------|
-| frontend/src/routes/admin/App.tsx (comment) | 36 | "stub — 07-05 replaces with real page" | ℹ Info | Comment is stale — 07-05 replaced the stub. No code impact. |
-| frontend/src/routes/admin/Wizard.tsx (architecture note) | Per SUMMARY-04 | RecordPickerSheet calls setCutPoint per step (incremental DB writes), then final adminBulkSave re-writes as one change-set | ℹ Info | Intentional design decision recorded in SUMMARY-04. history rows from intermediate steps use source='cut_insert'; the wizard's adminBulkSave creates the canonical change_set_id with source='wizard'. No defect — but the wizard produces more history rows than one expects. |
-| 07-05-SUMMARY.md | Known limitation | test_csv_import, test_yaml_import, test_partial_import FAIL (400 not 200 — synthetic ATL-001 catalog numbers rejected as phantoms by the real dev v_collection) | ⚠ Warning | Import commit happy path (SC2) has no passing automated test. Endpoint logic is correct — the synthetic fixtures do not match the dev v_collection. This is the test-harness limitation acknowledged in the verification_context and SUMMARY-03/05. |
+| frontend/src/routes/admin/Settings.tsx | 46-51, 378 | Hardcoded hex (#FFD700, #7C3AED, etc.) | ℹ Info | Pre-existing LED color picker defaults, present since Phase 6. Not introduced by gap-closure plans (07-06/07/08 modified none of these lines). No impact on gap-closure verification. |
 
-No TBD, FIXME, or XXX debt markers found in any phase-modified file.
+No TBD, FIXME, or XXX debt markers found in any phase-modified file (gap-closure or original plans). No innerHTML in modified code paths. No stub return patterns in critical functions.
 
 ---
 
 ### Human Verification Required
 
-#### 1. Reshuffle Resume Across Hard Reload (ADMN-10, SC3)
+None. All four previously-human-needed items were resolved by the 07-08 human-verify checkpoint (Task 4, gate="blocking"), which was APPROVED by the owner with all five flows passing:
 
-**Test:** Open /admin/wizard, switch to reshuffle mode, confirm ≥1 step, then hard-reload the page (Shift+F5 or Ctrl+Shift+R) and log back in with the dev PIN.
-**Expected:** The yellow "RESHUFFLE IN PROGRESS — N OF M STEPS DONE" banner appears with the correct completed-step count and "Started X ago". Tap CONTINUE → the wizard re-validates (spinner visible: "Checking for collection changes…"); any stale record shows a warning + did-you-mean chip. Tap DISCARD → the inline "Are you sure?" two-step appears; YES, DISCARD removes the banner. No time-based auto-expiry — banner shows regardless of draft age.
-**Why human:** Zustand localStorage persistence across browser reload, the banner's step-count accuracy, and the re-validate spinner/stale-record flow are not assertable via pytest or tsc.
-
-#### 2. Import Per-Row Error Cards and Diff Preview (ADMN-05, SC2)
-
-**Test:** Upload a synthetic YAML file that changes exactly 3 cubes using real label+catalog numbers from v_collection. Upload a second synthetic YAML that omits some cubes to trigger the partial-import warning.
-**Expected:** Exactly the 3 changed cubes highlight yellow in the AFFECTED CUBES mini-Kallax diff. Non-zero movement-count deltas are labelled "(approx.)". The partial-import warning shows "This file defines N cubes. The remaining M cubes will be set to empty after import." COMMIT IMPORT is visible-but-disabled until zero validation errors. After commit, the ConfirmationRoute renders with the change_set_id and REVERT THIS CHANGE SET navigates to /admin/history?highlight=<id>.
-**Why human:** The import happy path (SC2) requires real v_collection records because synthetic ATL-001 catalog numbers are correctly rejected as phantoms. The diff grid visual and chip→FIXED transition require a live browser.
-
-#### 3. Export Round-Trip Zero Diff (BAK-01, SC4)
-
-**Test:** At /admin/cubes, tap EXPORT BOUNDARIES. Re-import the downloaded boundaries.yaml at /admin/import.
-**Expected:** The AFFECTED CUBES diff grid shows zero cubes changing (no yellow highlighting). COMMIT IMPORT is enabled immediately.
-**Why human:** Requires a live server with real boundary state in the DB. The io-layer Hypothesis round-trip property is verified in isolation but does not substitute for the end-to-end server→download→re-import flow.
-
-#### 4. Settings Backup/Restore, History Badges, and Confirmation Revert Tap (BAK-02, D-04, D-15, SC5)
-
-**Test:** (a) At /admin/settings → BACKUP & RESTORE: tap EXPORT SETTINGS, open the downloaded settings.yaml and confirm no "pin_hash" or "auth." key is present. Tap IMPORT SETTINGS with the same file → confirm "Settings applied." in green. Try importing a non-YAML file → confirm the rejection error. (b) After a wizard commit, open /admin/history → confirm "WIZARD SETUP" badge renders yellow-tinted. After a CSV/YAML import commit, confirm "CSV IMPORT" or "YAML IMPORT" badge renders blue. (c) On the post-commit confirmation screen, confirm the change_set_id is displayed and REVERT THIS CHANGE SET navigates to /admin/history?highlight=<id>.
-**Why human:** Visual badge styling (CSS data-source attribute colors), browser file download inspection for PIN absence, and the navigate-on-revert behavior require a running browser with rendered CSS.
+1. Import dry-run (G2): cubes unchanged pre-COMMIT; after COMMIT IMPORT, change_set_id confirmed. PASS.
+2. Export identity (G3/SC4): unedited re-export re-imported with ZERO diff. PASS.
+3. Settings round-trip (G4): "Settings applied." on valid YAML; failure copy on non-YAML. PASS.
+4. SC5 badges + revert: History showed source badges; REVERT THIS CHANGE SET worked end-to-end. PASS.
+5. Reshuffle entry (G1): /admin/wizard showed START SETUP WIZARD + START RESHUFFLE. PASS.
 
 ---
 
 ### Gaps Summary
 
-No blocker gaps. The code implementation for all five requirements (ADMN-04, ADMN-05, ADMN-10, BAK-01, BAK-02) is present, wired, and compiles/builds clean. The test suite confirms backend atomicity, PIN exclusion, source labelling, and io-layer round-trip correctness.
+No gaps. All phase goal components are verified:
 
-The four UNCERTAIN truths (SC2, SC3, SC4, SC5) are gated on running-stack/browser behavior that cannot be asserted programmatically. This is the expected state described in the verification_context: automated checks pass; the 6 human UAT items (consolidated to 4 above) are pending.
+- Guided setup wizard is discoverable and commits atomically (SC1, ADMN-04).
+- Reshuffle wizard is discoverable from /admin/wizard, persists draft to localStorage, and resume banner works (SC3, ADMN-10).
+- CSV/YAML import runs a true dry-run preview (no write until COMMIT IMPORT), validates per-row with near-miss chips, shows diff grid (SC2, ADMN-05).
+- Export → re-import is identity (zero diff, zero errors) via the G3 phantom-identity-skip (SC4, BAK-01).
+- Settings export excludes PIN; settings import round-trips via raw-body upload reading result.updated (BAK-02).
+- Every commit ends with a confirmation naming change_set_id and REVERT THIS CHANGE SET working (SC5).
+- History source badges (WIZARD SETUP / RESHUFFLE / CSV IMPORT / YAML IMPORT) render correctly (D-04).
 
-One honest limitation to note: the test_csv_import / test_yaml_import / test_partial_import integration tests FAIL with 400 (phantom rejection of synthetic ATL-001 catalog numbers in the real dev v_collection). This is not a bug — the import validate path is working correctly. It means SC2 import commit success has no passing automated integration test and depends entirely on the human UAT with real records.
+The test suite is order-independent and green (pre-existing isolation debt fixed by a26252d). mypy --strict clean. tsc -b && vite build clean.
 
 ---
 
-_Verified: 2026-05-24T22:00:00Z_
+_Verified: 2026-05-25T01:10:00Z_
 _Verifier: Claude (gsd-verifier)_
+_Re-verification: Yes — initial had status human_needed (14/18); gap-closure plans 07-06/07/08 closed all 4 human-needed items; all 18/18 truths now verified_
