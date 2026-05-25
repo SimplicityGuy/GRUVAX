@@ -20,7 +20,7 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 - [x] **Phase 5: Segment-Aware Position Precision** - A bin holds an ordered list of per-label segments; store only cut points + optional physical-width overrides and derive segments/counts/fractions from `v_collection`; a segment-aware estimator supersedes §4.1 via two-level interpolation so a record's position is precise even when multiple labels share a bin. (completed 2026-05-23)
 - [x] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness; a configurable idle/ambient baseline with timed highlight revert (server-scheduled) and an optional recently-found retain mode. (completed 2026-05-24)
 - [x] **Phase 7: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable. (completed 2026-05-24)
-- [ ] **Phase 8: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof.
+- [x] **Phase 8: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof. (completed 2026-05-25)
 
 ## Phase Details
 
@@ -283,7 +283,7 @@ Plans:
   4. Compose declares per-service `logging:` directives (max-size + max-file) for `gruvax-api` and `mosquitto`; each service has a `healthcheck:` integrated with `restart: unless-stopped` for self-healing; volume permissions on a fresh host are documented and verified (Pitfall 14).
   5. A `pytest-benchmark` CI gate proves p95 `/api/search` end-to-end ≤200 ms and p95 `/api/locate` ≤50 ms against the synthetic CI dataset; a `just demo` (or equivalent) smoke script runs the Core Value flow against a fresh `docker compose up` to prove the SLO holds at the box level.
 
-**Plans:** 4/6 plans executed
+**Plans:** 6/6 plans complete
 Plans:
 **Wave 1** *(parallel — no file overlap)*
 
@@ -297,8 +297,8 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2; 08-04 and 08-05 run in parallel — no file overlap)*
 
-- [ ] 08-04-PLAN.md — Diagnostics surface: admin-gated /api/admin/diagnostics (7 SC#2 rows) + reset-stats + /admin/diagnostics page per UI-SPEC (OBS-05/06/07) [has human-verify checkpoint]
-- [ ] 08-05-PLAN.md — Kiosk staleness banner: StalenessBar (>14d) wired to /api/health; no-results stays generic (D-02 descope honored) (OBS-06) [has human-verify checkpoint]
+- [x] 08-04-PLAN.md — Diagnostics surface: admin-gated /api/admin/diagnostics (7 SC#2 rows) + reset-stats + /admin/diagnostics page per UI-SPEC (OBS-05/06/07) [has human-verify checkpoint]
+- [x] 08-05-PLAN.md — Kiosk staleness banner: StalenessBar (>14d) wired to /api/health; no-results stays generic (D-02 descope honored) (OBS-06) [has human-verify checkpoint]
 
 **UI hint:** yes (admin diagnostics page + kiosk banner; render to 08-UI-SPEC.md)
 
@@ -313,7 +313,7 @@ Plans:
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
 | 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete    | 2026-05-24 |
 | 7. Wizards + Import/Export | 8/8 | Complete    | 2026-05-25 |
-| 8. Observability + Deployment Hardening | 4/6 | In Progress|  |
+| 8. Observability + Deployment Hardening | 6/6 | Complete   | 2026-05-25 |
 
 ## Critical-Path Notes (carried from research)
 
