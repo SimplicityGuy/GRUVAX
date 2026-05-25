@@ -52,7 +52,7 @@ dev = [
 [tool.pytest.ini_options]
 asyncio_mode = "auto"
 testpaths = ["tests"]
-addopts = "-q --tb=short"
+addopts = "-q --tb=short --benchmark-disable"
 # repo root on sys.path so `from fixtures.synth_collection import ...` and
 # `from scripts.run_all_algorithms import ...` resolve in pytest (Plan 02-01 §Task 2b)
 pythonpath = ["."]

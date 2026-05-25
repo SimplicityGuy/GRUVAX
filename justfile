@@ -99,6 +99,42 @@ up-d:
 down:
     docker compose down
 
-# Build the Docker image only
+# Build the Docker image only (passes version metadata as build-args)
 build:
-    docker compose build
+    docker compose build \
+      --build-arg GIT_SHA=$(git rev-parse --short HEAD) \
+      --build-arg BUILD_TIMESTAMP=$(date -u +"%Y-%m-%dT%H:%M:%SZ") \
+      --build-arg GRUVAX_ENV=production
+
+# Generate src/gruvax/_version.py from current git state (for local dev outside Docker)
+build-version:
+    uv run python3 -c "\
+import pathlib, subprocess, datetime; \
+sha = subprocess.check_output(['git','rev-parse','--short','HEAD']).decode().strip(); \
+ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'); \
+pathlib.Path('src/gruvax/_version.py').write_text(f'GIT_SHA = \"{sha}\"\nBUILD_TIMESTAMP = \"{ts}\"\nENVIRONMENT = \"development\"\n') \
+"
+
+# Core Value smoke test: docker compose up → search → locate → assert SLO (SC5)
+demo:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    echo "=== GRUVAX Core Value smoke test ==="
+    docker compose up --build -d
+    echo "Waiting for api to be healthy..."
+    until curl -sf http://localhost:8000/api/health | python3 -c \
+      "import sys,json; d=json.load(sys.stdin); sys.exit(0 if d['status']=='ok' else 1)"; do
+        sleep 2
+    done
+    RESULT=$(curl -sf "http://localhost:8000/api/search?q=Miles+Davis&limit=1")
+    TOOK_MS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['took_ms'])")
+    echo "Search took: ${TOOK_MS}ms"
+    python3 -c "
+ms = float('$TOOK_MS')
+assert ms < 200, f'Search SLO FAILED: {ms:.1f}ms > 200ms'
+print(f'Search SLO: PASS ({ms:.1f}ms)')
+"
+    RELEASE_ID=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['items'][0]['release_id'])")
+    LOC_RESULT=$(curl -sf "http://localhost:8000/api/locate?release_id=${RELEASE_ID}")
+    echo "Locate result: $(echo $LOC_RESULT | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["primary_cube"])')"
+    echo "=== PASS ==="
