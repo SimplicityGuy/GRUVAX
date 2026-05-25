@@ -317,7 +317,7 @@ Plans:
 | 7. Wizards + Import/Export | 8/8 | Complete    | 2026-05-25 |
 | 8. Observability + Deployment Hardening | 6/6 | Complete    | 2026-05-25 |
 | 9. Tooling and docs hardening | 6/6 | Complete    | 2026-05-25 |
-| 10. Close Milestone Gaps | 3/3 | Complete   | 2026-05-25 |
+| 10. Close Milestone Gaps | 3/3 | Complete    | 2026-05-25 |
 
 ## Critical-Path Notes (carried from research)
 
