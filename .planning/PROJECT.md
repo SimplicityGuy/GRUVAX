@@ -110,4 +110,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-25 after Phase 8 (Observability + Deployment Hardening) completion*
+*Last updated: 2026-05-25 after Phase 9 (Tooling & Docs Hardening) completion — v1.x developer-experience debt closed (structlog logging, six-workflow GitHub Actions CI with honest-green gate, pre-commit/dependabot/update-script, pull-based GHCR deploy, docs/ARCHITECTURE.md). No product behavior changed. v1.x runway cleared for the v2.0 multi-user milestone.*
