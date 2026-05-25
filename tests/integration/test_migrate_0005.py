@@ -331,6 +331,15 @@ async def test_0005_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no
     import subprocess
     import sys
 
+    # Clear boundary_history first. On the shared dev DB other modules' import /
+    # wizard tests commit history rows with source labels (csv/yaml/wizard/import)
+    # that the OLDER 0006 source CHECK forbids; the 0007→0006 downgrade step then
+    # fails with a CheckViolation. This is a SCHEMA round-trip test — the history
+    # data is irrelevant to it, so clearing it makes the test order-independent.
+    async with migrate_pool.connection() as conn:
+        await conn.execute("DELETE FROM gruvax.boundary_history")
+        await conn.commit()
+
     # Downgrade to 0004 (drops migration 0005's segment model, independent of any
     # newer migrations layered above 0005).
     result = subprocess.run(

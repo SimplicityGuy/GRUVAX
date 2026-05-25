@@ -45,6 +45,31 @@ def event_loop_policy() -> asyncio.DefaultEventLoopPolicy:
     return asyncio.DefaultEventLoopPolicy()
 
 
+# ── login rate-limit reset (global) ──────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limit_global() -> None:  # type: ignore[return]
+    """Reset the process-global login rate-limit counter before EVERY test.
+
+    The login endpoint enforces a 5-attempts-per-5-minute limit via a
+    module-level singleton ``FixedWindowRateLimiter`` backed by ``MemoryStorage``
+    (see ``gruvax.api.admin.limiter``).  The key is the socket peer IP, which is
+    constant for all in-process test requests, so the counter is shared across
+    the ENTIRE test session — every test module's per-test ``_login()`` helper
+    draws from the same 5-attempt bucket.  After 5 logins the rest of the session
+    receives 429 and every auth-gated test fails at the login step.
+
+    ``test_admin_auth`` already resets the limiter per-test, but only for its own
+    module.  Promoting the reset to an autouse fixture in the root conftest makes
+    every module start with a clean budget.  The reset only clears an in-memory
+    counter (no DB), so it is safe and cheap for unit and property tests too.
+    """
+    from gruvax.api.admin.limiter import limiter
+
+    limiter.reset()
+
+
 # ── database ─────────────────────────────────────────────────────────────────
 
 

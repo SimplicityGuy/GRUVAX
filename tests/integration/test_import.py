@@ -86,6 +86,43 @@ def _make_synthetic_yaml(cubes: list[dict]) -> bytes:
     return content.encode()
 
 
+async def _seed_boundaries_via_bulk(client, auth, cubes) -> None:  # type: ignore[no-untyped-def]
+    """Commit ``cubes`` as the CURRENT boundary via POST /admin/cubes/bulk (force=True).
+
+    Makes the import tests self-contained instead of depending on cross-test
+    boundary state on the shared dev DB. Import phantom re-validation is skipped
+    for rows that equal the current committed boundary (G3 identity-skip, 07-07),
+    so once these synthetic cubes are the current boundary, re-importing the same
+    set returns 200 rather than 400 phantom_boundary. ``force=True`` bypasses the
+    phantom check on the bulk write itself — these synthetic labels/catalogs are
+    deliberately absent from the dev v_collection.
+    """
+    import uuid
+
+    updates = [
+        {
+            "unit_id": c["unit_id"],
+            "row": c["row"],
+            "col": c["col"],
+            "first_label": c["first_label"],
+            "first_catalog": c["first_catalog"],
+            "is_empty": c.get("is_empty", False),
+            "force": True,
+        }
+        for c in cubes
+    ]
+    resp = await client.post(
+        "/api/admin/cubes/bulk",
+        json={"updates": updates, "source": "bulk"},
+        headers={
+            "X-CSRF-Token": auth["csrf_token"],
+            "Idempotency-Key": str(uuid.uuid4()),
+        },
+        cookies=auth["cookies"],
+    )
+    assert resp.status_code == 200, f"Seed via bulk failed: {resp.status_code}: {resp.text}"
+
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_csv_import(client, four_cube_boundaries) -> None:  # type: ignore[no-untyped-def]
     """POST /api/admin/import/boundaries with a synthetic CSV → 200, source='csv' in history.
@@ -95,6 +132,11 @@ async def test_csv_import(client, four_cube_boundaries) -> None:  # type: ignore
     """
     auth = await _login(client)
     assert auth, "Login must be available for CSV import test"
+
+    # Seed the synthetic cubes as the current boundary first so the import's
+    # phantom re-validation is correctly skipped (G3 identity-skip) regardless of
+    # what other modules left on the shared dev DB.
+    await _seed_boundaries_via_bulk(client, auth, four_cube_boundaries)
 
     csv_bytes = _make_synthetic_csv(four_cube_boundaries)
     response = await client.post(
@@ -124,6 +166,9 @@ async def test_yaml_import(client, four_cube_boundaries) -> None:  # type: ignor
     auth = await _login(client)
     assert auth, "Login must be available for YAML import test"
 
+    # Seed the synthetic cubes as the current boundary first (see test_csv_import).
+    await _seed_boundaries_via_bulk(client, auth, four_cube_boundaries)
+
     yaml_bytes = _make_synthetic_yaml(four_cube_boundaries)
     response = await client.post(
         "/api/admin/import/boundaries",
@@ -142,18 +187,41 @@ async def test_yaml_import(client, four_cube_boundaries) -> None:  # type: ignor
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_partial_import(client, thirty_two_cube_boundaries) -> None:  # type: ignore[no-untyped-def]
+async def test_partial_import(client) -> None:  # type: ignore[no-untyped-def]
     """Partial import (16 of 32 cubes): remaining cubes become is_empty (D-09 atomic replace).
 
     Upload only unit_id=1 cubes (16 cubes); unit_id=2 cubes should become is_empty.
     Asserts 200 on the import endpoint — 404 fails RED as intended.
-    Synthetic data only.
+
+    Uses a CONTIGUOUS unit_id=1 layout (4 synthetic labels, each in a contiguous
+    run of 4 cubes matching the global sort order) so the import passes SEG-05
+    contiguity validation. The shared ``thirty_two_cube_boundaries`` fixture
+    cycles labels per-cube (non-contiguous) and is unsuitable for a *successful*
+    import. Synthetic data only.
     """
     auth = await _login(client)
     assert auth, "Login must be available for partial import test"
 
-    # Only include unit_id=1 (half the grid)
-    partial_cubes = [c for c in thirty_two_cube_boundaries if c["unit_id"] == 1]
+    # Contiguous unit_id=1 layout: label idx//4 → 4 cubes per label, physical
+    # order (row, col)=divmod(idx, 4) matches the (label, catalog) global sort.
+    _labels = [("Atlantic", "ATL"), ("Blue Note", "BNL"), ("Columbia", "COL"), ("Impulse", "IMP")]
+    partial_cubes = []
+    for idx in range(16):
+        row, col = divmod(idx, 4)
+        label_name, prefix = _labels[idx // 4]
+        partial_cubes.append(
+            {
+                "unit_id": 1,
+                "row": row,
+                "col": col,
+                "first_label": label_name,
+                "first_catalog": f"{prefix}-{idx + 1:03d}",
+                "is_empty": False,
+            }
+        )
+    # Seed those cubes as the current boundary first so the re-import's phantom
+    # re-validation is skipped (G3 identity-skip); unit_id=2 cubes become is_empty.
+    await _seed_boundaries_via_bulk(client, auth, partial_cubes)
     yaml_bytes = _make_synthetic_yaml(partial_cubes)
     response = await client.post(
         "/api/admin/import/boundaries",

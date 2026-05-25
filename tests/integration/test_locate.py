@@ -55,6 +55,15 @@ NO_BOUNDARY_RELEASE_ID = 119
 @pytest_asyncio.fixture(scope="module")
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan."""
+    # Restore canonical boundaries before the app loads its startup cache. Other
+    # modules on the shared dev DB may have mutated cube_boundaries (import/bulk
+    # tests), and GET /api/cubes reads the live DB — so the rows must be canonical
+    # for test_cubes_endpoint to be deterministic regardless of module run order.
+    from pathlib import Path
+
+    from gruvax.db.seed_boundaries import load_boundaries
+
+    await load_boundaries(Path(__file__).resolve().parents[2] / "fixtures" / "boundaries.yaml")
     app = create_app()
     async with (
         LifespanManager(app) as manager,
