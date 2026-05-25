@@ -1,0 +1,23 @@
+# compose.override.yaml.example — COMMITTED TEMPLATE (dev-only override)
+#
+# This file is the template for the gitignored compose.override.yaml.
+# Docker Compose auto-merges compose.override.yaml when present, which shadows
+# the GHCR image in compose.yaml with a local build context — enabling
+# `just up` / `docker compose up --build` to build locally during development.
+#
+# To use:
+#   cp compose.override.yaml.example compose.override.yaml
+#
+# IMPORTANT: compose.override.yaml is gitignored and must NEVER be deployed to
+# the production host. If present on the prod host, `docker compose up` will
+# auto-load it and attempt to build from source instead of pulling the published
+# GHCR image, defeating the pull-based deploy (Pitfall 3).
+#
+# On the production host, use pull-based deploy only:
+#   docker compose pull && docker compose up -d
+services:
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: gruvax-api:local   # local tag for dev; overrides compose.yaml GHCR image

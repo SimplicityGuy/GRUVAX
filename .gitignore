@@ -226,6 +226,9 @@ background/
 .DS_Store
 .claude/
 
+# compose.override.yaml is dev-only — never deploy to the production host
+compose.override.yaml
+
 # GRUVAX — generated / runtime artifacts (do not check in)
 mosquitto/passwd
 static/
