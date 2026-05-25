@@ -25,6 +25,10 @@ lint-fix:
     uv run ruff check --fix src/ tests/
     uv run ruff format src/ tests/
 
+# Run pre-commit on all files (the code-quality gate's single source of truth per D-02)
+lint-precommit:
+    uv run pre-commit run --all-files
+
 # Run mypy strict type check on application source
 typecheck:
     uv run mypy --strict src/gruvax/
