@@ -7,14 +7,18 @@ Tests (Wave-0):
   - test_unauthenticated_get:  GET without session returns 401.
   - test_unauthenticated_reset: POST reset-stats without session returns 401/403.
   - test_reset_stats:       Seed counters → GET (non-empty top_searched) → POST reset → GET (empty).
+  - test_recent_logs_shape: Each recent_logs entry has exactly {ts: float, level: str,
+                            logger: str, msg: str} — regression guard for structlog migration.
+  - test_recent_logs_ring_scoping: Third-party loggers (psycopg, uvicorn, etc.) do NOT
+                                   appear in recent_logs (T-9-IL secret-leak guard).
 
 Auth bypass uses app.dependency_overrides[require_admin] (Phase 06-04 canonical pattern).
 """
 
 from __future__ import annotations
 
+import logging
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 import pytest_asyncio
@@ -23,7 +27,6 @@ from httpx import ASGITransport, AsyncClient
 
 from gruvax.api.deps import require_admin
 from gruvax.app import create_app
-
 
 # ── Module-scoped client (authenticated via dependency_overrides) ──────────────
 
@@ -176,7 +179,7 @@ async def test_no_secrets(diag_client) -> None:  # type: ignore[no-untyped-def]
     for key in forbidden:
         assert key not in body_text, f"Diagnostics body must not leak {key!r}"
     # pin key must not be a top-level key
-    assert "pin" not in body.keys(), "pin must not be a top-level diagnostics key"
+    assert "pin" not in body, "pin must not be a top-level diagnostics key"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -206,7 +209,7 @@ async def test_reset_stats(diag_client, db_pool) -> None:  # type: ignore[no-unt
     Uses a real v_collection release_id to ensure the JOIN in get_top_searched
     returns a match. Falls back to skipping if v_collection is empty (no seed data).
     """
-    ac, app = diag_client
+    ac, _app = diag_client
 
     # Find a release_id that exists in v_collection (for the JOIN to work)
     async with db_pool.connection() as conn, conn.cursor() as cur:
@@ -245,3 +248,84 @@ async def test_reset_stats(diag_client, db_pool) -> None:  # type: ignore[no-unt
     assert body2["top_searched"] == [], (
         f"top_searched should be empty after reset but got: {body2['top_searched']}"
     )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_recent_logs_shape(diag_client) -> None:  # type: ignore[no-untyped-def]
+    """Every recent_logs entry must have exactly {ts: float, level: str, logger: str, msg: str}.
+
+    Wave-0 regression guard: the structlog migration must not silently change the shape
+    consumed by the admin diagnostics page (T-9-SHAPE). The test emits a gruvax-logger
+    record first so the ring is non-empty, then validates each entry's keys and types.
+    """
+    ac, _app = diag_client
+
+    # Emit a gruvax-scoped record so recent_logs is non-empty.
+    logging.getLogger("gruvax.test.shape").info("shape regression probe")
+
+    response = await ac.get("/api/admin/diagnostics")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    recent_logs: list[Any] = body["recent_logs"]
+
+    # The ring may still be empty (e.g. log level filtered it out) — skip if so.
+    if not recent_logs:
+        pytest.skip("recent_logs is empty — cannot assert shape; check LOG_LEVEL setting")
+
+    for entry in recent_logs:
+        assert isinstance(entry, dict), f"recent_logs entry must be a dict, got {type(entry)}"
+        assert set(entry.keys()) == {"ts", "level", "logger", "msg"}, (
+            f"recent_logs entry must have exactly {{ts, level, logger, msg}} keys, "
+            f"got {set(entry.keys())!r}"
+        )
+        assert isinstance(entry["ts"], (int, float)), (
+            f"ts must be a float but got {type(entry['ts']).__name__!r}: {entry['ts']!r}"
+        )
+        assert isinstance(entry["level"], str), (
+            f"level must be a str but got {type(entry['level']).__name__!r}"
+        )
+        assert isinstance(entry["logger"], str), (
+            f"logger must be a str but got {type(entry['logger']).__name__!r}"
+        )
+        assert isinstance(entry["msg"], str), (
+            f"msg must be a str but got {type(entry['msg']).__name__!r}"
+        )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_recent_logs_ring_scoping(diag_client) -> None:  # type: ignore[no-untyped-def]
+    """Third-party logger records must NOT appear in recent_logs (T-9-IL secret-leak guard).
+
+    Wave-0 regression assertion: after a psycopg-namespace logger emits at INFO+, no
+    entry in recent_logs should have a 'logger' field starting with a non-gruvax prefix.
+    This covers the security control that prevents a stringified DSN from a psycopg
+    connection-failure record from reaching the admin diagnostics page.
+
+    The LogRingHandler is attached only to logging.getLogger("gruvax"); third-party
+    loggers propagate to the root logger but cannot reach the ring buffer.
+    """
+    ac, _app = diag_client
+
+    # Emit from third-party-namespaced loggers to verify they cannot reach the ring.
+    for third_party_name in ("psycopg", "uvicorn.error", "sqlalchemy.engine", "aiomqtt"):
+        logging.getLogger(third_party_name).info(
+            "scoping probe — should never appear in recent_logs"
+        )
+
+    # Also emit from the gruvax logger so recent_logs is non-empty and the test is meaningful.
+    logging.getLogger("gruvax.test.scoping").info("scoping probe — gruvax reference record")
+
+    response = await ac.get("/api/admin/diagnostics")
+    assert response.status_code == 200, response.text
+    body = response.json()
+    recent_logs: list[Any] = body["recent_logs"]
+
+    third_party_prefixes = ("psycopg", "uvicorn", "sqlalchemy", "aiomqtt")
+    for entry in recent_logs:
+        logger_name: str = entry.get("logger", "")
+        for prefix in third_party_prefixes:
+            assert not logger_name.startswith(prefix), (
+                f"Third-party logger {logger_name!r} (prefix {prefix!r}) appeared in "
+                f"recent_logs — ring scoping is broken (T-9-IL: secret-leak guard failed). "
+                f"Entry: {entry!r}"
+            )

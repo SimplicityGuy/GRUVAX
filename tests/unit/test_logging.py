@@ -1,29 +1,27 @@
-"""Unit tests for src/gruvax/logging_config.py.
+"""Unit tests for src/gruvax/logging_config.py (post-structlog migration).
 
 Tests:
-  - JsonFormatter.format() returns valid single-line JSON with ts/level/logger/msg keys.
-  - JsonFormatter.format() includes 'exc' key when record has exc_info.
   - LogRingHandler.emit() appends one dict per record to the passed deque.
-  - LogRingHandler dict has ts (float), level, logger, msg keys.
+  - LogRingHandler dict has ts (float), level (str), logger (str), msg (str) keys.
+  - LogRingHandler handles structlog-native records (record.msg is a dict).
+  - LogRingHandler handles stdlib foreign records (record.msg is a string).
   - deque(maxlen=N) eviction works correctly (capacity enforcement).
 """
 
 from __future__ import annotations
 
-import json
 import logging
 from collections import deque
 
-from gruvax.logging_config import JsonFormatter, LogRingHandler
+from gruvax.logging_config import LogRingHandler
 
 
-def _make_record(
+def _make_string_record(
     msg: str = "hello",
     level: int = logging.INFO,
     name: str = "test.logger",
-    exc_info: object = None,
 ) -> logging.LogRecord:
-    """Create a LogRecord suitable for testing."""
+    """Create a stdlib-style LogRecord with a plain string msg."""
     record = logging.LogRecord(
         name=name,
         level=level,
@@ -31,96 +29,32 @@ def _make_record(
         lineno=1,
         msg=msg,
         args=(),
-        exc_info=exc_info,
+        exc_info=None,
     )
     return record
 
 
-class TestJsonFormatter:
-    """Tests for JsonFormatter."""
+def _make_dict_record(
+    event: str = "hello",
+    level: int = logging.INFO,
+    name: str = "gruvax.api",
+) -> logging.LogRecord:
+    """Create a structlog-native LogRecord where msg is the event dict.
 
-    def test_format_returns_valid_json(self) -> None:
-        """format() output parses as JSON without error."""
-        formatter = JsonFormatter()
-        record = _make_record("test message")
-        output = formatter.format(record)
-        parsed = json.loads(output)
-        assert isinstance(parsed, dict)
-
-    def test_format_has_required_keys(self) -> None:
-        """Parsed output contains ts, level, logger, msg keys."""
-        formatter = JsonFormatter()
-        record = _make_record("test message", name="gruvax.api")
-        output = formatter.format(record)
-        parsed = json.loads(output)
-        assert "ts" in parsed
-        assert "level" in parsed
-        assert "logger" in parsed
-        assert "msg" in parsed
-
-    def test_format_ts_is_iso8601_string(self) -> None:
-        """ts field is a string in ISO-8601 UTC format (ends with Z)."""
-        formatter = JsonFormatter()
-        record = _make_record()
-        parsed = json.loads(formatter.format(record))
-        ts = parsed["ts"]
-        assert isinstance(ts, str)
-        assert ts.endswith("Z"), f"Expected ts to end with Z, got {ts!r}"
-        # Must contain T separator (ISO-8601)
-        assert "T" in ts
-
-    def test_format_level_is_levelname(self) -> None:
-        """level field matches the record's levelname."""
-        formatter = JsonFormatter()
-        record = _make_record(level=logging.WARNING)
-        parsed = json.loads(formatter.format(record))
-        assert parsed["level"] == "WARNING"
-
-    def test_format_logger_is_record_name(self) -> None:
-        """logger field matches the record's name."""
-        formatter = JsonFormatter()
-        record = _make_record(name="gruvax.search")
-        parsed = json.loads(formatter.format(record))
-        assert parsed["logger"] == "gruvax.search"
-
-    def test_format_msg_is_message(self) -> None:
-        """msg field contains the formatted message."""
-        formatter = JsonFormatter()
-        record = _make_record("search took 42ms")
-        parsed = json.loads(formatter.format(record))
-        assert parsed["msg"] == "search took 42ms"
-
-    def test_format_no_exc_key_on_normal_record(self) -> None:
-        """No 'exc' key when record has no exc_info."""
-        formatter = JsonFormatter()
-        record = _make_record()
-        parsed = json.loads(formatter.format(record))
-        assert "exc" not in parsed
-
-    def test_format_error_with_exc_info_includes_exc(self) -> None:
-        """ERROR record with exc_info includes an 'exc' key."""
-        formatter = JsonFormatter()
-        try:
-            raise ValueError("oops")
-        except ValueError:
-            import sys
-
-            exc_info = sys.exc_info()
-        record = _make_record(msg="something failed", level=logging.ERROR, exc_info=exc_info)
-        parsed = json.loads(formatter.format(record))
-        assert "exc" in parsed
-        assert "ValueError" in parsed["exc"]
-        assert "oops" in parsed["exc"]
-
-    def test_format_is_single_line(self) -> None:
-        """Output is a single JSON line (no newlines in the JSON itself)."""
-        formatter = JsonFormatter()
-        record = _make_record("line one\nline two")
-        output = formatter.format(record)
-        # The JSON string itself should not contain raw newlines outside the JSON encoding
-        parsed = json.loads(output)
-        # Verify it parses (single-line JSON)
-        assert parsed is not None
+    structlog wraps its log calls into stdlib LogRecords with record.msg set to
+    the event dict (a Python dict) before ProcessorFormatter renders it to JSON
+    for stdout.  LogRingHandler.emit() fires on this unmodified record.
+    """
+    record = logging.LogRecord(
+        name=name,
+        level=level,
+        pathname="test.py",
+        lineno=1,
+        msg={"event": event, "level": "info"},
+        args=(),
+        exc_info=None,
+    )
+    return record
 
 
 class TestLogRingHandler:
@@ -130,7 +64,7 @@ class TestLogRingHandler:
         """emit() appends one entry to the deque."""
         ring: deque[dict] = deque()
         handler = LogRingHandler(ring)
-        record = _make_record("test msg")
+        record = _make_string_record("test msg")
         handler.emit(record)
         assert len(ring) == 1
 
@@ -138,7 +72,7 @@ class TestLogRingHandler:
         """Emitted dict has ts, level, logger, msg keys."""
         ring: deque[dict] = deque()
         handler = LogRingHandler(ring)
-        record = _make_record("hello", level=logging.DEBUG, name="gruvax.db")
+        record = _make_string_record("hello", level=logging.DEBUG, name="gruvax.db")
         handler.emit(record)
         entry = ring[0]
         assert "ts" in entry
@@ -150,7 +84,7 @@ class TestLogRingHandler:
         """ts field in the emitted dict is a float (Unix timestamp)."""
         ring: deque[dict] = deque()
         handler = LogRingHandler(ring)
-        record = _make_record()
+        record = _make_string_record()
         handler.emit(record)
         ts = ring[0]["ts"]
         assert isinstance(ts, float)
@@ -161,7 +95,7 @@ class TestLogRingHandler:
         """level field matches the record's levelname string."""
         ring: deque[dict] = deque()
         handler = LogRingHandler(ring)
-        record = _make_record(level=logging.ERROR)
+        record = _make_string_record(level=logging.ERROR)
         handler.emit(record)
         assert ring[0]["level"] == "ERROR"
 
@@ -169,24 +103,61 @@ class TestLogRingHandler:
         """logger field matches the record name."""
         ring: deque[dict] = deque()
         handler = LogRingHandler(ring)
-        record = _make_record(name="gruvax.api.search")
+        record = _make_string_record(name="gruvax.api.search")
         handler.emit(record)
         assert ring[0]["logger"] == "gruvax.api.search"
 
-    def test_emit_msg_is_message(self) -> None:
-        """msg field contains the formatted message text."""
+    def test_emit_msg_stdlib_string_record(self) -> None:
+        """msg field contains getMessage() text for stdlib foreign records."""
         ring: deque[dict] = deque()
         handler = LogRingHandler(ring)
-        record = _make_record("search done")
+        record = _make_string_record("search done")
         handler.emit(record)
         assert ring[0]["msg"] == "search done"
+
+    def test_emit_msg_structlog_dict_record(self) -> None:
+        """msg field extracts 'event' key for structlog-native records (record.msg is dict)."""
+        ring: deque[dict] = deque()
+        handler = LogRingHandler(ring)
+        record = _make_dict_record("boundary cache loaded")
+        handler.emit(record)
+        assert ring[0]["msg"] == "boundary cache loaded"
+
+    def test_emit_msg_structlog_dict_missing_event(self) -> None:
+        """Structlog-native dict without 'event' key produces empty string msg."""
+        ring: deque[dict] = deque()
+        handler = LogRingHandler(ring)
+        record = logging.LogRecord(
+            name="gruvax.test",
+            level=logging.INFO,
+            pathname="test.py",
+            lineno=1,
+            msg={"level": "info"},  # no 'event' key
+            args=(),
+            exc_info=None,
+        )
+        handler.emit(record)
+        assert ring[0]["msg"] == ""
+
+    def test_emit_structlog_does_not_mutate_record(self) -> None:
+        """emit() must not modify record.msg (ProcessorFormatter needs it intact)."""
+        ring: deque[dict] = deque()
+        handler = LogRingHandler(ring)
+        original_msg = {"event": "startup complete", "level": "info"}
+        record = _make_dict_record("startup complete")
+        # Capture the original dict id
+        original_id = id(record.msg)
+        handler.emit(record)
+        # record.msg must still be the same dict object, unmodified
+        assert id(record.msg) == original_id
+        assert record.msg == original_msg
 
     def test_deque_evicts_oldest_past_maxlen(self) -> None:
         """A deque(maxlen=N) evicts the oldest entry when capacity is exceeded."""
         ring: deque[dict] = deque(maxlen=3)
         handler = LogRingHandler(ring)
         for i in range(5):
-            handler.emit(_make_record(f"msg {i}"))
+            handler.emit(_make_string_record(f"msg {i}"))
         # Only last 3 should remain
         assert len(ring) == 3
         msgs = [entry["msg"] for entry in ring]
@@ -197,7 +168,7 @@ class TestLogRingHandler:
         ring: deque[dict] = deque(maxlen=200)
         handler = LogRingHandler(ring)
         for i in range(250):
-            handler.emit(_make_record(f"msg {i}"))
+            handler.emit(_make_string_record(f"msg {i}"))
         assert len(ring) == 200
         # Most recent entry should be msg 249
         assert ring[-1]["msg"] == "msg 249"
@@ -208,8 +179,8 @@ class TestLogRingHandler:
         """Multiple emits produce ordered entries in the deque."""
         ring: deque[dict] = deque()
         handler = LogRingHandler(ring)
-        handler.emit(_make_record("first"))
-        handler.emit(_make_record("second"))
-        handler.emit(_make_record("third"))
+        handler.emit(_make_string_record("first"))
+        handler.emit(_make_string_record("second"))
+        handler.emit(_make_string_record("third"))
         msgs = [e["msg"] for e in ring]
         assert msgs == ["first", "second", "third"]
