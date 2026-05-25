@@ -10,16 +10,13 @@ and recorded calls) to assert publish args without a live broker.
 
 from __future__ import annotations
 
-import asyncio
 import json
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 from gruvax.mqtt import publishers, topics
-from gruvax.mqtt.schemas import IlluminatePayload
-
 
 # ── shared fixture helpers ────────────────────────────────────────────────────
 
@@ -78,8 +75,10 @@ async def test_illuminate_payload() -> None:
     brightness int, transition {style, duration_ms}.
     """
     client = _make_mqtt_client()
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.fan_out_illuminate(client, LOCATE_RESULT_BODY, SETTINGS_CACHE)
 
     # Find the illuminate topic publish call
@@ -99,7 +98,9 @@ async def test_illuminate_payload() -> None:
     assert {"r", "g", "b"} <= set(color), f"color missing r/g/b: {color}"
     assert isinstance(payload["brightness"], int)
     transition = payload["transition"]
-    assert "style" in transition and "duration_ms" in transition, f"transition keys missing: {transition}"
+    assert "style" in transition and "duration_ms" in transition, (
+        f"transition keys missing: {transition}"
+    )
 
 
 # ── LED-02: span payload lists all label_span cubes ──────────────────────────
@@ -113,8 +114,10 @@ async def test_span_payload() -> None:
     every entry in label_span.
     """
     client = _make_mqtt_client()
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.fan_out_illuminate(client, LOCATE_RESULT_BODY, SETTINGS_CACHE)
 
     publish_calls = client.publish.call_args_list
@@ -142,8 +145,10 @@ async def test_sub_payload() -> None:
     schema == "gruvax.sub_interval.v1".
     """
     client = _make_mqtt_client()
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.fan_out_illuminate(client, LOCATE_RESULT_BODY, SETTINGS_CACHE)
 
     sub_t = topics.sub_topic(TEST_PREFIX, 0, 2, 3)
@@ -171,8 +176,10 @@ async def test_fan_out_topics() -> None:
     state/* topics are retain=True.
     """
     client = _make_mqtt_client()
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.fan_out_illuminate(client, LOCATE_RESULT_BODY, SETTINGS_CACHE)
 
     calls = client.publish.call_args_list
@@ -192,7 +199,7 @@ async def test_fan_out_topics() -> None:
     for c in calls:
         t = c[0][0]
         kwargs = c[1] if len(c) > 1 else {}
-        if any(t == cmd for cmd in [illuminate_t, sub_t] + span_ts):
+        if any(t == cmd for cmd in [illuminate_t, sub_t, *span_ts]):
             retain = kwargs.get("retain", False)
             assert retain is False, f"Command topic {t!r} must not be retained; got retain={retain}"
 
@@ -211,8 +218,10 @@ async def test_state_retained_has_expiry() -> None:
 
     client = _make_mqtt_client()
     expiry = 3600
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", expiry):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", expiry),
+    ):
         await publishers.fan_out_illuminate(client, LOCATE_RESULT_BODY, SETTINGS_CACHE)
 
     calls = client.publish.call_args_list
@@ -223,7 +232,9 @@ async def test_state_retained_has_expiry() -> None:
         assert kwargs.get("qos") == 1, f"state/* must use qos=1; got {kwargs.get('qos')}"
         assert kwargs.get("retain") is True, f"state/* must be retained; got {kwargs.get('retain')}"
         props = kwargs.get("properties")
-        assert isinstance(props, Properties), f"state/* must carry paho Properties; got {type(props)}"
+        assert isinstance(props, Properties), (
+            f"state/* must carry paho Properties; got {type(props)}"
+        )
         assert props.MessageExpiryInterval == expiry, (
             f"MessageExpiryInterval {props.MessageExpiryInterval} != {expiry}"
         )
@@ -237,8 +248,10 @@ async def test_topic_prefix() -> None:
     """Topics are prefixed with MQTT_TOPIC_PREFIX (D-14 dev/prod isolation)."""
     client = _make_mqtt_client()
     custom_prefix = "gruvax/v1/dev/leds"
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", custom_prefix), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", custom_prefix),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.fan_out_illuminate(client, LOCATE_RESULT_BODY, SETTINGS_CACHE)
 
     for c in client.publish.call_args_list:
@@ -263,13 +276,15 @@ async def test_span_brightness_uses_span_tier() -> None:
     is led_brightness.active (100%). The ambient tier is the idle baseline only.
     """
     cache = dict(SETTINGS_CACHE)
-    cache["led_brightness.span"] = "90"    # label-span tier
+    cache["led_brightness.span"] = "90"  # label-span tier
     cache["led_brightness.active"] = "200"  # position tier
     cache["led_brightness.ambient"] = "10"  # idle baseline — NOT used for span
 
     client = _make_mqtt_client()
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.fan_out_illuminate(client, LOCATE_RESULT_BODY, cache)
 
     calls = client.publish.call_args_list
@@ -290,7 +305,9 @@ async def test_span_brightness_uses_span_tier() -> None:
     # span brightness must be from span tier (clamped to 90), NOT ambient (10)
     assert span_brightness == 90, f"Expected span brightness=90 (span tier); got {span_brightness}"
     # position brightness must be from active tier (clamped to 200)
-    assert ill_brightness == 200, f"Expected illuminate brightness=200 (active tier); got {ill_brightness}"
+    assert ill_brightness == 200, (
+        f"Expected illuminate brightness=200 (active tier); got {ill_brightness}"
+    )
 
 
 # ── D-01: degraded mode — fan_out_illuminate with client=None does not raise ──
@@ -317,17 +334,16 @@ async def test_no_retain_on_commands() -> None:
     Only state/* is retained.
     """
     client = _make_mqtt_client()
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.fan_out_illuminate(client, LOCATE_RESULT_BODY, SETTINGS_CACHE)
 
     for c in client.publish.call_args_list:
         topic: str = c[0][0]
         kwargs = c[1] if len(c) > 1 else {}
-        if any(
-            segment in topic
-            for segment in ["/illuminate/", "/span/", "/sub/"]
-        ):
+        if any(segment in topic for segment in ["/illuminate/", "/span/", "/sub/"]):
             retain = kwargs.get("retain", False)
             assert retain is False, (
                 f"Command topic {topic!r} must have retain=False; got retain={retain}"

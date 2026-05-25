@@ -240,9 +240,7 @@ async def test_get_top_searched_returns_display_fields(db_pool) -> None:  # type
     result = await get_top_searched(db_pool, limit=5)
 
     if not result:
-        pytest.skip(
-            "release_id=1 not in v_collection for this DB — skipping dict-shape check"
-        )
+        pytest.skip("release_id=1 not in v_collection for this DB — skipping dict-shape check")
 
     row = result[0]
     required_keys = {

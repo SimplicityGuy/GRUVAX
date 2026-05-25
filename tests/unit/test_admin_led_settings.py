@@ -19,14 +19,12 @@ RED: All tests fail until settings.py _ALLOWED_SETTINGS_KEYS, GET response,
 
 from __future__ import annotations
 
-import json
 import os
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 
 # ── helpers ───────────────────────────────────────────────────────────────────
 
@@ -65,7 +63,7 @@ class _FakeCursor:
     async def fetchall(self) -> list[tuple[str, Any]]:
         return self._rows
 
-    async def __aenter__(self) -> "_FakeCursor":
+    async def __aenter__(self) -> _FakeCursor:
         return self
 
     async def __aexit__(self, *args: object) -> None:
@@ -85,7 +83,7 @@ class _FakeConn:
     async def commit(self) -> None:
         pass
 
-    async def __aenter__(self) -> "_FakeConn":
+    async def __aenter__(self) -> _FakeConn:
         return self
 
     async def __aexit__(self, *args: object) -> None:
@@ -102,7 +100,7 @@ class _FakePool:
 
 def _make_all_settings_rows() -> list[tuple[str, Any]]:
     """Build a list of (key, value) rows matching migration 0006 defaults."""
-    return [(k, v) for k, v in _LED_DB_ROWS.items()]
+    return list(_LED_DB_ROWS.items())
 
 
 # Stub admin identity returned by the patched require_admin dependency.
@@ -164,9 +162,7 @@ async def test_get_settings_includes_led_keys() -> None:
     """
     app = _make_app()
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         res = await client.get("/api/admin/settings")
 
     assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
@@ -194,15 +190,33 @@ async def test_get_settings_includes_led_keys() -> None:
     )
 
     # Verify default values match migration 0006
-    assert body["led_color_position"] == "#FFD700", f"position default wrong: {body['led_color_position']}"
-    assert body["led_color_label_span"] == "#7C3AED", f"label_span default wrong: {body['led_color_label_span']}"
-    assert body["led_color_ambient"] == "#0051A2", f"ambient default wrong: {body['led_color_ambient']}"
-    assert body["led_brightness_span"] == 128, f"span brightness default wrong: {body['led_brightness_span']}"
-    assert body["led_brightness_active"] == 255, f"active brightness default wrong: {body['led_brightness_active']}"
-    assert body["led_brightness_ambient"] == 40, f"ambient brightness default wrong: {body['led_brightness_ambient']}"
-    assert body["led_highlight_active_ttl_seconds"] == 180, f"TTL default wrong: {body['led_highlight_active_ttl_seconds']}"
-    assert body["led_highlight_retain_mode"] is False, f"retain_mode default wrong: {body['led_highlight_retain_mode']}"
-    assert body["led_highlight_retain_ttl_seconds"] == 900, f"retain TTL default wrong: {body['led_highlight_retain_ttl_seconds']}"
+    assert body["led_color_position"] == "#FFD700", (
+        f"position default wrong: {body['led_color_position']}"
+    )
+    assert body["led_color_label_span"] == "#7C3AED", (
+        f"label_span default wrong: {body['led_color_label_span']}"
+    )
+    assert body["led_color_ambient"] == "#0051A2", (
+        f"ambient default wrong: {body['led_color_ambient']}"
+    )
+    assert body["led_brightness_span"] == 128, (
+        f"span brightness default wrong: {body['led_brightness_span']}"
+    )
+    assert body["led_brightness_active"] == 255, (
+        f"active brightness default wrong: {body['led_brightness_active']}"
+    )
+    assert body["led_brightness_ambient"] == 40, (
+        f"ambient brightness default wrong: {body['led_brightness_ambient']}"
+    )
+    assert body["led_highlight_active_ttl_seconds"] == 180, (
+        f"TTL default wrong: {body['led_highlight_active_ttl_seconds']}"
+    )
+    assert body["led_highlight_retain_mode"] is False, (
+        f"retain_mode default wrong: {body['led_highlight_retain_mode']}"
+    )
+    assert body["led_highlight_retain_ttl_seconds"] == 900, (
+        f"retain TTL default wrong: {body['led_highlight_retain_ttl_seconds']}"
+    )
 
 
 # ── Test 2: PUT persists and caches LED keys ──────────────────────────────────
@@ -248,9 +262,7 @@ async def test_put_led_settings_persists_and_caches() -> None:
         "gruvax.api.admin.settings.load_settings_cache",
         side_effect=mock_load_settings_cache,
     ):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             put_res = await client.put(
                 "/api/admin/settings",
                 json=put_payload,
@@ -319,9 +331,7 @@ async def test_put_rejects_unknown_led_key() -> None:
     app = _make_app()
 
     with patch("gruvax.api.admin.settings.load_settings_cache", return_value={}):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             put_res = await client.put(
                 "/api/admin/settings",
                 json={"totally_unknown_key": "malicious"},
@@ -350,9 +360,7 @@ async def test_put_rejects_malformed_hex() -> None:
     """
     app = _make_app()
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         put_res = await client.put(
             "/api/admin/settings",
             json={"led_color_position": "nothex"},
@@ -375,9 +383,7 @@ async def test_transition_keys_not_writable() -> None:
     app = _make_app()
 
     with patch("gruvax.api.admin.settings.load_settings_cache", return_value={}):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             put_res = await client.put(
                 "/api/admin/settings",
                 json={"led_transition_position_style": "instant"},

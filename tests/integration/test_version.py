@@ -45,9 +45,7 @@ async def test_version_returns_200(client) -> None:  # type: ignore[no-untyped-d
     """GET /api/version returns HTTP 200."""
     ac, _app = client
     response = await ac.get("/api/version")
-    assert response.status_code == 200, (
-        f"Expected 200, got {response.status_code}: {response.text}"
-    )
+    assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -57,9 +55,7 @@ async def test_version_has_required_keys(client) -> None:  # type: ignore[no-unt
     response = await ac.get("/api/version")
     body = response.json()
     required_keys = {"git_sha", "build_timestamp", "environment"}
-    assert required_keys.issubset(body.keys()), (
-        f"Missing keys: {required_keys - body.keys()}"
-    )
+    assert required_keys.issubset(body.keys()), f"Missing keys: {required_keys - body.keys()}"
 
 
 @pytest.mark.asyncio(loop_scope="session")

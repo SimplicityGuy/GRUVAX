@@ -23,7 +23,6 @@ import logging
 from typing import Any
 
 import yaml
-
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 
@@ -57,9 +56,7 @@ async def export_boundaries(
 
     # Load per-label segment overrides, keyed by (unit_id, row, col) → {label: fraction}
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            "SELECT unit_id, row, col, label, fraction FROM gruvax.segment_overrides"
-        )
+        await cur.execute("SELECT unit_id, row, col, label, fraction FROM gruvax.segment_overrides")
         override_rows = await cur.fetchall()
 
     overrides_index: dict[tuple[int, int, int], dict[str, float]] = {}
@@ -181,11 +178,11 @@ def _decode_settings_value(raw: Any) -> Any:
         # JSON integer
         try:
             return int(stripped)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
         # JSON float
         try:
             return float(stripped)
-        except (ValueError, TypeError):
+        except ValueError, TypeError:
             pass
     return raw

@@ -115,8 +115,7 @@ def test_configure_logging_invalid_level_falls_back_to_info() -> None:
     root = logging.getLogger()
     # Should default to INFO (20), not DEBUG (10) or WARNING (30).
     assert root.level == logging.INFO, (
-        f"Expected root logger level INFO (20) for invalid log_level string, "
-        f"got {root.level}"
+        f"Expected root logger level INFO (20) for invalid log_level string, got {root.level}"
     )
 
 

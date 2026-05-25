@@ -22,6 +22,7 @@ All tests MUST fail in RED until gruvax.mqtt.lifecycle is implemented (Task 2).
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import json
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -36,7 +37,6 @@ from gruvax.mqtt.lifecycle import (
     schedule_revert,
 )
 from gruvax.mqtt.publishers import publish_ambient
-
 
 # ── Shared fixture helpers ────────────────────────────────────────────────────
 
@@ -126,8 +126,10 @@ async def test_publish_ambient_writes_retained_state_for_every_cube() -> None:
     client = _make_mqtt_client()
     pool = _make_pool_with_one_unit()
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         count = await publish_ambient(client, pool, SETTINGS_CACHE)
 
     # One unit, 2x2 = 4 cubes.
@@ -170,8 +172,10 @@ async def test_ambient_uses_ambient_keys_not_span() -> None:
     cache["led_brightness.ambient"] = "30"
     cache["led_brightness.span"] = "200"  # should NOT appear in ambient publishes
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publish_ambient(client, pool, cache)
 
     publish_calls = client.publish.call_args_list
@@ -198,15 +202,15 @@ async def test_illuminate_schedules_revert() -> None:
     client = _make_mqtt_client()
     registry = HighlightRegistry()
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await illuminate_with_lifecycle(
             registry, client, SETTINGS_CACHE, LOCATE_BODY_A, sleep=asyncio.sleep
         )
 
-    assert len(registry) == 1, (
-        f"Expected 1 registered highlight; got {len(registry)}"
-    )
+    assert len(registry) == 1, f"Expected 1 registered highlight; got {len(registry)}"
 
 
 @pytest.mark.asyncio
@@ -253,9 +257,7 @@ async def test_revert_republishes_ambient_for_affected_cubes() -> None:
     await task
 
     # Verify: registry entry was removed.
-    assert len(registry) == 0, (
-        f"Registry should be empty after revert; got {len(registry)}"
-    )
+    assert len(registry) == 0, f"Registry should be empty after revert; got {len(registry)}"
 
     # Verify: ambient state/* was published for exactly the 2 affected cubes.
     publish_calls = client.publish.call_args_list
@@ -294,18 +296,16 @@ async def test_default_mode_next_search_reverts_prior() -> None:
         """Never actually sleep — the revert should NOT fire while cancelled."""
         await asyncio.sleep(0)
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         # First search.
-        await illuminate_with_lifecycle(
-            registry, client, cache, LOCATE_BODY_A, sleep=instant_sleep
-        )
+        await illuminate_with_lifecycle(registry, client, cache, LOCATE_BODY_A, sleep=instant_sleep)
         assert len(registry) == 1, "After first illuminate, registry must have 1 entry"
 
         # Second search — must cancel first, revert first cubes, light new.
-        await illuminate_with_lifecycle(
-            registry, client, cache, LOCATE_BODY_B, sleep=instant_sleep
-        )
+        await illuminate_with_lifecycle(registry, client, cache, LOCATE_BODY_B, sleep=instant_sleep)
 
     # After second illuminate, only the NEW highlight should remain.
     assert len(registry) == 1, (
@@ -350,8 +350,10 @@ async def test_retain_mode_accumulates() -> None:
         # Use Event.wait() so cancellation works properly.
         await asyncio.Event().wait()
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await illuminate_with_lifecycle(
             registry, client, cache, LOCATE_BODY_A, sleep=blocking_sleep
         )
@@ -371,7 +373,8 @@ async def test_retain_mode_accumulates() -> None:
     # Any state/* publish for (1,0,0) that is a revert (ambient brightness=40) should not exist.
     first_cube_state = f"{TEST_PREFIX}/state/1/0/0"
     first_cube_ambient_calls = [
-        c for c in publish_calls
+        c
+        for c in publish_calls
         if c[0][0] == first_cube_state
         and "brightness" in json.loads(c[0][1])
         and json.loads(c[0][1])["brightness"] == int(cache["led_brightness.ambient"])
@@ -384,10 +387,8 @@ async def test_retain_mode_accumulates() -> None:
     # Cleanup: cancel the pending revert tasks to avoid asyncio warnings.
     for _, entry in registry.items():
         entry.task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError, Exception):
             await entry.task
-        except (asyncio.CancelledError, Exception):
-            pass
 
 
 # ── Registry leak guard (security) ───────────────────────────────────────────
@@ -427,9 +428,7 @@ async def test_completed_revert_removes_registry_entry() -> None:
     await asyncio.sleep(0)
     await task
 
-    assert len(registry) == 0, (
-        f"Registry must be empty after revert completes; got {len(registry)}"
-    )
+    assert len(registry) == 0, f"Registry must be empty after revert completes; got {len(registry)}"
     assert registry.pop(highlight_id) is None, "pop on missing id must return None (idempotent)"
 
 
@@ -483,8 +482,10 @@ async def test_cancel_and_revert_all_clears_registry() -> None:
 
     assert len(registry) == 2
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await cancel_and_revert_all(registry, client, SETTINGS_CACHE)
 
     assert len(registry) == 0, (
@@ -515,8 +516,10 @@ async def test_lifecycle_degraded_no_raise() -> None:
     assert result == 0, f"publish_ambient(client=None) must return 0; got {result}"
 
     # illuminate_with_lifecycle with client=None
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await illuminate_with_lifecycle(
             registry, None, SETTINGS_CACHE, LOCATE_BODY_A, sleep=instant_sleep
         )
@@ -542,7 +545,9 @@ async def test_lifecycle_degraded_no_raise() -> None:
     registry2 = HighlightRegistry()
     task2 = asyncio.create_task(asyncio.sleep(3600))
     registry2.add("x", task2, cubes)
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await cancel_and_revert_all(registry2, None, SETTINGS_CACHE)
     assert len(registry2) == 0, "cancel_and_revert_all(client=None) must empty registry"

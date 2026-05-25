@@ -36,67 +36,77 @@ router = APIRouter(tags=["admin-settings"])
 # Phase 3: cube capacity + session TTL.
 # Phase 6 (LED-04, LED-05, D-15, D-24, D-25): LED color / brightness / highlight keys.
 # NOTE (D-17): led_transition.* keys are intentionally EXCLUDED — fixed per-state defaults.
-_ALLOWED_SETTINGS_KEYS = frozenset({
-    # Phase 3 — capacity + session
-    "cube.nominal_capacity",
-    "session.idle_ttl_seconds",
-    # Phase 6 — LED colors (all six states)
-    "led_color.position",
-    "led_color.label_span",
-    "led_color.error",
-    "led_color.setup",
-    "led_color.all_off",
-    "led_color.ambient",
-    # Phase 6 — LED brightness tiers (D-24 naming contract — three DISTINCT tiers)
-    "led_brightness.span",      # label-span tier (~50%) — NOT the idle baseline
-    "led_brightness.active",    # position/primary tier (100%)
-    "led_brightness.ambient",   # idle/resting baseline (low) — NOT the span tier
-    # Phase 6 — LED highlight lifecycle (D-21, D-23, D-25)
-    "led_highlight.active_ttl_seconds",
-    "led_highlight.retain_mode",
-    "led_highlight.retain_ttl_seconds",
-})
+_ALLOWED_SETTINGS_KEYS = frozenset(
+    {
+        # Phase 3 — capacity + session
+        "cube.nominal_capacity",
+        "session.idle_ttl_seconds",
+        # Phase 6 — LED colors (all six states)
+        "led_color.position",
+        "led_color.label_span",
+        "led_color.error",
+        "led_color.setup",
+        "led_color.all_off",
+        "led_color.ambient",
+        # Phase 6 — LED brightness tiers (D-24 naming contract — three DISTINCT tiers)
+        "led_brightness.span",  # label-span tier (~50%) — NOT the idle baseline
+        "led_brightness.active",  # position/primary tier (100%)
+        "led_brightness.ambient",  # idle/resting baseline (low) — NOT the span tier
+        # Phase 6 — LED highlight lifecycle (D-21, D-23, D-25)
+        "led_highlight.active_ttl_seconds",
+        "led_highlight.retain_mode",
+        "led_highlight.retain_ttl_seconds",
+    }
+)
 
 # Regex for valid #RRGGBB hex color (T-06-08 — reject malformed hex with 422)
-_HEX_COLOR_RE = re.compile(r'^#[0-9A-Fa-f]{6}$')
+_HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
 # DB keys that store color values (JSON strings "#RRGGBB"); remaining LED keys are
 # integers or booleans stored as bare JSON.
-_COLOR_KEYS = frozenset({
-    "led_color.position",
-    "led_color.label_span",
-    "led_color.error",
-    "led_color.setup",
-    "led_color.all_off",
-    "led_color.ambient",
-})
+_COLOR_KEYS = frozenset(
+    {
+        "led_color.position",
+        "led_color.label_span",
+        "led_color.error",
+        "led_color.setup",
+        "led_color.all_off",
+        "led_color.ambient",
+    }
+)
 
 # DB keys that store integers (brightness values, TTL seconds)
-_INT_KEYS = frozenset({
-    "cube.nominal_capacity",
-    "session.idle_ttl_seconds",
-    "led_brightness.span",
-    "led_brightness.active",
-    "led_brightness.ambient",
-    "led_highlight.active_ttl_seconds",
-    "led_highlight.retain_ttl_seconds",
-})
+_INT_KEYS = frozenset(
+    {
+        "cube.nominal_capacity",
+        "session.idle_ttl_seconds",
+        "led_brightness.span",
+        "led_brightness.active",
+        "led_brightness.ambient",
+        "led_highlight.active_ttl_seconds",
+        "led_highlight.retain_ttl_seconds",
+    }
+)
 
 # DB keys that store booleans
-_BOOL_KEYS = frozenset({
-    "led_highlight.retain_mode",
-})
+_BOOL_KEYS = frozenset(
+    {
+        "led_highlight.retain_mode",
+    }
+)
 
 # WR-03: brightness keys must be within the 8-bit hardware range [0, 255].
 # Without this, a value like 999 is persisted verbatim, echoed back by GET, and
 # only clamped at publish time — the stored value and the published value disagree.
 # Validate on the PUT path (422 on out-of-range) so the persisted value is always
 # one the publisher will honour, consistent with the hex validation for colours.
-_BRIGHTNESS_KEYS = frozenset({
-    "led_brightness.span",
-    "led_brightness.active",
-    "led_brightness.ambient",
-})
+_BRIGHTNESS_KEYS = frozenset(
+    {
+        "led_brightness.span",
+        "led_brightness.active",
+        "led_brightness.ambient",
+    }
+)
 
 
 @router.get("/settings")
@@ -134,7 +144,7 @@ async def get_settings(
         raw = settings_map.get(key, default)
         try:
             return int(raw)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default
 
     def _get_bool(key: str, default: bool) -> bool:
@@ -200,9 +210,9 @@ async def update_settings(
         "led_color_all_off": "led_color.all_off",
         "led_color_ambient": "led_color.ambient",
         # Phase 6 — LED brightness (LED-04, D-24 — three distinct tiers)
-        "led_brightness_span": "led_brightness.span",      # label-span tier
+        "led_brightness_span": "led_brightness.span",  # label-span tier
         "led_brightness_active": "led_brightness.active",  # position/primary tier
-        "led_brightness_ambient": "led_brightness.ambient", # idle baseline
+        "led_brightness_ambient": "led_brightness.ambient",  # idle baseline
         # Phase 6 — LED highlight lifecycle (D-25)
         "led_highlight_active_ttl_seconds": "led_highlight.active_ttl_seconds",
         "led_highlight_retain_mode": "led_highlight.retain_mode",
@@ -222,8 +232,7 @@ async def update_settings(
                         "type": "invalid_hex_color",
                         "field": body_key,
                         "message": (
-                            f"Color value must be a valid #RRGGBB hex string. "
-                            f"Got: {value!r}"
+                            f"Color value must be a valid #RRGGBB hex string. Got: {value!r}"
                         ),
                     },
                 )
@@ -232,7 +241,7 @@ async def update_settings(
             value = body[body_key]
             try:
                 int_value = int(value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={
@@ -265,7 +274,7 @@ async def update_settings(
                 # Store as bare integer JSON
                 try:
                     int_val = int(value)
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     logger.warning("Skipping invalid integer for %s: %r", db_key, value)
                     continue
                 json_value = str(int_val)
@@ -276,6 +285,7 @@ async def update_settings(
             else:
                 # Fallback: plain JSON encoding
                 import json as _json
+
                 json_value = _json.dumps(value)
 
             await conn.execute(
@@ -292,7 +302,7 @@ async def update_settings(
     #
     # WR-01: MUTATE the existing dict in place (clear + update) rather than REBINDING
     # the attribute to a fresh dict.  Fire-and-forget tasks (fan_out_illuminate,
-    # illuminate_with_lifecycle, in-flight schedule_revert that runs 180–900s later)
+    # illuminate_with_lifecycle, in-flight schedule_revert that runs 180-900s later)
     # capture the settings_cache dict REFERENCE at spawn time.  Rebinding the
     # attribute would leave those tasks reading the stale OLD dict; mutating the
     # same object in place means every holder of the reference sees the new values

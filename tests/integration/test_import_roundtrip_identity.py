@@ -155,9 +155,7 @@ async def test_export_reimport_identity(client, four_cube_boundaries) -> None:  
     )
 
     # Dry-run must NOT produce a change_set_id (no write)
-    assert "change_set_id" not in dry_data, (
-        f"Dry-run must not mint a change_set_id: {dry_data}"
-    )
+    assert "change_set_id" not in dry_data, f"Dry-run must not mint a change_set_id: {dry_data}"
 
     # ── 4. Commit re-import: assert 200 + change_set_id ──────────────────────
     commit_resp = await client.post(

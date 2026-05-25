@@ -211,9 +211,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                         " FROM gruvax.v_collection"
                     )
                     row = await cur.fetchone()
-                app.state.sync_age_seconds = (
-                    float(row[0]) if (row and row[0] is not None) else None
-                )
+                app.state.sync_age_seconds = float(row[0]) if (row and row[0] is not None) else None
             except Exception as exc:
                 logger.warning("sync_age refresh failed: %s", exc)
                 app.state.sync_age_seconds = None

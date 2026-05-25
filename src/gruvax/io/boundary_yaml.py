@@ -75,8 +75,7 @@ def parse_yaml_boundaries(content: bytes | str) -> list[CutPointEntry]:
     entries: list[CutPointEntry] = []
     for cube in data.get("cubes", []):
         overrides: dict[str, float] = {
-            str(k): float(v)
-            for k, v in cube.get("overrides", {}).items()
+            str(k): float(v) for k, v in cube.get("overrides", {}).items()
         }
         entries.append(
             CutPointEntry(

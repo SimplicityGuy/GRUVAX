@@ -15,19 +15,18 @@ directly with the stub; endpoint-level tests use httpx AsyncClient against the a
 
 from __future__ import annotations
 
-import asyncio
+import os
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, call, patch
+from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 
 # ── Shared test constants ─────────────────────────────────────────────────────
 
 TEST_PREFIX = "gruvax/v1/dev/leds"
 
-# Minimal unit set: one unit, 2×2 grid → 4 cubes
+# Minimal unit set: one unit, 2x2 grid -> 4 cubes
 # Each row returned by `fetchall` is a 3-tuple: (id, rows, cols)
 UNITS_ROWS = [(1, 2, 2)]  # unit_id=1, rows=2, cols=2
 
@@ -41,7 +40,7 @@ SETTINGS_CACHE: dict[str, Any] = {
     "led_color.all_off": '"#000000"',
     "led_color.ambient": '"#0051A2"',
     # Brightness tiers (D-24 naming)
-    "led_brightness.span": "128",    # label-span tier
+    "led_brightness.span": "128",  # label-span tier
     "led_brightness.active": "255",  # position tier
     "led_brightness.ambient": "40",  # idle baseline — NOT used for active sequence
     # Diagnostic parameters
@@ -111,8 +110,10 @@ async def test_all_off() -> None:
     client = _make_mqtt_client()
     pool = _make_pool()
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         count = await publishers.publish_all_off(client, pool, SETTINGS_CACHE)
 
     # 4 cubes → 4 state clears
@@ -127,16 +128,15 @@ async def test_all_off() -> None:
             assert t in published_topics, f"Expected {t!r} in published topics"
 
     # Verify the state clears use b'' payload + retain=True
-    state_calls = [
-        c for c in client.publish.call_args_list
-        if f"{TEST_PREFIX}/state/" in c[0][0]
-    ]
+    state_calls = [c for c in client.publish.call_args_list if f"{TEST_PREFIX}/state/" in c[0][0]]
     assert len(state_calls) == 4, f"Expected 4 state clear publishes; got {len(state_calls)}"
     for c in state_calls:
         payload = c[0][1]
         kwargs = c[1] if len(c) > 1 else {}
-        assert payload == b'', f"State clear payload must be b''; got {payload!r}"
-        assert kwargs.get("retain") is True, f"State clear must be retained; got retain={kwargs.get('retain')}"
+        assert payload == b"", f"State clear payload must be b''; got {payload!r}"
+        assert kwargs.get("retain") is True, (
+            f"State clear must be retained; got retain={kwargs.get('retain')}"
+        )
         assert kwargs.get("qos") == 1, f"State clear must use qos=1; got qos={kwargs.get('qos')}"
 
     # Verify the all/off command topic is published (retain=False, not retained)
@@ -161,8 +161,10 @@ async def test_all_off_idempotent() -> None:
     client = _make_mqtt_client()
     pool = _make_pool()
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         count1 = await publishers.publish_all_off(client, pool, SETTINGS_CACHE)
         # Reset mock to count second call independently
         client.publish.reset_mock()
@@ -170,7 +172,9 @@ async def test_all_off_idempotent() -> None:
         pool2 = _make_pool()
         count2 = await publishers.publish_all_off(client, pool2, SETTINGS_CACHE)
 
-    assert count1 == count2, f"Idempotent: both calls must return same count; got {count1} vs {count2}"
+    assert count1 == count2, (
+        f"Idempotent: both calls must return same count; got {count1} vs {count2}"
+    )
     assert count2 == 4, f"Expected 4 on second call; got {count2}"
 
 
@@ -186,8 +190,10 @@ async def test_all_off_uses_units_table() -> None:
     client = _make_mqtt_client()
     pool = _make_pool()
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.publish_all_off(client, pool, SETTINGS_CACHE)
 
     # The mock cursor's execute must have been called with a SQL containing gruvax.units
@@ -196,9 +202,7 @@ async def test_all_off_uses_units_table() -> None:
     execute_calls = mock_cursor.execute.call_args_list
     assert len(execute_calls) >= 1, "Expected at least one SQL execute call"
     sql_arg = execute_calls[0][0][0]
-    assert "gruvax.units" in sql_arg, (
-        f"SQL must query gruvax.units; got {sql_arg!r}"
-    )
+    assert "gruvax.units" in sql_arg, f"SQL must query gruvax.units; got {sql_arg!r}"
 
 
 # ── Publisher-level tests: run_diagnostic ────────────────────────────────────
@@ -209,7 +213,7 @@ async def test_diagnostic_sequence() -> None:
     """run_diagnostic publishes the 5-state color sequence for each cube, then
     restores the ambient baseline (CR-04 / LED-11 / D-20).
 
-    For units=[(1, 2, 2)] → 4 cubes × 5 states = 20 diagnostic state publishes,
+    For units=[(1, 2, 2)] -> 4 cubes x 5 states = 20 diagnostic state publishes,
     plus 4 ambient-restore state publishes (one per cube) = 24 state publishes.
     Plus 1 subscribe + 1 unsubscribe to status/# (LED-07, D-09).
     """
@@ -218,17 +222,19 @@ async def test_diagnostic_sequence() -> None:
     client = _make_mqtt_client()
     pool = _make_pool()
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.run_diagnostic(client, pool, SETTINGS_CACHE, run_id="test-run-001")
 
     publish_calls = client.publish.call_args_list
     state_publishes = [c for c in publish_calls if f"{TEST_PREFIX}/state/" in c[0][0]]
 
-    # 4 cubes × 5 states = 20 diagnostic publishes + 4 ambient-restore publishes
+    # 4 cubes x 5 states = 20 diagnostic publishes + 4 ambient-restore publishes
     # (CR-04: run_diagnostic ends by republishing the idle ambient baseline so the
     # final "off" frame does not leave every cube dark).
-    expected_diagnostic = 4 * 5  # cubes × states
+    expected_diagnostic = 4 * 5  # cubes x states
     expected_ambient = 4  # one ambient-restore publish per cube
     assert len(state_publishes) == expected_diagnostic + expected_ambient, (
         f"Expected {expected_diagnostic + expected_ambient} state publishes "
@@ -250,25 +256,28 @@ async def test_diagnostic_uses_correct_brightness_tiers() -> None:
     diagnostic-sequence brightness check below — the D-24 invariant applies only to
     the diagnostic *sequence* frames, not the closing ambient restore.
     """
-    from gruvax.mqtt import publishers
     import json as _json
+
+    from gruvax.mqtt import publishers
 
     client = _make_mqtt_client()
     pool = _make_pool()
 
     # Distinct values for each tier so we can verify
     cache = dict(SETTINGS_CACHE)
-    cache["led_brightness.span"] = "111"    # label-span tier — only used for span state
+    cache["led_brightness.span"] = "111"  # label-span tier — only used for span state
     cache["led_brightness.active"] = "222"  # position/active tier — used for position state
-    cache["led_brightness.ambient"] = "9"   # idle baseline — only used by ambient restore
+    cache["led_brightness.ambient"] = "9"  # idle baseline — only used by ambient restore
     # Ambient colour used by the closing ambient-restore frames (CR-04).
     ambient_hex = str(cache["led_color.ambient"]).strip('"').lstrip("#").lower()
 
     def _hex_from_rgb(color: dict[str, int]) -> str:
         return f"{color['r']:02x}{color['g']:02x}{color['b']:02x}"
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.run_diagnostic(client, pool, cache, run_id="test-tier-001")
 
     publish_calls = client.publish.call_args_list
@@ -319,8 +328,10 @@ async def test_diagnostic_status_subscribe() -> None:
     client = _make_mqtt_client()
     pool = _make_pool()
 
-    with patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX), \
-         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400):
+    with (
+        patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
+        patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
+    ):
         await publishers.run_diagnostic(client, pool, SETTINGS_CACHE, run_id="test-sub-001")
 
     expected_wildcard = topics.status_wildcard(TEST_PREFIX)
@@ -353,8 +364,6 @@ async def test_publishers_degraded() -> None:
 
 
 # ── App factory for endpoint tests ───────────────────────────────────────────
-
-import os
 
 
 async def _stub_require_admin() -> dict[str, str]:
@@ -414,9 +423,7 @@ async def test_off_endpoint_requires_admin() -> None:
     app.state.settings_cache = {}
     app.state.db_pool = _make_pool()
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         res = await client.post("/api/admin/leds/off")
 
     assert res.status_code in (401, 403), (
@@ -434,14 +441,10 @@ async def test_diagnostic_endpoint_returns_run_id() -> None:
     app = _make_app_with_mqtt(AsyncMock())
 
     with patch.object(publishers, "run_diagnostic", new=AsyncMock(return_value=None)):
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             res = await client.post("/api/admin/leds/diagnostic")
 
-    assert res.status_code == 200, (
-        f"Expected 200; got {res.status_code}: {res.text}"
-    )
+    assert res.status_code == 200, f"Expected 200; got {res.status_code}: {res.text}"
     body = res.json()
     assert "run_id" in body, f"Response must contain run_id; got {body}"
     assert "started_at" in body, f"Response must contain started_at; got {body}"
@@ -455,15 +458,11 @@ async def test_off_endpoint_degraded() -> None:
     """
     app = _make_app_with_mqtt(None)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         res = await client.post("/api/admin/leds/off")
 
     assert res.status_code == 200, (
         f"Expected 200 in degraded mode; got {res.status_code}: {res.text}"
     )
     body = res.json()
-    assert body.get("published") == 0, (
-        f"Degraded mode must return published=0; got {body}"
-    )
+    assert body.get("published") == 0, f"Degraded mode must return published=0; got {body}"
