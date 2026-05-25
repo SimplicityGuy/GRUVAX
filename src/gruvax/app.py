@@ -22,10 +22,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from collections import deque
 from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 from pathlib import Path
+from typing import Any
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
@@ -35,7 +37,9 @@ from starlette.types import Scope
 
 from gruvax.db.pool import create_pool
 from gruvax.estimator.boundary_cache import BoundaryCache
+from gruvax.logging_config import JsonFormatter, LogRingHandler
 from gruvax.mqtt.client import connect_mqtt, disconnect_mqtt
+from gruvax.settings import settings
 
 logger = logging.getLogger(__name__)
 
@@ -78,12 +82,31 @@ class SpaStaticFiles(StaticFiles):
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     """FastAPI lifespan: startup setup → yield → teardown."""
 
+    # ── 0. Structured-JSON logging + log ring buffer (OBS-02, D-12) ─────────
+    # Configure before the pool opens so all subsequent log calls emit JSON.
+    _log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
+    _root = logging.getLogger()
+    _root.setLevel(_log_level)
+    _json_handler = logging.StreamHandler()
+    _json_handler.setFormatter(JsonFormatter())
+    _root.handlers = [_json_handler]  # replace any default handlers
+    _log_ring: deque[dict[str, Any]] = deque(maxlen=200)
+    app.state.log_ring_buffer = _log_ring
+    _root.addHandler(LogRingHandler(_log_ring, level=logging.DEBUG))
+
     # ── 1. DB pool ───────────────────────────────────────────────────────────
     pool = create_pool(min_size=2, max_size=10)
     await pool.open()
     app.state.db_pool = pool
     app.state.db_ok = True
     app.state.started_at = datetime.now(UTC)
+
+    # ── 1b. In-memory ring buffers (OBS-05/06, D-08) ────────────────────────
+    # Slow-query ring: last 50 requests above SLO threshold (resets on restart).
+    app.state.slow_query_ring = deque(maxlen=50)
+    # Sync-age seed: None until first background refresh completes.
+    # Set before scheduling the task so health.py never KeyErrors on this attribute.
+    app.state.sync_age_seconds = None  # float | None
 
     # ── 2. v_collection startup probe (D-07, Pitfall 5) ─────────────────────
     try:
@@ -179,6 +202,40 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # reuses this same set (see gruvax.api.illuminate).
     app.state.background_tasks = set()
 
+    # ── 1c. Sync-staleness background refresh (OBS-06, D-03) ─────────────────
+    # Refresh app.state.sync_age_seconds every 60 s from gruvax.v_collection.
+    # Uses the pool (Pitfall 1 — search_path includes gruvax via configure_connection).
+    # Never blocks a request; failures are logged + set None (degraded, not crash).
+    async def _refresh_sync_age() -> None:
+        while True:
+            try:
+                async with pool.connection() as conn, conn.cursor() as cur:
+                    await cur.execute(
+                        "SELECT EXTRACT(EPOCH FROM (now() - max(synced_at)))"
+                        " FROM gruvax.v_collection"
+                    )
+                    row = await cur.fetchone()
+                app.state.sync_age_seconds = (
+                    float(row[0]) if (row and row[0] is not None) else None
+                )
+            except Exception as exc:
+                logger.warning("sync_age refresh failed: %s", exc)
+                app.state.sync_age_seconds = None
+            await asyncio.sleep(60)
+
+    _age_task = asyncio.create_task(_refresh_sync_age())
+    # CR-01: strong reference so the GC cannot cancel the task mid-flight.
+    app.state.background_tasks.add(_age_task)
+    _age_task.add_done_callback(app.state.background_tasks.discard)
+
+    # Pitfall 2: log exceptions from the background refresh task.
+    def _log_age_task_exc(t: asyncio.Task) -> None:  # type: ignore[type-arg]
+        if not t.cancelled() and t.exception() is not None:
+            logger.warning("sync_age background task exited unexpectedly: %s", t.exception())
+
+    _age_task.add_done_callback(_log_age_task_exc)
+    logger.info("sync_age background refresh task scheduled (60s cadence)")
+
     # Publish ambient baseline for every cube — best-effort.  Never blocks startup.
     # Guard: only attempt when MQTT is connected (degraded mode → mqtt is None).
     try:
@@ -249,12 +306,14 @@ def create_app() -> FastAPI:
     from gruvax.api.locate import router as locate_router
     from gruvax.api.search import router as search_router
     from gruvax.api.units import router as units_router
+    from gruvax.api.version import router as version_router
 
     app.include_router(health_router, prefix="/api")
     app.include_router(search_router, prefix="/api")
     app.include_router(locate_router, prefix="/api")
     app.include_router(units_router, prefix="/api")
     app.include_router(illuminate_router, prefix="/api")  # Phase 6: public LED fan-out (D-03)
+    app.include_router(version_router, prefix="/api")  # Phase 8: build metadata (OBS-04)
 
     # ── Admin router (Phase 3) — BEFORE StaticFiles mount (Pitfall 3) ──────────
     from gruvax.api.admin.router import create_admin_router
