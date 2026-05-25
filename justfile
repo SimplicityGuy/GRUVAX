@@ -66,9 +66,9 @@ seed-dev:
 # This prints the SQL to stdout for review; pipe to psql when ready.
 provision-db:
     @echo "-- Run the following SQL as a superuser on the shared Postgres instance:"
-    @echo "-- GRANT USAGE ON SCHEMA discogsography TO gruvax_app;"
+    @echo "-- GRANT USAGE ON SCHEMA discogsography TO gruvax;"
     @echo "-- GRANT SELECT ON discogsography.releases, discogsography.artists,"
-    @echo "--                  discogsography.collection_items TO gruvax_app;"
+    @echo "--                  discogsography.collection_items TO gruvax;"
     @echo "-- (No INSERT / UPDATE / DELETE granted.)"
 
 # ── frontend ─────────────────────────────────────────────────────────────────

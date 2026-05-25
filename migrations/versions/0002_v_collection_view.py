@@ -14,10 +14,10 @@ No code path needs to branch on environment — the same view body works
 everywhere.  This is the sole read-contact surface with discogsography (DEP-02).
 
 GRANT NOTE (for operator, never run by application code):
-    GRANT USAGE ON SCHEMA discogsography TO gruvax_app;
+    GRANT USAGE ON SCHEMA discogsography TO gruvax;
     GRANT SELECT ON discogsography.releases,
                     discogsography.artists,
-                    discogsography.collection_items TO gruvax_app;
+                    discogsography.collection_items TO gruvax;
     -- No INSERT / UPDATE / DELETE granted.
     -- See `just provision-db` for the full provisioning script.
 """
