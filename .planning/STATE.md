@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: executing
-last_updated: "2026-05-25T17:39:00.546Z"
+last_updated: "2026-05-25T18:13:29.224Z"
 progress:
   total_phases: 11
   completed_phases: 7
@@ -20,7 +20,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 999.1 — shelf overview mini kallax shows per cube fill/occupancy (backlog)
+**Current Focus:** Phase 09 — tooling-and-docs-hardening
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -28,12 +28,12 @@ progress:
 
 ## Current Position
 
-Phase: 08 (observability-deployment-hardening) — EXECUTING
+Phase: 09 (tooling-and-docs-hardening) — EXECUTING
 Plan: 1 of 6
 
 - **Phase:** 999.1
 - **Plan:** Not started
-- **Status:** Ready to execute
+- **Status:** Executing Phase 09
 - **Progress:** [██████████] 100%
 
 ```
