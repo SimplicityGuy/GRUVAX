@@ -29,6 +29,13 @@ from gruvax.app import create_app
 _BOUNDARIES_YAML = Path(__file__).parents[2] / "fixtures" / "boundaries.yaml"
 
 
+async def load_boundaries_fresh() -> None:
+    """Re-seed the dev DB to the canonical fixture state (order-independence helper)."""
+    from gruvax.db.seed_boundaries import load_boundaries
+
+    await load_boundaries(_BOUNDARIES_YAML)
+
+
 @pytest.fixture(autouse=True)
 def reset_login_rate_limit() -> None:  # type: ignore[return]
     """Reset the login rate-limit counter before each test.
@@ -714,3 +721,295 @@ def test_locate_p95_le_50ms() -> None:
     See: pytest tests/integration/test_locate.py --benchmark-only
     """
     pytest.skip("Benchmark latency gate validated in Plan 05-03")
+
+
+# ── INT-A: boundary_changed payload-contract tests (10-01) ───────────────────
+#
+# These tests capture the published boundary_changed payload via a SpyEventBus
+# wired through app.dependency_overrides[get_event_bus].  They assert the
+# canonical shape: cube_ids / unit (not cubes / unit_id), no top-level type key.
+# The tests are RED before Task 2 (segments.py fix) and GREEN after.
+
+
+class _SpyEventBus:
+    """Test double that records every publish() call for assertion.
+
+    Wired via ``app.dependency_overrides[get_event_bus] = lambda: spy``.
+    The override is installed before the endpoint call and cleaned up in
+    a finally block so it does not leak to other tests.
+    """
+
+    def __init__(self) -> None:
+        self.published: list[tuple[str, dict]] = []
+
+    async def publish(self, event: str, payload: dict) -> None:  # noqa: D102
+        self.published.append((event, payload))
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_cut_publishes_correct_payload(db_pool) -> None:  # type: ignore[no-untyped-def]
+    """INT-A / SEG-07 / SEG-08: PUT /cut emits boundary_changed with cube_ids/unit shape.
+
+    Asserts the published payload from put_bin_cut has:
+      - top-level key ``cube_ids`` (a list), NOT ``cubes``
+      - each item keyed ``unit`` (not ``unit_id``), plus ``row`` and ``col``
+      - top-level ``change_set_id`` key
+      - NO top-level ``type`` key
+
+    Uses a fresh ASGI client per test so the SpyEventBus can be installed via
+    ``app.dependency_overrides`` before ``LifespanManager`` starts (the module-scoped
+    ``client`` fixture hides the app object, so we can't inject overrides into it).
+
+    This test is RED until segments.py is fixed (Task 2).
+    """
+    from gruvax.api.deps import get_event_bus
+
+    await _seed_test_pin(db_pool)
+    await load_boundaries_fresh()
+
+    spy = _SpyEventBus()
+    app = create_app()
+    app.dependency_overrides[get_event_bus] = lambda: spy
+    try:
+        async with (
+            LifespanManager(app) as manager,
+            AsyncClient(
+                transport=ASGITransport(app=manager.app),
+                base_url="http://test",
+            ) as ac,
+        ):
+            auth = await _login(ac)
+            assert auth, "login should succeed after seeding the test PIN"
+            response = await ac.put(
+                "/api/admin/cubes/1/0/0/cut",
+                json={"first_label": "Blue Note", "first_catalog": "BLP 4001", "force": True},
+                cookies=auth["cookies"],
+                headers={"X-CSRF-Token": auth["csrf_token"]},
+            )
+            assert response.status_code == 200, (
+                f"Expected 200 from PUT cut, got {response.status_code}: {response.text}"
+            )
+    finally:
+        app.dependency_overrides.pop(get_event_bus, None)
+
+    # Assert the event was published
+    assert len(spy.published) >= 1, "Expected at least one boundary_changed publish"
+    event_name, payload = spy.published[0]
+    assert event_name == "boundary_changed", f"Expected 'boundary_changed', got {event_name!r}"
+
+    # Payload shape assertions — the canonical form (INT-A fix)
+    assert "cube_ids" in payload, (
+        f"Payload must have top-level 'cube_ids' key (not 'cubes'): {payload}"
+    )
+    assert "cubes" not in payload, (
+        f"Payload must NOT have 'cubes' key: {payload}"
+    )
+    assert "type" not in payload, (
+        f"Payload must NOT have top-level 'type' key: {payload}"
+    )
+    assert "change_set_id" in payload, (
+        f"Payload must have 'change_set_id' key: {payload}"
+    )
+    cube_ids = payload["cube_ids"]
+    assert isinstance(cube_ids, list) and len(cube_ids) >= 1, (
+        f"cube_ids must be a non-empty list: {cube_ids}"
+    )
+    for item in cube_ids:
+        assert "unit" in item, (
+            f"Each cube_ids item must have 'unit' key (not 'unit_id'): {item}"
+        )
+        assert "unit_id" not in item, (
+            f"cube_ids items must NOT have 'unit_id' key: {item}"
+        )
+        assert "row" in item, f"Each cube_ids item must have 'row' key: {item}"
+        assert "col" in item, f"Each cube_ids item must have 'col' key: {item}"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_overrides_publishes_correct_payload(db_pool) -> None:  # type: ignore[no-untyped-def]
+    """INT-A / SEG-08: POST /overrides emits boundary_changed with cube_ids/unit shape.
+
+    Asserts the published payload from set_bin_overrides has:
+      - top-level key ``cube_ids`` (not ``cubes``)
+      - each item keyed ``unit`` (not ``unit_id``)
+      - ``change_set_id`` is None (overrides do not create a history row)
+      - NO top-level ``type`` key
+
+    Uses a fresh ASGI client with SpyEventBus installed before lifespan starts.
+    This test is RED until segments.py is fixed (Task 2).
+    """
+    from gruvax.api.deps import get_event_bus
+
+    await _seed_test_pin(db_pool)
+    await load_boundaries_fresh()
+
+    spy = _SpyEventBus()
+    app = create_app()
+    app.dependency_overrides[get_event_bus] = lambda: spy
+    try:
+        async with (
+            LifespanManager(app) as manager,
+            AsyncClient(
+                transport=ASGITransport(app=manager.app),
+                base_url="http://test",
+            ) as ac,
+        ):
+            auth = await _login(ac)
+            assert auth, "login should succeed after seeding the test PIN"
+
+            # Find a valid label in bin (1,0,0) to override
+            seg_res = await ac.get("/api/admin/cubes/1/0/0/segments", cookies=auth["cookies"])
+            assert seg_res.status_code == 200, f"GET segments failed: {seg_res.text}"
+            segments = seg_res.json().get("segments", [])
+            assert segments, "Need at least one segment in bin (1,0,0) for override test"
+            valid_label = segments[0]["label"]
+
+            # Reset spy to capture only the overrides publish (GET segments may produce events)
+            spy.published.clear()
+
+            response = await ac.post(
+                "/api/admin/cubes/1/0/0/overrides",
+                json={"overrides": [{"label": valid_label, "fraction": 1.0}]},
+                cookies=auth["cookies"],
+                headers={"X-CSRF-Token": auth["csrf_token"]},
+            )
+            assert response.status_code == 200, (
+                f"Expected 200 from POST overrides, got {response.status_code}: {response.text}"
+            )
+    finally:
+        app.dependency_overrides.pop(get_event_bus, None)
+
+    # Assert the event was published
+    assert len(spy.published) >= 1, "Expected at least one boundary_changed publish"
+    event_name, payload = spy.published[0]
+    assert event_name == "boundary_changed", f"Expected 'boundary_changed', got {event_name!r}"
+
+    # Payload shape assertions
+    assert "cube_ids" in payload, (
+        f"Payload must have top-level 'cube_ids' key (not 'cubes'): {payload}"
+    )
+    assert "cubes" not in payload, (
+        f"Payload must NOT have 'cubes' key: {payload}"
+    )
+    assert "type" not in payload, (
+        f"Payload must NOT have top-level 'type' key: {payload}"
+    )
+    assert "change_set_id" in payload, (
+        f"Payload must have 'change_set_id' key: {payload}"
+    )
+    assert payload["change_set_id"] is None, (
+        f"Overrides publish must have change_set_id=None (no history row): {payload}"
+    )
+    cube_ids = payload["cube_ids"]
+    assert isinstance(cube_ids, list) and len(cube_ids) >= 1, (
+        f"cube_ids must be a non-empty list: {cube_ids}"
+    )
+    for item in cube_ids:
+        assert "unit" in item, (
+            f"Each cube_ids item must have 'unit' key (not 'unit_id'): {item}"
+        )
+        assert "unit_id" not in item, (
+            f"cube_ids items must NOT have 'unit_id' key: {item}"
+        )
+        assert "row" in item, f"Each cube_ids item must have 'row' key: {item}"
+        assert "col" in item, f"Each cube_ids item must have 'col' key: {item}"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_insert_cut_publishes_correct_payload(db_pool) -> None:  # type: ignore[no-untyped-def]
+    """INT-A / SEG-07 / SEG-08: POST /insert-cut emits boundary_changed with cube_ids/unit shape.
+
+    Asserts the published payload from insert_cut has:
+      - top-level key ``cube_ids`` (a list of all affected cubes)
+      - each item keyed ``unit`` (not ``unit_id``), plus ``row`` and ``col``
+      - top-level ``change_set_id`` key (non-None — insert creates a history row)
+      - NO top-level ``type`` key
+
+    Uses a fresh ASGI client with SpyEventBus installed before lifespan starts.
+    This test is RED until segments.py is fixed (Task 2).
+    Cleanup: reverts the insert via boundary_history DELETE + re-seed so the
+    suite remains order-independent on the shared dev DB.
+    """
+    from gruvax.api.deps import get_event_bus
+
+    await _seed_test_pin(db_pool)
+    await load_boundaries_fresh()
+
+    spy = _SpyEventBus()
+    app = create_app()
+    app.dependency_overrides[get_event_bus] = lambda: spy
+    change_set_id: str | None = None
+    try:
+        async with (
+            LifespanManager(app) as manager,
+            AsyncClient(
+                transport=ASGITransport(app=manager.app),
+                base_url="http://test",
+            ) as ac,
+        ):
+            auth = await _login(ac)
+            assert auth, "login should succeed after seeding the test PIN"
+            response = await ac.post(
+                "/api/admin/cubes/insert-cut",
+                json={
+                    "after_unit_id": 1,
+                    "after_row": 0,
+                    "after_col": 0,
+                    "new_first_label": "Blue Note",
+                    "new_first_catalog": "BLP 4005",
+                    "force": True,
+                },
+                cookies=auth["cookies"],
+                headers={"X-CSRF-Token": auth["csrf_token"]},
+            )
+            assert response.status_code == 200, (
+                f"Expected 200 from POST insert-cut, got {response.status_code}: {response.text}"
+            )
+            change_set_id = response.json().get("change_set_id")
+    finally:
+        app.dependency_overrides.pop(get_event_bus, None)
+
+    # Assert the event was published
+    assert len(spy.published) >= 1, "Expected at least one boundary_changed publish"
+    event_name, payload = spy.published[0]
+    assert event_name == "boundary_changed", f"Expected 'boundary_changed', got {event_name!r}"
+
+    # Payload shape assertions
+    assert "cube_ids" in payload, (
+        f"Payload must have top-level 'cube_ids' key (not 'cubes'): {payload}"
+    )
+    assert "cubes" not in payload, (
+        f"Payload must NOT have 'cubes' key: {payload}"
+    )
+    assert "type" not in payload, (
+        f"Payload must NOT have top-level 'type' key: {payload}"
+    )
+    assert "change_set_id" in payload, (
+        f"Payload must have 'change_set_id' key: {payload}"
+    )
+    assert payload["change_set_id"] is not None, (
+        f"insert-cut publish must have a non-None change_set_id (history row created): {payload}"
+    )
+    cube_ids = payload["cube_ids"]
+    assert isinstance(cube_ids, list) and len(cube_ids) >= 1, (
+        f"cube_ids must be a non-empty list (affected cubes from insert): {cube_ids}"
+    )
+    for item in cube_ids:
+        assert "unit" in item, (
+            f"Each cube_ids item must have 'unit' key (not 'unit_id'): {item}"
+        )
+        assert "unit_id" not in item, (
+            f"cube_ids items must NOT have 'unit_id' key: {item}"
+        )
+        assert "row" in item, f"Each cube_ids item must have 'row' key: {item}"
+        assert "col" in item, f"Each cube_ids item must have 'col' key: {item}"
+
+    # Cleanup: restore fixture state so later tests see canonical boundaries
+    if change_set_id:
+        async with db_pool.connection() as conn:
+            await conn.execute(
+                "DELETE FROM gruvax.boundary_history WHERE change_set_id = %s",
+                (change_set_id,),
+            )
+            await conn.commit()
+    await load_boundaries_fresh()
