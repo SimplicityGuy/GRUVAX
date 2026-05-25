@@ -108,12 +108,12 @@ build:
 
 # Generate src/gruvax/_version.py from current git state (for local dev outside Docker)
 build-version:
-    uv run python3 -c "\
-import pathlib, subprocess, datetime; \
-sha = subprocess.check_output(['git','rev-parse','--short','HEAD']).decode().strip(); \
-ts = datetime.datetime.utcnow().strftime('%Y-%m-%dT%H:%M:%SZ'); \
-pathlib.Path('src/gruvax/_version.py').write_text(f'GIT_SHA = \"{sha}\"\nBUILD_TIMESTAMP = \"{ts}\"\nENVIRONMENT = \"development\"\n') \
-"
+    #!/usr/bin/env bash
+    set -euo pipefail
+    sha=$(git rev-parse --short HEAD)
+    ts=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+    printf 'GIT_SHA = "%s"\nBUILD_TIMESTAMP = "%s"\nENVIRONMENT = "development"\n' "$sha" "$ts" > src/gruvax/_version.py
+    echo "Wrote src/gruvax/_version.py (GIT_SHA=$sha)"
 
 # Core Value smoke test: docker compose up → search → locate → assert SLO (SC5)
 demo:
@@ -129,11 +129,7 @@ demo:
     RESULT=$(curl -sf "http://localhost:8000/api/search?q=Miles+Davis&limit=1")
     TOOK_MS=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['took_ms'])")
     echo "Search took: ${TOOK_MS}ms"
-    python3 -c "
-ms = float('$TOOK_MS')
-assert ms < 200, f'Search SLO FAILED: {ms:.1f}ms > 200ms'
-print(f'Search SLO: PASS ({ms:.1f}ms)')
-"
+    python3 -c "ms=float('$TOOK_MS'); assert ms < 200, f'Search SLO FAILED: {ms:.1f}ms > 200ms'; print(f'Search SLO: PASS ({ms:.1f}ms)')"
     RELEASE_ID=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin)['items'][0]['release_id'])")
     LOC_RESULT=$(curl -sf "http://localhost:8000/api/locate?release_id=${RELEASE_ID}")
     echo "Locate result: $(echo $LOC_RESULT | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d["primary_cube"])')"
