@@ -15,6 +15,7 @@ Type artist, title, label, or catalog number → see the right cube (and a sub-c
 - [x] Admin-configurable color settings for LED/UI output (label-span color, position-estimate color, etc.) — *Validated in Phase 6: LED Contract over MQTT*
 - [x] LED illumination endpoint with hardware integration stubbed (publishes to an MQTT topic); contract finalized so hardware can land in a later milestone without changing the API — *Validated in Phase 6: LED Contract over MQTT (illuminate/span/sub/all-off/diagnostic over Mosquitto; live-broker behavior pending hardware in 06-HUMAN-UAT.md)*
 - [x] Admin mode (PIN-gated, session timeout) for editing cube boundaries — mobile-first admin web UI, manual entry + undo, segment-aware boundary editing, guided setup/reshuffle wizard, and CSV/YAML boundary + settings import/export — *Validated across Phase 3 (PIN + manual entry + undo), Phase 5 (segment-aware precision), and Phase 7 (wizards + import/export; one quick reshuffle resume-at-step re-verify tracked in 07-HUMAN-UAT.md)*
+- [x] Operable, observable, self-healing v1: enriched `/api/health` (per-subsystem reachability + git-SHA version + sync staleness), `/api/version`, structured-JSON logging, slow-query SLO log, durable `release_id`-only usage counters (no query text), admin `/admin/diagnostics` page + kiosk staleness banner, Compose log limits + healthchecks, and GitHub Actions CI proving the Alembic round-trip + p95 SLO gate on synthetic data — *Validated in Phase 8: Observability + Deployment Hardening (two browser-based UI confirmations — diagnostics page render + kiosk banner — tracked in 08-HUMAN-UAT.md)*
 
 ### Active
 
@@ -109,4 +110,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-24 after Phase 6 (LED Contract over MQTT) completion*
+*Last updated: 2026-05-25 after Phase 8 (Observability + Deployment Hardening) completion*
