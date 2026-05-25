@@ -66,6 +66,10 @@ Phase 8: Observability + Deployment Hardening       [ ] Not started
 
 ## Accumulated Context
 
+### Pending Todos
+
+- [2026-05-25] Reconcile gruvax vs gruvax_app Postgres role naming (`database`) — app connects as `gruvax`, prod grant docs reference `gruvax_app`; pick canonical name + sync across .env/compose/migration 0002/justfile. → `.planning/todos/pending/2026-05-25-reconcile-gruvax-vs-gruvax-app-postgres-role-naming.md`
+
 ### Roadmap Evolution
 
 - Phase 5 inserted after Phase 4: Segment-Aware Position Precision — true integer insert; bumped LED→6, Wizards→7, Observability→8
