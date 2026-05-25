@@ -5,8 +5,9 @@ Reports:
   - ``discogsography_view_check``: "ok" | "failed"
   - ``mqtt``:                   "ok" | "degraded"
   - ``status``:                 "ok" | "degraded"
-  - ``version``:                package version string
+  - ``version``:                git SHA baked at Docker build time (OBS-04/OBS-01)
   - ``started_at``:             ISO-8601 UTC timestamp of app startup
+  - ``sync_age_seconds``:       seconds since last discogsography sync (OBS-06), float or null
 """
 
 from __future__ import annotations
@@ -17,6 +18,11 @@ from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+
+try:
+    from gruvax._version import GIT_SHA
+except ImportError:
+    GIT_SHA = "dev"
 
 logger = logging.getLogger(__name__)
 
@@ -44,13 +50,16 @@ async def get_health(request: Request) -> JSONResponse:
     mqtt_status = "ok" if mqtt_ok else "degraded"
     overall = "ok" if (db_ok and view_ok) else "degraded"
 
+    sync_age_seconds: float | None = getattr(request.app.state, "sync_age_seconds", None)
+
     body: dict[str, Any] = {
         "status": overall,
         "db": db_status,
         "discogsography_view_check": view_status,
         "mqtt": mqtt_status,
-        "version": "0.1.0",
+        "version": GIT_SHA,
         "started_at": started_at.isoformat(),
+        "sync_age_seconds": sync_age_seconds,
     }
     # Always HTTP 200 — callers inspect individual fields for degraded subsystems.
     return JSONResponse(content=body, status_code=200)
