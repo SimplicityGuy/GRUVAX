@@ -60,19 +60,20 @@ Exceptions: kiosk banner horizontal padding uses `--gruvax-space-4` (16px) left/
 
 Three-font system — Barlow Condensed / Space Grotesk / DM Mono. Roles are fixed; no ad-hoc assignments.
 
+**Exactly 4 distinct pixel sizes are used across both surfaces: 24 / 18 / 16 / 14.**
+
 | Role | Font | Size token | Weight | Line Height | Usage |
 |------|------|-----------|--------|-------------|-------|
-| Section heading | Barlow Condensed | `--gruvax-text-display-lg` (36px) | 900 | `--gruvax-leading-tight` (1.1) | Diagnostics page section headings (e.g. "SYNC STATUS") |
-| Field label / column header | Barlow Condensed | `--gruvax-text-display-sm` (16px) | 700 | `--gruvax-leading-tight` (1.1) | Row labels, table column headers — ALL CAPS, tracked |
-| Body / description | Space Grotesk | `--gruvax-text-body-sm` (14px) | 400 | `--gruvax-leading-normal` (1.5) | Hint text, row descriptions, kiosk banner message |
-| Data readout | DM Mono | `--gruvax-text-mono` (14px) | 400 | `--gruvax-leading-normal` (1.5) | Search counts, selection counts, timing values (ms), pool stats |
-| Data readout large | DM Mono | `--gruvax-text-mono-lg` (16px) | 500 | `--gruvax-leading-normal` (1.5) | Staleness age display (e.g. "18d 4h") |
-| Caption | Space Grotesk | `--gruvax-text-caption` (12px) | 400 | `--gruvax-leading-normal` (1.5) | Recent log line timestamps |
+| Section heading | Barlow Condensed | `--gruvax-text-display-md` (24px) | 900 | `--gruvax-leading-tight` (1.1) | Diagnostics page section headings (e.g. "SYNC STATUS") |
+| Kiosk banner | Space Grotesk | `--gruvax-text-body-lg` (18px) | 400 | `--gruvax-leading-normal` (1.5) | Kiosk sync-staleness banner message ONLY — 18px is the contrast-safe floor for yellow-on-dark-blue (~3.1:1 = WCAG large text) |
+| Field label / column header + large data | Barlow Condensed (labels) · DM Mono (data) | `--gruvax-text-display-sm` / `--gruvax-text-mono-lg` (16px) | 700 (labels) · 500 (data) | 1.1 labels (`--gruvax-leading-tight`) · 1.5 data (`--gruvax-leading-normal`) | Row labels, table column headers (ALL CAPS, tracked); staleness age readout (DM Mono 16px 500) |
+| Body / data / log readout | Space Grotesk (body) · DM Mono (data + logs) | `--gruvax-text-body-sm` / `--gruvax-text-mono` (14px) | 400 (body) · 400/500 (data) | `--gruvax-leading-normal` (1.5) | Hint text, row descriptions, status messages, empty-state copy, error copy, sub-labels, log-line timestamps (Space Grotesk 14px); search/selection counts, timing values (ms), pool stats, recent log lines (DM Mono 14px) |
 
 **Enforcement:**
 - Barlow Condensed is ALL CAPS only — never sentence case for display labels.
-- DM Mono is reserved for numeric data: counts, timing values (ms), pool sizes, catalog IDs. Never for instructions or copy.
+- DM Mono is reserved for numeric data: counts, timing values (ms), pool sizes, catalog IDs, and the dark-terminal log readout. Never for instructions or copy.
 - Body copy and instructions are Space Grotesk sentence case.
+- **Size discipline:** the only sizes permitted in this phase are 24px, 18px, 16px, and 14px. 18px is reserved exclusively for the kiosk banner (its accessibility floor). Everything previously specced at 12px (captions / sub-labels / log timestamps) and 11px (log lines) folds into 14px. No 5th or 6th size appears anywhere in this spec.
 
 ---
 
@@ -98,7 +99,7 @@ Source: `gruvax-design-tokens.css`. No hex values anywhere in component CSS.
 - `sync_age` 0–3d: no special treatment (normal data color, `--gruvax-text-secondary`)
 - `sync_age` > 3d (admin diagnostics only): row background `--gruvax-yellow-faint` (rgba(255,218,0,0.12)), label text `--gruvax-warning` (#E6A800)
 - `sync_age` > 14d (admin diagnostics): row background `--gruvax-yellow-faint`, label text `--gruvax-error` (#C0392B)
-- `sync_age` > 14d (kiosk banner): banner background `--gruvax-yellow`, text `--gruvax-blue-darker` (#002855) — large text (18px) meets 3.1:1 contrast minimum per design-language accessibility note
+- `sync_age` > 14d (kiosk banner): banner background `--gruvax-yellow`, text `--gruvax-blue-darker` (#002855) — 18px text meets 3.1:1 contrast minimum per design-language accessibility note
 
 **Yellow-on-blue / blue-on-yellow accessibility rule:** Yellow is 3.1:1 on blue — large text (18px+) or decoration only, never body copy. The kiosk banner uses 18px Space Grotesk to satisfy this. The admin yellow-tint row background uses `--gruvax-text-secondary` (#555555) for data values to maintain ≥ 4.5:1 contrast.
 
@@ -135,7 +136,7 @@ Each section is a `.settings-section` card (white bg, `--gruvax-radius-lg`, `--g
 
 #### StalenessSection
 
-- Heading: "SYNC STATUS" (Barlow Condensed 900 36px `--gruvax-blue`)
+- Heading: "SYNC STATUS" (Barlow Condensed 900 24px `--gruvax-blue`)
 - Single data row showing:
   - Label (ALL CAPS, Barlow Condensed 700 16px): "DISCOGSOGRAPHY LAST SYNC"
   - Value: DM Mono 16px 500 — formatted as "Xd Yh ago" or "< 1h ago"
@@ -147,7 +148,7 @@ Each section is a `.settings-section` card (white bg, `--gruvax-radius-lg`, `--g
 
 #### TopSearchedSection
 
-- Heading: "TOP SEARCHED" (Barlow Condensed 900 36px `--gruvax-blue`)
+- Heading: "TOP SEARCHED" (Barlow Condensed 900 24px `--gruvax-blue`)
 - Table layout — four columns:
   - Artist / Title (Space Grotesk 14px `--gruvax-text-secondary`) — derived from release_id lookup (backend provides display text)
   - SEARCHES ALL-TIME (DM Mono 14px)
@@ -163,14 +164,14 @@ Each section is a `.settings-section` card (white bg, `--gruvax-radius-lg`, `--g
 - Positioned below the table, right-aligned
 - Button style: outlined destructive — `border: 1px solid --gruvax-error`, text `--gruvax-error`, bg transparent, Barlow Condensed 700 16px ALL CAPS, min-height 44px
 - Label: "RESET STATS"
-- On tap: inline confirmation replaces the button text — "CONFIRM RESET?" with two inline buttons: "YES, RESET" (destructive filled: bg `--gruvax-error`, white text) and "CANCEL" (secondary outlined)
+- On tap: inline confirmation replaces the button text — "CONFIRM RESET?" with two inline buttons: "YES, RESET" (destructive filled: bg `--gruvax-error`, white text) and "KEEP STATS" (secondary outlined — names the preserved outcome, never a generic "Cancel")
 - PIN is NOT re-prompted (the admin is already authenticated in the current session). The confirmation step is the only gate. (Decision: session PIN already covers auth; a second PIN re-entry would be redundant for a home-LAN single-admin product.)
 - After reset: "Stats cleared." (Space Grotesk 14px `--gruvax-success`, auto-hides after 3s, role="status")
-- After cancel: returns to "RESET STATS" button state
+- After "KEEP STATS": returns to "RESET STATS" button state, no data touched
 
 #### SlowQuerySection
 
-- Heading: "SLOW QUERIES" (Barlow Condensed 900 36px)
+- Heading: "SLOW QUERIES" (Barlow Condensed 900 24px)
 - Sub-label: "Requests exceeding SLO threshold (search > 200 ms · locate > 50 ms)" — Space Grotesk 14px `--gruvax-text-muted`
 - Table layout — five columns:
   - ENDPOINT (Barlow Condensed 700 16px ALL CAPS for value too, since it's a path token like `/api/search`)
@@ -184,7 +185,7 @@ Each section is a `.settings-section` card (white bg, `--gruvax-radius-lg`, `--g
 
 #### SystemStatusSection
 
-- Heading: "SYSTEM" (Barlow Condensed 900 36px)
+- Heading: "SYSTEM" (Barlow Condensed 900 24px)
 - Three status rows, each following a fixed layout:
   - Left: status indicator dot (8px circle, filled) + ALL-CAPS label (Barlow Condensed 700 16px)
   - Right: DM Mono 14px value
@@ -196,28 +197,28 @@ Each section is a `.settings-section` card (white bg, `--gruvax-radius-lg`, `--g
   Row 2 — POSTGRES POOL
   - Dot: always `--gruvax-success` (no warning state for pool stats; data is informational)
   - Value: "{size_used} / {size_min}" — DM Mono 14px (e.g. "2 / 2")
-  - Sub-label: "connections used / min pool size" — Space Grotesk 12px `--gruvax-text-muted`
+  - Sub-label: "connections used / min pool size" — Space Grotesk 14px `--gruvax-text-muted`
 
   Row 3 — PHANTOM BOUNDARIES
   - Dot: `--gruvax-success` when 0; `--gruvax-warning` when > 0
   - Value: "{count}" — DM Mono 14px
-  - Sub-label: "boundaries referencing records not in v_collection" — Space Grotesk 12px `--gruvax-text-muted`
+  - Sub-label: "boundaries referencing records not in v_collection" — Space Grotesk 14px `--gruvax-text-muted`
 
 - Row dividers: 1px `--gruvax-border-faint`, `--gruvax-space-3` vertical padding per row
 
 #### RecentLogsSection
 
-- Heading: "RECENT LOGS" (Barlow Condensed 900 36px)
+- Heading: "RECENT LOGS" (Barlow Condensed 900 24px)
 - Display: monospace log lines, newest-first, max 20 lines visible (scrollable within a fixed-height container: `max-height: 300px; overflow-y: auto`)
 - Container bg: `--gruvax-blue-darker` (#002855) — dark terminal aesthetic; text `--gruvax-white`
-- Font: DM Mono 11px (`--gruvax-text-mono-sm`), line-height `--gruvax-leading-relaxed` (1.7)
+- Font: DM Mono 14px (`--gruvax-text-mono`), line-height `--gruvax-leading-relaxed` (1.7)
 - Log level color coding (foreground text only, no bg):
   - ERROR: `--gruvax-error` (#C0392B)
   - WARNING: `--gruvax-warning` (#E6A800)
   - INFO: `--gruvax-white`
   - DEBUG: `--gruvax-text-muted` (#777777)
-- Timestamp prefix: DM Mono 11px `--gruvax-text-faint` (#999999)
-- Empty state (dark bg): "No log entries in buffer." — DM Mono 11px `--gruvax-text-faint`, centered, padding `--gruvax-space-4`
+- Timestamp prefix: DM Mono 14px `--gruvax-text-faint` (#999999)
+- Empty state (dark bg): "No log entries in buffer." — DM Mono 14px `--gruvax-text-faint`, centered, padding `--gruvax-space-4`
 
 ---
 
@@ -238,7 +239,7 @@ Each section is a `.settings-section` card (white bg, `--gruvax-radius-lg`, `--g
 
 - Background: `--gruvax-yellow` (#FFDA00)
 - Text color: `--gruvax-blue-darker` (#002855)
-- Font: Space Grotesk 18px weight 400 — sentence case (18px meets accessibility minimum for yellow-on-dark contrast of 3.1:1 per design language note)
+- Font: Space Grotesk 18px weight 400 — sentence case (18px meets accessibility minimum for yellow-on-dark contrast of 3.1:1 per design language note; this is the only 18px in the phase and it is reserved for this banner)
 - Icon: inline SVG warning triangle (Lucide `AlertTriangle`, 18×18), `--gruvax-blue-darker`, `aria-hidden="true"` — decorative, not load-bearing
 - Padding: `--gruvax-space-3` (12px) vertical × `--gruvax-space-4` (16px) horizontal
 - Full-width, no border-radius (flush edge-to-edge like a system notification bar)
@@ -299,7 +300,8 @@ Shimmer skeleton: single `div` per card with `background: linear-gradient(90deg,
 idle → confirm → (success | error) → idle
 ```
 
-- Confirm state: inline — the "RESET STATS" button is replaced in-place by the two confirm buttons; no modal, no overlay. Keeps the user's scroll position.
+- Confirm state: inline — the "RESET STATS" button is replaced in-place by the two confirm buttons ("YES, RESET" + "KEEP STATS"); no modal, no overlay. Keeps the user's scroll position.
+- "KEEP STATS" path: returns to idle, no network call, no data change.
 - Network error on reset: "Could not reset stats. Try again." (Space Grotesk 14px `--gruvax-error`, role="alert", auto-hides after 4s) — returns to "RESET STATS" state.
 
 ### Kiosk banner mount/unmount
@@ -315,7 +317,7 @@ idle → confirm → (success | error) → idle
 | Element | Copy |
 |---------|------|
 | Primary CTA — Refresh | "REFRESH" (idle) · "REFRESHING…" (loading) |
-| Destructive action — Reset | "RESET STATS" (idle) · "CONFIRM RESET?" (confirm) · "YES, RESET" (confirm-primary) · "CANCEL" (confirm-secondary) |
+| Destructive action — Reset | "RESET STATS" (idle) · "CONFIRM RESET?" (confirm) · "YES, RESET" (confirm-primary) · "KEEP STATS" (confirm-secondary) |
 | Post-reset success | "Stats cleared." |
 | Empty state — top searched | "No search data yet. Stats accumulate as records are searched." |
 | Empty state — slow queries | "No slow queries logged. The ring buffer resets on restart." |
@@ -334,6 +336,7 @@ idle → confirm → (success | error) → idle
 **Voice rules applied:**
 - ALL CAPS labels: Barlow Condensed — section headings, column headers, button labels, nav tabs
 - Sentence case: Space Grotesk — hints, descriptions, kiosk banner text, status messages
+- No generic action labels: the destructive confirm pair is "YES, RESET" / "KEEP STATS" — both name their outcome; "Cancel" / "OK" generic labels are not used.
 - Plain language: no "sync_age_seconds", no "v_collection", no "ring buffer" in user-visible strings (exception: the empty-state copy for slow queries, which is admin-facing and benefits from the technical context)
 - Error messages: problem description + explicit recovery action ("Check that the API is reachable", "Try again")
 
@@ -369,7 +372,7 @@ icon + text gap:           --gruvax-space-2 (8px)
 
 - All interactive elements have `aria-label` or visible label
 - Refresh button: `aria-label="Refresh diagnostics"` when no icon text
-- Destructive confirm buttons: `aria-label="Confirm reset stats"` / `aria-label="Cancel reset stats"`
+- Destructive confirm buttons: `aria-label="Confirm reset stats"` (YES, RESET) / `aria-label="Keep stats, cancel reset"` (KEEP STATS)
 - Status dots: `aria-hidden="true"` (color alone; text value is always present alongside)
 - Kiosk banner: `role="alert"` on first mount; subsequent renders use `role="status"` to avoid re-announcing
 - Recent logs scroll container: `aria-label="Recent log entries"` + `tabindex="0"` (keyboard scroll)
