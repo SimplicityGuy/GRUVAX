@@ -1054,7 +1054,11 @@ secrets should be embedded (secrets go in GitHub Secrets, referenced via `secret
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
+
+> All three resolved during planning (Phase 9 plans, 2026-05-25): (1) → `just lint-precommit`
+> recipe added in 09-03; (2) → Node 26 used in CI throughout 09-02/09-03; (3) →
+> `compose.override.yaml` gitignored + `.example` committed in 09-05.
 
 1. **`pre-commit run --all-files` vs `just lint` in `code-quality.yml` (D-02)**
    - What we know: D-02 locks `pre-commit run --all-files` as the single source of truth.
