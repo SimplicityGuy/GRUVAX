@@ -361,7 +361,7 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
   6. **`scripts/update-project.sh`** — adapt from `discogsography/scripts/update-project.sh` (justfile-delegating), specialized for GRUVAX.
   7. **Docs refresh** — capture the final Phase 1–8 design and **remove all `lux`/`nox` host references** from docs/CLAUDE.md.
 
-**Plans:** 6/6 plans complete
+**Plans:** 8/6 plans complete
 
 Plans:
 **Wave 1**
