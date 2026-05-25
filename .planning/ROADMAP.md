@@ -283,7 +283,7 @@ Plans:
   4. Compose declares per-service `logging:` directives (max-size + max-file) for `gruvax-api` and `mosquitto`; each service has a `healthcheck:` integrated with `restart: unless-stopped` for self-healing; volume permissions on a fresh host are documented and verified (Pitfall 14).
   5. A `pytest-benchmark` CI gate proves p95 `/api/search` end-to-end ≤200 ms and p95 `/api/locate` ≤50 ms against the synthetic CI dataset; a `just demo` (or equivalent) smoke script runs the Core Value flow against a fresh `docker compose up` to prove the SLO holds at the box level.
 
-**Plans:** 2/6 plans executed
+**Plans:** 4/6 plans executed
 Plans:
 **Wave 1** *(parallel — no file overlap)*
 
@@ -292,8 +292,8 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1; 08-03 and 08-06 run in parallel — no file overlap)*
 
-- [ ] 08-03-PLAN.md — Surfacing slice: enrich /api/health (git-SHA version + sync_age_seconds) + search/locate counter increments + slow-query hooks + Dockerfile version injection (OBS-01/04/05/06/07)
-- [ ] 08-06-PLAN.md — Hardening + CI: Compose log limits (DEP-04) + healthcheck verify (DEP-05) + GitHub Actions Alembic round-trip (OBS-03) + pytest-benchmark SLO gate + just demo + fresh-host runbook
+- [x] 08-03-PLAN.md — Surfacing slice: enrich /api/health (git-SHA version + sync_age_seconds) + search/locate counter increments + slow-query hooks + Dockerfile version injection (OBS-01/04/05/06/07)
+- [x] 08-06-PLAN.md — Hardening + CI: Compose log limits (DEP-04) + healthcheck verify (DEP-05) + GitHub Actions Alembic round-trip (OBS-03) + pytest-benchmark SLO gate + just demo + fresh-host runbook
 
 **Wave 3** *(blocked on Wave 2; 08-04 and 08-05 run in parallel — no file overlap)*
 
@@ -313,7 +313,7 @@ Plans:
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
 | 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete    | 2026-05-24 |
 | 7. Wizards + Import/Export | 8/8 | Complete    | 2026-05-25 |
-| 8. Observability + Deployment Hardening | 2/6 | In Progress|  |
+| 8. Observability + Deployment Hardening | 4/6 | In Progress|  |
 
 ## Critical-Path Notes (carried from research)
 
