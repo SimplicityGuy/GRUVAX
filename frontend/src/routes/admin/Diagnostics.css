@@ -1,0 +1,536 @@
+/**
+ * Diagnostics page CSS — /admin/diagnostics (Phase 8, UI-SPEC Surface 1).
+ *
+ * Consumes ONLY design tokens from gruvax-design-tokens.css.
+ * Never hardcodes hex values — all colors via var(--gruvax-*).
+ *
+ * Typography: exactly 4 sizes — 24px / 18px / 16px / 14px.
+ * Fonts: Barlow Condensed (display, ALL CAPS), Space Grotesk (body), DM Mono (data).
+ */
+
+/* ── Section heading (Barlow Condensed 24px 900, --gruvax-blue) ────────────── */
+
+.diag-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md); /* 24px */
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  line-height: var(--gruvax-leading-tight);
+  margin: 0;
+}
+
+/* ── Toolbar ─────────────────────────────────────────────────────────────── */
+
+.diag-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-4);
+  flex-wrap: wrap;
+}
+
+.diag-refresh-btn {
+  width: auto;
+  max-width: 160px;
+}
+
+@media (max-width: 480px) {
+  .diag-refresh-btn {
+    width: 100%;
+    max-width: none;
+  }
+
+  .diag-last-refreshed {
+    width: 100%;
+  }
+}
+
+.diag-last-refreshed {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-text-muted);
+}
+
+/* ── Shimmer skeleton (loading state) ───────────────────────────────────── */
+
+@keyframes diag-shimmer {
+  0% { background-position: -400px 0; }
+  100% { background-position: 400px 0; }
+}
+
+.diag-skeleton {
+  height: 80px;
+  border-radius: var(--gruvax-radius-md);
+  background: linear-gradient(
+    90deg,
+    var(--gruvax-border-faint) 25%,
+    var(--gruvax-blue-faint) 50%,
+    var(--gruvax-border-faint) 75%
+  );
+  background-size: 800px 100%;
+  animation: diag-shimmer 1.2s linear infinite;
+}
+
+/* ── Staleness section ──────────────────────────────────────────────────── */
+
+.diag-staleness-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-4);
+  padding: var(--gruvax-space-3);
+  border-radius: var(--gruvax-radius-md);
+  flex-wrap: wrap;
+}
+
+.diag-staleness-row--stale,
+.diag-staleness-row--outdated {
+  background: var(--gruvax-yellow-faint);
+}
+
+.diag-row-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  color: var(--gruvax-text-primary);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  line-height: var(--gruvax-leading-tight);
+  flex: 1;
+  min-width: 160px;
+}
+
+.diag-row-value {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono-lg); /* 16px */
+  font-weight: 500;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* Staleness badge */
+
+.diag-badge {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  padding: var(--gruvax-space-1) var(--gruvax-space-2);
+  border-radius: var(--gruvax-radius-pill);
+  line-height: var(--gruvax-leading-tight);
+}
+
+.diag-badge--ok {
+  background: rgba(26, 122, 74, 0.12); /* --gruvax-success tint, token-safe via rgba */
+  color: var(--gruvax-success);
+}
+
+.diag-badge--stale {
+  background: var(--gruvax-yellow-faint);
+  color: var(--gruvax-warning);
+}
+
+.diag-badge--outdated {
+  background: var(--gruvax-yellow-faint);
+  color: var(--gruvax-error);
+}
+
+/* ── Table shared styles ────────────────────────────────────────────────── */
+
+.diag-table-wrapper {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
+.diag-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.diag-col-header {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  color: var(--gruvax-text-primary);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  text-align: left;
+  padding: 0 var(--gruvax-space-3) var(--gruvax-space-2);
+  border-bottom: 1px solid var(--gruvax-border-faint);
+  white-space: nowrap;
+  line-height: var(--gruvax-leading-tight);
+}
+
+.diag-col-number {
+  text-align: right;
+}
+
+.diag-table-row {
+  border-bottom: 1px solid var(--gruvax-border-faint);
+}
+
+.diag-table-row:last-child {
+  border-bottom: none;
+}
+
+.diag-cell-text {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-text-secondary);
+  padding: var(--gruvax-space-3);
+  line-height: var(--gruvax-leading-normal);
+}
+
+.diag-cell-mono {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono); /* 14px */
+  color: var(--gruvax-text-secondary);
+  padding: var(--gruvax-space-3);
+  text-align: right;
+  line-height: var(--gruvax-leading-normal);
+  white-space: nowrap;
+}
+
+.diag-cell-muted {
+  color: var(--gruvax-text-muted);
+}
+
+.diag-cell-path {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  color: var(--gruvax-text-secondary);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  padding: var(--gruvax-space-3);
+  line-height: var(--gruvax-leading-tight);
+}
+
+.diag-cell-time {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-text-muted);
+  padding: var(--gruvax-space-3);
+  white-space: nowrap;
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* ── Top-searched artist/title pair ─────────────────────────────────────── */
+
+.diag-artist {
+  font-weight: 500;
+  color: var(--gruvax-text-secondary);
+}
+
+.diag-title {
+  color: var(--gruvax-text-muted);
+}
+
+/* ── Sub-label (Space Grotesk 14px muted) ───────────────────────────────── */
+
+.diag-sub-label {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0;
+}
+
+/* ── Empty state (centered, Space Grotesk 14px muted) ───────────────────── */
+
+.diag-empty-state {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-text-muted);
+  text-align: center;
+  padding: var(--gruvax-space-5) 0;
+  margin: 0;
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* ── Reset stats row ────────────────────────────────────────────────────── */
+
+.diag-reset-row {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  margin-top: var(--gruvax-space-2);
+  gap: var(--gruvax-space-2);
+  flex-wrap: wrap;
+}
+
+/* Outlined destructive button (RESET STATS) */
+.diag-btn-destructive {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-error);
+  background: transparent;
+  border: 1px solid var(--gruvax-error);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 44px;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+              opacity var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.diag-btn-destructive:hover:not(:disabled) {
+  background: rgba(192, 57, 43, 0.06); /* --gruvax-error tint, token-safe */
+}
+
+.diag-btn-destructive:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.diag-btn-destructive:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Filled destructive button (YES, RESET) */
+.diag-btn-destructive-filled {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-white);
+  background: var(--gruvax-error);
+  border: 1px solid var(--gruvax-error);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 44px;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.diag-btn-destructive-filled:hover:not(:disabled) {
+  background: var(--gruvax-error);
+  filter: brightness(0.9);
+}
+
+.diag-btn-destructive-filled:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* Secondary outlined button (KEEP STATS) */
+.diag-btn-secondary {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-text-primary);
+  background: transparent;
+  border: 1px solid var(--gruvax-border-faint);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 44px;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.diag-btn-secondary:hover {
+  background: var(--gruvax-blue-faint);
+}
+
+.diag-btn-secondary:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* Confirm row inline replacement */
+.diag-confirm-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.diag-confirm-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-error);
+  white-space: nowrap;
+}
+
+.diag-reset-success {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-success);
+  margin: 0;
+  line-height: var(--gruvax-leading-normal);
+}
+
+.diag-reset-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-error);
+  margin: 0;
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* ── System status rows ─────────────────────────────────────────────────── */
+
+.diag-status-rows {
+  display: flex;
+  flex-direction: column;
+}
+
+.diag-status-row {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--gruvax-space-4);
+  padding: var(--gruvax-space-3) 0;
+  border-bottom: 1px solid var(--gruvax-border-faint);
+  flex-wrap: wrap;
+}
+
+.diag-status-row:last-child {
+  border-bottom: none;
+}
+
+.diag-status-left {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  min-width: 160px;
+}
+
+/* Status dot (8px circle) */
+.diag-status-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.diag-status-dot--ok {
+  background: var(--gruvax-success);
+}
+
+.diag-status-dot--error {
+  background: var(--gruvax-error);
+}
+
+.diag-status-dot--warning {
+  background: var(--gruvax-warning);
+}
+
+.diag-status-value {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+}
+
+.diag-status-value-group {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: var(--gruvax-space-1);
+  text-align: right;
+}
+
+/* ── Recent logs terminal ───────────────────────────────────────────────── */
+
+.diag-logs-terminal {
+  background: var(--gruvax-blue-darker);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-4);
+  max-height: 300px;
+  overflow-y: auto;
+  /* Keyboard scroll (accessibility) */
+  outline: none;
+}
+
+.diag-logs-terminal:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.diag-log-line {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono); /* 14px */
+  line-height: var(--gruvax-leading-relaxed);
+  color: var(--gruvax-white);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.diag-log-ts {
+  color: var(--gruvax-text-faint);
+}
+
+.diag-log-level {
+  font-weight: 500;
+}
+
+.diag-log-info {
+  color: var(--gruvax-white);
+}
+
+.diag-log-error {
+  color: var(--gruvax-error);
+}
+
+.diag-log-warning {
+  color: var(--gruvax-warning);
+}
+
+.diag-log-debug {
+  color: var(--gruvax-text-muted);
+}
+
+.diag-log-msg {
+  color: var(--gruvax-white);
+}
+
+.diag-logs-empty {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono); /* 14px */
+  color: var(--gruvax-text-faint);
+  text-align: center;
+  padding: var(--gruvax-space-4);
+  margin: 0;
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* ── Load error state ───────────────────────────────────────────────────── */
+
+.diag-load-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-error);
+  margin: 0;
+  line-height: var(--gruvax-leading-normal);
+}
+
+.diag-retry-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--gruvax-blue);
+  cursor: pointer;
+  text-decoration: underline;
+  line-height: inherit;
+}
+
+.diag-retry-link:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}

@@ -578,6 +578,80 @@ export async function ledsDiagnostic(): Promise<{ run_id: string; started_at: st
   return res.json() as Promise<{ run_id: string; started_at: string }>
 }
 
+// ── Phase 8: Diagnostics endpoints ───────────────────────────────────────────
+
+/** Shape of a single top-searched row from the backend. */
+export interface TopSearchedRow {
+  release_id: number
+  title: string
+  primary_artist: string
+  search_count: number
+  search_count_7d: number
+  selection_count: number
+  selection_count_7d: number
+}
+
+/** Shape of a slow-query ring buffer entry from the backend. */
+export interface SlowQueryEntry {
+  path: string
+  total_ms: number
+  db_ms: number
+  threshold_ms: number
+  ts: number
+}
+
+/** Shape of a recent-log ring buffer entry from the backend. */
+export interface LogEntry {
+  ts: number
+  level: string
+  logger: string
+  msg: string
+}
+
+/** The full diagnostics payload returned by GET /api/admin/diagnostics. */
+export interface DiagnosticsData {
+  sync_age_seconds: number | null
+  top_searched: TopSearchedRow[]
+  slow_queries: SlowQueryEntry[]
+  mqtt: 'connected' | 'disconnected'
+  pool: {
+    size_used: number
+    size_min: number
+  }
+  phantom_boundary_count: number
+  recent_logs: LogEntry[]
+}
+
+/**
+ * GET /api/admin/diagnostics — return the 7 SC#2 diagnostic rows.
+ *
+ * Admin-gated (session cookie + CSRF via adminFetch). Returns the current
+ * operational state: staleness, counters, ring buffers, pool stats, phantom count.
+ */
+export async function getDiagnostics(): Promise<DiagnosticsData> {
+  const res = await adminFetch('/api/admin/diagnostics')
+  if (!res.ok) {
+    throw new Error(`Diagnostics fetch failed: ${res.status}`)
+  }
+  return res.json() as Promise<DiagnosticsData>
+}
+
+/**
+ * POST /api/admin/diagnostics/reset-stats — truncate gruvax.record_stats.
+ *
+ * PIN-gated Reset stats action (D-06). Admin session + CSRF required (handled
+ * by adminFetch — CSRF auto-attached for POST). Returns {reset: true} on success.
+ */
+export async function resetStats(): Promise<{ reset: boolean }> {
+  const res = await adminFetch('/api/admin/diagnostics/reset-stats', {
+    method: 'POST',
+  })
+  if (!res.ok) {
+    throw new Error(`Reset stats failed: ${res.status}`)
+  }
+  return res.json() as Promise<{ reset: boolean }>
+}
+
 // ── Phase 7: Export / Import endpoints ───────────────────────────────────────
 
 /**
