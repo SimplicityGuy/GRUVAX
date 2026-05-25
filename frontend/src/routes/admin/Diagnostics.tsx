@@ -468,7 +468,9 @@ export function Diagnostics(): React.ReactElement {
 
   // Load on mount (D-11 — single useEffect, no polling)
   useEffect(() => {
-    // load is async; setState calls execute after the awaited fetch resolves, not synchronously.
+    // setRefreshing(true) and setError(null) run synchronously before the await, which is
+    // intentional (loading indicator). React 18 batches both into one re-render. The rule
+    // is suppressed because this pattern is deliberate, not a cascading-render bug.
     // eslint-disable-next-line react-hooks/set-state-in-effect
     void load()
   }, [load])

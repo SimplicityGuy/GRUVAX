@@ -58,7 +58,7 @@ echo "==> Refreshing uv.lock within existing floor constraints"
 if [[ "$MAJOR_UPGRADES" == "true" ]]; then
   uv lock --upgrade
 else
-  uv lock --upgrade
+  uv lock # refresh within existing pyproject.toml floor constraints
 fi
 
 echo "==> Updating pre-commit hook revisions"

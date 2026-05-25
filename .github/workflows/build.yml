@@ -89,7 +89,7 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           build-args: |
             GIT_SHA=${{ github.sha }}
-            BUILD_TIMESTAMP=${{ github.event.head_commit.timestamp }}
+            BUILD_TIMESTAMP=${{ github.event.head_commit.timestamp || 'pr-build' }}
 
   aggregate-results:
     runs-on: ubuntu-latest
