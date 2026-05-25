@@ -209,5 +209,5 @@ def test_safe_load_rejects_python_object_tag() -> None:
     """)
     # yaml.safe_load raises yaml.constructor.ConstructorError for arbitrary tags.
     # parse_yaml_boundaries propagates that error (does not catch it).
-    with pytest.raises(Exception):
+    with pytest.raises(yaml.constructor.ConstructorError):
         parse_yaml_boundaries(malicious)

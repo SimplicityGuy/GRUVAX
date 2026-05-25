@@ -8,7 +8,7 @@ Invariant (SC4):
   (zero diff between exported and re-imported boundary set)
 
 Strategy: generate synthetic cut sets using made-up labels from a fixed sample
-pool (unit_id 1–2, row/col 0–3, unique by address). The export produces a YAML
+pool (unit_id 1-2, row/col 0-3, unique by address). The export produces a YAML
 file; re-importing that file should produce an identical boundary set.
 
 No real collection data is used — synthetic labels only.
@@ -57,7 +57,7 @@ def _make_cube_entry(unit_id: int, row: int, col: int, label_info: tuple) -> dic
 def synthetic_cut_set(draw: st.DrawFn) -> list[dict]:  # type: ignore[type-arg]
     """Generate a non-empty list of unique-by-address synthetic cut-point dicts.
 
-    unit_id: 1 or 2, row: 0–3, col: 0–3. Each address is unique.
+    unit_id: 1 or 2, row: 0-3, col: 0-3. Each address is unique.
     Labels are sampled from the synthetic label pool (not necessarily unique across cubes).
     """
     addresses = draw(

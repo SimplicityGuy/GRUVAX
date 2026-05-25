@@ -15,6 +15,7 @@ directly with the stub; endpoint-level tests use httpx AsyncClient against the a
 
 from __future__ import annotations
 
+import os
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
@@ -25,7 +26,7 @@ from httpx import ASGITransport, AsyncClient
 
 TEST_PREFIX = "gruvax/v1/dev/leds"
 
-# Minimal unit set: one unit, 2×2 grid → 4 cubes
+# Minimal unit set: one unit, 2x2 grid -> 4 cubes
 # Each row returned by `fetchall` is a 3-tuple: (id, rows, cols)
 UNITS_ROWS = [(1, 2, 2)]  # unit_id=1, rows=2, cols=2
 
@@ -212,7 +213,7 @@ async def test_diagnostic_sequence() -> None:
     """run_diagnostic publishes the 5-state color sequence for each cube, then
     restores the ambient baseline (CR-04 / LED-11 / D-20).
 
-    For units=[(1, 2, 2)] → 4 cubes × 5 states = 20 diagnostic state publishes,
+    For units=[(1, 2, 2)] -> 4 cubes x 5 states = 20 diagnostic state publishes,
     plus 4 ambient-restore state publishes (one per cube) = 24 state publishes.
     Plus 1 subscribe + 1 unsubscribe to status/# (LED-07, D-09).
     """
@@ -230,10 +231,10 @@ async def test_diagnostic_sequence() -> None:
     publish_calls = client.publish.call_args_list
     state_publishes = [c for c in publish_calls if f"{TEST_PREFIX}/state/" in c[0][0]]
 
-    # 4 cubes × 5 states = 20 diagnostic publishes + 4 ambient-restore publishes
+    # 4 cubes x 5 states = 20 diagnostic publishes + 4 ambient-restore publishes
     # (CR-04: run_diagnostic ends by republishing the idle ambient baseline so the
     # final "off" frame does not leave every cube dark).
-    expected_diagnostic = 4 * 5  # cubes × states
+    expected_diagnostic = 4 * 5  # cubes x states
     expected_ambient = 4  # one ambient-restore publish per cube
     assert len(state_publishes) == expected_diagnostic + expected_ambient, (
         f"Expected {expected_diagnostic + expected_ambient} state publishes "
@@ -363,8 +364,6 @@ async def test_publishers_degraded() -> None:
 
 
 # ── App factory for endpoint tests ───────────────────────────────────────────
-
-import os
 
 
 async def _stub_require_admin() -> dict[str, str]:

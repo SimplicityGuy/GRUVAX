@@ -32,7 +32,7 @@ Security:
 All SQL uses ``%s`` placeholders — no f-string interpolation.
 
 dry_run preview contract (POST /api/admin/import/boundaries?dry_run=true):
-  - Runs the identical parse + fill + validation pipeline (steps 1–6) with NO DB write.
+  - Runs the identical parse + fill + validation pipeline (steps 1-6) with NO DB write.
   - On validation pass → 200 preview body:
       {
         "total_cubes":    <int — count of all addresses in cube_boundaries>,
@@ -154,7 +154,7 @@ async def import_boundaries(
     Returns: JSON ``{change_set_id, applied, source}``
 
     dry_run=true — NO-write preview (T-07-DRYRUN-WRITE):
-      Runs steps 1–6 identically (same parse + fill + validation), then:
+      Runs steps 1-6 identically (same parse + fill + validation), then:
       - Returns 400 on any validation error (same bodies as commit path).
       - On validation pass, returns 200 preview:
           {total_cubes, file_cube_count, diff_preview: [{unit_id, row, col, delta, will_be_empty}]}

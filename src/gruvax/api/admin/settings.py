@@ -302,7 +302,7 @@ async def update_settings(
     #
     # WR-01: MUTATE the existing dict in place (clear + update) rather than REBINDING
     # the attribute to a fresh dict.  Fire-and-forget tasks (fan_out_illuminate,
-    # illuminate_with_lifecycle, in-flight schedule_revert that runs 180–900s later)
+    # illuminate_with_lifecycle, in-flight schedule_revert that runs 180-900s later)
     # capture the settings_cache dict REFERENCE at spawn time.  Rebinding the
     # attribute would leave those tasks reading the stale OLD dict; mutating the
     # same object in place means every holder of the reference sees the new values

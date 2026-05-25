@@ -37,7 +37,7 @@ _LABEL_STRATEGY = st.sampled_from(_SYNTHETIC_LABELS)
 def synthetic_yaml_import(draw: st.DrawFn) -> str:  # type: ignore[type-arg]
     """Generate a synthetic YAML import string (version: '1') with unique addresses.
 
-    unit_id: 1 or 2, row: 0–3, col: 0–3.
+    unit_id: 1 or 2, row: 0-3, col: 0-3.
     All labels are synthetic; no real collection data.
     """
     import yaml
