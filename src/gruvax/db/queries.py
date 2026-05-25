@@ -14,6 +14,14 @@ Functions:
                                 returns nothing strong (D-11).
   - ``load_settings_cache``:   load all key/value rows from gruvax.settings
                                 into a dict for in-process caching (Phase 3).
+
+Phase 8 — OBS-07 counter + staleness + diagnostics functions:
+  - ``get_sync_staleness_seconds``: seconds since last discogsography sync via v_collection.
+  - ``increment_search_count``:     upsert search counters keyed by release_id only (D-04/D-05).
+  - ``increment_selection_count``:  upsert selection counters keyed by release_id only (D-04/D-05).
+  - ``get_top_searched``:           top-N records by all-time search_count (D-05/D-06).
+  - ``get_phantom_boundary_count``: count non-empty boundaries not in v_collection (OQ7).
+  - ``reset_record_stats``:         TRUNCATE gruvax.record_stats (admin Reset stats action).
 """
 
 from __future__ import annotations
@@ -897,3 +905,189 @@ LIMIT 1
         await cur.execute(sql, (label, catalog))
         row = await cur.fetchone()
     return row is not None
+
+
+# ── Phase 8: OBS-07 — durable counters + diagnostics queries ─────────────────
+
+
+async def get_sync_staleness_seconds(
+    pool: AsyncConnectionPool,
+) -> float | None:
+    """Return seconds since the last discogsography sync, or None if v_collection is empty.
+
+    Reads gruvax.v_collection exclusively (Pitfall 5 — no direct collection_items access).
+    All SQL uses %s placeholders (T-08-06).
+
+    Args:
+        pool: Open psycopg ``AsyncConnectionPool``.
+
+    Returns:
+        Seconds as a non-negative float, or None when v_collection has no rows (OBS-06).
+    """
+    sql = "SELECT EXTRACT(EPOCH FROM (now() - max(synced_at))) FROM gruvax.v_collection"
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql)
+        row = await cur.fetchone()
+    if row is None or row[0] is None:
+        return None
+    return float(row[0])
+
+
+async def increment_search_count(
+    pool: AsyncConnectionPool,
+    release_id: int,
+) -> None:
+    """Upsert search counters for the given release_id (D-04, D-05, D-06).
+
+    Counters are release_id-keyed aggregates; no query text is ever stored (OBS-07, T-08-05).
+    Rolling 7-day bucket: search_count_7d resets to 1 when last_searched_at is older
+    than 7 days; otherwise it increments (D-05).
+
+    All SQL uses %s placeholders — never f-string interpolation (T-08-06).
+
+    Args:
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        release_id: Discogs release ID (integer, server-side — no user text stored).
+    """
+    sql = """
+INSERT INTO gruvax.record_stats
+    (release_id, search_count, search_count_7d, last_searched_at, updated_at)
+VALUES (%s, 1, 1, now(), now())
+ON CONFLICT (release_id) DO UPDATE SET
+    search_count     = gruvax.record_stats.search_count + 1,
+    search_count_7d  = CASE
+        WHEN gruvax.record_stats.last_searched_at > now() - INTERVAL '7 days'
+        THEN gruvax.record_stats.search_count_7d + 1
+        ELSE 1
+    END,
+    last_searched_at = now(),
+    updated_at       = now()
+"""
+    async with pool.connection() as conn:
+        await conn.execute(sql, (release_id,))
+
+
+async def increment_selection_count(
+    pool: AsyncConnectionPool,
+    release_id: int,
+) -> None:
+    """Upsert selection counters for the given release_id (D-04, D-05, D-06).
+
+    Counters are release_id-keyed aggregates; no query text is ever stored (OBS-07, T-08-05).
+    Rolling 7-day bucket: selection_count_7d resets to 1 when last_selected_at is older
+    than 7 days; otherwise it increments (D-05).
+
+    All SQL uses %s placeholders — never f-string interpolation (T-08-06).
+
+    Args:
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        release_id: Discogs release ID (integer, server-side — no user text stored).
+    """
+    sql = """
+INSERT INTO gruvax.record_stats
+    (release_id, selection_count, selection_count_7d, last_selected_at, updated_at)
+VALUES (%s, 1, 1, now(), now())
+ON CONFLICT (release_id) DO UPDATE SET
+    selection_count     = gruvax.record_stats.selection_count + 1,
+    selection_count_7d  = CASE
+        WHEN gruvax.record_stats.last_selected_at > now() - INTERVAL '7 days'
+        THEN gruvax.record_stats.selection_count_7d + 1
+        ELSE 1
+    END,
+    last_selected_at = now(),
+    updated_at       = now()
+"""
+    async with pool.connection() as conn:
+        await conn.execute(sql, (release_id,))
+
+
+async def get_top_searched(
+    pool: AsyncConnectionPool,
+    limit: int = 10,
+) -> list[dict[str, Any]]:
+    """Return top-N records by all-time search count, joined to v_collection (D-05, D-06).
+
+    Reads record_stats and gruvax.v_collection exclusively — no direct discogsography
+    table access (Pitfall 5).
+    All SQL uses %s placeholders (T-08-06).
+
+    Args:
+        pool:  Open psycopg ``AsyncConnectionPool``.
+        limit: Maximum number of rows to return (default 10).
+
+    Returns:
+        List of dicts with keys: release_id, title, primary_artist, search_count,
+        search_count_7d, selection_count, selection_count_7d.
+        Returns [] when record_stats is empty or no records match v_collection.
+    """
+    sql = """
+SELECT
+    rs.release_id,
+    v.title,
+    v.primary_artist,
+    rs.search_count,
+    rs.search_count_7d,
+    rs.selection_count,
+    rs.selection_count_7d
+FROM gruvax.record_stats rs
+JOIN gruvax.v_collection v ON v.release_id = rs.release_id
+ORDER BY rs.search_count DESC
+LIMIT %s
+"""
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql, (limit,))
+        rows_raw = await cur.fetchall()
+        cols = [desc[0] for desc in (cur.description or [])]
+    return [dict(zip(cols, row, strict=True)) for row in rows_raw]
+
+
+async def get_phantom_boundary_count(
+    pool: AsyncConnectionPool,
+) -> int:
+    """Count non-empty cube boundaries whose (first_label, first_catalog) is not in v_collection.
+
+    A "phantom" boundary references a (label, catalog) pair that no longer exists in the
+    collection (record may have been sold, deleted from Discogs, or the boundary was
+    entered incorrectly).
+
+    Reads gruvax.cube_boundaries and gruvax.v_collection exclusively (Pitfall 5).
+    All SQL uses %s placeholders (T-08-06).
+
+    Args:
+        pool: Open psycopg ``AsyncConnectionPool``.
+
+    Returns:
+        Count of phantom boundaries (non-negative int). Returns 0 when cube_boundaries
+        has no non-empty rows or all boundaries resolve in v_collection.
+    """
+    sql = """
+SELECT COUNT(*)
+FROM gruvax.cube_boundaries cb
+WHERE cb.is_empty = FALSE
+  AND NOT EXISTS (
+      SELECT 1 FROM gruvax.v_collection v
+      WHERE lower(v.label) = lower(cb.first_label)
+        AND v.catalog_number = cb.first_catalog
+  )
+"""
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql)
+        row = await cur.fetchone()
+    return int(row[0]) if row else 0
+
+
+async def reset_record_stats(
+    pool: AsyncConnectionPool,
+) -> None:
+    """TRUNCATE gruvax.record_stats — backs the PIN-gated Reset stats admin action (D-06).
+
+    Clears all rows from the stats table. The caller (admin reset endpoint, Plan 04)
+    is responsible for PIN/session gate enforcement before calling this function.
+
+    All SQL uses %s placeholders (T-08-06); no parameters needed for TRUNCATE.
+
+    Args:
+        pool: Open psycopg ``AsyncConnectionPool``.
+    """
+    async with pool.connection() as conn:
+        await conn.execute("TRUNCATE gruvax.record_stats")
