@@ -361,7 +361,7 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
   6. **`scripts/update-project.sh`** — adapt from `discogsography/scripts/update-project.sh` (justfile-delegating), specialized for GRUVAX.
   7. **Docs refresh** — capture the final Phase 1–8 design and **remove all `lux`/`nox` host references** from docs/CLAUDE.md.
 
-**Plans:** 4/6 plans executed
+**Plans:** 5/6 plans executed
 
 Plans:
 **Wave 1**
@@ -373,7 +373,7 @@ Plans:
 - [x] 09-04-PLAN.md — Isolated lint cleanup (D-07): fix all 69 ruff errors (48 auto + 21 manual) -> honest-green gate, suite stays green
 
 **Wave 3** *(blocked on 09-02 + 09-03)*
-- [ ] 09-05-PLAN.md — Pull-based deploy flip: compose.yaml->GHCR image + gitignored compose.override.yaml (+.example) + runbook lux-strip
+- [x] 09-05-PLAN.md — Pull-based deploy flip: compose.yaml->GHCR image + gitignored compose.override.yaml (+.example) + runbook lux-strip
 
 **Wave 4** *(blocked on 09-05)*
 - [ ] 09-06-PLAN.md — Docs refresh: new docs/ARCHITECTURE.md (Mermaid) + README/CLAUDE.md point at it + remaining lux-strip
