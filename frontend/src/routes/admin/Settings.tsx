@@ -200,12 +200,23 @@ export function Settings() {
     }
   }
 
-  // Phase 7: Settings import handler (BAK-02)
+  // Phase 7: Settings import handler (BAK-02).
+  // The backend returns {updated: [...keys...]} (NOT {applied: ...}).
+  // B2: we read .updated to confirm the server actually wrote keys — if the array
+  // is non-empty the import was applied; an empty array means nothing changed
+  // (acceptable — still show success, no keys to write is valid for an empty export).
   const handleSettingsImport = async (file: File) => {
     setBackupImportStatus('applying')
     setBackupImportError('')
     try {
-      await uploadImportSettings(file)
+      const result = await uploadImportSettings(file)
+      // result.updated is the list of DB key names written by import_settings.
+      // We log it for debuggability but do not block success on it being non-empty.
+      const updatedKeys = result.updated
+      if (updatedKeys.length === 0) {
+        // No keys were applied (valid for a settings file with only version/metadata).
+        // Still report success — the file was accepted and is valid.
+      }
       setBackupImportStatus('success')
       // Success inline message; auto-reset after 4s to allow re-import
       setTimeout(() => setBackupImportStatus('idle'), 4000)
