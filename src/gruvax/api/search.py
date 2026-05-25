@@ -18,13 +18,15 @@ SRCH-07: ``did_you_mean`` is a trigram-similarity suggestion returned only
 
 from __future__ import annotations
 
+import asyncio
 import logging
 from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 
 from gruvax.api.deps import get_pool
-from gruvax.db.queries import search_collection
+from gruvax.db.queries import increment_search_count, search_collection
+from gruvax.middleware.timing import record_slow_query
 
 logger = logging.getLogger(__name__)
 
@@ -56,6 +58,31 @@ async def search(
         finds a high-similarity candidate (SRCH-07/D-11).
     """
     rows, took_ms, did_you_mean = await search_collection(pool, q, limit)
+
+    # OBS-05: record in slow-query ring when request exceeds the /api/search SLO (200 ms).
+    # For search, took_ms is both request-total and DB time (Pitfall 3 — inline approach).
+    record_slow_query(request.app, "/api/search", took_ms, took_ms)
+
+    # OBS-07/D-04: fire-and-forget counter increment for the top result only.
+    # PRIVACY: only the int release_id is passed — never q, did_you_mean, or label text.
+    # CR-01: strong-reference via app.state.background_tasks so GC cannot cancel mid-flight.
+    if rows:
+        top_id: int = rows[0]["release_id"]
+        task = asyncio.create_task(increment_search_count(pool, top_id))
+        bg: set[asyncio.Task[None]] = getattr(request.app.state, "background_tasks", set())
+        bg.add(task)
+        task.add_done_callback(bg.discard)
+
+        # Pitfall 2: log exceptions from fire-and-forget tasks; never crash the response.
+        def _log_exc(t: asyncio.Task[None]) -> None:
+            if not t.cancelled() and t.exception() is not None:
+                logger.warning(
+                    "increment_search_count failed for release_id=%s: %s",
+                    top_id,
+                    t.exception(),
+                )
+
+        task.add_done_callback(_log_exc)
 
     return {
         "items": rows,

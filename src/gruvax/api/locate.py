@@ -21,18 +21,21 @@ Error semantics:
 
 from __future__ import annotations
 
+import asyncio
 import logging
+import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
 
 from gruvax.api.deps import get_collection_snapshot, get_pool, get_segment_cache
-from gruvax.db.queries import get_release_for_locate
+from gruvax.db.queries import get_release_for_locate, increment_selection_count
 from gruvax.estimator.algorithm import locate
 from gruvax.estimator.collection_snapshot import CollectionSnapshot
 from gruvax.estimator.contract import CubeRef, SubInterval
 from gruvax.estimator.segment_cache import SegmentCache
+from gruvax.middleware.timing import record_slow_query
 
 logger = logging.getLogger(__name__)
 
@@ -86,9 +89,13 @@ async def locate_endpoint(
     where ``sub_cube_interval`` is ``{start, end, crosses_boundary, next_cube}``
     when the estimator produces a sub-cube estimate, or ``null`` for the cube-only fallback.
     """
+    # OBS-05: measure request-total from handler entry (locate is CPU-only, POS-03).
+    t0 = time.perf_counter()
+
     record = await get_release_for_locate(pool, release_id)
 
     if record is None:
+        # 404 path — do NOT increment selection_count (D-04: only successful locates count).
         raise HTTPException(
             status_code=404,
             detail={
@@ -107,6 +114,29 @@ async def locate_endpoint(
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
+
+    # OBS-07/D-04: fire-and-forget counter increment on SUCCESS path only.
+    # PRIVACY: only the int release_id is passed — never label or catalog text.
+    # CR-01: strong-reference via app.state.background_tasks so GC cannot cancel mid-flight.
+    task = asyncio.create_task(increment_selection_count(pool, release_id))
+    bg: set[asyncio.Task[None]] = getattr(request.app.state, "background_tasks", set())
+    bg.add(task)
+    task.add_done_callback(bg.discard)
+
+    # Pitfall 2: log exceptions from fire-and-forget tasks; never crash the response.
+    def _log_exc(t: asyncio.Task[None]) -> None:
+        if not t.cancelled() and t.exception() is not None:
+            logger.warning(
+                "increment_selection_count failed for release_id=%s: %s",
+                release_id,
+                t.exception(),
+            )
+
+    task.add_done_callback(_log_exc)
+
+    # OBS-05: record slow request. Locate is CPU-only so db_ms = 0.0 (POS-03).
+    total_ms = (time.perf_counter() - t0) * 1000
+    record_slow_query(request.app, "/api/locate", total_ms, 0.0)
 
     # Serialize LocateResult to JSON-compatible dict.
     # Dataclasses are not JSON-serializable by default; JSONResponse handles dicts.
