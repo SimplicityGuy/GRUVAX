@@ -317,7 +317,7 @@ Plans:
 | 7. Wizards + Import/Export | 8/8 | Complete    | 2026-05-25 |
 | 8. Observability + Deployment Hardening | 6/6 | Complete    | 2026-05-25 |
 | 9. Tooling and docs hardening | 6/6 | Complete    | 2026-05-25 |
-| 10. Close Milestone Gaps | 0/3 | Planned | — |
+| 10. Close Milestone Gaps | 1/3 | In Progress|  |
 
 ## Critical-Path Notes (carried from research)
 
@@ -396,13 +396,13 @@ Plans:
 
 **Out of scope (separate decisions, not this phase):** the 9 deferred requirements (SRCH-09, OFF-01..04, PRIV-01..04) still need a relocate-to-v2/backlog-vs-close-in-v1 scope decision (audit item 3); the Phase 2 VALIDATION.md nyquist reconcile (`/gsd-validate-phase 2`); and the Phase 6/8 manual human-verify checkpoints (live-broker MQTT-5 + browser visual, audit item 5).
 
-**Plans:** 3 plans
+**Plans:** 1/3 plans executed
 Plans:
 **Wave 1** *(all parallel — disjoint files_modified; safe under worktree isolation)*
 
 - [ ] 10-01-PLAN.md — INT-A: fix all three segments.py boundary_changed publishes to canonical cube_ids/unit shape (drop type key) + harden KioskView SSE handlers with try/catch + 3 SpyEventBus payload-contract tests (RTM-01, ADMN-11, SEG-07, SEG-08)
 - [ ] 10-02-PLAN.md — INT-B: wire get_segment_cache + get_collection_snapshot + get_event_bus into history.py::revert_change_set; post-commit SegmentCache re-derive (re-read overrides) + boundary_changed publish mirroring cubes.py:342-362 + 2 revert re-derive/publish tests (ADMN-09, RTM-01, ADMN-11, SEG-07)
-- [ ] 10-03-PLAN.md — Traceability reconcile (docs-only): flip SEG-01..08 to Complete (table + body) + correct REQUIREMENTS.md header 81→84 + reconcile ROADMAP.md traceability intro 73→84 (SEG-07, SEG-08, CUBE-08, RTM-01)
+- [x] 10-03-PLAN.md — Traceability reconcile (docs-only): flip SEG-01..08 to Complete (table + body) + correct REQUIREMENTS.md header 81→84 + reconcile ROADMAP.md traceability intro 73→84 (SEG-07, SEG-08, CUBE-08, RTM-01)
 
 **UI hint:** no (backend integration repair + frontend SSE hardening + docs; no new UI surface)
 
