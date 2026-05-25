@@ -92,7 +92,12 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     _root.handlers = [_json_handler]  # replace any default handlers
     _log_ring: deque[dict[str, Any]] = deque(maxlen=200)
     app.state.log_ring_buffer = _log_ring
-    _root.addHandler(LogRingHandler(_log_ring, level=logging.DEBUG))
+    # WR-02 fix: attach the ring buffer to the application logger only, at INFO+.
+    # The root JSON StreamHandler still captures third-party loggers to stdout, but
+    # the in-memory ring served to the admin diagnostics page is restricted to our
+    # own `gruvax.*` loggers so a stringified third-party error (e.g. a psycopg
+    # connection failure carrying the DSN) cannot leak into the admin UI.
+    logging.getLogger("gruvax").addHandler(LogRingHandler(_log_ring, level=logging.INFO))
 
     # ── 1. DB pool ───────────────────────────────────────────────────────────
     pool = create_pool(min_size=2, max_size=10)

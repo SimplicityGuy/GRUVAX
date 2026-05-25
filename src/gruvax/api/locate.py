@@ -119,7 +119,13 @@ async def locate_endpoint(
     # PRIVACY: only the int release_id is passed — never label or catalog text.
     # CR-01: strong-reference via app.state.background_tasks so GC cannot cancel mid-flight.
     task = asyncio.create_task(increment_selection_count(pool, release_id))
-    bg: set[asyncio.Task[None]] = getattr(request.app.state, "background_tasks", set())
+    # CR-01 fix: never fall back to a throwaway set() — that would drop the only
+    # strong reference and let the GC cancel the task. Persist the set on app.state
+    # if the lifespan did not seed it (e.g. tests without a full lifespan).
+    bg: set[asyncio.Task[None]] | None = getattr(request.app.state, "background_tasks", None)
+    if bg is None:
+        bg = set()
+        request.app.state.background_tasks = bg
     bg.add(task)
     task.add_done_callback(bg.discard)
 

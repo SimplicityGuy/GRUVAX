@@ -18,7 +18,9 @@ Usage in ``app.py`` lifespan::
     root = logging.getLogger()
     root.handlers = [logging.StreamHandler()]
     root.handlers[0].setFormatter(JsonFormatter())
-    root.addHandler(LogRingHandler(ring, level=logging.DEBUG))
+    # Ring buffer is scoped to the `gruvax` logger (not root) so third-party log
+    # records — which may stringify secrets like a DSN — never reach the admin UI.
+    logging.getLogger("gruvax").addHandler(LogRingHandler(ring))
     app.state.log_ring_buffer = ring
 """
 
@@ -70,7 +72,7 @@ class LogRingHandler(logging.Handler):
     are serialised at the handler level.
     """
 
-    def __init__(self, ring: deque[dict[str, Any]], level: int = logging.DEBUG) -> None:
+    def __init__(self, ring: deque[dict[str, Any]], level: int = logging.INFO) -> None:
         super().__init__(level)
         self._ring = ring
 
