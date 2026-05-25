@@ -1,0 +1,135 @@
+# GRUVAX Security Scans — called by build.yml after the code-quality gate passes.
+#
+# Covers: Python dependency vulnerability scanning, SAST, secret detection,
+# container filesystem scanning. Uploads SARIF to GitHub Security tab.
+# No Rust security job (GRUVAX has no Rust components).
+
+name: Security
+
+on:
+  workflow_call:
+
+env:
+  CI: true
+  PYTHON_VERSION: "3.14"
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  python-security:
+    name: Python Security
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Set up uv
+        uses: astral-sh/setup-uv@08807647e7069bb48b6ef5acd8ec9567f424441b  # v8.1.0
+        with:
+          version: "latest"
+          enable-cache: true
+
+      - name: Set up Python
+        uses: actions/setup-python@a309ff8b426b58ec0e2a45f0f869d46889d02405  # v6.2.0
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: uv sync --frozen
+
+      - name: Run pip-audit (Python dependency vulnerability scan)
+        run: uv run pip-audit
+
+      - name: Run bandit (Python SAST)
+        run: uv run bandit -x tests -s B608 -r src/
+
+      - name: Run osv-scanner (multi-ecosystem vulnerability scan)
+        uses: google/osv-scanner-action/osv-scanner-action@9a498708959aeaef5ef730655706c5a1df1edbc2  # v2.3.8
+
+  semgrep:
+    name: Semgrep CE Scan
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    container:
+      image: semgrep/semgrep
+
+    if: github.actor != 'dependabot[bot]'
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Run semgrep scan
+        run: semgrep scan --config auto --error --sarif --output semgrep.sarif
+
+      - name: Remove nosemgrep-suppressed findings from SARIF
+        # Semgrep includes nosemgrep suppressed findings in SARIF with a
+        # suppressions field. GitHub Code Scanning still creates alerts from
+        # them, even though they are intentionally silenced. Strip them before
+        # upload so GHAS only sees genuinely un-suppressed findings.
+        run: |
+          python3 - <<'EOF'
+          import json
+          with open("semgrep.sarif") as f:
+              sarif = json.load(f)
+          for run in sarif.get("runs", []):
+              run["results"] = [
+                  r for r in run.get("results", [])
+                  if not r.get("suppressions")
+              ]
+          with open("semgrep.sarif", "w") as f:
+              json.dump(sarif, f)
+          EOF
+        if: always()
+
+      - name: Upload SARIF to GitHub Advanced Security
+        uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba  # v4.35.5
+        with:
+          sarif_file: semgrep.sarif
+        if: always()
+
+  secret-scanning:
+    name: Secret Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+        with:
+          fetch-depth: 0
+
+      - name: Run TruffleHog (secret detection)
+        uses: trufflesecurity/trufflehog@37b77001d0174ebec2fcca2bd83ff83a6d45a3ab  # v3.95.3
+        with:
+          path: ./
+          extra_args: --only-verified
+
+  container-scanning:
+    name: Container Scanning
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd  # v6.0.2
+
+      - name: Run trivy (filesystem vulnerability scan)
+        uses: aquasecurity/trivy-action@ed142fd0673e97e23eac54620cfb913e5ce36c25  # v0.36.0
+        with:
+          scan-type: fs
+          scan-ref: .
+          format: sarif
+          output: trivy-results.sarif
+          severity: HIGH,CRITICAL
+
+      - name: Upload trivy SARIF results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@9e0d7b8d25671d64c341c19c0152d693099fb5ba  # v4.35.5
+        if: always()
+        with:
+          sarif_file: trivy-results.sarif
