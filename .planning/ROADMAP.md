@@ -361,12 +361,12 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
   6. **`scripts/update-project.sh`** — adapt from `discogsography/scripts/update-project.sh` (justfile-delegating), specialized for GRUVAX.
   7. **Docs refresh** — capture the final Phase 1–8 design and **remove all `lux`/`nox` host references** from docs/CLAUDE.md.
 
-**Plans:** 6 plans
+**Plans:** 2/6 plans executed
 
 Plans:
 **Wave 1**
-- [ ] 09-01-PLAN.md — structlog migration (preserve log-ring shape + gruvax-logger scoping) + env-driven LOG_LEVEL + Wave-0 regression assertions
-- [ ] 09-02-PLAN.md — Six-workflow CI: build orchestrator gating code-quality -> test/security/build (GHCR publish) + cleanup-cache/cleanup-images; supersede ci.yml
+- [x] 09-01-PLAN.md — structlog migration (preserve log-ring shape + gruvax-logger scoping) + env-driven LOG_LEVEL + Wave-0 regression assertions
+- [x] 09-02-PLAN.md — Six-workflow CI: build orchestrator gating code-quality -> test/security/build (GHCR publish) + cleanup-cache/cleanup-images; supersede ci.yml
 
 **Wave 2** *(09-03 blocked on 09-02; 09-04 blocked on 09-01)*
 - [ ] 09-03-PLAN.md — pre-commit (SHA-frozen, no cargo, +frontend/mypy hooks) + .yamllint + prettier install + dependabot + update-project.sh + just lint-precommit
