@@ -196,6 +196,14 @@ export function AdminShell() {
           >
             IMPORT
           </NavLink>
+          <NavLink
+            to="/admin/diagnostics"
+            className={({ isActive }) =>
+              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
+            }
+          >
+            DIAGNOSTICS
+          </NavLink>
         </nav>
 
         <div className="admin-topbar-actions">

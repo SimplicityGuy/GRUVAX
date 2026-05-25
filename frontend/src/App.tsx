@@ -4,6 +4,7 @@ import { AdminShell } from './routes/admin/AdminShell'
 import { BinWidthEditor } from './routes/admin/BinWidthEditor'
 import { ConfirmationRoute } from './routes/admin/ConfirmationScreen'
 import { CubesGrid } from './routes/admin/CubesGrid'
+import { Diagnostics } from './routes/admin/Diagnostics'
 import { HistoryView } from './routes/admin/HistoryView'
 import Import from './routes/admin/Import'
 import { Settings } from './routes/admin/Settings'
@@ -34,6 +35,7 @@ const queryClient = new QueryClient({
  *   /admin/wizard               → Wizard (setup + reshuffle modes, D-01)
  *   /admin/wizard/done          → ConfirmationRoute (post-commit confirmation, D-15)
  *   /admin/import               → Import (stub — 07-05 replaces with real page)
+ *   /admin/diagnostics          → Diagnostics (OBS-05/06/07 — phase 08-04)
  *
  * Design tokens are imported in main.tsx (single entry point).
  */
@@ -53,6 +55,7 @@ function App() {
             <Route path="wizard" element={<Wizard />} />
             <Route path="wizard/done" element={<ConfirmationRoute />} />
             <Route path="import" element={<Import />} />
+            <Route path="diagnostics" element={<Diagnostics />} />
           </Route>
         </Routes>
       </BrowserRouter>
