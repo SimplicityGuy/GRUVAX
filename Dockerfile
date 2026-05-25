@@ -101,6 +101,20 @@ RUN chmod +x /app/docker-entrypoint.sh
 ENV PATH="/app/.venv/bin:$PATH"
 ENV PYTHONPATH="/app/src"
 
+# ── Build-time metadata (OBS-04) ─────────────────────────────────────────────
+# Bake git SHA, build timestamp, and environment into _version.py before
+# switching to the non-root user (needs write access to /app/src/gruvax/).
+# Defaults: GIT_SHA=unknown, BUILD_TIMESTAMP=unknown, GRUVAX_ENV=production.
+# Pass via --build-arg in `just build` (Plan 06).
+ARG GIT_SHA=unknown
+ARG BUILD_TIMESTAMP=unknown
+ARG GRUVAX_ENV=production
+
+RUN python3 -c "\
+content = 'GIT_SHA = \"${GIT_SHA}\"\nBUILD_TIMESTAMP = \"${BUILD_TIMESTAMP}\"\nENVIRONMENT = \"${GRUVAX_ENV}\"\n';\
+import pathlib; pathlib.Path('/app/src/gruvax/_version.py').write_text(content)\
+"
+
 USER gruvax
 
 EXPOSE 8000

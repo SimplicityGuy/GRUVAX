@@ -233,6 +233,8 @@ frontend/dist/
 frontend/node_modules/
 __pycache__/
 .venv/
+# Auto-generated at Docker build time; dev fallback is ImportError → GIT_SHA = "dev"
+src/gruvax/_version.py
 
 # Playwright MCP transient artifacts
 .playwright-mcp/
