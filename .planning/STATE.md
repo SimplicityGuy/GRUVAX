@@ -2,14 +2,14 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: "Phase 6 shipped — PR #10"
-last_updated: "2026-05-24T04:40:56.584Z"
+status: "Phase 07 shipped — PR #11 (awaiting merge)"
+last_updated: "2026-05-25T01:27:59.537Z"
 progress:
   total_phases: 10
-  completed_phases: 5
-  total_plans: 28
-  completed_plans: 27
-  percent: 50
+  completed_phases: 7
+  total_plans: 36
+  completed_plans: 35
+  percent: 70
 ---
 
 # State: GRUVAX
@@ -20,7 +20,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 7 — wizards + import/export
+**Current Focus:** Phase 8 — observability + deployment hardening
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -28,12 +28,12 @@ progress:
 
 ## Current Position
 
-Phase: 06 (led-contract-over-mqtt-hardware-stubbed) — EXECUTING
-Plan: 1 of 4
+Phase: 07 (wizards-import-export) — EXECUTING
+Plan: 8 of 8 (07-08 complete; awaiting orchestrator phase verification)
 
-- **Phase:** 7
+- **Phase:** 8
 - **Plan:** Not started
-- **Status:** Phase 6 shipped — PR #10
+- **Status:** Phase 07 shipped — PR #11 (awaiting merge)
 - **Progress:** [██████████] 100%
 
 ```
@@ -145,9 +145,10 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-24 (Phase 06 Plan 04 complete — all-off/diagnostic admin vertical slice. 318 tests passing. Phase 06 4/4 plans complete — all LED contract plans done.)
-**Prev:** 2026-05-23 (Phase 05 FULLY VERIFIED — gap-closure 05-06 complete (6/6 plans) + all 6 UAT items pass. SEG-05 label-contiguity enforced on the LIVE admin write paths PUT /cut + POST /insert-cut (400 type=contiguity_error before any DB write) via build_proposed_cuts→validate_contiguity, surfaced in RecordPickerSheet (sheet stays open), orphaned /admin/preview + DiffPreviewSheet/RollbackToast removed. UAT test 6 RE-VERIFIED LIVE via Playwright on the rebuilt stack — the container image predated 05-06 so it was rebuilt (docker compose up -d --build api) and the dev DB was DROPPED + RE-SEEDED from fixtures (which also cleared the cut_insert pollution → test_migrate_0005 now passes → full backend suite exits 0). 05-VERIFICATION.md status=passed. Admin PIN re-seeded to 0000 after the DB drop.)
-**Next action:** Phase 05 is COMPLETE across every gate — 6/6 plans, UAT 6/6 pass, 05-VERIFICATION.md status=passed, 05-SECURITY.md SECURED (24/24, threats_open=0), and code-review fixes applied (05-REVIEW-FIX.md: WR-04 fixed — contiguity message now shows proper-case "Blue Note", confirmed live; WR-01 docstring marked deferred; WR-03 freshness comment added; WR-02 deliberately deferred — real cross-unit gap needing its own plan; INFO items out of scope). Container rebuilt so the live stack carries the WR-04 fix. Ready for Phase 6 (LED Contract over MQTT, hardware-stubbed): `/clear` then `/gsd-discuss-phase 6` or `/gsd-plan-phase 6`. REMAINING DEFERRED (future hardening, own plan): WR-02 cross-unit contiguity (build_proposed_cuts is unit-scoped) and WR-01 step-5 SegmentCache occupancy cross-check (validate_contiguity only checks bin-START labels) — both documented in 05-REVIEW.md / 05-REVIEW-FIX.md, beyond the SEG-05 must-haves.
+**Last touched:** 2026-05-25 (Phase 07 COMPLETE — all 8 plans; gap-closure 07-06/07/08 done; 07-VERIFICATION.md status=passed 18/18; owner-approved human-verify UAT. FINALIZATION this session: (1) fixed pre-existing test-isolation debt — promoted the login rate-limiter reset to a global autouse fixture in tests/conftest.py + made the import/locate/migrate tests self-contained → backend suite is now ORDER-INDEPENDENT and green twice back-to-back, even on a UAT-mutated DB [a26252d]; (2) code review found + fixed 1 critical + 2 warnings [03fb309]: CR-01 reshuffle resume Math.min(…,0)→Math.max (always resumed at step 0), WR-01 settings-import explicit conn.transaction(), WR-02 export download appended-anchor + deferred revoke (Firefox/mobile-Safari); (3) reconciled 07-UAT.md + 07-HUMAN-UAT.md + PROJECT.md. `uv run pytest tests/` exits 0, mypy --strict clean, frontend tsc+build clean. Stack rebuilt (docker compose up -d --build api), dev PIN=0000.)
+**Prev:** 2026-05-24 (Phase 06 Plan 04 complete — all-off/diagnostic admin vertical slice. 318 tests passing. Phase 06 4/4 plans complete — all LED contract plans done.)
+**Prev2:** 2026-05-23 (Phase 05 FULLY VERIFIED — gap-closure 05-06 complete (6/6 plans) + all 6 UAT items pass. SEG-05 label-contiguity enforced on the LIVE admin write paths PUT /cut + POST /insert-cut (400 type=contiguity_error before any DB write) via build_proposed_cuts→validate_contiguity, surfaced in RecordPickerSheet (sheet stays open), orphaned /admin/preview + DiffPreviewSheet/RollbackToast removed. UAT test 6 RE-VERIFIED LIVE via Playwright on the rebuilt stack — the container image predated 05-06 so it was rebuilt (docker compose up -d --build api) and the dev DB was DROPPED + RE-SEEDED from fixtures (which also cleared the cut_insert pollution → test_migrate_0005 now passes → full backend suite exits 0). 05-VERIFICATION.md status=passed. Admin PIN re-seeded to 0000 after the DB drop.)
+**Next action:** Phase 07 is COMPLETE across every gate (8/8 plans; 07-VERIFICATION.md passed 18/18; 07-REVIEW.md resolved). TWO non-blocking follow-ups remain: (1) ONE quick human re-verify — reshuffle resume-at-step after the CR-01 fix (07-HUMAN-UAT.md Test 1: start a reshuffle, complete ≥1 step, hard-reload, CONTINUE → should land on the SAVED step, not step 0); (2) optional `/gsd-secure-phase 7` (no 07-SECURITY.md yet; workflow.security_enforcement=true). Ready for Phase 8 (Observability + Deployment Hardening): `/clear` then `/gsd-discuss-phase 8` or `/gsd-plan-phase 8`.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*

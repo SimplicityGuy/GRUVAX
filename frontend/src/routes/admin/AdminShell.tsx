@@ -18,6 +18,7 @@ import { Outlet, NavLink } from 'react-router'
 import { adminGetSession, adminLogout, AuthError } from '../../api/adminClient'
 import { useAdminStore } from '../../state/adminStore'
 import { PinOverlay } from './PinOverlay'
+import { ReshuffleBanner } from './ReshuffleBanner'
 import './admin.css'
 
 const POLL_INTERVAL_MS = 30_000    // 30 s — background session sync
@@ -179,6 +180,22 @@ export function AdminShell() {
           >
             HISTORY
           </NavLink>
+          <NavLink
+            to="/admin/wizard"
+            className={({ isActive }) =>
+              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
+            }
+          >
+            WIZARD
+          </NavLink>
+          <NavLink
+            to="/admin/import"
+            className={({ isActive }) =>
+              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
+            }
+          >
+            IMPORT
+          </NavLink>
         </nav>
 
         <div className="admin-topbar-actions">
@@ -260,7 +277,13 @@ export function AdminShell() {
 
       {/* Main content area */}
       <main className="admin-content">
-        {isLoggedIn ? <Outlet /> : null}
+        {isLoggedIn ? (
+          <>
+            {/* ReshuffleBanner — renders null when no draft in store (D-06) */}
+            <ReshuffleBanner />
+            <Outlet />
+          </>
+        ) : null}
       </main>
 
       {/* PIN overlay — shown when not logged in OR when screen is locked */}

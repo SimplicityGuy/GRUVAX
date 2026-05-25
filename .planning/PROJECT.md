@@ -14,6 +14,7 @@ Type artist, title, label, or catalog number → see the right cube (and a sub-c
 
 - [x] Admin-configurable color settings for LED/UI output (label-span color, position-estimate color, etc.) — *Validated in Phase 6: LED Contract over MQTT*
 - [x] LED illumination endpoint with hardware integration stubbed (publishes to an MQTT topic); contract finalized so hardware can land in a later milestone without changing the API — *Validated in Phase 6: LED Contract over MQTT (illuminate/span/sub/all-off/diagnostic over Mosquitto; live-broker behavior pending hardware in 06-HUMAN-UAT.md)*
+- [x] Admin mode (PIN-gated, session timeout) for editing cube boundaries — mobile-first admin web UI, manual entry + undo, segment-aware boundary editing, guided setup/reshuffle wizard, and CSV/YAML boundary + settings import/export — *Validated across Phase 3 (PIN + manual entry + undo), Phase 5 (segment-aware precision), and Phase 7 (wizards + import/export; one quick reshuffle resume-at-step re-verify tracked in 07-HUMAN-UAT.md)*
 
 ### Active
 
@@ -22,10 +23,6 @@ Type artist, title, label, or catalog number → see the right cube (and a sub-c
 - [ ] Configurable N×4×4 Kallax grid UI rendering the active cube selection (current N=2 units, 32 cubes)
 - [ ] Cube boundary data model: per-cube first/last `(label, catalog#)` bounds; binary-searched at query time
 - [ ] Position estimation API that returns both a label-span (cubes the label occupies) and a sub-cube position estimate (interval, may cross cube boundaries). The estimation approach is intentionally not specified here — see research stream below; the right approach likely varies with how a label's catalog numbers are distributed.
-- [ ] Admin mode (PIN-gated, session timeout) for editing cube boundaries
-  - Mobile-first admin web UI (typing-friendly, used at desk)
-  - Kiosk admin fallback (touchscreen, used at the shelf)
-  - Boundary entry supports manual, guided wizard, and CSV/YAML seed file workflows
 - [ ] Offline behavior: kiosk detects loss of connectivity to the GRUVAX backend on `lux` and shows an offline banner; search is disabled until reachable
 - [ ] Docker Compose deployment alongside discogsography on `lux`; shared Postgres instance, dedicated `gruvax` schema
 

@@ -1,14 +1,18 @@
 """Shared pytest fixtures for GRUVAX tests.
 
 Provides:
-  - ``db_pool``        — session-scoped async psycopg pool connected to the
-                         test Postgres instance (reads DATABASE_URL from env).
-  - ``boundary_cache`` — the parsed contents of ``fixtures/boundaries.yaml``
-                         as a list of dicts, for unit tests that don't need DB.
-  - ``admin_session``  — module-scoped fixture that seeds a test PIN hash and
-                         posts to ``/api/admin/login``, returning session cookies
-                         and CSRF token.  Depends on Plan 02 implementing
-                         ``gruvax.auth.pin.hash_pin`` and the login endpoint.
+  - ``db_pool``             — session-scoped async psycopg pool connected to the
+                              test Postgres instance (reads DATABASE_URL from env).
+  - ``boundary_cache``      — the parsed contents of ``fixtures/boundaries.yaml``
+                              as a list of dicts, for unit tests that don't need DB.
+  - ``admin_session``       — module-scoped fixture that seeds a test PIN hash and
+                              posts to ``/api/admin/login``, returning session cookies
+                              and CSRF token.  Depends on Plan 02 implementing
+                              ``gruvax.auth.pin.hash_pin`` and the login endpoint.
+  - ``four_cube_boundaries`` — Phase 7: synthetic 4-cube cut-point list (unit 1, row 0,
+                              cols 0–3) using made-up labels only.  No real collection CSV.
+  - ``thirty_two_cube_boundaries`` — Phase 7: synthetic 32-cube cut-point list (units 1 + 2,
+                              4×4 each) using made-up labels only. No real collection CSV.
 
 Integration tests that need a live DB should use ``db_pool``; unit tests
 should use ``boundary_cache`` or plain Python fixtures.
@@ -39,6 +43,31 @@ BOUNDARIES_YAML = FIXTURE_DIR / "boundaries.yaml"
 def event_loop_policy() -> asyncio.DefaultEventLoopPolicy:
     """Use the default event loop policy (no uvloop in tests for simplicity)."""
     return asyncio.DefaultEventLoopPolicy()
+
+
+# ── login rate-limit reset (global) ──────────────────────────────────────────
+
+
+@pytest.fixture(autouse=True)
+def _reset_login_rate_limit_global() -> None:  # type: ignore[return]
+    """Reset the process-global login rate-limit counter before EVERY test.
+
+    The login endpoint enforces a 5-attempts-per-5-minute limit via a
+    module-level singleton ``FixedWindowRateLimiter`` backed by ``MemoryStorage``
+    (see ``gruvax.api.admin.limiter``).  The key is the socket peer IP, which is
+    constant for all in-process test requests, so the counter is shared across
+    the ENTIRE test session — every test module's per-test ``_login()`` helper
+    draws from the same 5-attempt bucket.  After 5 logins the rest of the session
+    receives 429 and every auth-gated test fails at the login step.
+
+    ``test_admin_auth`` already resets the limiter per-test, but only for its own
+    module.  Promoting the reset to an autouse fixture in the root conftest makes
+    every module start with a clean budget.  The reset only clears an in-memory
+    counter (no DB), so it is safe and cheap for unit and property tests too.
+    """
+    from gruvax.api.admin.limiter import limiter
+
+    limiter.reset()
 
 
 # ── database ─────────────────────────────────────────────────────────────────
@@ -143,4 +172,94 @@ def boundary_cache() -> list[dict[str, Any]]:
             # Ignore stale last_* keys from older YAML files (Phase 5 compatibility)
             clean_cube = {k: v for k, v in cube.items() if k not in ("last_label", "last_catalog")}
             cubes.append({**clean_cube, "unit_id": unit_id})
+    return cubes
+
+
+# ── Phase 7 synthetic cut-point fixtures ─────────────────────────────────────
+#
+# These fixtures use ONLY made-up labels and catalog numbers.
+# They NEVER reference the real collection CSV, background/, or any real data.
+# Labels chosen: "Atlantic", "Blue Note", "Columbia", "Impulse"
+# Catalog formats: short alphabetic prefix + numeric suffix (purely fictional).
+#
+# Usage in tests: pass as `force=True` to /api/admin/cubes/bulk so the phantom
+# check is bypassed (these labels do not exist in the dev v_collection).
+
+
+@pytest.fixture(scope="session")
+def four_cube_boundaries() -> list[dict[str, Any]]:
+    """4 synthetic cut-point rows — unit_id=1, row=0, cols 0–3.
+
+    Covers one shelf row with four distinct made-up labels.
+    Synthetic catalog numbers: A-001 … A-004 (purely fictional).
+    Used in wizard/reshuffle tests that need a small, fast commit target.
+    """
+    return [
+        {
+            "unit_id": 1,
+            "row": 0,
+            "col": 0,
+            "first_label": "Atlantic",
+            "first_catalog": "ATL-001",
+            "is_empty": False,
+        },
+        {
+            "unit_id": 1,
+            "row": 0,
+            "col": 1,
+            "first_label": "Blue Note",
+            "first_catalog": "BNL-001",
+            "is_empty": False,
+        },
+        {
+            "unit_id": 1,
+            "row": 0,
+            "col": 2,
+            "first_label": "Columbia",
+            "first_catalog": "COL-001",
+            "is_empty": False,
+        },
+        {
+            "unit_id": 1,
+            "row": 0,
+            "col": 3,
+            "first_label": "Impulse",
+            "first_catalog": "IMP-001",
+            "is_empty": False,
+        },
+    ]
+
+
+@pytest.fixture(scope="session")
+def thirty_two_cube_boundaries() -> list[dict[str, Any]]:
+    """32 synthetic cut-point rows — units 1 and 2, each 4×4 (rows 0–3, cols 0–3).
+
+    Covers a full 2-unit Kallax setup.
+    Labels cycle through the four synthetic label families.
+    Catalog numbers increment per cube (row*4 + col + 1, prefixed by label code).
+    Synthetic data only — no real collection records referenced.
+    """
+    _LABELS = [
+        ("Atlantic", "ATL"),
+        ("Blue Note", "BNL"),
+        ("Columbia", "COL"),
+        ("Impulse", "IMP"),
+    ]
+    cubes: list[dict[str, Any]] = []
+    for unit_id in (1, 2):
+        for row in range(4):
+            for col in range(4):
+                idx = (unit_id - 1) * 16 + row * 4 + col
+                label_name, label_prefix = _LABELS[idx % 4]
+                catalog = f"{label_prefix}-{idx + 1:03d}"
+                cubes.append(
+                    {
+                        "unit_id": unit_id,
+                        "row": row,
+                        "col": col,
+                        "first_label": label_name,
+                        "first_catalog": catalog,
+                        "is_empty": False,
+                    }
+                )
     return cubes

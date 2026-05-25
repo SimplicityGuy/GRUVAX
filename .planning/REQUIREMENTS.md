@@ -62,13 +62,13 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 - [x] **ADMN-01**: Admin can log in via a single PIN (Argon2id-hashed in DB) on either mobile or kiosk
 - [x] **ADMN-02**: Admin session uses a sliding-window timeout (5–10 min idle); a visible countdown appears in the last 60 seconds before logout
 - [x] **ADMN-03**: Admin can enter cube boundaries manually via a form with autocomplete drawn from the collection (no free-text accepted unless explicitly confirmed)
-- [ ] **ADMN-04**: Admin can run a guided setup wizard that walks cube-by-cube and infers each boundary from a single point of transition
-- [ ] **ADMN-05**: Admin can upload a CSV/YAML seed file; the system validates per-row and shows a diff preview before atomic replace
+- [x] **ADMN-04**: Admin can run a guided setup wizard that walks cube-by-cube and infers each boundary from a single point of transition
+- [x] **ADMN-05**: Admin can upload a CSV/YAML seed file; the system validates per-row and shows a diff preview before atomic replace
 - [x] **ADMN-06**: All boundary saves are validated against the collection; mismatches are flagged with trigram-near-misses surfaced for confirmation
 - [x] **ADMN-07**: All boundary mutations show a diff preview with affected cubes highlighted before commit
 - [x] **ADMN-08**: Admin can log out manually from any screen
 - [x] **ADMN-09**: Every boundary mutation is recorded in an append-only change log grouped by change-set; admin can undo/revert by change-set
-- [ ] **ADMN-10**: A reshuffle wizard guides the admin through post-haul boundary updates and commits the result as a single atomic change-set
+- [x] **ADMN-10**: A reshuffle wizard guides the admin through post-haul boundary updates and commits the result as a single atomic change-set
 - [x] **ADMN-11**: Admin boundary edits on mobile cause the kiosk to re-render the affected cubes without manual refresh
 - [x] **ADMN-12**: The boundary entry UI can auto-suggest a midpoint catalog# for a given cube based on the natural sort of adjacent populated cubes
 
@@ -121,8 +121,8 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 
 ### Backup / Data Portability
 
-- [ ] **BAK-01**: Admin can export current cube boundaries to YAML/JSON on demand, matching the import schema
-- [ ] **BAK-02**: Admin can export and import color/LED settings via the same schema (separate section)
+- [x] **BAK-01**: Admin can export current cube boundaries to YAML/JSON on demand, matching the import schema
+- [x] **BAK-02**: Admin can export and import color/LED settings via the same schema (separate section)
 
 ### Deployment
 
@@ -254,13 +254,13 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | ADMN-01 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-02 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-03 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
-| ADMN-04 | Phase 7 — Wizards + Import/Export | Pending |
-| ADMN-05 | Phase 7 — Wizards + Import/Export | Pending |
+| ADMN-04 | Phase 7 — Wizards + Import/Export | Complete |
+| ADMN-05 | Phase 7 — Wizards + Import/Export | Complete |
 | ADMN-06 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-07 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-08 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | ADMN-09 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
-| ADMN-10 | Phase 7 — Wizards + Import/Export | Pending |
+| ADMN-10 | Phase 7 — Wizards + Import/Export | Complete |
 | ADMN-11 | Phase 4 — Realtime + Offline Resilience | Complete |
 | ADMN-12 | Phase 3 — Admin Loop (PIN + Manual Entry + Undo) | Complete |
 | LED-01 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
@@ -295,8 +295,8 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | PRIV-02 | Phase 4 — Realtime + Offline Resilience | Pending |
 | PRIV-03 | Phase 4 — Realtime + Offline Resilience | Pending |
 | PRIV-04 | Phase 4 — Realtime + Offline Resilience | Pending |
-| BAK-01 | Phase 7 — Wizards + Import/Export | Pending |
-| BAK-02 | Phase 7 — Wizards + Import/Export | Pending |
+| BAK-01 | Phase 7 — Wizards + Import/Export | Complete |
+| BAK-02 | Phase 7 — Wizards + Import/Export | Complete |
 | DEP-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |

@@ -118,9 +118,13 @@ class BulkWriteRequest(BaseModel):
     a replay with the same key returns the cached response without re-writing.
 
     Phase 5 (05-04): BoundaryEdit no longer carries last_label / last_catalog.
+    Phase 7 (07-01): source field added so wizard/import commits are legible in
+    History (D-04, Pitfall 1). Default 'bulk' preserves all existing callers.
+    The DB CHECK constraint (migration 0007) is the value allowlist (T-07-01).
     """
 
     updates: list[BoundaryEdit]
+    source: str = "bulk"  # 'bulk' | 'wizard' | 'reshuffle' | 'csv' | 'yaml'
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -777,7 +781,7 @@ async def bulk_write_cubes(
                 new_first_label,
                 new_first_catalog,
                 edit.is_empty,
-                source="bulk",
+                source=body.source,  # Phase 7: use caller-supplied source (D-15, T-07-01)
             )
 
         # Store idempotency key inside transaction (atomic with writes)
