@@ -14,8 +14,6 @@ import json
 import logging
 from collections import deque
 
-import pytest
-
 from gruvax.logging_config import JsonFormatter, LogRingHandler
 
 

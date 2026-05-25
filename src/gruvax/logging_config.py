@@ -42,7 +42,7 @@ class JsonFormatter(logging.Formatter):
     formatted traceback string (from ``self.formatException``).
     """
 
-    def format(self, record: logging.LogRecord) -> str:  # noqa: A003
+    def format(self, record: logging.LogRecord) -> str:
         payload: dict[str, Any] = {
             "ts": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime(record.created)),
             "level": record.levelname,

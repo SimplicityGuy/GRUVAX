@@ -89,7 +89,7 @@ async def test_version_values_are_strings(client) -> None:  # type: ignore[no-un
 @pytest.mark.asyncio(loop_scope="session")
 async def test_version_not_gated(client) -> None:  # type: ignore[no-untyped-def]
     """GET /api/version is accessible without an admin session cookie (public endpoint)."""
-    ac, _app = client
+    _ac, _app = client
     # Issue a fresh client with no session cookies
     app = create_app()
     async with (

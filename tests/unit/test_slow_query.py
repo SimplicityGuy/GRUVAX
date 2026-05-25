@@ -16,8 +16,6 @@ from collections import deque
 from typing import Any
 from unittest.mock import MagicMock
 
-import pytest
-
 from gruvax.middleware.timing import SLO_THRESHOLDS_MS, record_slow_query
 
 

@@ -3,7 +3,7 @@
 Per RESEARCH.md Open Question 5 (A5) and Pitfall 3, the chosen approach is
 **inline instrumentation** rather than ``BaseHTTPMiddleware``.
 
-``BaseHTTPMiddleware`` adds ~0.5–1 ms overhead per request due to response
+``BaseHTTPMiddleware`` adds ~0.5-1 ms overhead per request due to response
 streaming buffering — unacceptable for the 50 ms ``/api/locate`` SLO.  The
 inline helper approach records slow requests with zero middleware overhead;
 route handlers call ``record_slow_query`` directly after measuring timing.
