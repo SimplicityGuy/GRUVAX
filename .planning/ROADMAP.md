@@ -313,7 +313,7 @@ Plans:
 | 5. Segment-Aware Position Precision | 6/6 | Complete   | 2026-05-23 |
 | 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete    | 2026-05-24 |
 | 7. Wizards + Import/Export | 8/8 | Complete    | 2026-05-25 |
-| 8. Observability + Deployment Hardening | 6/6 | Complete   | 2026-05-25 |
+| 8. Observability + Deployment Hardening | 6/6 | Complete    | 2026-05-25 |
 
 ## Critical-Path Notes (carried from research)
 

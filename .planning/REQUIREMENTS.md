@@ -104,13 +104,13 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 
 ### Observability & Maintenance
 
-- [ ] **OBS-01**: `/healthz` endpoint reports overall status plus per-subsystem reachability (Postgres, MQTT broker) and version
-- [ ] **OBS-02**: Service logs structured JSON with log level configurable via environment variable
-- [ ] **OBS-03**: Schema changes ship as Alembic migrations; CI proves upgrade-then-downgrade-then-upgrade round-trips clean
-- [ ] **OBS-04**: `/version` endpoint reports git SHA, build timestamp, and environment
-- [ ] **OBS-05**: Admin diagnostics surface a slow-query log: any search exceeding the 200 ms SLO is flagged
-- [ ] **OBS-06**: Admin diagnostics show discogsography-sync staleness (latest `collection_items.updated_at`)
-- [ ] **OBS-07**: Admin diagnostics include an aggregate top-N most-searched records page (no per-query text persisted)
+- [x] **OBS-01**: `/healthz` endpoint reports overall status plus per-subsystem reachability (Postgres, MQTT broker) and version
+- [x] **OBS-02**: Service logs structured JSON with log level configurable via environment variable
+- [x] **OBS-03**: Schema changes ship as Alembic migrations; CI proves upgrade-then-downgrade-then-upgrade round-trips clean
+- [x] **OBS-04**: `/version` endpoint reports git SHA, build timestamp, and environment
+- [x] **OBS-05**: Admin diagnostics surface a slow-query log: any search exceeding the 200 ms SLO is flagged
+- [x] **OBS-06**: Admin diagnostics show discogsography-sync staleness (latest `collection_items.updated_at`)
+- [x] **OBS-07**: Admin diagnostics include an aggregate top-N most-searched records page (no per-query text persisted)
 
 ### Privacy (Multi-User Floor)
 
@@ -129,8 +129,8 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 - [x] **DEP-01**: GRUVAX deploys via Docker Compose as a sibling of discogsography; services include `gruvax-api` and `mosquitto`; frontend is served via FastAPI `StaticFiles`
 - [x] **DEP-02**: The schema is named `gruvax` within the shared Postgres instance; reads from discogsography go exclusively through a `gruvax.v_collection` view contract
 - [x] **DEP-03**: The Mosquitto broker has no Compose `ports:` exposure in v1 (internal-network-only until the hardware milestone); persistence is configured with explicit retained-message expiry semantics
-- [ ] **DEP-04**: Each Compose service declares log-size limits to prevent disk exhaustion on `lux`
-- [ ] **DEP-05**: Each Compose service declares a healthcheck integrated with `restart: unless-stopped` for self-healing on transient failure
+- [x] **DEP-04**: Each Compose service declares log-size limits to prevent disk exhaustion on `lux`
+- [x] **DEP-05**: Each Compose service declares a healthcheck integrated with `restart: unless-stopped` for self-healing on transient failure
 
 ## v2 / Backlog
 
@@ -284,13 +284,13 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | OFF-02 | Phase 4 — Realtime + Offline Resilience | Pending |
 | OFF-03 | Phase 4 — Realtime + Offline Resilience | Pending |
 | OFF-04 | Phase 4 — Realtime + Offline Resilience | Pending |
-| OBS-01 | Phase 8 — Observability + Deployment Hardening | Pending |
-| OBS-02 | Phase 8 — Observability + Deployment Hardening | Pending |
-| OBS-03 | Phase 8 — Observability + Deployment Hardening | Pending |
-| OBS-04 | Phase 8 — Observability + Deployment Hardening | Pending |
-| OBS-05 | Phase 8 — Observability + Deployment Hardening | Pending |
-| OBS-06 | Phase 8 — Observability + Deployment Hardening | Pending |
-| OBS-07 | Phase 8 — Observability + Deployment Hardening | Pending |
+| OBS-01 | Phase 8 — Observability + Deployment Hardening | Complete |
+| OBS-02 | Phase 8 — Observability + Deployment Hardening | Complete |
+| OBS-03 | Phase 8 — Observability + Deployment Hardening | Complete |
+| OBS-04 | Phase 8 — Observability + Deployment Hardening | Complete |
+| OBS-05 | Phase 8 — Observability + Deployment Hardening | Complete |
+| OBS-06 | Phase 8 — Observability + Deployment Hardening | Complete |
+| OBS-07 | Phase 8 — Observability + Deployment Hardening | Complete |
 | PRIV-01 | Phase 4 — Realtime + Offline Resilience | Pending |
 | PRIV-02 | Phase 4 — Realtime + Offline Resilience | Pending |
 | PRIV-03 | Phase 4 — Realtime + Offline Resilience | Pending |
@@ -300,8 +300,8 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | DEP-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | DEP-03 | Phase 6 — LED Contract over MQTT (Hardware Stubbed) | Complete |
-| DEP-04 | Phase 8 — Observability + Deployment Hardening | Pending |
-| DEP-05 | Phase 8 — Observability + Deployment Hardening | Pending |
+| DEP-04 | Phase 8 — Observability + Deployment Hardening | Complete |
+| DEP-05 | Phase 8 — Observability + Deployment Hardening | Complete |
 
 **Coverage:**
 - v1 requirements: 84 total (73 original + 8 SEG + 3 LED idle/ambient: LED-11/12/13)
