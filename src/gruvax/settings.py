@@ -28,7 +28,9 @@ class Settings(BaseSettings):
     MQTT_HOST: str = "localhost"
     MQTT_PORT: int = 1883
     MQTT_USERNAME: str = "gruvax"
-    MQTT_PASSWORD: str = "gruvax"
+    # Empty default = anonymous; real deployments override via env / .env / compose.yaml.
+    # Mirrors compose.yaml ``${MQTT_PASSWORD:-}`` substitution.
+    MQTT_PASSWORD: str = ""
     # Topic prefix separates dev and prod retained messages (D-14, Pitfall 3).
     # Dev: "gruvax/v1/dev/leds"  Prod: "gruvax/v1/leds"
     MQTT_TOPIC_PREFIX: str = "gruvax/v1/dev/leds"

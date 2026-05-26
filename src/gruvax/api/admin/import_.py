@@ -417,7 +417,11 @@ async def import_boundaries(
 
             nominal_capacity = _get_nominal_capacity(request)
         except Exception:  # nosec B110 - best-effort lookup; default is fine for preview delta
-            pass  # fall back to default — not critical for preview delta
+            # Log at debug — this is a best-effort lookup with a sane default.
+            logger.debug(
+                "import: nominal_capacity lookup failed; using default 95",
+                exc_info=True,
+            )
 
         total_cubes = len(all_addresses_raw)
         file_cube_count = len(file_index)

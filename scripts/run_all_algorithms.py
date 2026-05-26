@@ -36,7 +36,6 @@ Import-path strategy (single source of truth, Plan 02-01 §Task 2b):
 from __future__ import annotations
 
 import argparse
-import glob
 from pathlib import Path
 import sys
 import time
@@ -193,9 +192,8 @@ def _find_local_csv(repo_root: Path) -> Path | None:
     Returns None if absent (expected in CI and fresh developer checkouts).
     Guard: never fails — gracefully returns None when absent.
     """
-    pattern = str(repo_root / "RWlodarczyk-collection-*.csv")
-    matches = glob.glob(pattern)
-    return Path(matches[0]) if matches else None
+    matches = sorted(repo_root.glob("RWlodarczyk-collection-*.csv"))
+    return matches[0] if matches else None
 
 
 def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:

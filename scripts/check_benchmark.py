@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import json
 import math
+from pathlib import Path
 import sys
 
 
@@ -52,7 +53,7 @@ def _check(path: str) -> bool:
     Returns True if all budgets pass, False if any breach is found.
     """
     try:
-        with open(path) as f:
+        with Path(path).open() as f:
             data = json.load(f)
     except FileNotFoundError:
         print(f"ERROR: benchmark file not found: {path}", file=sys.stderr)

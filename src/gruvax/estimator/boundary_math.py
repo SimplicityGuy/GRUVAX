@@ -46,8 +46,8 @@ if TYPE_CHECKING:
 
 
 def count_records_in_boundary(
-    boundary: BoundaryRow,
-    snapshot: CollectionSnapshot,
+    _boundary: BoundaryRow,
+    _snapshot: CollectionSnapshot,
 ) -> int:
     """DEPRECATED — Phase 5 compatibility shim (used by admin/cubes.py until 05-04).
 

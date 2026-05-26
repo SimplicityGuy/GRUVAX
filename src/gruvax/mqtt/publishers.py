@@ -522,7 +522,7 @@ async def publish_ambient(
 async def publish_all_off(
     client: aiomqtt.Client | None,
     pool: Any,
-    settings_cache: dict[str, Any],
+    _settings_cache: dict[str, Any],
 ) -> int:
     """Publish an empty retained payload to every state/{unit_id}/{r}/{c} topic.
 
@@ -535,10 +535,11 @@ async def publish_all_off(
     global off was requested.
 
     Args:
-        client:         aiomqtt.Client, or None in degraded mode.
-        pool:           psycopg AsyncConnectionPool used to enumerate units.
-        settings_cache: The gruvax.settings key/value dict (unused in v1 but
-                        kept for API symmetry with other publisher functions).
+        client:          aiomqtt.Client, or None in degraded mode.
+        pool:            psycopg AsyncConnectionPool used to enumerate units.
+        _settings_cache: The gruvax.settings key/value dict (unused in v1 but
+                         kept for API symmetry with other publisher functions —
+                         underscore-prefixed to signal intentional non-use).
 
     Returns:
         Number of cube state-clear publishes made (NOT counting the all/off command).
