@@ -1,0 +1,126 @@
+# Requirements: GRUVAX v2.0 Multi-User Collections
+
+**Defined:** 2026-05-26
+**Milestone:** v2.0 — Multi-User Collections via discogsography API
+**Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
+**Goal:** Re-architect GRUVAX from direct-DB reads of discogsography to an HTTP-API integration with per-user collection authorization (scoped PATs), enabling multiple household members to each have their own collection on their own RPi kiosks, with one central GRUVAX server holding all profiles.
+
+**Source artifacts:**
+- Refined design spec: [`docs/superpowers/specs/2026-05-26-v2-multi-user-collections-refined.md`](../docs/superpowers/specs/2026-05-26-v2-multi-user-collections-refined.md)
+- Pre-synthesized intel: [`.planning/intel/SYNTHESIS.md`](./intel/SYNTHESIS.md), [`decisions.md`](./intel/decisions.md), [`requirements.md`](./intel/requirements.md), [`constraints.md`](./intel/constraints.md), [`context.md`](./intel/context.md)
+- v1.0 archive: [`milestones/v1.0-REQUIREMENTS.md`](./milestones/v1.0-REQUIREMENTS.md)
+
+**Scope counts:** 13 in scope (12 active + 1 deferred) — see also 5 EXTERNAL prereqs (discogsography repo) and ~9+ items deferred to later milestones.
+
+---
+
+## v2.0 Requirements
+
+### Profiles (PROF)
+
+- [ ] **PROF-01** — `profiles` table with Fernet-encrypted PAT storage, soft-delete via `deleted_at`, partial-unique indexes on `display_name` (case-insensitive) and `discogsography_user_id`
+- [ ] **PROF-02** — Profile manager admin UI (mobile-first, PIN-gated): list profiles with status badges; create / connect-PAT / rotate-PAT / rename / soft-delete; per-profile connection status view (last_sync, PAT health); "Sync now" button per profile
+- [ ] **PROF-03** — v1 data backfill to a deterministic "default" profile during `profile_id` migration (id `00000000-0000-0000-0000-000000000001`, display_name `'Default'`, owner-renameable post-migration)
+- [ ] **PROF-04** — `profile_id NOT NULL` migration across 7 v1 tables (`cube_boundaries`, `segments`, `change_log`, `change_sets`, `settings`, `record_stats`, `ambient_baseline`) with composite-uniqueness updates and clean Alembic upgrade↔downgrade round-trip (v1.0 CI invariant)
+
+### API client + cache (API)
+
+- [ ] **API-01** — `DiscogsographyClient` paged collection sync with bearer-PAT auth, retry semantics (401/403 raise PATRejected; 429 honor Retry-After + exp backoff ≤3; 5xx exp backoff ≤3; network 1 retry → fail)
+- [ ] **API-02** — Positioning (parser/comparator, v1 Phase 2 §4.1 / Phase 5 segment-aware estimator), search (FTS), and `/api/locate` all run off the local `profile_collection` cache; p95 `/api/search` ≤ 200 ms and p95 `/api/locate` ≤ 50 ms SLOs preserved (v1.0 Phase 8 CI gate)
+- [ ] **API-03** — Retire `gruvax.v_collection` view + revoke read-only Postgres grant in the same Alembic migration; health probe code updated to check discogsography HTTP API reachability instead of cross-schema view
+
+### Sync (SYN)
+
+- [ ] **SYN-01** — Three sync trigger modes: on profile connect (synchronous `per_page=1` test sync → captures `user_id` → kicks off full async sync), manual "Sync now" admin button (PIN-gated, progress UI + completion toast), nightly background scheduler (`asyncio.create_task` in lifespan, 03:00 local default, cadence configurable: 24h / 12h / 6h / off)
+- [ ] **SYN-02** — Staleness redefinition from `max(v_collection.synced_at)` to per-profile `now() - profiles.last_sync_at`; v1.0 Phase 8 thresholds (3d/14d) carry over verbatim; banner per-kiosk-view per-profile
+
+### Devices + pairing (DEV)
+
+- [ ] **DEV-01** — `devices` + `pairing_codes` tables: fingerprint cookie (HttpOnly + SameSite=Strict, persistent across reboot), partial-unique indexes on active rows, 5-min TTL on pairing codes with `consumed_at` one-shot guard
+- [ ] **DEV-02** — RPi device-to-profile binding: admin can assign / reassign / unbind / revoke via mobile UI (PENDING / PAIRED / REVOKED groupings, drawer per device); kiosk reflects bound profile across search, locate, SSE, LED, staleness; profile soft-delete detaches bound devices (kiosks revert to profile-picker)
+- [ ] **DEV-03** — Headless RPi pairing/binding flow A: kiosk displays a 4-digit server-generated code (Nordic Grid styling, large DM Mono digits, 5-min countdown, auto-reroll on expiry); admin types code in mobile admin (reuses v1 in-app numeric keypad from Phase 3); successful bind → kiosk auto-navigates to bound-profile search UI in <30s end-to-end
+
+---
+
+## Deferred (in v2.0 scope but not planned in P1–P4)
+
+- [ ] **AUTH-01** — OAuth2 device-authorization grant (RPi shows short code + URL → member approves on phone via existing discogsography session, no PAT ever crosses the household) — layers onto the same `app_tokens` store; v2.2
+
+---
+
+## EXTERNAL prereqs — tracked in `.planning/intel/context.md`
+
+These ship in the **discogsography** repo, NOT in GRUVAX. Sequential coordination: GRUVAX v2.0 P1 does not start until discogsography ships the contract artifact at `docs/specs/v2-gruvax-integration.md` in their repo. Brief at `background/discogsography-v2-app-tokens-brief.md` (gitignored).
+
+- **DGS-EXT-01** — `app_tokens` table (id, user_id FK, name, scope[], token_hash, created_at, last_used_at, revoked_at); SHA-256 token hash, plaintext shown once at mint, `collection:read` scope
+- **DGS-EXT-02** — "Connect an app" settings UI (mint / list / revoke; one-time plaintext reveal with copy + explicit warning)
+- **DGS-EXT-03** — `require_app_token` FastAPI dependency (validates bearer, checks scope, resolves `user_id`, async-updates `last_used_at`; 401 missing/invalid/revoked, 403 insufficient scope)
+- **DGS-EXT-04** — Catalog-number exposure on `GET /api/user/collection` — first verification spike, then expose (three branches: already exposed / lift from metadata / add column + Discogs ingestion update). **HIGH risk gate** for GRUVAX positioning.
+- **DGS-EXT-05** — Per-token rate limiting (~60 req/min initial; 429 includes `Retry-After`)
+
+These are NOT REQ rows in GRUVAX's traceability; they are external dependencies. GRUVAX milestone close depends on the discogsography contract landing.
+
+---
+
+## Future Requirements (deferred to later milestones)
+
+### v2.1 — Resilience + privacy + UX polish
+
+- **SRCH-09** — Per-session recently-pulled list (carried from v1.0 SPIDR-deferred)
+- **OFF-01..04** — Offline banner / disabled input on disconnect / reconnect backoff / success indicator on reconnect (carried from v1.0 SPIDR-deferred)
+- **PRIV-01..04** — Session-only history / no server query text / aggregate-only stats / no-PIN reset-kiosk (carried from v1.0 SPIDR-deferred; PRIV-02/03 already de-facto satisfied by Phase 8's release_id-only `record_stats` — formal re-scoping is the question)
+- **AUTH-02** — Per-profile self-connect PAT (member pastes own token via owner-issued invite link; owner never sees raw token)
+- **DEV-04** — QR-code RPi pairing (kiosk shows QR → admin scans on phone → lands in bind UI prefilled)
+- **API-04** — Collection diff highlighting on kiosk ("5 new records since last sync")
+
+### v2.x — Power-user features
+
+- **PROF-05** — Cross-profile admin operations (e.g., "copy Sam's boundaries to a new profile")
+- **PROF-06** — Profile export/import via owner CLI
+- **API-05** — Webhook push from discogsography → GRUVAX (replaces pull-only sync; requires discogsography webhook infra)
+
+### Hardware milestone (independent)
+
+- Real LED hardware end-to-end (ESP32 + WS2812B firmware + MQTT subscriber against Phase 6 contract)
+- 6 deferred Phase 6 MQTT 5 wire-level checkpoints (live-broker MessageExpiryInterval, brightness ceiling on the wire, all-off idempotency, TTL re-publish timing, concurrent-diagnostic guard)
+
+### Backlog
+
+- **Phase 999.1** — Shelf-overview mini-Kallax (per-cube fill/occupancy on `LocatorHeader`, data already returned by `GET /api/admin/cubes`)
+- **Phase 999.2** — LED party / sound-reactive modes (gated on hardware milestone)
+
+---
+
+## Out of Scope (explicit exclusions for v2.0)
+
+- **OOS-01 — `collection:write` scope** — GRUVAX is read-only against discogsography collections forever. Mint-side will never grant `collection:write` to GRUVAX-class apps.
+- **OOS-02 — Per-user GRUVAX accounts** — single-PIN owner manages profiles; member identity lives in discogsography only. *Why:* household scope; multi-user GRUVAX accounts would be a separate, much larger system.
+- **OOS-03 — Discogs OAuth credentials in GRUVAX** — GRUVAX never holds the member's Discogs login. Authorization is mediated through discogsography's `app_tokens`. *Why:* defense-in-depth; clean separation of concerns.
+- **OOS-04 — Cross-profile data visibility** — every read/write filters by an explicit `profile_id` derived from session/device binding; no global "see all profiles" view. *Why:* per-profile data isolation by construction.
+- **OOS-05 — Webhook push from discogsography → GRUVAX** — pull-only sync model in v2.0 (vinyl change cadence ≪ daily makes the webhook complexity unjustified). *Why:* simpler, no shared infra to maintain.
+- **OOS-06 — TLS termination** — LAN-only deployment. *Why:* household scope; no public exposure. Fingerprint cookie's `Secure` flag activates when TLS is added later.
+- **OOS-07 — Multi-server / clustered GRUVAX** — one central server per deployment. *Why:* household scale; clustering would add Postgres replication + MQTT clustering + cache-consistency story for no benefit.
+
+---
+
+## Traceability
+
+*Phase mapping populated by `gsd-roadmapper` in step 10 of the new-milestone workflow.*
+
+| REQ-ID | Description | Phase | Status |
+|--------|-------------|-------|--------|
+| PROF-01 | profiles table + Fernet PAT storage | P? | Pending |
+| PROF-02 | Profile manager admin UI | P? | Pending |
+| PROF-03 | v1 → default-profile backfill | P? | Pending |
+| PROF-04 | profile_id NOT NULL migration (7 v1 tables) | P? | Pending |
+| API-01 | DiscogsographyClient paged sync + retry | P? | Pending |
+| API-02 | Positioning off local cache + SLO preserved | P? | Pending |
+| API-03 | Retire v_collection view + grant | P? | Pending |
+| SYN-01 | Three sync triggers (connect / manual / nightly) | P? | Pending |
+| SYN-02 | Staleness redefinition per profile | P? | Pending |
+| DEV-01 | devices + pairing_codes tables + cookie | P? | Pending |
+| DEV-02 | RPi device-to-profile binding + admin UI | P? | Pending |
+| DEV-03 | 4-digit code pairing flow A | P? | Pending |
+| AUTH-01 | OAuth2 device-grant (deferred, v2.2) | — | Deferred |
+
+**External (tracked separately, not in GRUVAX P1–P4 plan):** DGS-EXT-01..05 in discogsography repo.
