@@ -51,7 +51,9 @@ repos:
   - repo: https://github.com/hadolint/hadolint
     rev: 4e697ba704fd23b2409b947a319c19c3ee54d24f  # frozen: v2.14.0
     hooks:
-      - id: hadolint
+      # docker variant: runs hadolint via its image so no host binary is required
+      # (the `hadolint` system hook fails in CI with "Executable hadolint not found").
+      - id: hadolint-docker
 
   - repo: https://github.com/IamTheFij/docker-pre-commit
     rev: f626253b23de45412865c07fd076ff95d4cd77a7  # frozen: v3.0.1

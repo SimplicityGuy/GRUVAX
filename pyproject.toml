@@ -97,6 +97,13 @@ ignore_errors = true
 module = ["aiomqtt.*", "sse_starlette.*", "psycopg.*", "psycopg_pool.*", "natsort.*"]
 ignore_missing_imports = true
 
+# gruvax._version is generated at build time (Dockerfile / `just build-version`) and is
+# gitignored, so it is absent in CI lint runs. version.py / health.py import it under a
+# try/except ImportError with a dev fallback, so a missing module is expected, not an error.
+[[tool.mypy.overrides]]
+module = ["gruvax._version"]
+ignore_missing_imports = true
+
 # ── coverage ─────────────────────────────────────────────────────────────────
 [tool.coverage.run]
 source = ["src/gruvax"]

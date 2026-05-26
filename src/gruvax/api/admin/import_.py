@@ -412,7 +412,7 @@ async def import_boundaries(
             from gruvax.api.admin.cubes import _get_nominal_capacity
 
             nominal_capacity = _get_nominal_capacity(request)
-        except Exception:
+        except Exception:  # nosec B110 - best-effort lookup; default is fine for preview delta
             pass  # fall back to default — not critical for preview delta
 
         total_cubes = len(all_addresses_raw)
