@@ -52,6 +52,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from gruvax.api.admin.validation import (
+    build_proposed_cuts,
+    validate_contiguity,
+    validate_no_empty_bin,
+    validate_shelf_overflow,
+)
 from gruvax.api.deps import (
     get_boundary_cache,
     get_collection_snapshot,
@@ -59,6 +65,16 @@ from gruvax.api.deps import (
     get_pool,
     get_segment_cache,
     require_admin,
+)
+from gruvax.db.queries import (
+    check_idempotency,
+    cleanup_idempotency,
+    cube_exact_match,
+    fetch_current_boundary,
+    find_boundary_near_misses,
+    store_idempotency,
+    write_boundary,
+    write_history_row,
 )
 
 
@@ -193,14 +209,6 @@ async def put_bin_cut(
 
     Returns 400 with phantom/near_misses on phantom rejection, 200 on success.
     """
-    from gruvax.db.queries import (
-        cube_exact_match,
-        fetch_current_boundary,
-        find_boundary_near_misses,
-        write_boundary,
-        write_history_row,
-    )
-
     first_label = body.first_label.strip()
     first_catalog = body.first_catalog.strip()
 
@@ -229,8 +237,6 @@ async def put_bin_cut(
     # fix: one validate_contiguity call per direct write path instead of
     # re-wiring the whole editor through the two-step validate→preview→commit
     # flow that the owner accepted dropping (05-UAT.md test 5 note).
-    from gruvax.api.admin.validation import build_proposed_cuts, validate_contiguity
-
     # Freshness contract (WR-03): build_proposed_cuts reads the live in-app
     # BoundaryCache, so the contiguity decision is only as correct as the cache
     # is current.  If a prior request mutated the DB without triggering a cache
@@ -345,8 +351,6 @@ async def set_bin_overrides(
 
     Response: ``{applied: int, cleared: int}`` (counts of upserted / deleted rows).
     """
-    from gruvax.db.queries import check_idempotency, cleanup_idempotency, store_idempotency
-
     idempotency_key: str | None = request.headers.get("Idempotency-Key")
 
     # ── Idempotency replay check ──────────────────────────────────────────────
@@ -476,20 +480,6 @@ async def insert_cut(
     Returns 400 with specific error types on each failure condition.
     HTTP 404 if (after_unit_id, after_row, after_col) is not a known cube.
     """
-    from gruvax.api.admin.validation import (
-        build_proposed_cuts,
-        validate_contiguity,
-        validate_no_empty_bin,
-        validate_shelf_overflow,
-    )
-    from gruvax.db.queries import (
-        cube_exact_match,
-        fetch_current_boundary,
-        find_boundary_near_misses,
-        write_boundary,
-        write_history_row,
-    )
-
     new_first_label = body.new_first_label.strip()
     new_first_catalog = body.new_first_catalog.strip()
     after_uid = body.after_unit_id
