@@ -1,0 +1,4 @@
+docs:
+  - path: docs/superpowers/specs/2026-05-25-v2-multi-user-collections-design.md
+    type: SPEC
+    precedence: 0

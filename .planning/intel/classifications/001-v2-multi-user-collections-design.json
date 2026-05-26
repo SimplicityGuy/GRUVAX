@@ -1,0 +1,30 @@
+{
+  "source_path": "/Users/Robert/Code/public/GRUVAX/docs/superpowers/specs/2026-05-25-v2-multi-user-collections-design.md",
+  "type": "SPEC",
+  "confidence": "high",
+  "manifest_override": true,
+  "title": "GRUVAX v2.0 — Multi-User Collections via discogsography API",
+  "summary": "Cross-repo design re-architecting GRUVAX from direct-DB reads to discogsography's HTTP API with scoped PATs, per-profile collection caching, and RPi-to-profile device binding.",
+  "scope": [
+    "v2.0 milestone",
+    "multi-user collections",
+    "discogsography HTTP API integration",
+    "scoped Personal Access Tokens (PAT)",
+    "app_tokens table (discogsography-side)",
+    "GRUVAX profiles",
+    "profile_id migration",
+    "per-profile shelving and LED config",
+    "RPi device binding",
+    "pull-and-cache collection sync",
+    "retirement of gruvax.v_collection",
+    "catalog-number exposure on collection API",
+    "Phase 9 v1.x tooling housekeeping",
+    "structlog migration",
+    "GitHub workflows adapted from discogsography",
+    "OAuth2 device-authorization grant (deferred)"
+  ],
+  "cross_refs": [],
+  "locked": false,
+  "precedence": 0,
+  "notes": "Manifest declared SPEC (authoritative). Document contains explicit 'Locked Decisions' table (D1–D7) with ADR-like trade-off rationale, plus data-model schemas, endpoint references, and phase decomposition — fits SPEC (contracts/data models) classification. ADR-style decisions are embedded; synthesizer may want to surface D1–D7 as constraints. Status header reads 'Approved (design)' but file is not a single-decision ADR. No explicit markdown cross-references to other docs found in body."
+}
