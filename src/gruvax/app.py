@@ -22,6 +22,7 @@ from __future__ import annotations
 
 import asyncio
 from collections import deque
+import contextlib
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
 import logging
@@ -32,10 +33,24 @@ from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
+from gruvax.api.admin.router import create_admin_router
+from gruvax.api.events import router as events_router
+from gruvax.api.health import router as health_router
+from gruvax.api.illuminate import router as illuminate_router
+from gruvax.api.locate import router as locate_router
+from gruvax.api.search import router as search_router
+from gruvax.api.units import router as units_router
+from gruvax.api.version import router as version_router
 from gruvax.db.pool import create_pool
+from gruvax.db.queries import load_settings_cache
 from gruvax.estimator.boundary_cache import BoundaryCache
+from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.estimator.segment_cache import SegmentCache
+from gruvax.events.bus import EventBus
 from gruvax.logging_config import configure_logging
 from gruvax.mqtt.client import connect_mqtt, disconnect_mqtt
+from gruvax.mqtt.lifecycle import HighlightRegistry, cancel_and_revert_all
+from gruvax.mqtt.publishers import publish_ambient
 from gruvax.settings import settings
 
 
@@ -134,8 +149,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.boundary_cache = cache
 
     # ── 3b. Collection snapshot (POS-03) ─────────────────────────────────────
-    from gruvax.estimator.collection_snapshot import CollectionSnapshot
-
     snapshot = CollectionSnapshot()
     try:
         await snapshot.load(pool)  # type: ignore[arg-type]
@@ -149,8 +162,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Derived from BoundaryCache + CollectionSnapshot (both already populated above).
     # CPU-only; no DB access during derive() or any lookup. Mirrors the try/except
     # + logger.error + proceed pattern of steps 3 and 3b.
-    from gruvax.estimator.segment_cache import SegmentCache
-
     segment_cache = SegmentCache()
     try:
         segment_cache.derive(cache, snapshot, cache.overrides)
@@ -164,8 +175,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Loads gruvax.settings key/value rows into app.state.settings_cache so
     # endpoints can read nominal_capacity, idle TTL, etc. without a DB hit.
     # Mirrors the try/except + logger.error + proceed pattern of steps 3 and 3b.
-    from gruvax.db.queries import load_settings_cache
-
     try:
         settings_map = await load_settings_cache(pool)
         app.state.settings_cache = settings_map
@@ -175,8 +184,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.settings_cache = {}
 
     # ── 3f. Event bus (Phase 4) ──────────────────────────────────────────────
-    from gruvax.events.bus import EventBus
-
     event_bus = EventBus()
     app.state.event_bus = event_bus
     try:
@@ -189,10 +196,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     await connect_mqtt(app)
 
     # ── 5. Highlight registry + ambient baseline (Phase 6 / LED-11/D-20) ─────
-    # Import here to avoid circular imports (mirrors the pattern for other routers).
-    from gruvax.mqtt.lifecycle import HighlightRegistry, cancel_and_revert_all
-    from gruvax.mqtt.publishers import publish_ambient
-
     app.state.highlight_registry = HighlightRegistry()
 
     # CR-01: the asyncio event loop holds only a WEAK reference to a task created
@@ -256,8 +259,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # ── Teardown ─────────────────────────────────────────────────────────────
     # Publish server_shutdown before closing (clients will reconnect)
-    import contextlib
-
     with contextlib.suppress(Exception):
         await event_bus.publish("server_shutdown", {})
 
@@ -298,15 +299,10 @@ def create_app() -> FastAPI:
     )
 
     # ── Register /api/* routers FIRST (Pitfall 3: StaticFiles catch-all order) ──
-    # Import here (not at module level) to avoid circular imports:
-    # app.py → api/*.py → deps.py → (no back-reference to app.py)
-    from gruvax.api.health import router as health_router
-    from gruvax.api.illuminate import router as illuminate_router
-    from gruvax.api.locate import router as locate_router
-    from gruvax.api.search import router as search_router
-    from gruvax.api.units import router as units_router
-    from gruvax.api.version import router as version_router
-
+    # Routers are module-top imports — verified during the discogsography tooling
+    # alignment that no api.* / api.admin.* / api.events module imports back from
+    # gruvax.app, so the earlier function-scope "circular guard" pattern was
+    # overcautious.
     app.include_router(health_router, prefix="/api")
     app.include_router(search_router, prefix="/api")
     app.include_router(locate_router, prefix="/api")
@@ -315,13 +311,9 @@ def create_app() -> FastAPI:
     app.include_router(version_router, prefix="/api")  # Phase 8: build metadata (OBS-04)
 
     # ── Admin router (Phase 3) — BEFORE StaticFiles mount (Pitfall 3) ──────────
-    from gruvax.api.admin.router import create_admin_router
-
     app.include_router(create_admin_router(), prefix="/api")
 
     # ── Events router (Phase 4 / RTM-01) — BEFORE StaticFiles mount (Pitfall 3) ─
-    from gruvax.api.events import router as events_router
-
     app.include_router(events_router, prefix="/api")
 
     # ── StaticFiles SPA mount LAST ───────────────────────────────────────────
