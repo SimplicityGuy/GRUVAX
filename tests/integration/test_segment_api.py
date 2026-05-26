@@ -742,7 +742,7 @@ class _SpyEventBus:
     def __init__(self) -> None:
         self.published: list[tuple[str, dict]] = []
 
-    async def publish(self, event: str, payload: dict) -> None:  # noqa: D102
+    async def publish(self, event: str, payload: dict) -> None:
         self.published.append((event, payload))
 
 
@@ -801,26 +801,16 @@ async def test_cut_publishes_correct_payload(db_pool) -> None:  # type: ignore[n
     assert "cube_ids" in payload, (
         f"Payload must have top-level 'cube_ids' key (not 'cubes'): {payload}"
     )
-    assert "cubes" not in payload, (
-        f"Payload must NOT have 'cubes' key: {payload}"
-    )
-    assert "type" not in payload, (
-        f"Payload must NOT have top-level 'type' key: {payload}"
-    )
-    assert "change_set_id" in payload, (
-        f"Payload must have 'change_set_id' key: {payload}"
-    )
+    assert "cubes" not in payload, f"Payload must NOT have 'cubes' key: {payload}"
+    assert "type" not in payload, f"Payload must NOT have top-level 'type' key: {payload}"
+    assert "change_set_id" in payload, f"Payload must have 'change_set_id' key: {payload}"
     cube_ids = payload["cube_ids"]
     assert isinstance(cube_ids, list) and len(cube_ids) >= 1, (
         f"cube_ids must be a non-empty list: {cube_ids}"
     )
     for item in cube_ids:
-        assert "unit" in item, (
-            f"Each cube_ids item must have 'unit' key (not 'unit_id'): {item}"
-        )
-        assert "unit_id" not in item, (
-            f"cube_ids items must NOT have 'unit_id' key: {item}"
-        )
+        assert "unit" in item, f"Each cube_ids item must have 'unit' key (not 'unit_id'): {item}"
+        assert "unit_id" not in item, f"cube_ids items must NOT have 'unit_id' key: {item}"
         assert "row" in item, f"Each cube_ids item must have 'row' key: {item}"
         assert "col" in item, f"Each cube_ids item must have 'col' key: {item}"
 
@@ -888,15 +878,9 @@ async def test_overrides_publishes_correct_payload(db_pool) -> None:  # type: ig
     assert "cube_ids" in payload, (
         f"Payload must have top-level 'cube_ids' key (not 'cubes'): {payload}"
     )
-    assert "cubes" not in payload, (
-        f"Payload must NOT have 'cubes' key: {payload}"
-    )
-    assert "type" not in payload, (
-        f"Payload must NOT have top-level 'type' key: {payload}"
-    )
-    assert "change_set_id" in payload, (
-        f"Payload must have 'change_set_id' key: {payload}"
-    )
+    assert "cubes" not in payload, f"Payload must NOT have 'cubes' key: {payload}"
+    assert "type" not in payload, f"Payload must NOT have top-level 'type' key: {payload}"
+    assert "change_set_id" in payload, f"Payload must have 'change_set_id' key: {payload}"
     assert payload["change_set_id"] is None, (
         f"Overrides publish must have change_set_id=None (no history row): {payload}"
     )
@@ -905,12 +889,8 @@ async def test_overrides_publishes_correct_payload(db_pool) -> None:  # type: ig
         f"cube_ids must be a non-empty list: {cube_ids}"
     )
     for item in cube_ids:
-        assert "unit" in item, (
-            f"Each cube_ids item must have 'unit' key (not 'unit_id'): {item}"
-        )
-        assert "unit_id" not in item, (
-            f"cube_ids items must NOT have 'unit_id' key: {item}"
-        )
+        assert "unit" in item, f"Each cube_ids item must have 'unit' key (not 'unit_id'): {item}"
+        assert "unit_id" not in item, f"cube_ids items must NOT have 'unit_id' key: {item}"
         assert "row" in item, f"Each cube_ids item must have 'row' key: {item}"
         assert "col" in item, f"Each cube_ids item must have 'col' key: {item}"
 
@@ -978,15 +958,9 @@ async def test_insert_cut_publishes_correct_payload(db_pool) -> None:  # type: i
     assert "cube_ids" in payload, (
         f"Payload must have top-level 'cube_ids' key (not 'cubes'): {payload}"
     )
-    assert "cubes" not in payload, (
-        f"Payload must NOT have 'cubes' key: {payload}"
-    )
-    assert "type" not in payload, (
-        f"Payload must NOT have top-level 'type' key: {payload}"
-    )
-    assert "change_set_id" in payload, (
-        f"Payload must have 'change_set_id' key: {payload}"
-    )
+    assert "cubes" not in payload, f"Payload must NOT have 'cubes' key: {payload}"
+    assert "type" not in payload, f"Payload must NOT have top-level 'type' key: {payload}"
+    assert "change_set_id" in payload, f"Payload must have 'change_set_id' key: {payload}"
     assert payload["change_set_id"] is not None, (
         f"insert-cut publish must have a non-None change_set_id (history row created): {payload}"
     )
@@ -995,12 +969,8 @@ async def test_insert_cut_publishes_correct_payload(db_pool) -> None:  # type: i
         f"cube_ids must be a non-empty list (affected cubes from insert): {cube_ids}"
     )
     for item in cube_ids:
-        assert "unit" in item, (
-            f"Each cube_ids item must have 'unit' key (not 'unit_id'): {item}"
-        )
-        assert "unit_id" not in item, (
-            f"cube_ids items must NOT have 'unit_id' key: {item}"
-        )
+        assert "unit" in item, f"Each cube_ids item must have 'unit' key (not 'unit_id'): {item}"
+        assert "unit_id" not in item, f"cube_ids items must NOT have 'unit_id' key: {item}"
         assert "row" in item, f"Each cube_ids item must have 'row' key: {item}"
         assert "col" in item, f"Each cube_ids item must have 'col' key: {item}"
 

@@ -668,7 +668,7 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
         f"Expected a 'boundary_changed' event, but spy captured: {spy.published}"
     )
 
-    event_name, payload = boundary_events[-1]  # the revert's publish is the last one
+    _event_name, payload = boundary_events[-1]  # the revert's publish is the last one
 
     # Verify cube_ids shape: must use "unit" (not "unit_id") to match ShimmerCube contract.
     assert "cube_ids" in payload, (
@@ -680,7 +680,9 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
     )
 
     # At least one entry must be the reverted cube (2, 0, 1).
-    matching = [c for c in cube_ids if c.get("unit") == 2 and c.get("row") == 0 and c.get("col") == 1]
+    matching = [
+        c for c in cube_ids if c.get("unit") == 2 and c.get("row") == 0 and c.get("col") == 1
+    ]
     assert matching, (
         f"Expected cube_ids to contain {{unit: 2, row: 0, col: 1}}, got: {cube_ids}. "
         "Key 'unit' (not 'unit_id') is required by the ShimmerCube contract."

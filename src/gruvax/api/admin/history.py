@@ -219,8 +219,7 @@ async def revert_change_set(
             overrides: dict[tuple[int, int, int, str], float] = {}
             async with pool.connection() as conn2, conn2.cursor() as cur2:
                 await cur2.execute(
-                    "SELECT unit_id, row, col, label, fraction"
-                    " FROM gruvax.segment_overrides"
+                    "SELECT unit_id, row, col, label, fraction FROM gruvax.segment_overrides"
                 )
                 override_rows = await cur2.fetchall()
             for uid_o, r_o, c_o, lbl_o, frac_o in override_rows:
@@ -235,8 +234,7 @@ async def revert_change_set(
                 "boundary_changed",
                 {
                     "cube_ids": [
-                        {"unit": r["unit_id"], "row": r["row"], "col": r["col"]}
-                        for r in reverted
+                        {"unit": r["unit_id"], "row": r["row"], "col": r["col"]} for r in reverted
                     ],
                     "change_set_id": new_change_set_id,
                 },
