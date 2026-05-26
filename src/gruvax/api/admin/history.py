@@ -45,6 +45,13 @@ from gruvax.api.deps import (
     get_segment_cache,
     require_admin,
 )
+from gruvax.db.queries import (
+    fetch_change_set_rows,
+    has_newer_changes,
+    list_change_sets,
+    write_boundary,
+    write_history_row,
+)
 
 
 if TYPE_CHECKING:
@@ -72,8 +79,6 @@ async def get_history(
 
     Response: ``{history: [{change_set_id, source, changed_at, cube_count}, ...]}``
     """
-    from gruvax.db.queries import list_change_sets
-
     change_sets = await list_change_sets(pool)
     return {"history": change_sets}
 
@@ -112,13 +117,6 @@ async def revert_change_set(
 
     HTTP 404 if the change_set_id is not found in boundary_history.
     """
-    from gruvax.db.queries import (
-        fetch_change_set_rows,
-        has_newer_changes,
-        write_boundary,
-        write_history_row,
-    )
-
     # Fetch all history rows for this change-set
     rows = await fetch_change_set_rows(pool, change_set_id)
     if not rows:

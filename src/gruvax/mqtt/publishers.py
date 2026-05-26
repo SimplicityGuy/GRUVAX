@@ -427,14 +427,10 @@ async def publish_ambient(
     )
     r, g, b = hex_to_rgb(ambient_hex)
 
-    from datetime import UTC, datetime
-
     now_iso = datetime.now(UTC).isoformat()
 
     # Build the ambient payload dict (minimal — firmware only needs color + brightness).
     # Re-use the IlluminatePayload schema shape for state/* compatibility.
-    from gruvax.mqtt.schemas import IlluminatePayload, RGBColor, TransitionSpec
-
     def _make_ambient_bytes(unit_id: int, row: int, col: int) -> bytes:
         payload = IlluminatePayload(
             issued_at=now_iso,

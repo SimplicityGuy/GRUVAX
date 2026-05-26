@@ -12,6 +12,9 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, HTTPException, Request, status
 
+from gruvax.auth.sessions import CSRF_COOKIE, get_session_id
+from gruvax.settings import settings
+
 
 if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryCache
@@ -156,9 +159,6 @@ async def require_admin(
         HTTP 401 — missing/invalid cookie, session not found, session expired.
         HTTP 403 — CSRF check failed (mutating request without X-CSRF-Token).
     """
-    from gruvax.auth.sessions import CSRF_COOKIE, get_session_id
-    from gruvax.settings import settings
-
     session_id = await get_session_id(request, settings.SESSION_SECRET)
     if not session_id:
         raise HTTPException(
