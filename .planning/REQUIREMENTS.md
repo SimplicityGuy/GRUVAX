@@ -105,22 +105,24 @@ These are NOT REQ rows in GRUVAX's traceability; they are external dependencies.
 
 ## Traceability
 
-*Phase mapping populated by `gsd-roadmapper` in step 10 of the new-milestone workflow.*
+Mapped 2026-05-26 by `gsd-roadmapper`. Each active REQ is owned by exactly one phase; PROF-02 maps to P2 where the bulk of the admin UI lands (status badges + CRUD + connect/rotate/rename/soft-delete). The "Sync now" progress UI and the 401 re-auth badge that PROF-02 implies are layered on by SYN-01 and SYN-02 in P4 — i.e., PROF-02 is *not* split into a second row, but its P4-flavored polish surfaces are covered by the SYN-* requirements in P4. AUTH-01 is deferred to v2.2 and intentionally has no phase mapping in this milestone.
 
 | REQ-ID | Description | Phase | Status |
 |--------|-------------|-------|--------|
-| PROF-01 | profiles table + Fernet PAT storage | P? | Pending |
-| PROF-02 | Profile manager admin UI | P? | Pending |
-| PROF-03 | v1 → default-profile backfill | P? | Pending |
-| PROF-04 | profile_id NOT NULL migration (7 v1 tables) | P? | Pending |
-| API-01 | DiscogsographyClient paged sync + retry | P? | Pending |
-| API-02 | Positioning off local cache + SLO preserved | P? | Pending |
-| API-03 | Retire v_collection view + grant | P? | Pending |
-| SYN-01 | Three sync triggers (connect / manual / nightly) | P? | Pending |
-| SYN-02 | Staleness redefinition per profile | P? | Pending |
-| DEV-01 | devices + pairing_codes tables + cookie | P? | Pending |
-| DEV-02 | RPi device-to-profile binding + admin UI | P? | Pending |
-| DEV-03 | 4-digit code pairing flow A | P? | Pending |
+| PROF-01 | profiles table + Fernet PAT storage | P2 | Pending |
+| PROF-02 | Profile manager admin UI (CRUD + status badges; P4 layers Sync-now progress + 401 badge via SYN-01/SYN-02) | P2 | Pending |
+| PROF-03 | v1 → default-profile backfill | P1 | Pending |
+| PROF-04 | profile_id NOT NULL migration (7 v1 tables) | P2 | Pending |
+| API-01 | DiscogsographyClient paged sync + retry | P1 | Pending |
+| API-02 | Positioning off local cache + SLO preserved (P1 single-profile; P2 multi-profile cache routing completion) | P1 | Pending |
+| API-03 | Retire v_collection view + grant | P1 | Pending |
+| SYN-01 | Three sync triggers (connect / manual "Sync now" / nightly background) | P4 | Pending |
+| SYN-02 | Staleness redefinition per profile (P1 single-profile; P2 per-profile fan-out; P4 UX polish per profile) | P1 | Pending |
+| DEV-01 | devices + pairing_codes tables + fingerprint cookie | P3 | Pending |
+| DEV-02 | RPi device-to-profile binding + admin UI | P3 | Pending |
+| DEV-03 | 4-digit code pairing flow A | P3 | Pending |
 | AUTH-01 | OAuth2 device-grant (deferred, v2.2) | — | Deferred |
 
-**External (tracked separately, not in GRUVAX P1–P4 plan):** DGS-EXT-01..05 in discogsography repo.
+**Coverage:** 12 / 12 active requirements mapped to P1–P4 (100%). AUTH-01 deferred (not in P1–P4 plan).
+
+**External (tracked separately, not in GRUVAX P1–P4 plan):** DGS-EXT-01..05 in discogsography repo. Cross-repo gating: GRUVAX P1 does not start until discogsography ships `docs/specs/v2-gruvax-integration.md`.

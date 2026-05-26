@@ -3,10 +3,10 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-User Collections
 status: planning
-last_updated: "2026-05-26T22:14:04.050Z"
+last_updated: "2026-05-26T22:30:00.000Z"
 last_activity: 2026-05-26
 progress:
-  total_phases: 0
+  total_phases: 4
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,109 +21,109 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 999.1 — shelf overview mini kallax shows per cube fill/occupancy (backlog)
+**Current Focus:** Phase 1 — Walking skeleton (waiting on DGS-PREREQ)
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
-**Granularity:** standard (8 phases, 3–5 plans each expected)
+**Granularity:** standard (4 phases planned; ~17 plans across P1–P4 per the refined spec's estimate)
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: Phase 1 — Walking skeleton — API client + single-profile sync
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-26 — Milestone v2.0 started
+Status: Not started (waiting on DGS-PREREQ — discogsography v2 contract artifact at `docs/specs/v2-gruvax-integration.md`)
+Last activity: 2026-05-26 — v2.0 roadmap created; phase numbering RESET via `--reset-phase-numbers`
 
-## Performance Metrics
+## Performance Metrics (v2.0)
 
 | Metric | Value |
 |--------|-------|
-| v1 requirements | 84 |
-| Requirements mapped to phases | 84 (100%) |
-| Phases planned | 0 / 7 |
+| v2.0 active requirements | 12 |
+| Requirements mapped to phases | 12 / 12 (100%) |
+| Deferred (not in P1–P4) | 1 (AUTH-01 → v2.2) |
+| External prereqs (discogsography) | 5 (DGS-EXT-01..05) |
+| Phases planned | 4 |
 | Plans complete | 0 |
 | Phases shipped | 0 |
-| Phase 01-first-search-cube-highlight P02 | 1109 | 2 tasks | 8 files |
-| Phase 01-first-search-cube-highlight P03 | 1200 | 3 tasks | 15 files |
-| Phase 01-first-search-cube-highlight P04 | 1303 | 3 tasks | 22 files |
-| Phase 02-real-position-estimation P01 | 19 | 4 tasks | 15 files |
-| Phase 02-real-position-estimation P02 | 14 | 3 tasks | 9 files |
-| Phase 02-real-position-estimation P04 | 5min | 2 tasks | 3 files |
-| Phase 06 P04 | 9min | 3 tasks | 6 files |
+
+### Historical (v1.0, shipped 2026-05-26)
+
+| Metric | Value |
+|--------|-------|
+| v1.0 in-scope requirements | 84 |
+| v1.0 requirements satisfied | 75 / 75 in-scope (9 SPIDR-relocated to v2/Backlog) |
+| v1.0 phases shipped | 10 / 10 |
+| v1.0 plans completed | 50 |
 
 ## Accumulated Context
 
 ### Pending Todos
 
-None. (Reconcile gruvax/gruvax_app role naming → completed as quick task 260524-sd6.)
+- [ ] DGS-PREREQ closes (external — discogsography v2 ships `app_tokens` + catalog# exposure + contract artifact)
+- [ ] User approves v2.0 ROADMAP.md (P1–P4)
+- [ ] Once DGS-PREREQ closes: read `docs/specs/v2-gruvax-integration.md` from discogsography repo; reconcile any contract drift; run `/gsd-discuss-phase 1`
 
 ### Roadmap Evolution
 
-- Phase 5 inserted after Phase 4: Segment-Aware Position Precision — true integer insert; bumped LED→6, Wizards→7, Observability→8
-- Phase 10 added (integer append) at end of v1.0: Close Milestone Gaps — INT-A SSE payload shape + INT-B undo re-derive/publish + traceability reconcile; closes the v1.0 milestone-audit gaps (`.planning/v1.0-MILESTONE-AUDIT.md`). 9 deferred reqs (SRCH-09, OFF-01..04, PRIV-01..04) remain a separate scope decision (audit item 3), out of Phase 10 scope.
+- **2026-05-26** — v2.0 milestone created. Phase numbering RESET via `--reset-phase-numbers`. 4 phases (P1: walking skeleton; P2: multi-profile; P3: devices + pairing; P4: sync polish + diagnostics). 12 active reqs mapped 100% across P1–P4. AUTH-01 deferred to v2.2.
+- **2026-05-26** — v1.0 archived. 10 phases, 50 plans, ~36k LOC. Phase 5 (Segment-Aware Position Precision) and Phase 10 (Close Milestone Gaps) were INSERTED during execution; both shipped clean. See `.planning/milestones/v1.0-ROADMAP.md` for the full archive.
+- Phase 5 inserted after Phase 4 (v1.0): Segment-Aware Position Precision — true integer insert; bumped LED→6, Wizards→7, Observability→8.
+- Phase 10 added (integer append) at end of v1.0: Close Milestone Gaps — INT-A SSE payload shape + INT-B undo re-derive/publish + traceability reconcile.
 
-### Decisions Made (from PROJECT.md + research)
+### Decisions Made
+
+#### v2.0 (carried from refined spec + roadmapper)
+
+- **Sequential cross-repo coordination (R1)** — discogsography v2 ships completely before GRUVAX P1 starts. No stubs, no contract drift.
+- **discogsography work is EXTERNAL (R2)** — tracked in `.planning/intel/context.md` as DGS-EXT-01..05; not part of GRUVAX's REQUIREMENTS.md.
+- **Owner-managed PAT only for v2.0 (R3)** — self-connect → v2.1; OAuth2 device-grant → v2.2.
+- **RPi pairing flow A — 4-digit code on kiosk (R4)** — reuses v1 in-app numeric keypad. QR/scan deferred to v2.1.
+- **Sync triggers (R5)** — on connect / manual "Sync now" / nightly background at 03:00 local (configurable 24h / 12h / 6h / off).
+- **Sessions and devices are independent (R6)** — browser sessions pick a profile via picker; RPi kiosks bind via pairing flow.
+- **Open profile picker on LAN — no PIN for read-only browsing (R7)** — PIN still gates admin actions.
+- **9 SPIDR-deferred v1 reqs stay deferred (R8)** — SRCH-09, OFF-01..04, PRIV-01..04 → v2.1 resilience + privacy milestone.
+- **Walking-skeleton-first phase ordering (R9)** — vertical MVP slicing carries from v1.0.
+- **Reset phase numbering to P1–P4 (R10)** — each milestone gets its own phase namespace.
+- **PROF-02 not split** — Profile manager admin UI maps to P2 (CRUD + status badges); P4 polish ("Sync now" progress + 401 re-auth badge + per-profile diagnostics cards) is covered by SYN-01 + SYN-02 in P4 without splitting PROF-02 into a second REQ row.
+
+#### v1.0 (carried for project-wide context)
 
 - **Vertical MVP slicing** — every phase delivers an end-to-end user-observable capability. No horizontal infrastructure-only phases.
-- **Parser + comparator (POS-01) is shared infrastructure** — implemented in Phase 1, reused by boundary-save validator (Phase 3), every algorithm (Phase 2), every test. Strategy C (token-stream split) or D (`natsort`) — pick during Phase 1 planning.
-- **`gruvax.v_collection` view + read-only grant** is the only contact surface with discogsography (DEP-02 + Pitfall 5). Established in Phase 1; probed at startup.
-- **Estimator contract locked in Phase 1** — `LocateResult{primary_cube, label_span, sub_cube_interval, confidence, generated_at, estimator_version}`. v1 Phase 1 ships cube-only fallback (INTERPOLATION §4.8); Phase 2 swaps in §4.1 index-based estimator behind the same contract.
-- **Boundary cache + SSE invalidation** — cache loads at startup (Phase 1), invalidates on `boundary_changed` events (Phase 4 wires SSE).
-- **In-app numeric keypad** mitigates labwc/squeekboard #2926 (Pitfall 4) — built in Phase 3, no dependency on system on-screen keyboard.
-- **MVP boundary seed via fixture** — Phase 1 uses a committed CSV/YAML fixture (no PII) so the search→highlight slice is demoable before any admin UI exists. Admin tooling lands in Phase 3; wizards in Phase 7.
-- **Stack pinned** (research/STACK.md, HIGH confidence): Python 3.13, FastAPI 0.136.x, psycopg 3.2 async, SQLAlchemy 2.0 async, Alembic 1.18.x, sse-starlette 2.x, aiomqtt 3.x, eclipse-mosquitto:2.1-alpine, React 19 + Vite 7 + Tailwind + GSAP + Framer Motion, Raspberry Pi OS Trixie + labwc + Chromium kiosk.
-- **search_path set via connect event listener** (not execute-before-configure) — prevents Alembic autobegin bug where _in_external_transaction=True causes no COMMIT. Documented in 01-01-SUMMARY.md.
-- **alembic_version in public schema** (version_table_schema="public") — prevents DROP SCHEMA gruvax cascade from deleting version row before Alembic bookkeeping runs.
-- **psycopg_pool configure callback** must leave connection in IDLE state — use set_autocommit(True/False) around any execute() calls.
-- [Phase 01-02]: **D-13 resolved: Strategy C token-stream parser for POS-01** — zero dependency, fully explicit, all stages testable with Hypothesis; no raw string comparisons in estimator.
-- [Phase 01-02]: **BoundaryCache._load_rows() testing seam** — added to allow unit testing without live DB; undocumented in RESEARCH but required for proper TDD RED phase isolation.
-- [Phase 01-02]: **NFC after separator collapse in normalize_catalog** — Hypothesis found combining-char idempotency edge case; NFC stabilizes canonical combining-char order after separator stripping.
-- [Phase 01-02]: **pytest-asyncio loop_scope="session" for DB tests** — session-scoped db_pool fixture requires test to use same event loop; use `@pytest.mark.asyncio(loop_scope="session")` pattern for all future integration tests that use db_pool.
-- [Phase 01-03]: **Circular import prevention** — dependency providers (get_pool, get_boundary_cache) live in api/deps.py; routers imported inside create_app() body, not at module level.
-- [Phase 01-03]: **psycopg placeholder syntax** — psycopg uses `%s` (Python DB-API 2.0), not `$1`/`$2` (PostgreSQL server-side syntax). Affects all SQL in queries.py.
-- [Phase 01-03]: **asgi-lifespan as production dependency** — LifespanManager correctly triggers FastAPI's lifespan context in async test fixtures; added as prod dep to avoid conditional import issues.
-- [Phase 01-03]: **test_no_boundary uses release_id=111** — Saturn label records have no boundary coverage because boundary (first_label=Saturn, last_label=ESP) has "saturn" > "esp" alphabetically, so label range check fails.
-- [Phase 01-03]: **MQTT aiomqtt stub** — uses client.__aenter__()/__aexit__() directly instead of `async with` to retain client reference in app.state.mqtt after context manager enters.
-- [Phase 01-04]: **Vite 8 (not 7)** — npm latest is 8.0.x; CLAUDE.md/STACK.md pins treated as stale per environment directive; RESEARCH.md confirmed 8.x.
-- [Phase 01-04]: **eclipse-mosquitto:latest** — plan said 2.1-alpine; environment directive says use latest image tag.
-- [Phase 01-04]: **python -m pattern in docker-entrypoint.sh** — uv copies venv from /build/.venv to /app/.venv; wrapper scripts have hardcoded shebangs (#!/build/.venv/bin/python) so direct invocation fails. Using `$PYTHON -m alembic` and `$PYTHON -m uvicorn` with absolute binary path avoids shebang issue entirely.
-- [Phase 01-04]: **Design tokens via relative path** — `../../design/gruvax-design-tokens.css` in frontend/src/main.tsx resolves locally; Docker stage copies design/ to /design/ (one level above /frontend-build workdir) so same relative path resolves in build.
-- [Phase 01-04]: **TanStack Query for /api/locate fires imperatively** — not as a hook key, to ensure each result selection triggers a fresh locate call without stale cube position caching.
-- [Phase 02-01]: **D-02 singleton override** — singletons return SubInterval(start=0.0, end=1.0) full-cube band at confidence 0.30, not a tick-mark. Overrides CUBE-10 literal wording per owner decision documented in algorithm.py.
-- [Phase 02-01]: **sub_cube_interval JSON contract** — emits {start, end, crosses_boundary, next_cube}; NO cube field. Frontend derives cube from primary_cube/label_span context (UI-SPEC §TypeScript Type Extension).
-- [Phase 02-01]: **locate() dispatcher** — no-snapshot → cube-only-v1; confidence<=CUBE_ONLY_CONFIDENCE → sub_cube_interval=None, cube-only-v1; else §4.1 index-v1 with populated sub_cube_interval.
-- [Phase 02-01]: **pythonpath=[.] strategy** — pyproject.toml + fixtures/__init__.py + root conftest.py; single source of truth for importable repo-root packages; consistent with Plan 02-04 scripts/ imports.
-- [Phase 02-02]: **DID_YOU_MEAN_THRESHOLD = 0.35** — conservative per RESEARCH D-11; did_you_mean fires only when rows is empty; avoids spurious suggestions on partial FTS hits.
-- [Phase 02-02]: **Catalog boost via setweight() Option A** — catalog_number tokens weighted 'A', fts_vector tokens 'C'; ts_rank_cd scores 'A' highest; catalog records rank above text matches for catalog-like queries (D-12).
-- [Phase 02-02]: **onTap calls setQuery (not direct locate)** — D-10 explicit user confirmation; no silent auto-correct; user sees corrected term in search box.
-- [Phase 02-04]: **CUBE_ONLY_NULL_MIDPOINT=0.5** — §4.8 null sub_cube_interval scored as midpoint of cube for MAE comparison; worst-case analysis per plan spec.
-- [Phase 02-04]: **session-scoped harness_results fixture** — run_all_algorithms(ci=True) called once per pytest session; all CI tests consume shared per-shape {index, cube_only} dict.
-- [Phase 06-04]: **publish_all_off retained-clear mechanism** — publishes `b''` with `retain=True` to delete retained messages (MQTT protocol; Mosquitto expiry-cleanup is unreliable, D-11). The all-off clear is idempotent by MQTT spec.
-- [Phase 06-04]: **Endpoint tests use dependency_overrides, not patch** — FastAPI resolves `Depends(require_admin)` by function reference at route registration; patching the module-level name does not intercept the dependency. Use `app.dependency_overrides[require_admin] = stub` (canonical pattern from test_admin_led_settings.py).
-- [Phase 06-04]: **run_diagnostic uses asyncio.timeout(5.0)** — pure stdlib (Python 3.11+), no new deps; 5-second window for status/# subscribe covers firmware boot latency in v1 (D-10).
-- [Phase 05-01]: **BoundaryRow contract change under-scoped at plan time** — dropping `last_label`/`last_catalog` (migration 0005) ripples through more consumers than 05-02..05-05 covered. Post-merge gate caught ~40 RED tests + 12 mypy errors. 05-01's work is correct and merged; Waves 2–5 are being re-planned to add orphan coverage (`api/units.py`, `db/seed_boundaries.py`, `db/queries.py`, `boundary_cache.py:100`, ~11 test files). **Lesson:** plans that change a shared dataclass/DDL contract must include an explicit consumer-sweep (grep audit) covering every construction/SQL/test site, and each wave must leave the suite green. Full inventory: `05-REPLAN-NOTES.md`.
-- [Phase 10-03]: **SEG-01..08 traceability flipped from Pending to Complete** — Phase 5 passed 8/8 but traceability rows were stale-Pending; flipped both body checkboxes and table rows.
-- [Phase 10-03]: **Requirement count reconciled to 84 everywhere** — REQUIREMENTS.md header corrected 81→84 (73 original + 8 SEG + 3 LED idle/ambient); ROADMAP.md intro corrected 73→84. Internal-consistency target 84 total = 75 satisfied + 9 deferred achieved.
+- **Parser + comparator (POS-01) is shared infrastructure** — implemented in Phase 1, reused by boundary-save validator (Phase 3), every algorithm (Phase 2), every test. Strategy C token-stream split.
+- **`gruvax.v_collection` view + read-only grant** is the only contact surface with discogsography in v1.0 (DEP-02 + Pitfall 5). **Retired in v2.0 P1.**
+- **Estimator contract locked in Phase 1** — `LocateResult{primary_cube, label_span, sub_cube_interval, confidence, generated_at, estimator_version}`. v1.0 Phase 5 swapped in the segment-aware estimator behind this contract.
+- **Boundary cache + SSE invalidation** — cache loads at startup (Phase 1), invalidates on `boundary_changed` events (Phase 4 wires SSE). v2.0 P2 fans this out per-profile.
+- **In-app numeric keypad** mitigates labwc/squeekboard #2926 (Pitfall 4) — built in v1.0 Phase 3; v2.0 P3 reuses it for the 4-digit pairing code admin entry.
+- **MVP boundary seed via fixture** — Phase 1 uses a committed CSV/YAML fixture (no PII).
+- **Stack pinned** — Python 3.13, FastAPI 0.136.x, psycopg 3.2 async, SQLAlchemy 2.0 async, Alembic 1.18.x, sse-starlette 2.x, aiomqtt 3.x, eclipse-mosquitto:latest, React 19 + Vite 8 + Tailwind + GSAP + Framer Motion, Raspberry Pi OS Trixie + labwc + Chromium kiosk.
+- **search_path set via connect event listener** (not execute-before-configure) — prevents Alembic autobegin bug.
+- **alembic_version in public schema** (version_table_schema="public") — prevents DROP SCHEMA gruvax cascade from deleting version row.
+- **psycopg_pool configure callback** must leave connection in IDLE state.
+- **Strategy C token-stream parser for POS-01** — zero dependency, fully explicit, all stages testable with Hypothesis.
+- **`pytest-asyncio loop_scope="session"`** for DB tests — session-scoped db_pool fixture requires test to use same event loop.
+- **publish_all_off retained-clear mechanism** — publishes `b''` with `retain=True`; idempotent by MQTT spec.
+- **Endpoint tests use `dependency_overrides`, not `patch`** — FastAPI resolves `Depends(require_admin)` by function reference at route registration.
+- **Closure phase pattern (v1.0 Phase 10)** — when an audit surfaces cross-phase seams that no single per-phase verification can catch, absorb them in a single closure phase rather than retrofitting earlier phases.
 
-### Open Questions (carried from research/SUMMARY.md §Open Questions)
+### Open Questions
 
-To be resolved during plan-phase or as the user provides input:
+To be resolved during plan-phase or as the discogsography agent reports:
 
-- **Service-worker cached search results** — v1 or v1.x? (Pure offline read-cache, ~1 day of work)
-- **Per-visitor PIN** — v1 or v2? (Schema supports it; UX call)
-- **YAML or JSON** for boundary import/export? — Recommend YAML (Phase 7)
-- **PIN hash location** — env var or `gruvax.settings`? — Recommend DB-seeded via bootstrap CLI (Phase 3)
-- **Position-estimator algorithm beyond §4.1** — now scoped as Phase 5 (Segment-Aware Position Precision); empirically determined via the extended A/B harness against owner's hand-curated boundaries
-- **INTERPOLATION §8.1 owner-input questions** — density vs uniform shelving, multi-prefix grouping, multi-value catalog handling, multi-label handling, confidence threshold for sub-cube vs cube-only — surfaced during Phase 3 admin sign-off and Phase 7 wizard inspection (multi-label handling now central to Phase 5)
+- **Catalog# exposure outcome (HIGH risk)** — discogsography agent's verification spike determines whether their P1 is small (already exposed) or larger (missing column + Discogs ingestion update). User to be informed when known.
+- **`user_id` location in the discogsography collection envelope** — header or top-level field; TBD by discogsography agent; surfaces in their `docs/specs/v2-gruvax-integration.md` artifact.
+- **Fingerprint cookie persistence across RPi reboot** — Chromium with `--user-data-dir` on persistent storage should preserve cookies. Verify during P3 implementation.
+- **Cookie storage on iOS Safari** (browser session profile-picker path) — Safari restricts cross-site cookies. Same-site is fine since all traffic is to `gruvax.lan`; verify nonetheless.
+- **Discogsography API rate limits in practice** — full sync of 3,000 items at `per_page=200` = 15 requests; manual "Sync all profiles now" hitting 4 profiles back-to-back ~ 60 requests in <1 min. Check against the rate-limit policy in the contract artifact.
 
 ### Active Todos
 
-- [ ] User approves ROADMAP.md
-- [ ] Run `/gsd:plan-phase 1` to decompose Phase 1 into plans
+- [ ] DGS-PREREQ ships (external)
+- [ ] User approves v2.0 ROADMAP.md
+- [ ] Run `/gsd-discuss-phase 1` once DGS-PREREQ closes
 
 ### Blockers
 
-None.
+**DGS-PREREQ (external)** — GRUVAX P1 cannot start until discogsography ships the contract artifact at `docs/specs/v2-gruvax-integration.md`. Briefed at `background/discogsography-v2-app-tokens-brief.md` (gitignored). The discogsography agent session is in flight.
 
 ### Quick Tasks Completed
 
@@ -142,13 +142,14 @@ None.
 ## Session Continuity
 
 **Last activity:** 2026-05-26
-**Prev:** 2026-05-25 (Phase 10 Plan 03 COMPLETE — traceability/count reconcile (docs-only). SEG-01..08 flipped from Pending to Complete in both body checkboxes and traceability table. REQUIREMENTS.md header corrected 81→84. ROADMAP.md traceability intro corrected 73→84. Internal consistency achieved: 84 total = 75 satisfied + 9 deferred. Commits: 5cb0589 (REQUIREMENTS.md), 501a63f (ROADMAP.md).)
-**Prev2:** 2026-05-25 (Phase 07 COMPLETE — all 8 plans; gap-closure 07-06/07/08 done; 07-VERIFICATION.md status=passed 18/18; owner-approved human-verify UAT.)
-**Next action:** Optional — `/gsd-verify-work 06` to clear the 6 Phase 06 MQTT human-verification items (needs live mosquitto + MQTT 5 wire inspection), or `/gsd-discuss-phase 999.1` to open the shelf-overview backlog phase, or `/gsd-complete-milestone` to archive v1.0 now.
+**Prev:** 2026-05-26 (v1.0 milestone archived: Phases 1–10, 50 plans, 10 days, ~36k LOC. 9 SPIDR-deferred reqs relocated to v2/Backlog. v2.0 milestone created via `/gsd-new-milestone v2.0 --reset-phase-numbers`. ROADMAP/REQUIREMENTS/STATE rewritten for v2.0 P1–P4 with 12 active reqs mapped 100%; AUTH-01 deferred to v2.2.)
+**Prev2:** 2026-05-25 (Phase 10 Plan 03 COMPLETE — traceability/count reconcile (docs-only). v1.0 internal consistency achieved: 84 total = 75 satisfied + 9 deferred.)
+**Next action:** Wait for DGS-PREREQ closure (discogsography v2 ships `docs/specs/v2-gruvax-integration.md` in their repo). Once that lands, read the artifact, reconcile contract drift against the refined spec, then run `/gsd-discuss-phase 1`.
 
 ---
-*State initialized: 2026-05-19 with roadmap creation*
+*State initialized: 2026-05-19 with roadmap creation. v2.0 milestone reset: 2026-05-26.*
 
 ## Operator Next Steps
 
-- Start the next milestone with /gsd-new-milestone
+- Wait for DGS-PREREQ closure (discogsography v2 in flight)
+- Once DGS-PREREQ closes: read the contract artifact, reconcile drift, run `/gsd-discuss-phase 1`
