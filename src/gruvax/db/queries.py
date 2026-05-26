@@ -26,6 +26,7 @@ Phase 8 — OBS-07 counter + staleness + diagnostics functions:
 
 from __future__ import annotations
 
+import json
 import re
 import time
 from typing import TYPE_CHECKING, Any
@@ -737,8 +738,6 @@ INSERT INTO gruvax.idempotency_keys (key, response_json)
 VALUES (%s, %s)
 ON CONFLICT (key) DO NOTHING
 """
-    import json
-
     await conn.execute(sql, (key, json.dumps(response)))
 
 

@@ -10,6 +10,7 @@ from pathlib import Path
 import sys
 
 from alembic import context
+import psycopg
 from sqlalchemy import event, pool
 from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config
 
@@ -132,8 +133,6 @@ async def _make_engine() -> AsyncEngine:
     # the schema creation is not inside a transaction that could be rolled back.
     # We bypass SQLAlchemy here to avoid the connect event firing and starting
     # an implicit transaction on the bootstrap connection.
-    import psycopg
-
     bootstrap_url = settings.DATABASE_URL.replace("postgresql+psycopg://", "postgresql://", 1)
     async with await psycopg.AsyncConnection.connect(
         bootstrap_url, autocommit=True

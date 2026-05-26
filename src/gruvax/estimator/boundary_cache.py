@@ -19,7 +19,7 @@ Phase 5 changes:
 from __future__ import annotations
 
 from dataclasses import dataclass
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, cast
 
 
 if TYPE_CHECKING:
@@ -101,9 +101,7 @@ class BoundaryCache:
             # psycopg fetchall() returns list[Any] in practice; the explicit cast is
             # safe because the SELECT column order matches the tuple shape exactly:
             # (unit_id:int, row:int, col:int, label:str, fraction:float).
-            from typing import cast as _cast  # local import to avoid module-level name clash
-
-            typed_rows = _cast(
+            typed_rows = cast(
                 "list[tuple[int, int, int, str, float]]",
                 overrides_raw,
             )
