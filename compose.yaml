@@ -43,6 +43,19 @@ services:
 
   api:
     image: ghcr.io/simplicityguy/gruvax:latest
+    # Build-or-pull: local dev (`just up` / `just build`, which use `--build`)
+    # builds this image from source and tags it as the `image:` name above;
+    # production deploys `docker compose pull` the same tag published by CI to
+    # GHCR. With both `build:` and `image:` present, a plain `docker compose up`
+    # also builds the image locally when it isn't already cached, instead of
+    # failing to pull an unpublished tag.
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        GIT_SHA: "${GIT_SHA:-unknown}"
+        BUILD_TIMESTAMP: "${BUILD_TIMESTAMP:-unknown}"
+        GRUVAX_ENV: "${GRUVAX_ENV:-production}"
     env_file:
       # Loads SESSION_SECRET (and any other secrets not listed below).
       # Explicit environment: entries below override values from .env.
