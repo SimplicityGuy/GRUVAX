@@ -45,7 +45,6 @@ async def _set_pin(pin: str) -> None:
         )
         await conn.commit()
 
-    print("PIN set successfully.")
 
 
 def main() -> None:

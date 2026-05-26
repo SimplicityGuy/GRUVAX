@@ -29,13 +29,12 @@ Topic architecture (ARCHITECTURE.md §"MQTT Topic Design" — LOCKED):
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 import json
 import logging
+from typing import TYPE_CHECKING, Any
 import uuid
-from datetime import UTC, datetime
-from typing import Any
 
-import aiomqtt
 from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 
@@ -48,6 +47,11 @@ from gruvax.mqtt.schemas import (
     TransitionSpec,
 )
 from gruvax.settings import settings
+
+
+if TYPE_CHECKING:
+    import aiomqtt
+
 
 logger = logging.getLogger(__name__)
 

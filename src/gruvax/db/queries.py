@@ -28,10 +28,14 @@ from __future__ import annotations
 
 import re
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import psycopg.errors
-from psycopg_pool import AsyncConnectionPool
+
+
+if TYPE_CHECKING:
+    from psycopg_pool import AsyncConnectionPool
+
 
 # ── Catalog-query detection regexes (D-12) ───────────────────────────────────
 # Leading digit: "4195", "19BOX019", "1SHOT-002"

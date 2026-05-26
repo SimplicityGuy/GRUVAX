@@ -53,12 +53,15 @@ from __future__ import annotations
 
 import asyncio
 import logging
+from typing import TYPE_CHECKING, Any
 import uuid
-from typing import Any
-
-import aiomqtt
 
 from gruvax.mqtt.publishers import fan_out_illuminate, publish_ambient
+
+
+if TYPE_CHECKING:
+    import aiomqtt
+
 
 logger = logging.getLogger(__name__)
 

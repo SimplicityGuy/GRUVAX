@@ -21,25 +21,30 @@ Router registration order (CRITICAL — Pitfall 3):
 from __future__ import annotations
 
 import asyncio
-import logging
 from collections import deque
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from datetime import UTC, datetime
+import logging
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
-from starlette.responses import Response
-from starlette.types import Scope
 
 from gruvax.db.pool import create_pool
 from gruvax.estimator.boundary_cache import BoundaryCache
 from gruvax.logging_config import configure_logging
 from gruvax.mqtt.client import connect_mqtt, disconnect_mqtt
 from gruvax.settings import settings
+
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from starlette.responses import Response
+    from starlette.types import Scope
+
 
 logger = logging.getLogger(__name__)
 

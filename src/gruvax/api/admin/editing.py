@@ -14,14 +14,18 @@ Security:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
 from gruvax.api.deps import get_event_bus, require_admin
-from gruvax.events.bus import EventBus
+
+
+if TYPE_CHECKING:
+    from gruvax.events.bus import EventBus
+
 
 logger = logging.getLogger(__name__)
 

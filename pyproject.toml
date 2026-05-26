@@ -70,29 +70,90 @@ pythonpath = ["."]
 deriving_xfail = true
 
 # ── ruff ────────────────────────────────────────────────────────────────────
+# Aligned with discogsography's rule set (line-length / target stay
+# GRUVAX-specific: 100 cols, Python 3.14).
 [tool.ruff]
 target-version = "py314"
 line-length = 100
 
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
+
 [tool.ruff.lint]
-select = ["E", "F", "W", "I", "UP", "B", "C4", "SIM", "RUF"]
-ignore = ["E501"]  # line-too-long handled by formatter
+select = [
+    "ARG",  # flake8-unused-arguments
+    "B",    # flake8-bugbear
+    "C4",   # flake8-comprehensions
+    "E",    # pycodestyle errors
+    "F",    # pyflakes
+    "I",    # isort
+    "PLC",  # pylint conventions
+    "PTH",  # flake8-use-pathlib
+    "RUF",  # ruff-specific rules
+    "S",    # bandit security rules
+    "SIM",  # flake8-simplify
+    "T20",  # flake8-print (no print statements)
+    "TCH",  # flake8-type-checking
+    "UP",   # pyupgrade
+    "W",    # pycodestyle warnings
+    "W191", # indentation contains tabs (explicit tab detection)
+]
+fixable = ["ALL"]
+unfixable = []
+ignore = [
+    "B008",   # do not perform function calls in argument defaults (FastAPI Depends pattern)
+    "C901",   # too complex
+    "E501",   # line too long, handled by ruff format
+    "S101",   # use of assert detected (allow assert statements)
+]
+
+[tool.ruff.lint.isort]
+lines-after-imports = 2
+combine-as-imports = true
+split-on-trailing-comma = true
+known-first-party = ["gruvax"]
+section-order = ["future", "standard-library", "third-party", "first-party", "local-folder"]
+force-sort-within-sections = true
 
 [tool.ruff.lint.per-file-ignores]
-"tests/**" = ["S101"]
-# FastAPI intentionally uses Depends() in function default arguments (B008).
-"src/gruvax/api/**" = ["B008"]
+"__init__.py" = ["F401"]
+# tests: pytest fixtures inject by-name (ARG), pylint conventions (helpers/setup),
+# hardcoded test passwords (S105/S106), /tmp use (S108), prints (T201).
+"tests/**/*.py" = ["ARG", "PLC", "S105", "S106", "S108", "T201"]
+# CLI scripts intentionally print user-facing output and may use /tmp.
+"scripts/*.py" = ["T201", "S108"]
+# FastAPI handlers commonly declare `request` / `cache` / `snapshot` as `Depends(...)`
+# args for DI side effects without dereferencing them in the body — intended pattern.
+"src/gruvax/api/**" = ["ARG001"]
+# SQLAlchemy event listeners have fixed-shape callbacks; some args required by interface.
+"src/gruvax/db/**" = ["ARG001"]
+# Alembic env/version files follow a fixed alembic shape — print() in env, fixed signatures.
+"migrations/**" = ["ARG001", "T201"]
 
 # ── mypy ────────────────────────────────────────────────────────────────────
+# Aligned with discogsography (python_version stays at GRUVAX's 3.14).
+# `strict = true` already implies disallow_untyped_defs / disallow_incomplete_defs /
+# check_untyped_defs / disallow_untyped_decorators / no_implicit_optional /
+# warn_redundant_casts / warn_unused_ignores / warn_no_return / warn_unreachable /
+# strict_equality — listed individually in discogsography's config but covered here
+# by the strict toggle. Additions below are flags NOT implied by strict.
 [tool.mypy]
 python_version = "3.14"
 plugins = ["pydantic.mypy"]
 mypy_path = "src"
 strict = true
 warn_unused_ignores = true
+warn_unused_configs = true
 warn_return_any = true
 namespace_packages = true
 explicit_package_bases = true
+# Exclude test files from type checking (overrides below also relax for tests/*).
+exclude = "^tests/"
 
 [[tool.mypy.overrides]]
 module = ["tests.*"]
@@ -117,6 +178,33 @@ omit = ["tests/*", "migrations/*", "scripts/*"]
 [tool.coverage.report]
 skip_covered = false
 show_missing = true
+exclude_lines = [
+    "def __repr__",
+    "if __name__ == .__main__.:",
+    "pragma: no cover",
+    "raise AssertionError",
+    "raise NotImplementedError",
+]
+
+# ── mdformat ─────────────────────────────────────────────────────────────────
+# Markdown formatter config — aligned with discogsography.
+[tool.mdformat]
+wrap = "no"           # Don't wrap lines (preserves intentional structure in planning docs)
+number = false        # Don't number headings
+end_of_line = "lf"    # Use Unix line endings
+
+# ── bandit ───────────────────────────────────────────────────────────────────
+# Single source of truth for bandit's skip list. The pre-commit hook + the
+# `Python Security` CI workflow pass `-s B608` explicitly today; the values
+# here additionally apply when bandit is invoked without those flags.
+[tool.bandit]
+exclude_dirs = [".venv", "tests", "venv", "*/.venv/*", "*/venv/*"]
+skips = [
+    "B101",  # assert_used (allow assert in tests + property-test invariants)
+    "B108",  # hardcoded_tmp_directory (CLI scripts may legitimately use /tmp)
+    "B608",  # hardcoded_sql_expressions (parameterized %s used for all user input;
+             # interpolated values are internal constants — same posture as discogsography)
+]
 
 # NOTE: Version reconciliation (2026-05-20)
 # aiomqtt: STACK.md/CLAUDE.md reference "3.x" but PyPI latest is 2.5.1 (no 3.x exists).

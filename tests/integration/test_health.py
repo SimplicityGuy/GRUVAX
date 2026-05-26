@@ -18,12 +18,13 @@ Tests:
 
 from __future__ import annotations
 
-import pytest
-import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
+import pytest
+import pytest_asyncio
 
 from gruvax.app import create_app
+
 
 try:
     from gruvax._version import GIT_SHA as _GIT_SHA

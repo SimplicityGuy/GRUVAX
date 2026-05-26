@@ -20,14 +20,18 @@ All SQL uses ``%s`` placeholders — no f-string interpolation (T-07-SC).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import yaml
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
+import yaml
 
 from gruvax.api.deps import get_boundary_cache, get_pool, require_admin
-from gruvax.estimator.boundary_cache import BoundaryCache
+
+
+if TYPE_CHECKING:
+    from gruvax.estimator.boundary_cache import BoundaryCache
+
 
 logger = logging.getLogger(__name__)
 

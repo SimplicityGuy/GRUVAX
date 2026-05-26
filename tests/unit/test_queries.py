@@ -16,6 +16,7 @@ import pytest
 
 from gruvax.db.queries import DID_YOU_MEAN_THRESHOLD, did_you_mean_query, is_catalog_query
 
+
 # ── is_catalog_query truth table (D-12) ───────────────────────────────────────
 
 

@@ -24,7 +24,7 @@ from __future__ import annotations
 import asyncio
 import logging
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request
 from fastapi.responses import JSONResponse
@@ -32,10 +32,14 @@ from fastapi.responses import JSONResponse
 from gruvax.api.deps import get_collection_snapshot, get_pool, get_segment_cache
 from gruvax.db.queries import get_release_for_locate, increment_selection_count
 from gruvax.estimator.algorithm import locate
-from gruvax.estimator.collection_snapshot import CollectionSnapshot
-from gruvax.estimator.contract import CubeRef, SubInterval
-from gruvax.estimator.segment_cache import SegmentCache
 from gruvax.middleware.timing import record_slow_query
+
+
+if TYPE_CHECKING:
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot
+    from gruvax.estimator.contract import CubeRef, SubInterval
+    from gruvax.estimator.segment_cache import SegmentCache
+
 
 logger = logging.getLogger(__name__)
 

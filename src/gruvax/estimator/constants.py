@@ -20,6 +20,7 @@ from __future__ import annotations
 
 from gruvax.estimator.contract import CUBE_ONLY_CONFIDENCE
 
+
 # ── Threshold constants ────────────────────────────────────────────────────────
 
 # Phase 5: segment-aware estimator version string (SEG-07)

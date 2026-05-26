@@ -15,8 +15,8 @@ Design decisions:
 
 from __future__ import annotations
 
-import logging
 from collections import deque
+import logging
 from typing import Any
 
 import pytest

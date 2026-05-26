@@ -22,6 +22,7 @@ from typing import TYPE_CHECKING
 
 from gruvax.estimator.normalize import parse_key
 
+
 if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryCache
     from gruvax.estimator.segment_cache import SegmentCache

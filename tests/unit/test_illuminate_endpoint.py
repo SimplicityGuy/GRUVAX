@@ -14,8 +14,9 @@ from __future__ import annotations
 from typing import Any
 from unittest.mock import AsyncMock, patch
 
-import pytest
 from httpx import ASGITransport, AsyncClient
+import pytest
+
 
 # ── shared body fixture ───────────────────────────────────────────────────────
 

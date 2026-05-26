@@ -17,6 +17,7 @@ import yaml
 
 from gruvax.io.boundary_yaml import CutPointEntry, parse_yaml_boundaries, serialize_boundaries_yaml
 
+
 # ── Fixture data ──────────────────────────────────────────────────────────────
 
 VALID_YAML = textwrap.dedent("""\

@@ -19,8 +19,9 @@ import os
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from httpx import ASGITransport, AsyncClient
+import pytest
+
 
 # ── Shared test constants ─────────────────────────────────────────────────────
 

@@ -20,13 +20,14 @@ from __future__ import annotations
 import logging
 from typing import Any
 
-import pytest
-import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
+import pytest
+import pytest_asyncio
 
 from gruvax.api.deps import require_admin
 from gruvax.app import create_app
+
 
 # ── Module-scoped client (authenticated via dependency_overrides) ──────────────
 

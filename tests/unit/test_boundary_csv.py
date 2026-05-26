@@ -16,6 +16,7 @@ import pytest
 from gruvax.io.boundary_csv import REQUIRED_HEADERS, parse_csv_boundaries
 from gruvax.io.boundary_yaml import CutPointEntry
 
+
 # ── Fixture CSV data ──────────────────────────────────────────────────────────
 
 FIVE_ROW_CSV = (

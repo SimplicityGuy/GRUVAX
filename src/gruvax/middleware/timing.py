@@ -23,9 +23,10 @@ Usage in route handlers (search.py, locate.py — Plan 03)::
 
 from __future__ import annotations
 
-import time
 from collections import deque
+import time
 from typing import Any
+
 
 # Per-endpoint SLO thresholds in milliseconds (D-09).
 # /api/search: page total (framework + DB) must be < 200 ms

@@ -18,13 +18,14 @@ Phase 2 tests (02-01 §Task 3):
 
 from __future__ import annotations
 
-import pytest
-import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
+import pytest
+import pytest_asyncio
 
 from gruvax.app import create_app
 from gruvax.estimator.contract import CUBE_ONLY_CONFIDENCE
+
 
 # ── Seed constants (stable for the synthetic fixture) ────────────────────────
 

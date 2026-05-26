@@ -19,16 +19,21 @@ D-01 / SC5: The publish is fire-and-forget via asyncio.create_task.
 from __future__ import annotations
 
 import asyncio
-import logging
-from collections.abc import Coroutine
 from datetime import UTC, datetime
-from typing import Any
+import logging
+from typing import TYPE_CHECKING, Any
 
-import aiomqtt
 from fastapi import APIRouter, Request
 from pydantic import BaseModel
 
 from gruvax.mqtt import lifecycle, publishers
+
+
+if TYPE_CHECKING:
+    from collections.abc import Coroutine
+
+    import aiomqtt
+
 
 logger = logging.getLogger(__name__)
 

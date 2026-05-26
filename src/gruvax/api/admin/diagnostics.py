@@ -17,12 +17,11 @@ Phase 8: Observability + Deployment Hardening (OBS-05, OBS-06, OBS-07)
 
 from __future__ import annotations
 
-import logging
 from collections import deque
-from typing import Any
+import logging
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, Request
-from psycopg_pool import AsyncConnectionPool
 
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.db.queries import (
@@ -31,6 +30,11 @@ from gruvax.db.queries import (
     get_top_searched,
     reset_record_stats,
 )
+
+
+if TYPE_CHECKING:
+    from psycopg_pool import AsyncConnectionPool
+
 
 logger = logging.getLogger(__name__)
 

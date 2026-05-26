@@ -14,6 +14,7 @@ from __future__ import annotations
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
 from gruvax.estimator.constants import SEGMENT_ESTIMATOR_VERSION
 
+
 # ── BoundaryRow shape tests ───────────────────────────────────────────────────
 
 

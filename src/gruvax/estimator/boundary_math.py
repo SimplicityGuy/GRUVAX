@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING
 
 from gruvax.estimator.normalize import parse_key
 
+
 if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryRow
     from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow

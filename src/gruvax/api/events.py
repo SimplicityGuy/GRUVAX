@@ -13,13 +13,19 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
-from collections.abc import AsyncIterator
+from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request
 from sse_starlette import EventSourceResponse, ServerSentEvent
 
 from gruvax.api.deps import get_event_bus
-from gruvax.events.bus import EventBus
+
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
+
+    from gruvax.events.bus import EventBus
+
 
 logger = logging.getLogger(__name__)
 

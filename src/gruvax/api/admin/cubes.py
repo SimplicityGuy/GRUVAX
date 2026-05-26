@@ -41,7 +41,7 @@ Phase 5 changes (05-04):
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
@@ -55,11 +55,15 @@ from gruvax.api.deps import (
     get_segment_cache,
     require_admin,
 )
-from gruvax.estimator.boundary_cache import BoundaryCache
 from gruvax.estimator.boundary_math import count_records_in_bin, suggest_midpoint
-from gruvax.estimator.collection_snapshot import CollectionSnapshot
-from gruvax.estimator.segment_cache import SegmentCache
-from gruvax.events.bus import EventBus
+
+
+if TYPE_CHECKING:
+    from gruvax.estimator.boundary_cache import BoundaryCache
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot
+    from gruvax.estimator.segment_cache import SegmentCache
+    from gruvax.events.bus import EventBus
+
 
 logger = logging.getLogger(__name__)
 

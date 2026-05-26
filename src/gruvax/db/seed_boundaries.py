@@ -19,8 +19,8 @@ Phase 5 changes:
 from __future__ import annotations
 
 import asyncio
-import sys
 from pathlib import Path
+import sys
 from typing import Any
 
 import yaml
@@ -112,20 +112,14 @@ async def load_boundaries(yaml_path: Path) -> None:
             n = await _upsert_cubes(conn, unit["unit_id"], unit["cubes"])
             total += n
 
-    print(f"seed_boundaries: loaded {total} cube boundary rows from {yaml_path}")
 
 
 def main() -> None:
     if len(sys.argv) != 2:
-        print(
-            "Usage: python -m gruvax.db.seed_boundaries <path/to/boundaries.yaml>",
-            file=sys.stderr,
-        )
         sys.exit(1)
 
     yaml_path = Path(sys.argv[1])
     if not yaml_path.exists():
-        print(f"Error: {yaml_path} not found", file=sys.stderr)
         sys.exit(1)
 
     asyncio.run(load_boundaries(yaml_path))

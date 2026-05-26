@@ -6,15 +6,18 @@ app factory and the routers that depend on app.state.
 
 from __future__ import annotations
 
-import secrets
 from datetime import UTC, datetime, timedelta
-from typing import Any
+import secrets
+from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, HTTPException, Request, status
 
-from gruvax.estimator.boundary_cache import BoundaryCache
-from gruvax.estimator.collection_snapshot import CollectionSnapshot
-from gruvax.estimator.segment_cache import SegmentCache
+
+if TYPE_CHECKING:
+    from gruvax.estimator.boundary_cache import BoundaryCache
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot
+    from gruvax.estimator.segment_cache import SegmentCache
+    from gruvax.events.bus import EventBus
 
 
 def get_pool(request: Request) -> Any:
@@ -118,7 +121,6 @@ def get_event_bus(request: Request) -> Any:
         async def stream_events(bus: EventBus = Depends(get_event_bus)) -> ...:
             ...
     """
-    from gruvax.events.bus import EventBus  # local import avoids circular dep
 
     bus: EventBus | None = getattr(request.app.state, "event_bus", None)
     if bus is None:

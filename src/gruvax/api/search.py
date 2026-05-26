@@ -28,6 +28,7 @@ from gruvax.api.deps import get_pool
 from gruvax.db.queries import increment_search_count, search_collection
 from gruvax.middleware.timing import record_slow_query
 
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["search"])

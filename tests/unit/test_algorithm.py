@@ -46,9 +46,14 @@ from gruvax.estimator.algorithm import (
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
 from gruvax.estimator.constants import POSITION_HALF_WIDTH
-from gruvax.estimator.contract import CUBE_ONLY_CONFIDENCE as CONTRACT_CONFIDENCE
-from gruvax.estimator.contract import CubeRef, LocateResult, SubInterval
+from gruvax.estimator.contract import (
+    CUBE_ONLY_CONFIDENCE as CONTRACT_CONFIDENCE,
+    CubeRef,
+    LocateResult,
+    SubInterval,
+)
 from gruvax.estimator.segment_cache import SegmentCache
+
 
 # FIXTURE_DIR points to repo-root fixtures/ — same path as tests/conftest.py uses
 FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures"

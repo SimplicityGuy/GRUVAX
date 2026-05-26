@@ -18,11 +18,13 @@ Phase 5 changes:
 
 from __future__ import annotations
 
-from collections.abc import Sequence
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
+    from collections.abc import Sequence
+
     from psycopg import AsyncConnection
     from psycopg_pool import AsyncConnectionPool
 

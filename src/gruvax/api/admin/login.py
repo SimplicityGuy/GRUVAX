@@ -40,6 +40,7 @@ from gruvax.auth.sessions import (
     revoke_session,
 )
 
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["admin-auth"])

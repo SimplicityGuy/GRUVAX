@@ -24,6 +24,7 @@ from limits import parse as parse_limit
 from limits.storage import MemoryStorage
 from limits.strategies import FixedWindowRateLimiter
 
+
 # Shared in-process storage — ``limiter.reset()`` used by tests to clear state.
 # Rate-limit key is the direct socket peer IP (``request.client.host``), which
 # is correct for GRUVAX's single-host home-LAN deployment with NO reverse proxy.

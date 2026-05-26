@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.db.queries import load_settings_cache
 
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter(tags=["admin-settings"])

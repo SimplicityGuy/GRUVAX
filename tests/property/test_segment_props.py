@@ -13,11 +13,11 @@ Per-Requirement coverage:
 
 from __future__ import annotations
 
+from hypothesis import given, settings, strategies as st
 import pytest
-from hypothesis import given, settings
-from hypothesis import strategies as st
 
 from fixtures.synth_collection import make_multi_label_bin, make_singleton, make_straddle
+
 
 # ── Session-scoped synth fixtures ─────────────────────────────────────────────
 

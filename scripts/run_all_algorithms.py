@@ -37,9 +37,10 @@ from __future__ import annotations
 
 import argparse
 import glob
+from pathlib import Path
 import sys
 import time
-from pathlib import Path
+
 
 # ── Standalone-run import shim ────────────────────────────────────────────────
 # Must appear BEFORE any `from fixtures.*` or `from gruvax.*` imports.
@@ -55,6 +56,7 @@ from gruvax.estimator.algorithm import locate, locate_cube_only  # noqa: E402
 from gruvax.estimator.boundary_cache import BoundaryCache  # noqa: E402
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow  # noqa: E402
 from gruvax.estimator.segment_cache import SegmentCache  # noqa: E402
+
 
 # POS-03 budget: aggregate p95 per shape must stay under this threshold.
 P95_BUDGET_MS: float = 50.0

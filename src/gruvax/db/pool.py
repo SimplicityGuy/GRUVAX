@@ -11,13 +11,19 @@ This is the sole place in application code that handles the dev/prod schema
 branch; everything else uses ``gruvax.v_collection`` unqualified.
 """
 
-from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
+from typing import TYPE_CHECKING
 
-from psycopg import AsyncConnection
 from psycopg_pool import AsyncConnectionPool
 
 from gruvax.settings import settings
+
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncGenerator
+
+    from psycopg import AsyncConnection
+
 
 # Re-export for convenience.
 __all__ = ["create_pool", "get_pool_context"]

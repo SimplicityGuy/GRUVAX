@@ -38,7 +38,8 @@ CUBE-10 / D-02 RECONCILIATION (kept here for traceability):
 
 from __future__ import annotations
 
-from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
+from typing import TYPE_CHECKING
+
 from gruvax.estimator.constants import (
     POSITION_HALF_WIDTH,
     SEGMENT_ESTIMATOR_VERSION,
@@ -52,7 +53,12 @@ from gruvax.estimator.contract import (
     SubInterval,
 )
 from gruvax.estimator.normalize import parse_key
-from gruvax.estimator.segment_cache import SegmentCache
+
+
+if TYPE_CHECKING:
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
+    from gruvax.estimator.segment_cache import SegmentCache
+
 
 # Re-export constants so tests can import them from algorithm.py
 __all__ = [

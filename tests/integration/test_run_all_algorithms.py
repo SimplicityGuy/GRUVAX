@@ -19,6 +19,7 @@ import pytest
 
 from scripts.run_all_algorithms import P95_BUDGET_MS, run_all_algorithms
 
+
 # ── Shared fixture: run harness once per session ──────────────────────────────
 
 

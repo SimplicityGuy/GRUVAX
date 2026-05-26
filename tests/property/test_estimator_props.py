@@ -18,14 +18,14 @@ _load_snapshot / _load_rows seams from synth_collection.py).
 
 from __future__ import annotations
 
+from hypothesis import HealthCheck, given, settings, strategies as st
 import pytest
-from hypothesis import HealthCheck, given, settings
-from hypothesis import strategies as st
 
 from fixtures.synth_collection import make_multi_prefix, make_singleton, make_uniform_dense
 from gruvax.estimator.algorithm import locate, locate_by_segment
 from gruvax.estimator.normalize import parse_key
 from gruvax.estimator.segment_cache import SegmentCache
+
 
 # ── Session-scoped synth fixtures (no DB) ────────────────────────────────────
 
