@@ -37,8 +37,12 @@ def upgrade() -> None:
     # pg_trgm: attempt silently; app degrades if unavailable (Pitfall E).
     # Insufficient privileges or a missing extension are caught and ignored so
     # the migration chain still succeeds; SRCH-07/08 degrade gracefully.
+    # SCHEMA public is required so the extension lives outside `gruvax`; otherwise
+    # alembic's search_path lands it inside `gruvax`, and DROP SCHEMA gruvax in the
+    # 0001 downgrade fails the CI round-trip with "extension pg_trgm depends on
+    # schema gruvax" (pg_trgm is a shared/public extension by intent).
     with contextlib.suppress(Exception):
-        op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm")
+        op.execute("CREATE EXTENSION IF NOT EXISTS pg_trgm SCHEMA public")
 
 
 def downgrade() -> None:
