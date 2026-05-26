@@ -156,7 +156,7 @@ the test comment at test lines 564-573 into a code comment), and ensure the
 `boundary_changed` SSE handler reloads the cache before serving the next admin
 write — or read boundaries for the validation step from a guaranteed-fresh source.
 
-### WR-04: `validate_contiguity` emits the casefolded label in the user-facing error message
+### WR-04 [RESOLVED in commit 3598c22 (Phase 5 PR #8), verified 2026-05-26]: `validate_contiguity` emits the casefolded label in the user-facing error message
 
 **File:** `src/gruvax/api/admin/validation.py:246-257`
 
@@ -178,6 +178,25 @@ the mangled casing is uncaught.
 **Fix:** Track the original-case label alongside the casefold key —
 `label_display: dict[str, str]` mapping casefold → first-seen original-case label
 — and format with `label=label_display[lk]`.
+
+**Resolution (verified 2026-05-26 via quick task 260526-d6s):**
+
+The prescribed fix shipped as part of commit `3598c22` (Phase 5 squash-merge,
+PR #8). On `main` HEAD:
+
+- `src/gruvax/api/admin/validation.py` builds
+  `label_display: dict[str, str]` mapping each casefold key to the
+  first-seen original-case label.
+- The emission site returns
+  `_CONTIGUITY_MSG_TEMPLATE.format(label=label_display[lk])`, never
+  `format(label=lk)`.
+- `tests/integration/test_segment_api.py::test_put_cut_scatter_rejected_contiguity_error`
+  now asserts BOTH `"Blue Note" in raw_msg` AND
+  `"blue note" not in raw_msg`, locking the casing behavior against
+  regression in both directions.
+
+The bug an owner would have seen ("split blue note across non-adjacent
+bins") is no longer producible by the validation path.
 
 ## Info
 
