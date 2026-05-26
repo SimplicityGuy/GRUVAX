@@ -16,16 +16,33 @@ The end-to-end search → cube highlight loop ships and is verified. Owner can s
 
 Codebase at v1.0 close: ~36k LOC across `src/`, `frontend/src/`, `tests/`. Stack: Python 3.13 + FastAPI 0.136 + psycopg 3.2 async + SQLAlchemy 2.0 async + Alembic 1.18 on the backend; React 19 + Vite 8 + TanStack Query + Zustand + GSAP on the frontend; eclipse-mosquitto:latest for the MQTT broker; Docker Compose for deployment; Raspberry Pi OS Trixie + labwc + Chromium for the kiosk.
 
-## Next Milestone Goals
+## Current Milestone: v2.0 Multi-User Collections
 
-Not yet scoped. Start with `/gsd-new-milestone` to define requirements and roadmap.
+**Goal:** Re-architect GRUVAX from direct-DB reads of discogsography to an HTTP-API integration with per-user collection authorization (scoped PATs), enabling multiple household members to each have their own collection on their own RPi kiosks, with one central GRUVAX server holding all profiles.
 
-Likely candidates (see [`MILESTONES.md`](./MILESTONES.md#deferred-to-v1x--v2) for the full carry-forward list):
+**Target features (13 reqs in scope, walking-skeleton-first):**
 
-- **Real LED hardware end-to-end** (ESP32 / Arduino + WS2812B firmware + MQTT subscriber) — the natural follow-up since the Phase 6 contract is already built and waiting. Would also close the 6 deferred Phase 6 MQTT 5 wire-level checkpoints (live-broker MessageExpiryInterval, brightness ceiling on the wire, all-off idempotency, TTL re-publish timing, concurrent-diagnostic guard).
-- **Resilience + privacy floor** (SRCH-09, OFF-01..04, PRIV-01..04) — currently relocated to `## v2 / Backlog` in REQUIREMENTS.md (regenerated each milestone). Re-scope at next milestone kickoff if multi-user / per-visitor capabilities become priorities. PRIV-02/03 are *de-facto* satisfied by Phase 8's release_id-only `record_stats`; formal scoping is the open question.
-- **Phase 999.1** (admin shelf-overview occupancy) — small UI enhancement using existing `GET /api/admin/cubes` (`is_empty`, `fill_level`) data.
-- **Phase 999.2** (LED party / sound-reactive modes) — gated on the hardware milestone landing.
+- **P1 — Walking skeleton** — API client (httpx + paged + 401/403/429/5xx retry) + single-profile sync (staging-swap with advisory lock); retire `gruvax.v_collection` and the read-only Postgres grant; positioning runs off the local `profile_collection` cache; staleness reads `profiles.last_sync_at` (single profile).
+- **P2 — Multi-profile** — Full `profiles` table with Fernet-encrypted PAT storage; `profile_id NOT NULL` migration across 7 v1 tables (`cube_boundaries`, `segments`, `change_log`, `change_sets`, `settings`, `record_stats`, `ambient_baseline`); profile manager admin UI; browser session profile picker with auto-bind on 1-profile-only; per-profile SSE channel.
+- **P3 — Devices + pairing** — `devices` + `pairing_codes` schemas; HttpOnly fingerprint cookie; 4-digit code pairing flow (5-min TTL, auto-reroll on expiry, reuses v1 in-app numeric keypad); devices admin UI with pending/paired/revoked groupings + drawer (rename/change-profile/unbind/revoke).
+- **P4 — Polish** — Nightly background sync (24h @ 03:00 local default, configurable 24h/12h/6h/off); 401 reauth UI (profile-list badge + kiosk inline banner); per-profile `/admin/diagnostics` cards; profile soft-delete cache-purge background task; "Sync now" progress + completion toast.
+
+**External prereq (out of milestone, in flight):** discogsography v2 ships first — `app_tokens` table + catalog# verification/exposure + `require_app_token` dependency + scoped settings UI. Briefed at `background/discogsography-v2-app-tokens-brief.md` (gitignored). GRUVAX P1 does not start until discogsography ships the contract artifact at `docs/specs/v2-gruvax-integration.md` in their repo.
+
+**Deferred (NOT in v2.0):**
+
+- **Per-profile self-connect PAT** (invite-token model so members paste own token, owner never sees it) → v2.1
+- **OAuth2 device-authorization grant** (no PAT crosses the household) → v2.2
+- **QR-code RPi pairing** (kiosk shows QR, admin scans on phone) → v2.1
+- **9 SPIDR-deferred v1 reqs** (SRCH-09, OFF-01..04, PRIV-01..04) → v2.1 resilience + privacy milestone
+- **Phase 999.1** (shelf-overview mini-Kallax cube fill/occupancy) → Backlog
+- **Phase 999.2** (LED party / sound-reactive modes) → Backlog (gated on hardware milestone)
+- **Real LED hardware end-to-end** (ESP32 + WS2812B firmware) → Independent hardware milestone
+
+**Source artifacts:**
+
+- Refined design spec: [`docs/superpowers/specs/2026-05-26-v2-multi-user-collections-refined.md`](../docs/superpowers/specs/2026-05-26-v2-multi-user-collections-refined.md)
+- Pre-synthesized intel: [`.planning/intel/SYNTHESIS.md`](./intel/SYNTHESIS.md), `decisions.md`, `requirements.md`, `constraints.md`, `context.md`
 
 ## Context
 
@@ -104,4 +121,4 @@ This document evolves at phase transitions and milestone boundaries.
 5. REQUIREMENTS.md regenerated fresh for the next milestone
 
 ---
-*Last updated: 2026-05-26 at v1.0 milestone close. v1.0 MVP shipped with 10 phases (1–10), 50 plans, ~36k LOC, 75/75 in-scope requirements satisfied (9 SPIDR-deferred items formally relocated to v2/Backlog). Full archive: [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMAP.md), [`milestones/v1.0-REQUIREMENTS.md`](./milestones/v1.0-REQUIREMENTS.md), [`milestones/v1.0-MILESTONE-AUDIT.md`](./milestones/v1.0-MILESTONE-AUDIT.md). Project history: [`MILESTONES.md`](./MILESTONES.md).*
+*Last updated: 2026-05-26 at v2.0 milestone kickoff. v1.0 MVP shipped 2026-05-26 with 10 phases, 50 plans, ~36k LOC, 75/75 in-scope requirements satisfied (9 SPIDR-deferred items formally relocated to v2/Backlog). v2.0 introduces multi-user collections via discogsography's HTTP API + scoped PATs (13 reqs across 4 phases; phase numbering reset per `--reset-phase-numbers`). Full v1.0 archive: [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMAP.md), [`milestones/v1.0-REQUIREMENTS.md`](./milestones/v1.0-REQUIREMENTS.md), [`milestones/v1.0-MILESTONE-AUDIT.md`](./milestones/v1.0-MILESTONE-AUDIT.md). Project history: [`MILESTONES.md`](./MILESTONES.md).*
