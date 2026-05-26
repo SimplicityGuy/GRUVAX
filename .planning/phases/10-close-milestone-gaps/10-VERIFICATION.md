@@ -1,9 +1,11 @@
 ---
 phase: 10-close-milestone-gaps
 verified: 2026-05-25T22:30:00Z
-status: human_needed
+status: passed
 score: 10/10 must-haves verified
 overrides_applied: 0
+human_verification_resolved: 2026-05-25
+human_verification_outcome: "Resolved via 10-HUMAN-UAT.md. Item 2 (highlight-follows-record after a real segment edit, D-05/D-06) PASSED live on the kiosk — highlight relocated, shimmer cleared on commit, grid refreshed. Item 1 (malformed-frame try/catch, IN-02) SKIPPED as defensive-only: verified present in code review (two console.error catch blocks), image builds clean, not practically triggerable from the browser console (closure-scoped EventSource; reload wipes a console-set override; backend now only emits the correct shape) — its happy path is exercised by Item 2."
 human_verification:
   - test: "In a browser with the dev server running, open browser DevTools console, connect to the kiosk view at /kiosk, inject a malformed boundary_changed SSE frame (e.g., dispatch a MessageEvent with data containing a mis-keyed payload like {wrong_key: []}), and confirm console.error is emitted with '[SSE] boundary_changed parse error — degrading gracefully' and the page does not crash."
     expected: "console.error fires with the degrading-gracefully message. Subsequent real SSE frames (boundary_changed / admin_editing) continue to process normally. No uncaught TypeError in the console."
@@ -17,7 +19,7 @@ human_verification:
 
 **Phase Goal:** Close the two confirmed cross-phase integration blockers (INT-A: segment-edit SSE payload shape; INT-B: undo re-derive + publish) and the documentation/traceability drift surfaced by the v1.0 milestone audit, so the v1.0 admin-edit live-propagation seams work end-to-end and requirement traceability reflects reality.
 **Verified:** 2026-05-25T22:30:00Z
-**Status:** human_needed
+**Status:** passed (human verification resolved 2026-05-25 via 10-HUMAN-UAT.md — live highlight-follows-record confirmed; defensive try/catch item skipped as code-verified)
 **Re-verification:** No — initial verification
 
 ---
