@@ -84,6 +84,13 @@ jobs:
           uv run alembic downgrade base
           uv run alembic upgrade head
 
+      # Seed cube_boundaries from the canonical fixture so tests have the (1,0,0)..
+      # baseline rows the boundary-editor / locate / segment tests assume. The
+      # compose runbook seeds this on api-container startup, but the test job runs
+      # the app in-process via LifespanManager and skips that startup hook.
+      - name: Seed cube_boundaries
+        run: uv run python -m gruvax.db.seed_boundaries fixtures/boundaries.yaml
+
       # Full test suite (benchmarks are skipped by addopts --benchmark-disable)
       - name: Test suite
         run: uv run pytest tests/ -q --tb=short
