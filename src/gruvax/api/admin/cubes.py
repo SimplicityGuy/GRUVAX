@@ -42,11 +42,13 @@ from __future__ import annotations
 
 import logging
 from typing import TYPE_CHECKING, Any
+import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from gruvax.api.admin.validation import validate_contiguity
 from gruvax.api.deps import (
     get_boundary_cache,
     get_collection_snapshot,
@@ -55,7 +57,18 @@ from gruvax.api.deps import (
     get_segment_cache,
     require_admin,
 )
+from gruvax.db.queries import (
+    check_idempotency,
+    cleanup_idempotency,
+    cube_exact_match,
+    fetch_current_boundary,
+    find_boundary_near_misses,
+    store_idempotency,
+    write_boundary,
+    write_history_row,
+)
 from gruvax.estimator.boundary_math import count_records_in_bin, suggest_midpoint
+from gruvax.estimator.normalize import parse_key
 
 
 if TYPE_CHECKING:
@@ -262,8 +275,6 @@ async def put_cube_boundary(
     so the frontend can distinguish phantom errors without unwrapping a nested
     ``detail`` object.
     """
-    from gruvax.db.queries import cube_exact_match, find_boundary_near_misses
-
     first_label = body.first_label or ""
     first_catalog = body.first_catalog or ""
 
@@ -287,11 +298,7 @@ async def put_cube_boundary(
             )
 
     # ── Step 2: DB write (boundary update + history log) ─────────────────────
-    import uuid as _uuid
-
-    from gruvax.db.queries import fetch_current_boundary, write_boundary, write_history_row
-
-    change_set_id = str(_uuid.uuid4())
+    change_set_id = str(uuid.uuid4())
     new_first_label = first_label or None
     new_first_catalog = first_catalog or None
 
@@ -394,9 +401,6 @@ async def validate_boundary(
 
     This endpoint performs NO INSERT/UPDATE/DELETE (T-03-14, ADMN-07).
     """
-    from gruvax.api.admin.validation import validate_contiguity
-    from gruvax.db.queries import cube_exact_match, find_boundary_near_misses
-
     nominal_capacity = _get_nominal_capacity(request)
 
     results: list[dict[str, Any]] = []
@@ -557,8 +561,6 @@ async def suggest_cube_midpoint(
     Response on success: ``{suggestion: {release_id, label, catalog_number}}``
     Response when no midpoint: ``{suggestion: null}``
     """
-    from gruvax.estimator.normalize import parse_key
-
     # Get the SegmentBin for the requested cube
     current_bin = segment_cache.get_bin(body.unit_id, body.row, body.col)
     if current_bin is None or not current_bin.segments:
@@ -702,19 +704,6 @@ async def bulk_write_cubes(
     Returns:
       ``{change_set_id: str, applied: int}``
     """
-    import uuid as _uuid
-
-    from gruvax.db.queries import (
-        check_idempotency,
-        cleanup_idempotency,
-        cube_exact_match,
-        fetch_current_boundary,
-        find_boundary_near_misses,
-        store_idempotency,
-        write_boundary,
-        write_history_row,
-    )
-
     # ── Idempotency short-circuit (Pitfall 7) ────────────────────────────────
     idempotency_key = request.headers.get("Idempotency-Key")
     if idempotency_key:
@@ -749,7 +738,7 @@ async def bulk_write_cubes(
                 )
 
     # ── Single atomic transaction: write boundary + history for all cubes ────
-    change_set_id = str(_uuid.uuid4())
+    change_set_id = str(uuid.uuid4())
     response_body: dict[str, Any] = {
         "change_set_id": change_set_id,
         "applied": len(body.updates),
