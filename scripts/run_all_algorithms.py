@@ -144,7 +144,7 @@ def _score_shape(
         cube_result = locate_cube_only(
             release_id=release_id,
             label=label,
-            catalog_number=catalog_number,
+            _catalog_number=catalog_number,
             segment_cache=segment_cache,
             snapshot=snapshot,
         )
@@ -297,7 +297,7 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
             cres = locate_cube_only(
                 release_id=rec.release_id,
                 label=rec.label,
-                catalog_number=rec.catalog_number,
+                _catalog_number=rec.catalog_number,
                 segment_cache=segment_cache,
                 snapshot=snapshot,
             )
