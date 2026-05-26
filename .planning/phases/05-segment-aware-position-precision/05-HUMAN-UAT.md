@@ -3,7 +3,7 @@ status: complete
 phase: 05-segment-aware-position-precision
 source: [05-VERIFICATION.md]
 started: 2026-05-23T04:40:00Z
-updated: 2026-05-23T18:59:54Z
+updated: 2026-05-26T00:00:00Z
 superseded_by: 05-UAT.md
 ---
 
@@ -23,11 +23,13 @@ session via the running stack (Playwright + API); the rest remain for owner test
 
 ### 1. Segment drag — redistribute, 5% floor, live %
 expected: Dragging a yellow handle in BinWidthEditor (e.g. /admin/cubes/1/0/1) redistributes the two adjacent segments, sum stays constant, neither drops below 5%, legend percentages update live, dragged segments show the OVERRIDE accent + "OVERRIDE N% · auto was M%" chip.
-result: partial — editor RENDER confirmed (3-label bin Blue Note 48% / Capitol 5% / Columbia 47% = 100%, AUTO chips with row counts, 5% floor display, drag handles, live legend, "widths total 100%"). Tactile drag redistribution during pointer-drag not driven automatically — owner to confirm feel + live update.
+result: pass
+note: Superseded by 05-UAT.md Test 1 (pass, 2026-05-23) — tactile drag redistribution confirmed live by owner. This file's earlier "partial" reflected the pre-owner-driven Playwright session; resolved when owner drove the drag.
 
 ### 2. Drift chip resync (override drifts >3pp from auto)
 expected: Chip switches to "OVERRIDE N% · auto now M% · review" with caution icon and a one-tap "reset to M%" that RESYNCS the override (does not remove it).
-result: pending
+result: pass
+note: Superseded by 05-UAT.md Test 2 (pass, 2026-05-23). Authoritative results in 05-UAT.md.
 
 ### 3. Insert-cut: autocomplete + NEW + phantom USE-ANYWAY
 expected: '＋ insert cut' opens RecordPickerSheet; label + catalog autocomplete populate; a phantom catalog triggers the near-miss block with USE ANYWAY (force); on commit the new bin appears WITHOUT a manual refresh and settles yellow → normal; renumbering is reflected.
@@ -35,25 +37,29 @@ result: PASSED (this session) — label dropdown populates (Apple…Saturn), cat
 
 ### 4. Straddle fade caption (label continues into next bin)
 expected: A segment whose label continues into the next bin shows the right-edge fade mask + "↪ LABEL continues in BIN n+1" caption.
-result: pending — the bin inspected this session did not straddle; owner to confirm on a straddling bin.
+result: pass
+note: Superseded by 05-UAT.md Test 4 (pass, 2026-05-23, verified on a straddling bin — Blue Note across bins 1→2). Authoritative results in 05-UAT.md.
 
 ### 5. Diff-preview → COMMIT → REVERT round-trip
 expected: PREVIEW CHANGES shows cut-point/insert/override (and orphaned-override) rows; COMMIT applies; REVERT via History restores the prior state end-to-end.
-result: pending
+result: pass
+note: Superseded by 05-UAT.md Test 5 (pass, 2026-05-23). REVERT via History restores prior widths; change-set listed in History. Direct-save (no PREVIEW CHANGES diff step) accepted by owner — orphaned DiffPreviewSheet at /admin/preview folded into the cosmetic backlog. Authoritative results in 05-UAT.md.
 
 ### 6. UI contiguity hard-block
 expected: A cut that would scatter a label across non-adjacent bins hard-blocks PREVIEW CHANGES with the plain-language contiguity error (server validator already verified programmatically).
-result: pending
+result: pass
+note: Superseded by 05-UAT.md Test 6 (pass, 2026-05-23, re-verified on rebuilt image post gap-closure 05-06; live Playwright evidence, screenshot seg05-contiguity-block.png; API returns 400 type=contiguity_error). One cosmetic follow-up WR-04 (casefolded label in error string) tracked in 05-REVIEW.md, non-blocking. Authoritative results in 05-UAT.md.
 
 ## Summary
 
 total: 6
-passed: 1
+passed: 6
 issues: 0
-pending: 4
-partial: 1
+pending: 0
+partial: 0
 skipped: 0
 blocked: 0
+note: All 6 items reconciled to 05-UAT.md (authoritative, 2026-05-23). One non-blocking cosmetic follow-up (WR-04, casefolded label in contiguity error) tracked in 05-REVIEW.md.
 
 ## Gaps
 
