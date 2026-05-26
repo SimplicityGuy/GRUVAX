@@ -5,7 +5,7 @@
 
 ## v1 Requirements
 
-84 requirements (73 original v1 + 8 `SEG-*` added 2026-05-21 for Phase 5, Segment-Aware Position Precision + 3 LED idle/ambient `LED-11/12/13`). Table-stakes items are baseline expectations from FEATURES.md; differentiator items are the ones explicitly accepted into v1 during scoping.
+84 requirements originally drafted (73 original v1 + 8 `SEG-*` added 2026-05-21 for Phase 5, Segment-Aware Position Precision + 3 LED idle/ambient `LED-11/12/13`). At v1.0 close on 2026-05-26, 9 requirements (`SRCH-09`, `OFF-01..04`, `PRIV-01..04`) were SPIDR-deferred from v1 and relocated to **v2 / Backlog** (see `## v2 / Backlog` → `From v1.0 SPIDR-deferrals`), leaving **75 in v1.0 scope, all satisfied (100%)**. Table-stakes items are baseline expectations from FEATURES.md; differentiator items are the ones explicitly accepted into v1 during scoping.
 
 ### Search & Lookup
 
@@ -17,7 +17,7 @@
 - [x] **SRCH-06**: Search debounces keystrokes client-side to avoid hammering the backend
 - [x] **SRCH-07**: Search returns a "did you mean" suggestion when no high-rank FTS match exists but a trigram-similar candidate does
 - [x] **SRCH-08**: Search detects numeric-leading queries and boosts catalog-number field weight in ranking
-- [ ] **SRCH-09**: User sees a per-session recently-pulled list (kiosk-local, cleared on idle timeout)
+- ~~**SRCH-09**~~: SPIDR-deferred from v1 on 2026-05-21; relocated to **v2 / Backlog** at v1.0 close (see `## v2 / Backlog` → `From v1.0 SPIDR-deferrals`)
 
 ### Cube-Level UX
 
@@ -97,10 +97,7 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 
 ### Offline / Resilience
 
-- [ ] **OFF-01**: Kiosk displays an offline banner when the backend is unreachable (detected via SSE state and a periodic health-check fallback)
-- [ ] **OFF-02**: Search input is disabled while offline; placeholder text updates accordingly
-- [ ] **OFF-03**: Kiosk auto-reconnects with exponential backoff (1s → 2s → 5s → 10s → 30s cap)
-- [ ] **OFF-04**: Kiosk shows a brief success indicator on the first successful request after reconnection
+> SPIDR-deferred from v1 on 2026-05-21; relocated to **v2 / Backlog** at v1.0 close (2026-05-26). See `### From v1.0 SPIDR-deferrals` under `## v2 / Backlog` below.
 
 ### Observability & Maintenance
 
@@ -114,10 +111,7 @@ and the §4.1 estimator. (Design rationale: `.planning/notes/segment-aware-bound
 
 ### Privacy (Multi-User Floor)
 
-- [ ] **PRIV-01**: Search history lives only in kiosk session storage and is cleared on idle timeout
-- [ ] **PRIV-02**: Search queries are never persisted with text + timestamp to any server-side store; only aggregate counters per record
-- [ ] **PRIV-03**: Admin-visible search stats are aggregate-only; no per-session or per-visitor breakdown
-- [ ] **PRIV-04**: A "Reset kiosk" button is visible on the kiosk to any user (no PIN required) and clears the local session state
+> SPIDR-deferred from v1 on 2026-05-21; relocated to **v2 / Backlog** at v1.0 close (2026-05-26). PRIV-02 / PRIV-03 are *de-facto* satisfied by Phase 8's release_id-only counters (`gruvax.record_stats` has no `query_text` column) but remain formally re-scoped to v2 alongside PRIV-01 / PRIV-04. See `### From v1.0 SPIDR-deferrals` under `## v2 / Backlog` below.
 
 ### Backup / Data Portability
 
@@ -150,6 +144,20 @@ Tracked but not in the current roadmap. Items move to v1 only via explicit roadm
 - **Per-visitor PIN** with isolated session history (R2)
 - **Animated reshuffle preview** with cube-by-cube diff visualization (R3)
 - ~~**Always-on ambient LED mode** — fast-follow after v1~~ → **promoted to Phase 6 (v1)** as LED-11/12/13 (idle/ambient baseline + timed highlight revert + retain mode)
+
+### From v1.0 SPIDR-deferrals
+
+> Originally drafted under v1's "Realtime + Offline Resilience" (Phase 4) section. SPIDR-deferred on 2026-05-21 because the Phase 4 vertical slice landed the realtime path without offline / privacy work, and shipping v1.0 didn't require either capability. Formally relocated here at v1.0 milestone close (2026-05-26) per v1.0-MILESTONE-AUDIT.md recommendation #3 ("relocate to v2/backlog — they were explicitly deferred"). Integration checker confirmed zero half-wired dead code at relocation (only a single annotated `bannerVisible:false` stub in `store.ts`).
+
+- **SRCH-09**: User sees a per-session recently-pulled list (kiosk-local, cleared on idle timeout)
+- **OFF-01**: Kiosk displays an offline banner when the backend is unreachable (detected via SSE state and a periodic health-check fallback)
+- **OFF-02**: Search input is disabled while offline; placeholder text updates accordingly
+- **OFF-03**: Kiosk auto-reconnects with exponential backoff (1s → 2s → 5s → 10s → 30s cap)
+- **OFF-04**: Kiosk shows a brief success indicator on the first successful request after reconnection
+- **PRIV-01**: Search history lives only in kiosk session storage and is cleared on idle timeout
+- **PRIV-02**: Search queries are never persisted with text + timestamp to any server-side store; only aggregate counters per record *(de-facto satisfied in v1 by Phase 8's release_id-only counters — `gruvax.record_stats` has no `query_text` column — but re-scoped here for the formal multi-user privacy floor)*
+- **PRIV-03**: Admin-visible search stats are aggregate-only; no per-session or per-visitor breakdown *(de-facto satisfied in v1 by Phase 8's `record_stats` aggregate-only schema; re-scoped here for the formal multi-user privacy floor)*
+- **PRIV-04**: A "Reset kiosk" button is visible on the kiosk to any user (no PIN required) and clears the local session state
 
 ### From FEATURES.md future-tier surfacing
 
@@ -226,7 +234,7 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | SRCH-06 | Phase 1 — First Search → Cube Highlight | Complete |
 | SRCH-07 | Phase 2 — Real Position Estimation | Complete |
 | SRCH-08 | Phase 2 — Real Position Estimation | Complete |
-| SRCH-09 | Phase 4 — Realtime + Offline Resilience | Pending |
+| SRCH-09 | Relocated to v2 / Backlog (SPIDR-deferred 2026-05-21, formally relocated 2026-05-26) | Relocated |
 | CUBE-01 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-02 | Phase 1 — First Search → Cube Highlight | Complete |
 | CUBE-03 | Phase 2 — Real Position Estimation | Complete |
@@ -280,10 +288,10 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | RTM-02 | Phase 4 — Realtime + Offline Resilience | Complete |
 | RTM-03 | Phase 4 — Realtime + Offline Resilience | Complete |
 | RTM-04 | Phase 4 — Realtime + Offline Resilience | Complete |
-| OFF-01 | Phase 4 — Realtime + Offline Resilience | Pending |
-| OFF-02 | Phase 4 — Realtime + Offline Resilience | Pending |
-| OFF-03 | Phase 4 — Realtime + Offline Resilience | Pending |
-| OFF-04 | Phase 4 — Realtime + Offline Resilience | Pending |
+| OFF-01 | Relocated to v2 / Backlog (SPIDR-deferred 2026-05-21, formally relocated 2026-05-26) | Relocated |
+| OFF-02 | Relocated to v2 / Backlog (SPIDR-deferred 2026-05-21, formally relocated 2026-05-26) | Relocated |
+| OFF-03 | Relocated to v2 / Backlog (SPIDR-deferred 2026-05-21, formally relocated 2026-05-26) | Relocated |
+| OFF-04 | Relocated to v2 / Backlog (SPIDR-deferred 2026-05-21, formally relocated 2026-05-26) | Relocated |
 | OBS-01 | Phase 8 — Observability + Deployment Hardening | Complete |
 | OBS-02 | Phase 8 — Observability + Deployment Hardening | Complete |
 | OBS-03 | Phase 8 — Observability + Deployment Hardening | Complete |
@@ -291,10 +299,10 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | OBS-05 | Phase 8 — Observability + Deployment Hardening | Complete |
 | OBS-06 | Phase 8 — Observability + Deployment Hardening | Complete |
 | OBS-07 | Phase 8 — Observability + Deployment Hardening | Complete |
-| PRIV-01 | Phase 4 — Realtime + Offline Resilience | Pending |
-| PRIV-02 | Phase 4 — Realtime + Offline Resilience | Pending |
-| PRIV-03 | Phase 4 — Realtime + Offline Resilience | Pending |
-| PRIV-04 | Phase 4 — Realtime + Offline Resilience | Pending |
+| PRIV-01 | Relocated to v2 / Backlog (SPIDR-deferred 2026-05-21, formally relocated 2026-05-26) | Relocated |
+| PRIV-02 | Relocated to v2 / Backlog (SPIDR-deferred 2026-05-21, formally relocated 2026-05-26; de-facto satisfied in v1 by Phase 8 record_stats) | Relocated |
+| PRIV-03 | Relocated to v2 / Backlog (SPIDR-deferred 2026-05-21, formally relocated 2026-05-26; de-facto satisfied in v1 by Phase 8 record_stats) | Relocated |
+| PRIV-04 | Relocated to v2 / Backlog (SPIDR-deferred 2026-05-21, formally relocated 2026-05-26) | Relocated |
 | BAK-01 | Phase 7 — Wizards + Import/Export | Complete |
 | BAK-02 | Phase 7 — Wizards + Import/Export | Complete |
 | DEP-01 | Phase 1 — First Search → Cube Highlight | Complete |
@@ -303,11 +311,13 @@ Every v1 requirement maps to exactly one phase. Phase definitions live in ROADMA
 | DEP-04 | Phase 8 — Observability + Deployment Hardening | Complete |
 | DEP-05 | Phase 8 — Observability + Deployment Hardening | Complete |
 
-**Coverage:**
-- v1 requirements: 84 total (73 original + 8 SEG + 3 LED idle/ambient: LED-11/12/13)
-- Mapped to phases: 81 (100%)
-- Unmapped: 0
+**Coverage (at v1.0 close, 2026-05-26):**
+- v1.0 scope: 75 requirements (84 originally drafted minus the 9 SPIDR-deferred to v2 — see `## v2 / Backlog` → `From v1.0 SPIDR-deferrals`)
+- v1.0 satisfied: 75 / 75 (100%)
+- Relocated to v2 / Backlog at v1.0 close: 9 (SRCH-09, OFF-01..04, PRIV-01..04)
 
 ---
 *Requirements defined: 2026-05-19*
-*Last updated: 2026-05-22 — amended SEG-07 per Phase 5 decision D-01 (dropped the A/B "meet-or-beat §4.1" proof gate; §4.1 retired, segment-aware ships on trust). 2026-05-21 — added SEG-01..08 (Phase 5, Segment-Aware Position Precision); corrected traceability phase numbers after the Phase 5 insert renumbered LED→6, Wizards→7, Observability→8*
+*v1.0 milestone closed: 2026-05-26 — relocated 9 SPIDR-deferred requirements (SRCH-09, OFF-01..04, PRIV-01..04) to `## v2 / Backlog` per v1.0-MILESTONE-AUDIT.md recommendation #3. Final v1.0 scope: 75 satisfied / 75 in-scope (100%).*
+*2026-05-22 — amended SEG-07 per Phase 5 decision D-01 (dropped the A/B "meet-or-beat §4.1" proof gate; §4.1 retired, segment-aware ships on trust).*
+*2026-05-21 — added SEG-01..08 (Phase 5, Segment-Aware Position Precision); corrected traceability phase numbers after the Phase 5 insert renumbered LED→6, Wizards→7, Observability→8.*
