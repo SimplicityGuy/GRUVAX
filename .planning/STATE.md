@@ -145,6 +145,7 @@ None.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260526-d6s | fix WR-04: contiguity error should render original-cased label, not casefolded (doc-only — fix already on main in 3598c22) | 2026-05-26 | aee5967 | [260526-d6s-fix-wr-04-contiguity-error-should-render](./quick/260526-d6s-fix-wr-04-contiguity-error-should-render/) |
 | 260524-sd6 | Reconcile gruvax vs gruvax_app Postgres role naming (canonical: gruvax) | 2026-05-25 | 250f7b9 | [260524-sd6-reconcile-gruvax-vs-gruvax-app-postgres-](./quick/260524-sd6-reconcile-gruvax-vs-gruvax-app-postgres-/) |
 | 260522-u48 | Rename docker compose service gruvax-api → api (container gruvax-api-1) | 2026-05-23 | b753bd2 | [260522-u48-rename-docker-compose-service-gruvax-api](./quick/260522-u48-rename-docker-compose-service-gruvax-api/) |
 | 260522-mwy | Fix Docker venv shebangs so console scripts (gruvax-set-pin) run directly | 2026-05-22 | 1695cd5 | [260522-mwy-fix-docker-cli-shebangs](./quick/260522-mwy-fix-docker-cli-shebangs/) |
@@ -156,10 +157,10 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-25 (Phase 10 Plan 03 COMPLETE — traceability/count reconcile (docs-only). SEG-01..08 flipped from Pending to Complete in both body checkboxes and traceability table. REQUIREMENTS.md header corrected 81→84. ROADMAP.md traceability intro corrected 73→84. Internal consistency achieved: 84 total = 75 satisfied + 9 deferred. Commits: 5cb0589 (REQUIREMENTS.md), 501a63f (ROADMAP.md).)
-**Prev:** 2026-05-25 (Phase 07 COMPLETE — all 8 plans; gap-closure 07-06/07/08 done; 07-VERIFICATION.md status=passed 18/18; owner-approved human-verify UAT.)
-**Prev2:** 2026-05-24 (Phase 06 Plan 04 complete — all-off/diagnostic admin vertical slice. 318 tests passing. Phase 06 4/4 plans complete — all LED contract plans done.)
-**Next action:** Phase 10 Plans 10-01 (INT-A payload fix) and 10-02 (INT-B undo re-derive/publish) remain. Run those plans to close the remaining 2 integration blockers. Then run `/gsd-verify-work` for the full Phase 10 gate.
+**Last activity:** 2026-05-26 - Completed quick task 260526-d6s: fix WR-04 contiguity-error label casing (doc-only annotation; production fix and bidirectional regression test verified already on main in commit 3598c22). Phase 5 + Phase 8 HUMAN-UAT also reconciled this session (debt 4 files/13 items → 2 files/7 items, only Phase 06 MQTT + Phase 10 build_needed remain).
+**Prev:** 2026-05-25 (Phase 10 Plan 03 COMPLETE — traceability/count reconcile (docs-only). SEG-01..08 flipped from Pending to Complete in both body checkboxes and traceability table. REQUIREMENTS.md header corrected 81→84. ROADMAP.md traceability intro corrected 73→84. Internal consistency achieved: 84 total = 75 satisfied + 9 deferred. Commits: 5cb0589 (REQUIREMENTS.md), 501a63f (ROADMAP.md).)
+**Prev2:** 2026-05-25 (Phase 07 COMPLETE — all 8 plans; gap-closure 07-06/07/08 done; 07-VERIFICATION.md status=passed 18/18; owner-approved human-verify UAT.)
+**Next action:** Optional — `/gsd-verify-work 06` to clear the 6 Phase 06 MQTT human-verification items (needs live mosquitto + MQTT 5 wire inspection), or `/gsd-discuss-phase 999.1` to open the shelf-overview backlog phase, or `/gsd-complete-milestone` to archive v1.0 now.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
