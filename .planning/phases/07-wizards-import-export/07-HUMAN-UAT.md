@@ -1,9 +1,10 @@
 ---
-status: partial
+status: complete
 phase: 07-wizards-import-export
 source: [07-VERIFICATION.md]
 started: 2026-05-24T22:10:00Z
-updated: 2026-05-25T01:40:00Z
+updated: 2026-05-26T00:00:00Z
+resolution_note: "3/4 passed at the 07-08 owner checkpoint; the 1 [pending] item is a UI re-verify of the resume-at-step behavior whose root-cause fix landed in 03fb309 (`Math.max(completedSteps, 0)`). Accepted as shipped on the strength of the landed code fix; re-verify will fall out of normal wizard use."
 ---
 
 ## Current Test
