@@ -2,15 +2,15 @@
 gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
-status: ready_to_plan
-last_updated: 2026-05-25T22:45:25.507Z
+status: Awaiting next milestone
+last_updated: "2026-05-26T17:16:11.843Z"
+last_activity: 2026-05-26
 progress:
   total_phases: 12
-  completed_phases: 8
+  completed_phases: 9
   total_plans: 51
   completed_plans: 52
-  percent: 67
-stopped_at: Phase 10 complete (3/3) — ready to discuss Phase 999.1
+  percent: 75
 ---
 
 # State: GRUVAX
@@ -29,26 +29,10 @@ stopped_at: Phase 10 complete (3/3) — ready to discuss Phase 999.1
 
 ## Current Position
 
-Phase: 10 (close-milestone-gaps) — EXECUTING
-Plan: 3 of 3
-
-- **Phase:** 999.1
-- **Plan:** Not started
-- **Status:** Ready to plan
-- **Progress:** [██████████] 100%
-
-```
-Phase 1: First Search → Cube Highlight              [x] Complete
-Phase 2: Real Position Estimation                   [x] Complete
-Phase 3: Admin Loop (PIN + Manual Entry + Undo)     [x] Complete
-Phase 4: Realtime Live Updates                      [x] Complete
-Phase 5: Segment-Aware Position Precision           [x] Complete
-Phase 6: LED Contract over MQTT (Hardware Stubbed)  [x] Complete
-Phase 7: Wizards + Import/Export                    [x] Complete
-Phase 8: Observability + Deployment Hardening       [x] Complete
-Phase 9: Tooling and Docs Hardening                 [x] Complete
-Phase 10: Close Milestone Gaps                      [~] Executing (plan 3/3 done)
-```
+Phase: Milestone v1.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-26 — Milestone v1.0 completed and archived
 
 ## Performance Metrics
 
@@ -157,10 +141,14 @@ None.
 
 ## Session Continuity
 
-**Last activity:** 2026-05-26 - Completed quick task 260526-d6s: fix WR-04 contiguity-error label casing (doc-only annotation; production fix and bidirectional regression test verified already on main in commit 3598c22). Phase 5 + Phase 8 HUMAN-UAT also reconciled this session (debt 4 files/13 items → 2 files/7 items, only Phase 06 MQTT + Phase 10 build_needed remain).
+**Last activity:** 2026-05-26
 **Prev:** 2026-05-25 (Phase 10 Plan 03 COMPLETE — traceability/count reconcile (docs-only). SEG-01..08 flipped from Pending to Complete in both body checkboxes and traceability table. REQUIREMENTS.md header corrected 81→84. ROADMAP.md traceability intro corrected 73→84. Internal consistency achieved: 84 total = 75 satisfied + 9 deferred. Commits: 5cb0589 (REQUIREMENTS.md), 501a63f (ROADMAP.md).)
 **Prev2:** 2026-05-25 (Phase 07 COMPLETE — all 8 plans; gap-closure 07-06/07/08 done; 07-VERIFICATION.md status=passed 18/18; owner-approved human-verify UAT.)
 **Next action:** Optional — `/gsd-verify-work 06` to clear the 6 Phase 06 MQTT human-verification items (needs live mosquitto + MQTT 5 wire inspection), or `/gsd-discuss-phase 999.1` to open the shelf-overview backlog phase, or `/gsd-complete-milestone` to archive v1.0 now.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone
