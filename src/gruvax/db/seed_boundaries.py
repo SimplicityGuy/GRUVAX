@@ -113,7 +113,6 @@ async def load_boundaries(yaml_path: Path) -> None:
             total += n
 
 
-
 def main() -> None:
     if len(sys.argv) != 2:
         sys.exit(1)

@@ -46,7 +46,6 @@ async def _set_pin(pin: str) -> None:
         await conn.commit()
 
 
-
 def main() -> None:
     """Entry point for ``gruvax-set-pin`` CLI script."""
     pin = getpass.getpass("Enter new PIN (4 digits): ")
