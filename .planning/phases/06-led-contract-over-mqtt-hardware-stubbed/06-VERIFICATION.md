@@ -1,9 +1,12 @@
 ---
 phase: 06-led-contract-over-mqtt-hardware-stubbed
 verified: 2026-05-24T05:00:00Z
-status: human_needed
+status: verified_with_deferred_hw_checks
 score: 6/6 must-haves verified
 overrides_applied: 0
+human_verification_resolved_at: 2026-05-26T00:00:00Z
+human_verification_resolution: deferred-to-hardware-milestone
+human_verification_resolved_by: 06-HUMAN-UAT.md (status=complete, resolution=deferred-to-hardware-milestone)
 re_verification:
   previous_status: gaps_found
   previous_score: 4/6
