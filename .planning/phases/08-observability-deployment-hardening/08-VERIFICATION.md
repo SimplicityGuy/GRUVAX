@@ -1,16 +1,11 @@
 ---
 phase: 08-observability-deployment-hardening
 verified: 2026-05-24T22:00:00Z
-status: human_needed
+status: verified
 score: 12/12 must-haves verified
 overrides_applied: 0
-human_verification:
-  - test: "Open /admin/diagnostics in a running stack and confirm all 5 section cards render per UI-SPEC"
-    expected: "SYNC STATUS, TOP SEARCHED (with inline RESET STATS confirm), SLOW QUERIES, SYSTEM (MQTT/pool/phantom), RECENT LOGS all render with Nordic Grid styling; Refresh reloads data; no continuous polling; reset flow works"
-    why_human: "UI layout, typography (24/18/16/14px only, Barlow ALL-CAPS headings, DM Mono numbers), dark logs terminal, inline confirm flow — cannot be asserted by grep"
-  - test: "Force sync_age_seconds > 14d on kiosk and verify staleness banner"
-    expected: "Yellow banner appears ABOVE the grid with copy 'Collection data may be outdated — last synced {N}d ago'; search still works; no-results page has NO staleness hint; banner disappears when sync is recent"
-    why_human: "Requires forcing a stale state in the dev DB or stub, then checking visual placement, color, copy, icon, and dismiss-absence in a browser"
+human_verification_resolved_at: 2026-05-26T00:00:00Z
+human_verification_resolved_by: 08-HUMAN-UAT.md
 gaps: []
 deferred: []
 ---
