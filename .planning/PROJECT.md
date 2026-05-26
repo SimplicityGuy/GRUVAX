@@ -10,7 +10,7 @@ Type artist, title, label, or catalog number → see the right cube (and a sub-c
 
 ## Current State
 
-**Shipped:** v1.0 MVP (2026-05-26) — see [MILESTONES.md](./MILESTONES.md#v10-mvp--shipped-2026-05-26) for the full breakdown.
+**Shipped:** v1.0 MVP (2026-05-26) — see [MILESTONES.md](./MILESTONES.md#v10-mvp-shipped-2026-05-26) for the full breakdown.
 
 The end-to-end search → cube highlight loop ships and is verified. Owner can sign in (PIN), enter and edit boundaries with diff-preview + undo, run guided setup and reshuffle wizards, and import/export boundaries + LED settings. The segment-aware estimator (Phase 5) supersedes the original §4.1 interpolation behind the same `LocateResult` contract, so multi-label bins resolve precisely. The LED contract over MQTT is fully wired and validated against an internal Mosquitto broker — hardware (ESP32 + WS2812B) drops into the contract without API changes. Observability (`/api/health`, `/api/version`, `/admin/diagnostics`, kiosk staleness banner), GitHub Actions CI (Alembic round-trip + p95 SLO gate), and Compose log limits + healthchecks all land.
 

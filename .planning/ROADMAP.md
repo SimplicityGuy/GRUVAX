@@ -9,7 +9,7 @@
 
 ## Milestones
 
-- ✅ **v1.0 MVP** — Phases 1–10 (shipped 2026-05-26) — see [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMAP.md) and [`MILESTONES.md`](./MILESTONES.md#v10-mvp--shipped-2026-05-26)
+- ✅ **v1.0 MVP** — Phases 1–10 (shipped 2026-05-26) — see [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMAP.md) and [`MILESTONES.md`](./MILESTONES.md#v10-mvp-shipped-2026-05-26)
 - 📋 **v1.x / v2** — next milestone TBD via `/gsd-new-milestone` (likely hardware integration: ESP32 + WS2812B firmware against the Phase 6 MQTT contract, plus the deferred SPIDR items if re-scoped)
 
 ## Phases
