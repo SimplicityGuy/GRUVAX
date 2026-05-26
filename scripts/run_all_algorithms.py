@@ -36,9 +36,12 @@ Import-path strategy (single source of truth, Plan 02-01 §Task 2b):
 from __future__ import annotations
 
 import argparse
+import csv as csv_mod
 from pathlib import Path
 import sys
 import time
+
+import yaml
 
 
 # ── Standalone-run import shim ────────────────────────────────────────────────
@@ -52,7 +55,7 @@ if str(_REPO_ROOT) not in sys.path:
 
 from fixtures.synth_collection import all_shapes  # noqa: E402
 from gruvax.estimator.algorithm import locate, locate_cube_only  # noqa: E402
-from gruvax.estimator.boundary_cache import BoundaryCache  # noqa: E402
+from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow  # noqa: E402
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow  # noqa: E402
 from gruvax.estimator.segment_cache import SegmentCache  # noqa: E402
 
@@ -210,18 +213,12 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
         return None
 
     try:
-        import csv as csv_mod
-
-        import yaml
-
         boundaries_path = repo_root / "fixtures" / "boundaries.yaml"
         if not boundaries_path.exists():
             print(f"  [skip] fixtures/boundaries.yaml not found at {boundaries_path}")
             return None
 
         # Load boundaries — Phase 5: cut-point model (no last_*)
-        from gruvax.estimator.boundary_cache import BoundaryRow
-
         with boundaries_path.open() as f:
             raw = yaml.safe_load(f)
 
