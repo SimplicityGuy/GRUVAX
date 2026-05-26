@@ -51,14 +51,29 @@ dry_run preview contract (POST /api/admin/import/boundaries?dry_run=true):
 
 from __future__ import annotations
 
+import json
 import logging
+from typing import TYPE_CHECKING, Any
 import uuid as _uuid
-from typing import Any
 
-import yaml
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
+import yaml
 
+from gruvax.api.admin.cubes import (
+    BoundaryEdit,
+    _compute_movement_counts,
+    _get_nominal_capacity,
+)
+from gruvax.api.admin.settings import (
+    _ALLOWED_SETTINGS_KEYS,
+    _BOOL_KEYS,
+    _BRIGHTNESS_KEYS,
+    _COLOR_KEYS,
+    _HEX_COLOR_RE,
+    _INT_KEYS,
+)
+from gruvax.api.admin.validation import validate_contiguity
 from gruvax.api.deps import (
     get_boundary_cache,
     get_collection_snapshot,
@@ -67,10 +82,27 @@ from gruvax.api.deps import (
     get_segment_cache,
     require_admin,
 )
-from gruvax.estimator.boundary_cache import BoundaryCache
-from gruvax.estimator.collection_snapshot import CollectionSnapshot
-from gruvax.estimator.segment_cache import SegmentCache
-from gruvax.events.bus import EventBus
+from gruvax.db.queries import (
+    check_idempotency,
+    cleanup_idempotency,
+    cube_exact_match,
+    fetch_current_boundary,
+    find_boundary_near_misses,
+    load_settings_cache,
+    store_idempotency,
+    write_boundary,
+    write_history_row,
+)
+from gruvax.io.boundary_csv import parse_csv_boundaries
+from gruvax.io.boundary_yaml import parse_yaml_boundaries
+
+
+if TYPE_CHECKING:
+    from gruvax.estimator.boundary_cache import BoundaryCache
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot
+    from gruvax.estimator.segment_cache import SegmentCache
+    from gruvax.events.bus import EventBus
+
 
 logger = logging.getLogger(__name__)
 
@@ -165,20 +197,6 @@ async def import_boundaries(
 
     Idempotency-Key header (commit path only): same semantics as cubes/bulk.
     """
-    from gruvax.api.admin.validation import validate_contiguity
-    from gruvax.db.queries import (
-        check_idempotency,
-        cleanup_idempotency,
-        cube_exact_match,
-        fetch_current_boundary,
-        find_boundary_near_misses,
-        store_idempotency,
-        write_boundary,
-        write_history_row,
-    )
-    from gruvax.io.boundary_csv import parse_csv_boundaries
-    from gruvax.io.boundary_yaml import parse_yaml_boundaries
-
     # ── 1. Read + size cap (runs before dry_run branching — both paths capped) ─
     content = await request.body()
     if len(content) > _MAX_UPLOAD_BYTES:
@@ -248,8 +266,6 @@ async def import_boundaries(
             "first_catalog": addr_row[4],
             "is_empty": addr_row[5],
         }
-
-    from gruvax.api.admin.cubes import BoundaryEdit
 
     all_edits: list[BoundaryEdit] = []
     for addr_row in all_addresses_raw:
@@ -405,15 +421,15 @@ async def import_boundaries(
 
     # ── dry_run: return preview, NO DB write (T-07-DRYRUN-WRITE) ─────────────
     if dry_run:
-        from gruvax.api.admin.cubes import _compute_movement_counts
-
         nominal_capacity = 95  # default; no request.app.state access needed here
         try:
-            from gruvax.api.admin.cubes import _get_nominal_capacity
-
             nominal_capacity = _get_nominal_capacity(request)
         except Exception:  # nosec B110 - best-effort lookup; default is fine for preview delta
-            pass  # fall back to default — not critical for preview delta
+            # Log at debug — this is a best-effort lookup with a sane default.
+            logger.debug(
+                "import: nominal_capacity lookup failed; using default 95",
+                exc_info=True,
+            )
 
         total_cubes = len(all_addresses_raw)
         file_cube_count = len(file_index)
@@ -597,15 +613,6 @@ async def import_settings(
     Returns:
         JSON ``{updated: [<db-key>, ...]}``
     """
-    from gruvax.api.admin.settings import (
-        _ALLOWED_SETTINGS_KEYS,
-        _BOOL_KEYS,
-        _BRIGHTNESS_KEYS,
-        _COLOR_KEYS,
-        _HEX_COLOR_RE,
-        _INT_KEYS,
-    )
-
     # ── 1. Read + size cap ────────────────────────────────────────────────────
     content = await request.body()
     if len(content) > _MAX_UPLOAD_BYTES:
@@ -698,8 +705,6 @@ async def import_settings(
                 )
 
     # ── 6. Write settings via validated path (same as update_settings) ────────
-    import json as _json
-
     updated: list[str] = []
     # Explicit transaction so the whole-file-reject guarantee is structural, not
     # reliant on implicit rollback-on-release (matches the boundaries import path).
@@ -721,7 +726,7 @@ async def import_settings(
                 bool_val = bool(value)
                 json_value = "true" if bool_val else "false"
             else:
-                json_value = _json.dumps(value)
+                json_value = json.dumps(value)
 
             await conn.execute(
                 "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now() WHERE key = %s",
@@ -733,8 +738,6 @@ async def import_settings(
 
     # D-15 / WR-01: refresh in-process settings cache (same as update_settings)
     try:
-        from gruvax.db.queries import load_settings_cache
-
         fresh = await load_settings_cache(pool)
         existing = getattr(request.app.state, "settings_cache", None)
         if isinstance(existing, dict):

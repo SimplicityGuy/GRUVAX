@@ -17,13 +17,17 @@ Session expiry model (D-04, Pitfall 23):
 
 from __future__ import annotations
 
-import secrets
-import uuid
 from datetime import UTC, datetime, timedelta
-from typing import Any
+import secrets
+from typing import TYPE_CHECKING, Any
+import uuid
 
-from fastapi import Response
 from itsdangerous import URLSafeSerializer
+
+
+if TYPE_CHECKING:
+    from fastapi import Response
+
 
 # Cookie name constants — imported by deps.py, login.py, tests/conftest.py
 SESSION_COOKIE = "gruvax_session"

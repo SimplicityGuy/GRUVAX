@@ -22,6 +22,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 
+
 # ── Confidence constants (D-11) ──────────────────────────────────────────────
 
 CUBE_ONLY_CONFIDENCE: float = 0.30

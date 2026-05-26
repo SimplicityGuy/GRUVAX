@@ -12,12 +12,13 @@ Harness mirrors test_health.py: LifespanManager + AsyncClient + db_pool fixture.
 
 from __future__ import annotations
 
-import pytest
-import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
+import pytest
+import pytest_asyncio
 
 from gruvax.app import create_app
+
 
 # Keys that must NEVER appear in the version response (T-08-01 mitigation).
 _FORBIDDEN_KEYS = {"session_secret", "database_url", "pin", "csrf", "password", "secret"}

@@ -20,6 +20,7 @@ import pytest_asyncio
 
 from gruvax.db.pool import create_pool
 
+
 # ── Session-scoped DB pool (mirrors pattern from test_locate.py) ─────────────
 
 

@@ -28,11 +28,14 @@ secrets such as a DSN in a psycopg connection-failure message — from reaching 
 from __future__ import annotations
 
 import logging
-from collections import deque
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import orjson
 import structlog
+
+
+if TYPE_CHECKING:
+    from collections import deque
 
 
 def _orjson_serializer(obj: Any, **_kw: Any) -> str:

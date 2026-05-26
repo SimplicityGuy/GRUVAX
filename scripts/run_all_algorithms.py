@@ -36,10 +36,13 @@ Import-path strategy (single source of truth, Plan 02-01 §Task 2b):
 from __future__ import annotations
 
 import argparse
-import glob
+import csv as csv_mod
+from pathlib import Path
 import sys
 import time
-from pathlib import Path
+
+import yaml
+
 
 # ── Standalone-run import shim ────────────────────────────────────────────────
 # Must appear BEFORE any `from fixtures.*` or `from gruvax.*` imports.
@@ -52,9 +55,10 @@ if str(_REPO_ROOT) not in sys.path:
 
 from fixtures.synth_collection import all_shapes  # noqa: E402
 from gruvax.estimator.algorithm import locate, locate_cube_only  # noqa: E402
-from gruvax.estimator.boundary_cache import BoundaryCache  # noqa: E402
+from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow  # noqa: E402
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow  # noqa: E402
 from gruvax.estimator.segment_cache import SegmentCache  # noqa: E402
+
 
 # POS-03 budget: aggregate p95 per shape must stay under this threshold.
 P95_BUDGET_MS: float = 50.0
@@ -143,7 +147,7 @@ def _score_shape(
         cube_result = locate_cube_only(
             release_id=release_id,
             label=label,
-            catalog_number=catalog_number,
+            _catalog_number=catalog_number,
             segment_cache=segment_cache,
             snapshot=snapshot,
         )
@@ -191,9 +195,8 @@ def _find_local_csv(repo_root: Path) -> Path | None:
     Returns None if absent (expected in CI and fresh developer checkouts).
     Guard: never fails — gracefully returns None when absent.
     """
-    pattern = str(repo_root / "RWlodarczyk-collection-*.csv")
-    matches = glob.glob(pattern)
-    return Path(matches[0]) if matches else None
+    matches = sorted(repo_root.glob("RWlodarczyk-collection-*.csv"))
+    return matches[0] if matches else None
 
 
 def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
@@ -210,18 +213,12 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
         return None
 
     try:
-        import csv as csv_mod
-
-        import yaml
-
         boundaries_path = repo_root / "fixtures" / "boundaries.yaml"
         if not boundaries_path.exists():
             print(f"  [skip] fixtures/boundaries.yaml not found at {boundaries_path}")
             return None
 
         # Load boundaries — Phase 5: cut-point model (no last_*)
-        from gruvax.estimator.boundary_cache import BoundaryRow
-
         with boundaries_path.open() as f:
             raw = yaml.safe_load(f)
 
@@ -297,7 +294,7 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
             cres = locate_cube_only(
                 release_id=rec.release_id,
                 label=rec.label,
-                catalog_number=rec.catalog_number,
+                _catalog_number=rec.catalog_number,
                 segment_cache=segment_cache,
                 snapshot=snapshot,
             )

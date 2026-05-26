@@ -26,6 +26,7 @@ import contextlib
 
 from alembic import op
 
+
 # revision identifiers, used by Alembic.
 revision: str = "0003"
 down_revision: str | None = "0002"

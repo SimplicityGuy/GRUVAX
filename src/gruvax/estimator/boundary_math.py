@@ -38,6 +38,7 @@ from typing import TYPE_CHECKING
 
 from gruvax.estimator.normalize import parse_key
 
+
 if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryRow
     from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
@@ -45,8 +46,8 @@ if TYPE_CHECKING:
 
 
 def count_records_in_boundary(
-    boundary: BoundaryRow,
-    snapshot: CollectionSnapshot,
+    _boundary: BoundaryRow,
+    _snapshot: CollectionSnapshot,
 ) -> int:
     """DEPRECATED — Phase 5 compatibility shim (used by admin/cubes.py until 05-04).
 

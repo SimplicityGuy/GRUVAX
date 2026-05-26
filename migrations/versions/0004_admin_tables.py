@@ -27,6 +27,7 @@ from __future__ import annotations
 
 from alembic import op
 
+
 # revision identifiers, used by Alembic.
 revision: str = "0004"
 down_revision: str | None = "0003"

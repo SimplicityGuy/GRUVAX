@@ -23,11 +23,11 @@ from __future__ import annotations
 
 import uuid
 
+from asgi_lifespan import LifespanManager
+from httpx import ASGITransport, AsyncClient
 import pytest
 import pytest_asyncio
 import yaml
-from asgi_lifespan import LifespanManager
-from httpx import ASGITransport, AsyncClient
 
 from gruvax.app import create_app
 

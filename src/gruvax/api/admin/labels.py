@@ -28,6 +28,7 @@ from fastapi import APIRouter, Depends, Path
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.db.queries import get_catalogs_for_label, get_distinct_labels
 
+
 router = APIRouter(tags=["admin-labels"])
 
 

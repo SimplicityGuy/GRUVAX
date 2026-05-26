@@ -18,16 +18,20 @@ Phase 6: LED Contract over MQTT (Hardware Stubbed)
 
 from __future__ import annotations
 
-import logging
-import uuid as _uuid
 from datetime import UTC, datetime
-from typing import Any
+import logging
+from typing import TYPE_CHECKING, Any
+import uuid as _uuid
 
-import aiomqtt
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
 
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.mqtt import publishers
+
+
+if TYPE_CHECKING:
+    import aiomqtt
+
 
 logger = logging.getLogger(__name__)
 

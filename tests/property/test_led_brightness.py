@@ -11,11 +11,11 @@ from __future__ import annotations
 
 from datetime import UTC, datetime
 
-from hypothesis import given
-from hypothesis import strategies as st
+from hypothesis import given, strategies as st
 
 from gruvax.mqtt.publishers import clamp_brightness
 from gruvax.mqtt.schemas import IlluminatePayload, RGBColor, TransitionSpec
+
 
 # ── Property 1: clamp_brightness invariant ────────────────────────────────────
 

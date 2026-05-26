@@ -26,12 +26,17 @@ Phase 8 — OBS-07 counter + staleness + diagnostics functions:
 
 from __future__ import annotations
 
+import json
 import re
 import time
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 import psycopg.errors
-from psycopg_pool import AsyncConnectionPool
+
+
+if TYPE_CHECKING:
+    from psycopg_pool import AsyncConnectionPool
+
 
 # ── Catalog-query detection regexes (D-12) ───────────────────────────────────
 # Leading digit: "4195", "19BOX019", "1SHOT-002"
@@ -733,8 +738,6 @@ INSERT INTO gruvax.idempotency_keys (key, response_json)
 VALUES (%s, %s)
 ON CONFLICT (key) DO NOTHING
 """
-    import json
-
     await conn.execute(sql, (key, json.dumps(response)))
 
 

@@ -27,6 +27,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from typing import TYPE_CHECKING
 
+
 if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
     from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow

@@ -46,9 +46,14 @@ from gruvax.estimator.algorithm import (
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
 from gruvax.estimator.constants import POSITION_HALF_WIDTH
-from gruvax.estimator.contract import CUBE_ONLY_CONFIDENCE as CONTRACT_CONFIDENCE
-from gruvax.estimator.contract import CubeRef, LocateResult, SubInterval
+from gruvax.estimator.contract import (
+    CUBE_ONLY_CONFIDENCE as CONTRACT_CONFIDENCE,
+    CubeRef,
+    LocateResult,
+    SubInterval,
+)
 from gruvax.estimator.segment_cache import SegmentCache
+
 
 # FIXTURE_DIR points to repo-root fixtures/ — same path as tests/conftest.py uses
 FIXTURE_DIR = Path(__file__).parent.parent.parent / "fixtures"
@@ -204,7 +209,7 @@ def test_covered_record_confidence(boundary_cache: list[dict]) -> None:
     result = locate_cube_only(
         release_id=1,
         label="Blue Note",
-        catalog_number="BLP 4010",
+        _catalog_number="BLP 4010",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -223,7 +228,7 @@ def test_covered_record_sub_cube_interval_is_none(boundary_cache: list[dict]) ->
     result = locate_cube_only(
         release_id=1,
         label="Blue Note",
-        catalog_number="BLP 4010",
+        _catalog_number="BLP 4010",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -242,7 +247,7 @@ def test_covered_record_estimator_version(boundary_cache: list[dict]) -> None:
     result = locate_cube_only(
         release_id=1,
         label="Blue Note",
-        catalog_number="BLP 4010",
+        _catalog_number="BLP 4010",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -261,7 +266,7 @@ def test_covered_record_primary_cube(boundary_cache: list[dict]) -> None:
     result = locate_cube_only(
         release_id=1,
         label="Blue Note",
-        catalog_number="BLP 4010",
+        _catalog_number="BLP 4010",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -282,7 +287,7 @@ def test_covered_record_label_span_sorted(boundary_cache: list[dict]) -> None:
     result = locate_cube_only(
         release_id=1,
         label="Blue Note",
-        catalog_number="BLP 4010",
+        _catalog_number="BLP 4010",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -302,7 +307,7 @@ def test_covered_record_release_id(boundary_cache: list[dict]) -> None:
     result = locate_cube_only(
         release_id=42,
         label="ECM",
-        catalog_number="ECM 1001",
+        _catalog_number="ECM 1001",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -330,7 +335,7 @@ def test_no_boundary_confidence() -> None:
     result = locate_cube_only(
         release_id=99,
         label="NONEXISTENT LABEL XYZ",
-        catalog_number="ZZZ 9999",
+        _catalog_number="ZZZ 9999",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -348,7 +353,7 @@ def test_no_boundary_primary_cube_is_none() -> None:
     result = locate_cube_only(
         release_id=99,
         label="NONEXISTENT LABEL XYZ",
-        catalog_number="ZZZ 9999",
+        _catalog_number="ZZZ 9999",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -366,7 +371,7 @@ def test_no_boundary_label_span_empty() -> None:
     result = locate_cube_only(
         release_id=99,
         label="NONEXISTENT LABEL XYZ",
-        catalog_number="ZZZ 9999",
+        _catalog_number="ZZZ 9999",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -384,7 +389,7 @@ def test_no_boundary_sub_cube_interval_is_none() -> None:
     result = locate_cube_only(
         release_id=99,
         label="NONEXISTENT LABEL XYZ",
-        catalog_number="ZZZ 9999",
+        _catalog_number="ZZZ 9999",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -413,7 +418,7 @@ def test_numeric_edge_covering_blp_9_NOT_in_blp_10_20() -> None:
     result_blp9 = locate_cube_only(
         release_id=1,
         label="TestLabel",
-        catalog_number="BLP 9",
+        _catalog_number="BLP 9",
         segment_cache=sc_blp9,
         snapshot=snapshot_blp9,
     )
@@ -432,7 +437,7 @@ def test_numeric_edge_covering_blp_9_NOT_in_blp_10_20() -> None:
     result_blp10 = locate_cube_only(
         release_id=1,
         label="TestLabel",
-        catalog_number="BLP 10",
+        _catalog_number="BLP 10",
         segment_cache=sc_blp10,
         snapshot=snapshot_blp10,
     )
@@ -453,7 +458,7 @@ def test_numeric_edge_blp_9_in_single_cube() -> None:
     result = locate_cube_only(
         release_id=1,
         label="TestLabel",
-        catalog_number="BLP 9",
+        _catalog_number="BLP 9",
         segment_cache=segment_cache,
         snapshot=snapshot,
     )

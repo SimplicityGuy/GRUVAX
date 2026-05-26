@@ -14,6 +14,7 @@ import pytest
 
 from fixtures.synth_collection import make_multi_label_bin, make_straddle
 
+
 # ── Session-scoped synth fixtures ─────────────────────────────────────────────
 
 

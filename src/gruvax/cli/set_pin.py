@@ -24,14 +24,14 @@ import asyncio
 import getpass
 import sys
 
+from gruvax.auth.pin import hash_pin
+from gruvax.db.pool import get_pool_context
+
 
 async def _set_pin(pin: str) -> None:
     """Hash the PIN and upsert into gruvax.settings."""
     if not pin.isdigit() or len(pin) != 4:
         sys.exit("PIN must be exactly 4 numeric digits (e.g. 1234)")
-
-    from gruvax.auth.pin import hash_pin
-    from gruvax.db.pool import get_pool_context
 
     h = hash_pin(pin)
 
@@ -44,8 +44,6 @@ async def _set_pin(pin: str) -> None:
             (f'"{h}"',),
         )
         await conn.commit()
-
-    print("PIN set successfully.")
 
 
 def main() -> None:

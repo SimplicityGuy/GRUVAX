@@ -18,6 +18,7 @@ import pytest
 
 from gruvax.mqtt import publishers, topics
 
+
 # ── shared fixture helpers ────────────────────────────────────────────────────
 
 TEST_PREFIX = "gruvax/v1/dev/leds"

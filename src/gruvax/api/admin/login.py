@@ -33,12 +33,15 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 
 from gruvax.api.admin.limiter import _LOGIN_RATE, _rate_limiter
 from gruvax.api.deps import get_pool, require_admin
+from gruvax.auth.pin import verify_pin
 from gruvax.auth.sessions import (
     clear_session_cookies,
     create_session,
     get_session_id,
     revoke_session,
 )
+from gruvax.settings import settings
+
 
 logger = logging.getLogger(__name__)
 
@@ -132,9 +135,6 @@ async def login(
     # If psycopg returns a Python str, use it as-is.
     stored_hash: str = row[0] if isinstance(row[0], str) else str(row[0])
 
-    from gruvax.auth.pin import verify_pin
-    from gruvax.settings import settings
-
     if not verify_pin(pin, stored_hash):
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
@@ -170,8 +170,6 @@ async def logout(
     Immediate logout — no confirmation required (ADMN-08 + UI-SPEC §Destructive
     action confirmations: "Logout — immediate, no confirm").
     """
-    from gruvax.settings import settings
-
     session_id = await get_session_id(request, settings.SESSION_SECRET)
     if session_id:
         async with pool.connection() as conn:

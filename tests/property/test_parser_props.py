@@ -9,8 +9,7 @@ Properties (per RESEARCH.md §Pattern 2 and INTERPOLATION.md §3.4):
 
 from __future__ import annotations
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
 from gruvax.estimator.normalize import (
     catalog_in_range,
@@ -18,6 +17,7 @@ from gruvax.estimator.normalize import (
     normalize_catalog,
     parse_key,
 )
+
 
 # ── total order ───────────────────────────────────────────────────────────────
 

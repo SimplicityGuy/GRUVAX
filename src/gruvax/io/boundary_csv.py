@@ -22,6 +22,7 @@ import io
 
 from gruvax.io.boundary_yaml import CutPointEntry
 
+
 REQUIRED_HEADERS: frozenset[str] = frozenset(
     {"unit_id", "row", "col", "first_label", "first_catalog", "is_empty"}
 )

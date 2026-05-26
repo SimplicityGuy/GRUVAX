@@ -8,10 +8,10 @@ Uses Hypothesis for property-based coverage over synthetic CutPointEntry lists.
 
 from __future__ import annotations
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
 from gruvax.io.boundary_yaml import CutPointEntry, parse_yaml_boundaries, serialize_boundaries_yaml
+
 
 # ── Strategies ────────────────────────────────────────────────────────────────
 

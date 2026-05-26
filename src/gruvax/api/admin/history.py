@@ -31,8 +31,8 @@ Security:
 from __future__ import annotations
 
 import logging
+from typing import TYPE_CHECKING, Any
 import uuid as _uuid
-from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
@@ -45,10 +45,21 @@ from gruvax.api.deps import (
     get_segment_cache,
     require_admin,
 )
-from gruvax.estimator.boundary_cache import BoundaryCache
-from gruvax.estimator.collection_snapshot import CollectionSnapshot
-from gruvax.estimator.segment_cache import SegmentCache
-from gruvax.events.bus import EventBus
+from gruvax.db.queries import (
+    fetch_change_set_rows,
+    has_newer_changes,
+    list_change_sets,
+    write_boundary,
+    write_history_row,
+)
+
+
+if TYPE_CHECKING:
+    from gruvax.estimator.boundary_cache import BoundaryCache
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot
+    from gruvax.estimator.segment_cache import SegmentCache
+    from gruvax.events.bus import EventBus
+
 
 logger = logging.getLogger(__name__)
 
@@ -68,8 +79,6 @@ async def get_history(
 
     Response: ``{history: [{change_set_id, source, changed_at, cube_count}, ...]}``
     """
-    from gruvax.db.queries import list_change_sets
-
     change_sets = await list_change_sets(pool)
     return {"history": change_sets}
 
@@ -108,13 +117,6 @@ async def revert_change_set(
 
     HTTP 404 if the change_set_id is not found in boundary_history.
     """
-    from gruvax.db.queries import (
-        fetch_change_set_rows,
-        has_newer_changes,
-        write_boundary,
-        write_history_row,
-    )
-
     # Fetch all history rows for this change-set
     rows = await fetch_change_set_rows(pool, change_set_id)
     if not rows:

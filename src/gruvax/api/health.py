@@ -12,12 +12,13 @@ Reports:
 
 from __future__ import annotations
 
-import logging
 from datetime import UTC, datetime
+import logging
 from typing import Any
 
 from fastapi import APIRouter, Request
 from fastapi.responses import JSONResponse
+
 
 try:
     from gruvax._version import GIT_SHA

@@ -10,8 +10,8 @@ Tests:
 
 from __future__ import annotations
 
-import logging
 from collections import deque
+import logging
 
 from gruvax.logging_config import LogRingHandler
 

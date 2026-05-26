@@ -23,6 +23,7 @@ from aiomqtt import ProtocolVersion
 
 from gruvax.settings import settings
 
+
 if TYPE_CHECKING:
     from fastapi import FastAPI
 

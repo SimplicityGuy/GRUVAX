@@ -18,14 +18,14 @@ Tests:
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import json
 import uuid
-from datetime import UTC, datetime
 
-import pytest
-import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
+import pytest
+import pytest_asyncio
 
 from gruvax.app import create_app
 

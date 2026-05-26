@@ -27,7 +27,7 @@ Phase 5 changes:
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
@@ -39,8 +39,12 @@ from gruvax.api.deps import (
 )
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
 from gruvax.estimator.boundary_math import count_records_in_bin, get_records_in_bin, sample_records
-from gruvax.estimator.collection_snapshot import CollectionSnapshot
-from gruvax.estimator.segment_cache import SegmentCache
+
+
+if TYPE_CHECKING:
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot
+    from gruvax.estimator.segment_cache import SegmentCache
+
 
 logger = logging.getLogger(__name__)
 

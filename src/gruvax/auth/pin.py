@@ -14,6 +14,7 @@ from __future__ import annotations
 
 from passlib.context import CryptContext
 
+
 # Argon2id context — memory-hard, GPU-resistant (T-03-04).
 # ``deprecated="auto"`` ensures older hash schemes are upgraded on next verify.
 _ctx = CryptContext(schemes=["argon2"], deprecated="auto")

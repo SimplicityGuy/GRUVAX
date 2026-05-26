@@ -8,6 +8,7 @@ Tests:
 
 from __future__ import annotations
 
+
 # ── hex_to_rgb ────────────────────────────────────────────────────────────────
 
 

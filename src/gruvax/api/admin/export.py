@@ -20,14 +20,20 @@ All SQL uses ``%s`` placeholders — no f-string interpolation (T-07-SC).
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 
-import yaml
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
+import yaml
 
+from gruvax.api.admin.settings import _ALLOWED_SETTINGS_KEYS
 from gruvax.api.deps import get_boundary_cache, get_pool, require_admin
-from gruvax.estimator.boundary_cache import BoundaryCache
+from gruvax.io.boundary_yaml import CutPointEntry, serialize_boundaries_yaml
+
+
+if TYPE_CHECKING:
+    from gruvax.estimator.boundary_cache import BoundaryCache
+
 
 logger = logging.getLogger(__name__)
 
@@ -52,8 +58,6 @@ async def export_boundaries(
     Returns:
         YAML file download with Content-Disposition attachment.
     """
-    from gruvax.io.boundary_yaml import CutPointEntry, serialize_boundaries_yaml
-
     # Load per-label segment overrides, keyed by (unit_id, row, col) → {label: fraction}
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute("SELECT unit_id, row, col, label, fraction FROM gruvax.segment_overrides")
@@ -109,8 +113,6 @@ async def export_settings(
     """
     # D-14 hard exclusion: the WHERE clause IS the guard — auth.pin_hash is never
     # in _ALLOWED_SETTINGS_KEYS, so it is never SELECTed and never serialized.
-    from gruvax.api.admin.settings import _ALLOWED_SETTINGS_KEYS
-
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
             "SELECT key, value FROM gruvax.settings WHERE key = ANY(%s)",

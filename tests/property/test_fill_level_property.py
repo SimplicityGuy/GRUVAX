@@ -17,12 +17,12 @@ Analog: tests/property/test_parser_props.py (Hypothesis @given + @settings patte
 
 from __future__ import annotations
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
 from gruvax.estimator.segment_cache import SegmentBin, SegmentCache
+
 
 # ── Strategy helpers ──────────────────────────────────────────────────────────
 

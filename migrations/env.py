@@ -5,19 +5,27 @@ picks up the same value as the application (via .env or environment variable).
 """
 
 import asyncio
-import sys
 from logging.config import fileConfig
 from pathlib import Path
+import sys
 
 from alembic import context
+import psycopg
 from sqlalchemy import event, pool
-from sqlalchemy.engine import Connection
 from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config
+
 
 # Make ``src/`` importable when running ``alembic`` from the project root.
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
+from typing import TYPE_CHECKING
+
 from gruvax.settings import settings
+
+
+if TYPE_CHECKING:
+    from sqlalchemy.engine import Connection
+
 
 # ── Alembic Config object ─────────────────────────────────────────────────────
 config = context.config
@@ -125,8 +133,6 @@ async def _make_engine() -> AsyncEngine:
     # the schema creation is not inside a transaction that could be rolled back.
     # We bypass SQLAlchemy here to avoid the connect event firing and starting
     # an implicit transaction on the bootstrap connection.
-    import psycopg
-
     bootstrap_url = settings.DATABASE_URL.replace("postgresql+psycopg://", "postgresql://", 1)
     async with await psycopg.AsyncConnection.connect(
         bootstrap_url, autocommit=True

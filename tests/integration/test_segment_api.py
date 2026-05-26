@@ -19,12 +19,13 @@ from __future__ import annotations
 
 from pathlib import Path
 
-import pytest
-import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
+import pytest
+import pytest_asyncio
 
 from gruvax.app import create_app
+
 
 _BOUNDARIES_YAML = Path(__file__).parents[2] / "fixtures" / "boundaries.yaml"
 

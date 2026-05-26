@@ -17,6 +17,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 from fastapi.responses import JSONResponse
 
+
 try:
     from gruvax._version import BUILD_TIMESTAMP, ENVIRONMENT, GIT_SHA
 except ImportError:

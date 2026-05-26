@@ -19,6 +19,7 @@ All SQL uses ``%s`` placeholders — no f-string interpolation (T-01-07).
 
 from __future__ import annotations
 
+import json
 import logging
 import re
 from typing import Any
@@ -26,7 +27,10 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from gruvax.api.deps import get_pool, require_admin
+from gruvax.auth.pin import hash_pin, verify_pin
+from gruvax.auth.sessions import revoke_all_sessions_except
 from gruvax.db.queries import load_settings_cache
+
 
 logger = logging.getLogger(__name__)
 
@@ -284,9 +288,7 @@ async def update_settings(
                 json_value = "true" if bool_val else "false"
             else:
                 # Fallback: plain JSON encoding
-                import json as _json
-
-                json_value = _json.dumps(value)
+                json_value = json.dumps(value)
 
             await conn.execute(
                 "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now() WHERE key = %s",
@@ -339,9 +341,6 @@ async def change_pin(
 
     Returns 401 if ``current_pin`` is wrong.  PIN is never logged (Pitfall 12).
     """
-    from gruvax.auth.pin import hash_pin, verify_pin
-    from gruvax.auth.sessions import revoke_all_sessions_except
-
     logger.info("Change-PIN attempt pin_attempt=redacted")
 
     body = await request.json()

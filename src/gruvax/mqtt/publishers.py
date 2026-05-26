@@ -29,13 +29,12 @@ Topic architecture (ARCHITECTURE.md §"MQTT Topic Design" — LOCKED):
 from __future__ import annotations
 
 import asyncio
+from datetime import UTC, datetime
 import json
 import logging
+from typing import TYPE_CHECKING, Any
 import uuid
-from datetime import UTC, datetime
-from typing import Any
 
-import aiomqtt
 from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 
@@ -48,6 +47,11 @@ from gruvax.mqtt.schemas import (
     TransitionSpec,
 )
 from gruvax.settings import settings
+
+
+if TYPE_CHECKING:
+    import aiomqtt
+
 
 logger = logging.getLogger(__name__)
 
@@ -423,14 +427,10 @@ async def publish_ambient(
     )
     r, g, b = hex_to_rgb(ambient_hex)
 
-    from datetime import UTC, datetime
-
     now_iso = datetime.now(UTC).isoformat()
 
     # Build the ambient payload dict (minimal — firmware only needs color + brightness).
     # Re-use the IlluminatePayload schema shape for state/* compatibility.
-    from gruvax.mqtt.schemas import IlluminatePayload, RGBColor, TransitionSpec
-
     def _make_ambient_bytes(unit_id: int, row: int, col: int) -> bytes:
         payload = IlluminatePayload(
             issued_at=now_iso,
@@ -518,7 +518,7 @@ async def publish_ambient(
 async def publish_all_off(
     client: aiomqtt.Client | None,
     pool: Any,
-    settings_cache: dict[str, Any],
+    _settings_cache: dict[str, Any],
 ) -> int:
     """Publish an empty retained payload to every state/{unit_id}/{r}/{c} topic.
 
@@ -531,10 +531,11 @@ async def publish_all_off(
     global off was requested.
 
     Args:
-        client:         aiomqtt.Client, or None in degraded mode.
-        pool:           psycopg AsyncConnectionPool used to enumerate units.
-        settings_cache: The gruvax.settings key/value dict (unused in v1 but
-                        kept for API symmetry with other publisher functions).
+        client:          aiomqtt.Client, or None in degraded mode.
+        pool:            psycopg AsyncConnectionPool used to enumerate units.
+        _settings_cache: The gruvax.settings key/value dict (unused in v1 but
+                         kept for API symmetry with other publisher functions —
+                         underscore-prefixed to signal intentional non-use).
 
     Returns:
         Number of cube state-clear publishes made (NOT counting the all/off command).

@@ -40,11 +40,16 @@ All factories use the _load_rows / _load_snapshot seams — NO DB, NO async.
 
 from __future__ import annotations
 
-from collections.abc import Callable
+from typing import TYPE_CHECKING
 
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
 from gruvax.estimator.segment_cache import SegmentCache
+
+
+if TYPE_CHECKING:
+    from collections.abc import Callable
+
 
 # ── Internal helpers ──────────────────────────────────────────────────────────
 

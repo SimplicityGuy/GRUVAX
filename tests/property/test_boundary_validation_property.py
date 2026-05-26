@@ -13,10 +13,10 @@ Analog: tests/property/test_parser_props.py (Hypothesis @given + @settings patte
 
 from __future__ import annotations
 
-from hypothesis import given, settings
-from hypothesis import strategies as st
+from hypothesis import given, settings, strategies as st
 
 from gruvax.estimator.normalize import parse_key
+
 
 # ── Strategy helpers ──────────────────────────────────────────────────────────
 

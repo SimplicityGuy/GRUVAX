@@ -38,7 +38,8 @@ CUBE-10 / D-02 RECONCILIATION (kept here for traceability):
 
 from __future__ import annotations
 
-from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
+from typing import TYPE_CHECKING
+
 from gruvax.estimator.constants import (
     POSITION_HALF_WIDTH,
     SEGMENT_ESTIMATOR_VERSION,
@@ -52,7 +53,12 @@ from gruvax.estimator.contract import (
     SubInterval,
 )
 from gruvax.estimator.normalize import parse_key
-from gruvax.estimator.segment_cache import SegmentCache
+
+
+if TYPE_CHECKING:
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
+    from gruvax.estimator.segment_cache import SegmentCache
+
 
 # Re-export constants so tests can import them from algorithm.py
 __all__ = [
@@ -67,7 +73,7 @@ __all__ = [
 def locate_cube_only(
     release_id: int,
     label: str,
-    catalog_number: str,
+    _catalog_number: str,
     segment_cache: SegmentCache,
     snapshot: CollectionSnapshot,
 ) -> LocateResult:
@@ -97,7 +103,10 @@ def locate_cube_only(
     Args:
         release_id: The Discogs release ID (propagated into LocateResult).
         label: The record's label string (e.g. ``"Blue Note"``).
-        catalog_number: The record's catalog number (e.g. ``"BLP 4195"``).
+        _catalog_number: The record's catalog number (e.g. ``"BLP 4195"``).
+            Underscore-prefixed: accepted for API symmetry with the segment
+            estimator, but unused — cube-only fallback resolves the record
+            via release_id + label + segment_cache.
         segment_cache: A populated SegmentCache (derived at startup).
         snapshot: A populated CollectionSnapshot.
 
@@ -220,7 +229,7 @@ def locate_by_segment(
         return locate_cube_only(
             release_id=release_id,
             label=label,
-            catalog_number=catalog_number,
+            _catalog_number=catalog_number,
             segment_cache=segment_cache,
             snapshot=snapshot,
         )
@@ -233,7 +242,7 @@ def locate_by_segment(
         return locate_cube_only(
             release_id=release_id,
             label=label,
-            catalog_number=catalog_number,
+            _catalog_number=catalog_number,
             segment_cache=segment_cache,
             snapshot=snapshot,
         )
@@ -342,7 +351,7 @@ def _locate_by_index_v1(
     cube_only_result = locate_cube_only(
         release_id=release_id,
         label=label,
-        catalog_number=catalog_number,
+        _catalog_number=catalog_number,
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
@@ -387,7 +396,7 @@ def _locate_by_index_v1(
         return locate_cube_only(
             release_id=release_id,
             label=label,
-            catalog_number=catalog_number,
+            _catalog_number=catalog_number,
             segment_cache=segment_cache,
             snapshot=snapshot,
         )
@@ -481,7 +490,7 @@ def locate(
         result = locate_cube_only(
             release_id=release_id,
             label=label,
-            catalog_number=catalog_number,
+            _catalog_number=catalog_number,
             segment_cache=segment_cache,
             snapshot=snapshot,
         )

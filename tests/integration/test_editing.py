@@ -15,6 +15,7 @@ with infinite SSE streams.
 from __future__ import annotations
 
 import asyncio
+import logging
 import threading
 import time
 
@@ -22,6 +23,9 @@ import httpx
 import pytest
 
 from gruvax.app import create_app
+
+
+logger = logging.getLogger(__name__)
 
 
 def _find_free_port() -> int:
@@ -103,7 +107,8 @@ async def _login(base_url: str) -> dict[str, str]:
             await conn.commit()
         await pool.close()
     except Exception:
-        pass  # Seeding failure — login will fail gracefully below
+        # Seeding failure — login will fail gracefully below; surface for diagnostics.
+        logger.exception("test_editing: PIN seeding failed; login will fail gracefully")
 
     async with httpx.AsyncClient(base_url=base_url) as ac:
         res = await ac.post("/api/admin/login", json={"pin": "0000"})

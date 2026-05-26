@@ -15,12 +15,17 @@ directly with the stub; endpoint-level tests use httpx AsyncClient against the a
 
 from __future__ import annotations
 
+import logging
 import os
 from typing import Any
 from unittest.mock import AsyncMock, MagicMock, patch
 
-import pytest
 from httpx import ASGITransport, AsyncClient
+import pytest
+
+
+logger = logging.getLogger(__name__)
+
 
 # ── Shared test constants ─────────────────────────────────────────────────────
 
@@ -291,6 +296,8 @@ async def test_diagnostic_uses_correct_brightness_tiers() -> None:
         try:
             payload = _json.loads(payload_bytes)
         except Exception:
+            # Malformed publish — skip and surface for diagnostics.
+            logger.exception("test_led_admin_endpoints: skipping malformed publish payload")
             continue
         # Exclude the closing ambient-restore frames (CR-04): they legitimately
         # carry led_brightness.ambient and are identified by the ambient colour.

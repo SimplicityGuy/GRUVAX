@@ -20,12 +20,13 @@ from __future__ import annotations
 
 import os
 
-import pytest
-import pytest_asyncio
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
+import pytest
+import pytest_asyncio
 
 from gruvax.app import create_app
+
 
 # Test PIN used throughout this module — must match the seeded hash below.
 _TEST_PIN = "0000"
