@@ -40,6 +40,7 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "bandit>=1.9",
     "httpx>=0.28.1",
     "hypothesis>=6.152.9",
     "mypy>=2.1.0",
