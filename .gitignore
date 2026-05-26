@@ -241,3 +241,6 @@ src/gruvax/_version.py
 
 # Playwright MCP transient artifacts
 .playwright-mcp/
+
+# Superpowers brainstorm sessions (visual companion mockups)
+.superpowers/
