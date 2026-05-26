@@ -32,7 +32,7 @@ Security:
 All SQL uses ``%s`` placeholders — no f-string interpolation.
 
 dry_run preview contract (POST /api/admin/import/boundaries?dry_run=true):
-  - Runs the identical parse + fill + validation pipeline (steps 1–6) with NO DB write.
+  - Runs the identical parse + fill + validation pipeline (steps 1-6) with NO DB write.
   - On validation pass → 200 preview body:
       {
         "total_cubes":    <int — count of all addresses in cube_boundaries>,
@@ -56,7 +56,6 @@ import uuid as _uuid
 from typing import Any
 
 import yaml
-
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 
@@ -155,7 +154,7 @@ async def import_boundaries(
     Returns: JSON ``{change_set_id, applied, source}``
 
     dry_run=true — NO-write preview (T-07-DRYRUN-WRITE):
-      Runs steps 1–6 identically (same parse + fill + validation), then:
+      Runs steps 1-6 identically (same parse + fill + validation), then:
       - Returns 400 on any validation error (same bodies as commit path).
       - On validation pass, returns 200 preview:
           {total_cubes, file_cube_count, diff_preview: [{unit_id, row, col, delta, will_be_empty}]}
@@ -227,9 +226,7 @@ async def import_boundaries(
     # ── 4+5. Build edit list + full address space fill (D-09 replace-all) ─────
     # Also fetch the committed cut-point state in the SAME query for current_index
     # (G3 identity-skip: one SELECT — no per-row query). keyed by (unit_id, row, col).
-    file_index: dict[tuple[int, int, int], Any] = {
-        (e.unit_id, e.row, e.col): e for e in entries
-    }
+    file_index: dict[tuple[int, int, int], Any] = {(e.unit_id, e.row, e.col): e for e in entries}
 
     # Fetch full address space + committed cut-point columns in one SELECT.
     # current_index is used for both the G3 phantom skip (step 6) and the
@@ -415,7 +412,7 @@ async def import_boundaries(
             from gruvax.api.admin.cubes import _get_nominal_capacity
 
             nominal_capacity = _get_nominal_capacity(request)
-        except Exception:
+        except Exception:  # nosec B110 - best-effort lookup; default is fine for preview delta
             pass  # fall back to default — not critical for preview delta
 
         total_cubes = len(all_addresses_raw)
@@ -559,9 +556,7 @@ async def import_boundaries(
         await bus.publish(
             "boundary_changed",
             {
-                "cube_ids": [
-                    {"unit": e.unit_id, "row": e.row, "col": e.col} for e in all_edits
-                ],
+                "cube_ids": [{"unit": e.unit_id, "row": e.row, "col": e.col} for e in all_edits],
                 "change_set_id": change_set_id,
             },
         )
@@ -683,15 +678,13 @@ async def import_settings(
         elif dotted_key in _BRIGHTNESS_KEYS:
             try:
                 int_value = int(value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={
                         "type": "invalid_brightness",
                         "field": dotted_key,
-                        "message": (
-                            f"Brightness must be an integer in [0, 255]. Got: {value!r}"
-                        ),
+                        "message": (f"Brightness must be an integer in [0, 255]. Got: {value!r}"),
                     },
                 ) from None
             if not 0 <= int_value <= 255:
@@ -720,7 +713,7 @@ async def import_settings(
             elif dotted_key in _INT_KEYS:
                 try:
                     int_val = int(value)
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     logger.warning("Skipping invalid integer for %s", dotted_key)
                     continue
                 json_value = str(int_val)
@@ -731,9 +724,7 @@ async def import_settings(
                 json_value = _json.dumps(value)
 
             await conn.execute(
-                "UPDATE gruvax.settings"
-                " SET value = %s::jsonb, updated_at = now()"
-                " WHERE key = %s",
+                "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now() WHERE key = %s",
                 (json_value, dotted_key),
             )
             updated.append(dotted_key)

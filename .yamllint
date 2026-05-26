@@ -1,0 +1,26 @@
+---
+extends: default
+
+rules:
+  line-length:
+    max: 200
+    level: warning
+  comments:
+    min-spaces-from-content: 1
+  comments-indentation: disable
+  truthy:
+    allowed-values: ["true", "false", "on", "off"]
+  quoted-strings: disable
+  brackets:
+    max-spaces-inside: 1
+  document-start: disable
+  indentation:
+    spaces: 2
+    indent-sequences: true
+
+ignore: |
+  .venv/
+  venv/
+  .git/
+  node_modules/
+  frontend/node_modules/

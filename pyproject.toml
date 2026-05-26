@@ -10,6 +10,7 @@ requires-python = ">=3.14"
 dependencies = [
     "aiomqtt>=2.5",
     "alembic>=1.18.4",
+    "orjson>=3.11.9",
     "asgi-lifespan>=2.1.0",
     "fastapi>=0.136.1",
     "itsdangerous>=2.2",
@@ -22,6 +23,10 @@ dependencies = [
     "pyyaml>=6.0.3",
     "sqlalchemy[asyncio]>=2.0.49",
     "sse-starlette>=3.4",
+    # Pull up the transitive starlette to >=1.0.1 — PYSEC-2026-161 affects 1.0.0
+    # (FastAPI 0.136.1 accepts >=1.0,<2.0; 1.0.1 is in range).
+    "starlette>=1.0.1",
+    "structlog>=25.5.0",
     "uvicorn[standard]>=0.47.0",
 ]
 
@@ -35,10 +40,13 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
+    "bandit>=1.9",
     "httpx>=0.28.1",
     "hypothesis>=6.152.9",
     "mypy>=2.1.0",
     "natsort>=8.4",
+    "pip-audit>=2.7",
+    "pre-commit>=4.6",
     "pytest>=9.0.3",
     "pytest-asyncio>=1.3.0",
     "pytest-benchmark>=5.2.3",
@@ -92,6 +100,13 @@ ignore_errors = true
 
 [[tool.mypy.overrides]]
 module = ["aiomqtt.*", "sse_starlette.*", "psycopg.*", "psycopg_pool.*", "natsort.*"]
+ignore_missing_imports = true
+
+# gruvax._version is generated at build time (Dockerfile / `just build-version`) and is
+# gitignored, so it is absent in CI lint runs. version.py / health.py import it under a
+# try/except ImportError with a dev fallback, so a missing module is expected, not an error.
+[[tool.mypy.overrides]]
+module = ["gruvax._version"]
 ignore_missing_imports = true
 
 # ── coverage ─────────────────────────────────────────────────────────────────

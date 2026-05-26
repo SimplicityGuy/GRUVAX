@@ -10,9 +10,9 @@ Provides:
                               and CSRF token.  Depends on Plan 02 implementing
                               ``gruvax.auth.pin.hash_pin`` and the login endpoint.
   - ``four_cube_boundaries`` — Phase 7: synthetic 4-cube cut-point list (unit 1, row 0,
-                              cols 0–3) using made-up labels only.  No real collection CSV.
+                              cols 0-3) using made-up labels only.  No real collection CSV.
   - ``thirty_two_cube_boundaries`` — Phase 7: synthetic 32-cube cut-point list (units 1 + 2,
-                              4×4 each) using made-up labels only. No real collection CSV.
+                              4x4 each) using made-up labels only. No real collection CSV.
 
 Integration tests that need a live DB should use ``db_pool``; unit tests
 should use ``boundary_cache`` or plain Python fixtures.
@@ -188,7 +188,7 @@ def boundary_cache() -> list[dict[str, Any]]:
 
 @pytest.fixture(scope="session")
 def four_cube_boundaries() -> list[dict[str, Any]]:
-    """4 synthetic cut-point rows — unit_id=1, row=0, cols 0–3.
+    """4 synthetic cut-point rows - unit_id=1, row=0, cols 0-3.
 
     Covers one shelf row with four distinct made-up labels.
     Synthetic catalog numbers: A-001 … A-004 (purely fictional).
@@ -232,7 +232,7 @@ def four_cube_boundaries() -> list[dict[str, Any]]:
 
 @pytest.fixture(scope="session")
 def thirty_two_cube_boundaries() -> list[dict[str, Any]]:
-    """32 synthetic cut-point rows — units 1 and 2, each 4×4 (rows 0–3, cols 0–3).
+    """32 synthetic cut-point rows - units 1 and 2, each 4x4 (rows 0-3, cols 0-3).
 
     Covers a full 2-unit Kallax setup.
     Labels cycle through the four synthetic label families.

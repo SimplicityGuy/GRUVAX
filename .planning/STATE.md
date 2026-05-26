@@ -3,14 +3,14 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 status: ready_to_plan
-last_updated: 2026-05-25T04:08:22.966Z
+last_updated: 2026-05-25T22:45:25.507Z
 progress:
-  total_phases: 10
-  completed_phases: 6
-  total_plans: 42
-  completed_plans: 41
-  percent: 60
-stopped_at: Phase 08 complete (6/6) — ready to discuss Phase 999.1
+  total_phases: 12
+  completed_phases: 8
+  total_plans: 51
+  completed_plans: 52
+  percent: 67
+stopped_at: Phase 10 complete (3/3) — ready to discuss Phase 999.1
 ---
 
 # State: GRUVAX
@@ -29,8 +29,8 @@ stopped_at: Phase 08 complete (6/6) — ready to discuss Phase 999.1
 
 ## Current Position
 
-Phase: 08 (observability-deployment-hardening) — EXECUTING
-Plan: 1 of 6
+Phase: 10 (close-milestone-gaps) — EXECUTING
+Plan: 3 of 3
 
 - **Phase:** 999.1
 - **Plan:** Not started
@@ -38,22 +38,24 @@ Plan: 1 of 6
 - **Progress:** [██████████] 100%
 
 ```
-Phase 1: First Search → Cube Highlight              [ ] Not started — NEXT
-Phase 2: Real Position Estimation                   [ ] Not started
-Phase 3: Admin Loop (PIN + Manual Entry + Undo)     [ ] Not started
-Phase 4: Realtime + Offline Resilience              [ ] Not started
-Phase 5: Segment-Aware Position Precision           [ ] Not started
-Phase 6: LED Contract over MQTT (Hardware Stubbed)  [ ] Not started
-Phase 7: Wizards + Import/Export                    [ ] Not started
-Phase 8: Observability + Deployment Hardening       [ ] Not started
+Phase 1: First Search → Cube Highlight              [x] Complete
+Phase 2: Real Position Estimation                   [x] Complete
+Phase 3: Admin Loop (PIN + Manual Entry + Undo)     [x] Complete
+Phase 4: Realtime Live Updates                      [x] Complete
+Phase 5: Segment-Aware Position Precision           [x] Complete
+Phase 6: LED Contract over MQTT (Hardware Stubbed)  [x] Complete
+Phase 7: Wizards + Import/Export                    [x] Complete
+Phase 8: Observability + Deployment Hardening       [x] Complete
+Phase 9: Tooling and Docs Hardening                 [x] Complete
+Phase 10: Close Milestone Gaps                      [~] Executing (plan 3/3 done)
 ```
 
 ## Performance Metrics
 
 | Metric | Value |
 |--------|-------|
-| v1 requirements | 73 |
-| Requirements mapped to phases | 73 (100%) |
+| v1 requirements | 84 |
+| Requirements mapped to phases | 84 (100%) |
 | Phases planned | 0 / 7 |
 | Plans complete | 0 |
 | Phases shipped | 0 |
@@ -74,6 +76,7 @@ None. (Reconcile gruvax/gruvax_app role naming → completed as quick task 26052
 ### Roadmap Evolution
 
 - Phase 5 inserted after Phase 4: Segment-Aware Position Precision — true integer insert; bumped LED→6, Wizards→7, Observability→8
+- Phase 10 added (integer append) at end of v1.0: Close Milestone Gaps — INT-A SSE payload shape + INT-B undo re-derive/publish + traceability reconcile; closes the v1.0 milestone-audit gaps (`.planning/v1.0-MILESTONE-AUDIT.md`). 9 deferred reqs (SRCH-09, OFF-01..04, PRIV-01..04) remain a separate scope decision (audit item 3), out of Phase 10 scope.
 
 ### Decisions Made (from PROJECT.md + research)
 
@@ -115,6 +118,8 @@ None. (Reconcile gruvax/gruvax_app role naming → completed as quick task 26052
 - [Phase 06-04]: **Endpoint tests use dependency_overrides, not patch** — FastAPI resolves `Depends(require_admin)` by function reference at route registration; patching the module-level name does not intercept the dependency. Use `app.dependency_overrides[require_admin] = stub` (canonical pattern from test_admin_led_settings.py).
 - [Phase 06-04]: **run_diagnostic uses asyncio.timeout(5.0)** — pure stdlib (Python 3.11+), no new deps; 5-second window for status/# subscribe covers firmware boot latency in v1 (D-10).
 - [Phase 05-01]: **BoundaryRow contract change under-scoped at plan time** — dropping `last_label`/`last_catalog` (migration 0005) ripples through more consumers than 05-02..05-05 covered. Post-merge gate caught ~40 RED tests + 12 mypy errors. 05-01's work is correct and merged; Waves 2–5 are being re-planned to add orphan coverage (`api/units.py`, `db/seed_boundaries.py`, `db/queries.py`, `boundary_cache.py:100`, ~11 test files). **Lesson:** plans that change a shared dataclass/DDL contract must include an explicit consumer-sweep (grep audit) covering every construction/SQL/test site, and each wave must leave the suite green. Full inventory: `05-REPLAN-NOTES.md`.
+- [Phase 10-03]: **SEG-01..08 traceability flipped from Pending to Complete** — Phase 5 passed 8/8 but traceability rows were stale-Pending; flipped both body checkboxes and table rows.
+- [Phase 10-03]: **Requirement count reconciled to 84 everywhere** — REQUIREMENTS.md header corrected 81→84 (73 original + 8 SEG + 3 LED idle/ambient); ROADMAP.md intro corrected 73→84. Internal-consistency target 84 total = 75 satisfied + 9 deferred achieved.
 
 ### Open Questions (carried from research/SUMMARY.md §Open Questions)
 
@@ -151,10 +156,10 @@ None.
 
 ## Session Continuity
 
-**Last touched:** 2026-05-25 (Phase 07 COMPLETE — all 8 plans; gap-closure 07-06/07/08 done; 07-VERIFICATION.md status=passed 18/18; owner-approved human-verify UAT. FINALIZATION this session: (1) fixed pre-existing test-isolation debt — promoted the login rate-limiter reset to a global autouse fixture in tests/conftest.py + made the import/locate/migrate tests self-contained → backend suite is now ORDER-INDEPENDENT and green twice back-to-back, even on a UAT-mutated DB [a26252d]; (2) code review found + fixed 1 critical + 2 warnings [03fb309]: CR-01 reshuffle resume Math.min(…,0)→Math.max (always resumed at step 0), WR-01 settings-import explicit conn.transaction(), WR-02 export download appended-anchor + deferred revoke (Firefox/mobile-Safari); (3) reconciled 07-UAT.md + 07-HUMAN-UAT.md + PROJECT.md. `uv run pytest tests/` exits 0, mypy --strict clean, frontend tsc+build clean. Stack rebuilt (docker compose up -d --build api), dev PIN=0000.)
-**Prev:** 2026-05-24 (Phase 06 Plan 04 complete — all-off/diagnostic admin vertical slice. 318 tests passing. Phase 06 4/4 plans complete — all LED contract plans done.)
-**Prev2:** 2026-05-23 (Phase 05 FULLY VERIFIED — gap-closure 05-06 complete (6/6 plans) + all 6 UAT items pass. SEG-05 label-contiguity enforced on the LIVE admin write paths PUT /cut + POST /insert-cut (400 type=contiguity_error before any DB write) via build_proposed_cuts→validate_contiguity, surfaced in RecordPickerSheet (sheet stays open), orphaned /admin/preview + DiffPreviewSheet/RollbackToast removed. UAT test 6 RE-VERIFIED LIVE via Playwright on the rebuilt stack — the container image predated 05-06 so it was rebuilt (docker compose up -d --build api) and the dev DB was DROPPED + RE-SEEDED from fixtures (which also cleared the cut_insert pollution → test_migrate_0005 now passes → full backend suite exits 0). 05-VERIFICATION.md status=passed. Admin PIN re-seeded to 0000 after the DB drop.)
-**Next action:** Phase 07 is COMPLETE across every gate (8/8 plans; 07-VERIFICATION.md passed 18/18; 07-REVIEW.md resolved). TWO non-blocking follow-ups remain: (1) ONE quick human re-verify — reshuffle resume-at-step after the CR-01 fix (07-HUMAN-UAT.md Test 1: start a reshuffle, complete ≥1 step, hard-reload, CONTINUE → should land on the SAVED step, not step 0); (2) optional `/gsd-secure-phase 7` (no 07-SECURITY.md yet; workflow.security_enforcement=true). Ready for Phase 8 (Observability + Deployment Hardening): `/clear` then `/gsd-discuss-phase 8` or `/gsd-plan-phase 8`.
+**Last touched:** 2026-05-25 (Phase 10 Plan 03 COMPLETE — traceability/count reconcile (docs-only). SEG-01..08 flipped from Pending to Complete in both body checkboxes and traceability table. REQUIREMENTS.md header corrected 81→84. ROADMAP.md traceability intro corrected 73→84. Internal consistency achieved: 84 total = 75 satisfied + 9 deferred. Commits: 5cb0589 (REQUIREMENTS.md), 501a63f (ROADMAP.md).)
+**Prev:** 2026-05-25 (Phase 07 COMPLETE — all 8 plans; gap-closure 07-06/07/08 done; 07-VERIFICATION.md status=passed 18/18; owner-approved human-verify UAT.)
+**Prev2:** 2026-05-24 (Phase 06 Plan 04 complete — all-off/diagnostic admin vertical slice. 318 tests passing. Phase 06 4/4 plans complete — all LED contract plans done.)
+**Next action:** Phase 10 Plans 10-01 (INT-A payload fix) and 10-02 (INT-B undo re-derive/publish) remain. Run those plans to close the remaining 2 integration blockers. Then run `/gsd-verify-work` for the full Phase 10 gate.
 
 ---
 *State initialized: 2026-05-19 with roadmap creation*

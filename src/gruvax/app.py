@@ -37,7 +37,7 @@ from starlette.types import Scope
 
 from gruvax.db.pool import create_pool
 from gruvax.estimator.boundary_cache import BoundaryCache
-from gruvax.logging_config import JsonFormatter, LogRingHandler
+from gruvax.logging_config import configure_logging
 from gruvax.mqtt.client import connect_mqtt, disconnect_mqtt
 from gruvax.settings import settings
 
@@ -84,20 +84,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     # ── 0. Structured-JSON logging + log ring buffer (OBS-02, D-12) ─────────
     # Configure before the pool opens so all subsequent log calls emit JSON.
-    _log_level = getattr(logging, settings.LOG_LEVEL.upper(), logging.INFO)
-    _root = logging.getLogger()
-    _root.setLevel(_log_level)
-    _json_handler = logging.StreamHandler()
-    _json_handler.setFormatter(JsonFormatter())
-    _root.handlers = [_json_handler]  # replace any default handlers
+    # configure_logging() wires the structlog processor chain for stdout JSON,
+    # and attaches LogRingHandler to the gruvax logger only (WR-02 / T-9-IL).
     _log_ring: deque[dict[str, Any]] = deque(maxlen=200)
     app.state.log_ring_buffer = _log_ring
-    # WR-02 fix: attach the ring buffer to the application logger only, at INFO+.
-    # The root JSON StreamHandler still captures third-party loggers to stdout, but
-    # the in-memory ring served to the admin diagnostics page is restricted to our
-    # own `gruvax.*` loggers so a stringified third-party error (e.g. a psycopg
-    # connection failure carrying the DSN) cannot leak into the admin UI.
-    logging.getLogger("gruvax").addHandler(LogRingHandler(_log_ring, level=logging.INFO))
+    configure_logging(settings.LOG_LEVEL, _log_ring)
 
     # ── 1. DB pool ───────────────────────────────────────────────────────────
     pool = create_pool(min_size=2, max_size=10)
@@ -220,9 +211,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                         " FROM gruvax.v_collection"
                     )
                     row = await cur.fetchone()
-                app.state.sync_age_seconds = (
-                    float(row[0]) if (row and row[0] is not None) else None
-                )
+                app.state.sync_age_seconds = float(row[0]) if (row and row[0] is not None) else None
             except Exception as exc:
                 logger.warning("sync_age refresh failed: %s", exc)
                 app.state.sync_age_seconds = None

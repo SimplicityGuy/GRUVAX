@@ -91,7 +91,7 @@ async def test_auth_key_rejected(client) -> None:  # type: ignore[no-untyped-def
     assert auth, "Login must be available for auth key rejection test"
 
     # auth.pin_hash is the primary hard-exclusion concern (D-14)
-    yaml_content = b"auth.pin_hash: \"$argon2id$v=19$m=65536,t=2,p=1$fake$hash\"\n"
+    yaml_content = b'auth.pin_hash: "$argon2id$v=19$m=65536,t=2,p=1$fake$hash"\n'
     response = await client.post(
         "/api/admin/import/settings",
         content=yaml_content,

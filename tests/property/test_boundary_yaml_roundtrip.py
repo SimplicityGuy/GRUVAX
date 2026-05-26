@@ -8,12 +8,10 @@ Uses Hypothesis for property-based coverage over synthetic CutPointEntry lists.
 
 from __future__ import annotations
 
-import pytest
 from hypothesis import given, settings
 from hypothesis import strategies as st
 
 from gruvax.io.boundary_yaml import CutPointEntry, parse_yaml_boundaries, serialize_boundaries_yaml
-
 
 # ── Strategies ────────────────────────────────────────────────────────────────
 
@@ -36,7 +34,9 @@ override_dict = st.dictionaries(
 )
 
 
-def make_non_empty_entry(unit_id: int, row: int, col: int, label: str, catalog: str, overrides: dict) -> CutPointEntry:
+def make_non_empty_entry(
+    unit_id: int, row: int, col: int, label: str, catalog: str, overrides: dict
+) -> CutPointEntry:
     return CutPointEntry(
         unit_id=unit_id,
         row=row,
@@ -94,6 +94,7 @@ def _dedup(entries: list[CutPointEntry]) -> list[CutPointEntry]:
 
 # ── Property tests ────────────────────────────────────────────────────────────
 
+
 @given(entries=st.lists(entry_strategy, min_size=0, max_size=10).map(_dedup))
 @settings(max_examples=100)
 def test_round_trip_identity(entries: list[CutPointEntry]) -> None:
@@ -107,7 +108,7 @@ def test_round_trip_identity(entries: list[CutPointEntry]) -> None:
     assert len(orig_sorted) == len(reparsed_sorted), (
         f"Entry count differs: {len(orig_sorted)} vs {len(reparsed_sorted)}"
     )
-    for orig, rep in zip(orig_sorted, reparsed_sorted):
+    for orig, rep in zip(orig_sorted, reparsed_sorted, strict=False):
         assert orig.unit_id == rep.unit_id
         assert orig.row == rep.row
         assert orig.col == rep.col
@@ -123,17 +124,22 @@ def test_round_trip_identity(entries: list[CutPointEntry]) -> None:
 @given(
     label=label_str,
     catalog=catalog_str,
-    overrides=st.fixed_dictionaries({
-        "Atlantic": st.just(0.45),
-        "Blue Note": st.just(0.55),
-    }),
+    overrides=st.fixed_dictionaries(
+        {
+            "Atlantic": st.just(0.45),
+            "Blue Note": st.just(0.55),
+        }
+    ),
 )
 @settings(max_examples=20)
 def test_overrides_survive_roundtrip(label: str, catalog: str, overrides: dict) -> None:
     """Overrides dict survives serialize → parse unchanged."""
     entry = CutPointEntry(
-        unit_id=1, row=0, col=0,
-        first_label=label, first_catalog=catalog,
+        unit_id=1,
+        row=0,
+        col=0,
+        first_label=label,
+        first_catalog=catalog,
         is_empty=False,
         overrides=overrides,
     )

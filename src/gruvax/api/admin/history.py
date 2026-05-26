@@ -15,7 +15,9 @@ Endpoints:
           boundary_history row with source='revert' under a new change_set_id.
       The inverse change-set is atomic for the non-conflicting cubes.
       A revert is itself recorded in history — it is undoable (D-11).
-      After commit, invalidates + reloads the boundary cache (Pitfall A).
+      After commit, invalidates + reloads BoundaryCache, re-derives SegmentCache
+      from all current overrides in gruvax.segment_overrides, and publishes a
+      boundary_changed SSE event with the reverted cube_ids (Pitfall A).
       Requires admin session + CSRF.
 
 Security:
@@ -35,8 +37,18 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
 
-from gruvax.api.deps import get_boundary_cache, get_pool, require_admin
+from gruvax.api.deps import (
+    get_boundary_cache,
+    get_collection_snapshot,
+    get_event_bus,
+    get_pool,
+    get_segment_cache,
+    require_admin,
+)
 from gruvax.estimator.boundary_cache import BoundaryCache
+from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.estimator.segment_cache import SegmentCache
+from gruvax.events.bus import EventBus
 
 logger = logging.getLogger(__name__)
 
@@ -68,6 +80,9 @@ async def revert_change_set(
     change_set_id: str = Path(description="UUID of the change-set to revert"),
     pool: Any = Depends(get_pool),
     cache: BoundaryCache = Depends(get_boundary_cache),
+    segment_cache: SegmentCache = Depends(get_segment_cache),
+    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
+    bus: EventBus = Depends(get_event_bus),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Conflict-aware revert of a change-set (D-11, D-12, ADMN-09).
@@ -80,8 +95,10 @@ async def revert_change_set(
     The inverse change-set is itself written to boundary_history with
     source='revert' so it can be undone by reverting it (D-11).
 
-    AFTER the transaction commits, invalidates + reloads the boundary cache
-    (Pitfall A — never inside the transaction).
+    AFTER the transaction commits, invalidates + reloads BoundaryCache, re-reads
+    all overrides from gruvax.segment_overrides, re-derives SegmentCache, and
+    publishes a boundary_changed SSE event with the reverted cube_ids (Pitfall A —
+    cache mutations never inside the transaction).
 
     Response:
       ``{change_set_id: str, reverted: [...], skipped: [...]}``
@@ -188,11 +205,40 @@ async def revert_change_set(
     # was unreachable. Returning {reverted:[], skipped:[...]} is the meaningful
     # signal for a fully-conflicted revert — not 404.
 
-    # ── Invalidate + reload cache AFTER transaction commit (Pitfall A) ───────
-    # Only reload if at least one cube was actually changed
+    # ── Invalidate + reload BoundaryCache + re-derive SegmentCache AFTER commit ─
+    # (Pitfall A: cache mutations must run AFTER the transaction block exits.)
+    # Only execute if at least one cube was actually changed.
     if reverted:
         cache.invalidate()
-        await cache.load(pool)
+        try:
+            await cache.load(pool)
+            # Re-read ALL overrides from the DB before re-deriving SegmentCache.
+            # A revert may touch multiple bins, and admin-set width overrides must
+            # be preserved.  Re-reading from gruvax.segment_overrides is the same
+            # approach used by segments.py::set_bin_overrides and insert_cut.
+            overrides: dict[tuple[int, int, int, str], float] = {}
+            async with pool.connection() as conn2, conn2.cursor() as cur2:
+                await cur2.execute(
+                    "SELECT unit_id, row, col, label, fraction FROM gruvax.segment_overrides"
+                )
+                override_rows = await cur2.fetchall()
+            for uid_o, r_o, c_o, lbl_o, frac_o in override_rows:
+                overrides[(int(uid_o), int(r_o), int(c_o), str(lbl_o))] = float(frac_o)
+            segment_cache.invalidate()
+            segment_cache.derive(cache, snapshot, overrides)
+        finally:
+            # Publish boundary_changed even if cache.load() raised — the kiosk must
+            # be notified that a revert occurred.  cube_ids uses key "unit" (not
+            # "unit_id") to match the ShimmerCube contract (Pitfall 1).
+            await bus.publish(
+                "boundary_changed",
+                {
+                    "cube_ids": [
+                        {"unit": r["unit_id"], "row": r["row"], "col": r["col"]} for r in reverted
+                    ],
+                    "change_set_id": new_change_set_id,
+                },
+            )
 
     return JSONResponse(
         content={

@@ -46,7 +46,7 @@ The outer `Wizard` calls `useSearchParams()` and `useAdminStore()` unconditional
 
 Preserved invariants:
 - `?mode=reshuffle` deep-link → skips landing, enters walk directly
-- `?mode=setup` deep-link → skips landing, enters walk directly  
+- `?mode=setup` deep-link → skips landing, enters walk directly
 - Existing `reshuffleDraft` → skips landing, auto-resumes reshuffle walk
 
 **Task 2 — Admin nav chrome (AdminShell.tsx)** — no code changes required

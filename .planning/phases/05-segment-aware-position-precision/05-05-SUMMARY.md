@@ -147,7 +147,7 @@ Segment-aware bin-card cut-point editor with drag-to-override strip, slide-up re
 
 Task 3 requires manual UI verification of the drag/drift/insert behaviors:
 - SEG-08: Drag handle adjusts adjacent segment widths and both mark as overridden
-- Drift chip shows "review" state when |override - auto| > 3% 
+- Drift chip shows "review" state when |override - auto| > 3%
 - "reset to N%" resyncs without removing override
 - Insert-cut creates NEW bin card with badge and renumber hint
 - RecordPickerSheet phantom blocking works (USE ANYWAY path)
@@ -176,7 +176,7 @@ See `.planning/phases/05-segment-aware-position-precision/05-VALIDATION.md` for 
 ## Self-Check
 
 - [x] frontend/src/routes/admin/CutPointEditor.tsx exists
-- [x] frontend/src/routes/admin/RecordPickerSheet.tsx exists  
+- [x] frontend/src/routes/admin/RecordPickerSheet.tsx exists
 - [x] frontend/src/routes/admin/SegmentEditorPanel.tsx exists
 - [x] frontend/src/routes/admin/CubeEditor.tsx DELETED
 - [x] Commits daa5310 and 686fbf5 exist

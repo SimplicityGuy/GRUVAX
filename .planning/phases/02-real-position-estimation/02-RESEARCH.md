@@ -773,7 +773,7 @@ def test_locate_benchmark(benchmark, small_snapshot, boundary_cache):
     result = benchmark(lambda: [
         locate(rid, small_snapshot, boundary_cache) for rid in release_ids[:100]
     ])
-    # pytest-benchmark asserts via --benchmark-max-time; planner adds: 
+    # pytest-benchmark asserts via --benchmark-max-time; planner adds:
     # assert benchmark.stats['percentile_95'] < 50  # ms
 ```
 

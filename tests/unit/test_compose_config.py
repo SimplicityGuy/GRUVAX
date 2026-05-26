@@ -69,9 +69,7 @@ def test_production_service_has_healthcheck(service_name: str) -> None:
 def test_production_service_has_restart_unless_stopped(service_name: str) -> None:
     """DEP-05: every production service must declare restart: unless-stopped."""
     svc = _SERVICES.get(service_name)
-    assert svc is not None, (
-        f"Service '{service_name}' not found in compose.yaml."
-    )
+    assert svc is not None, f"Service '{service_name}' not found in compose.yaml."
     restart = svc.get("restart")
     assert restart == "unless-stopped", (
         f"DEP-05 violation: service '{service_name}' restart policy is {restart!r}, "
@@ -86,9 +84,7 @@ def test_production_service_has_restart_unless_stopped(service_name: str) -> Non
 def test_production_service_logging_driver_is_json_file(service_name: str) -> None:
     """DEP-04: every production service must declare logging driver json-file."""
     svc = _SERVICES.get(service_name)
-    assert svc is not None, (
-        f"Service '{service_name}' not found in compose.yaml."
-    )
+    assert svc is not None, f"Service '{service_name}' not found in compose.yaml."
     assert "logging" in svc, (
         f"DEP-04 violation: service '{service_name}' has no logging declaration."
     )

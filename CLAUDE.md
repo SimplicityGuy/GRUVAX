@@ -11,12 +11,12 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 
 - **Tech stack — Backend**: Python + FastAPI in this repo. Align Python and FastAPI versions with discogsography to share a dependency story.
 - **Tech stack — Frontend**: Web stack (React + GSAP + Three.js/Pixi proposed) running in Chromium kiosk mode on the Pi. Final stack decision deferred to UI design phase.
-- **Deployment**: Docker Compose on `lux`, sibling to discogsography. No second host for v1.
+- **Deployment**: Docker Compose on the deployment host, sibling to discogsography. No second host for v1.
 - **Database**: Shared Postgres instance with discogsography. GRUVAX owns a dedicated schema (`gruvax`); reads from discogsography's collection tables read-only.
 - **Performance**: Type-ahead search round-trip ≤ ~200 ms perceived from keystroke to result.
-- **Connectivity**: Home LAN only; no public exposure. Pi → `lux` link is the critical path.
+- **Connectivity**: Home LAN only; no public exposure. Pi → deployment host link is the critical path.
 - **Security**: Single PIN gates admin actions; session timeout after inactivity. No multi-user concerns.
-- **Footprint**: Total hardware budget guidance from prior planning: ~$80–$150 (screen + Pi + initial LEDs). Software side aims to stay correspondingly small — no heavyweight services beyond what already runs on `lux`.
+- **Footprint**: Total hardware budget guidance from prior planning: ~$80–$150 (screen + Pi + initial LEDs). Software side aims to stay correspondingly small — no heavyweight services beyond what already runs on the deployment host.
 - **Repo hygiene**: The collection CSV and `background/` directory are local-only references; they must never be committed.
 <!-- GSD:project-end -->
 
@@ -143,7 +143,7 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 | OS | Raspberry Pi OS Trixie (Debian 13), 64-bit | Official supported release since Oct 2025. Includes the labwc compositor by default for Wayland sessions on Pi 5. |
 | Display server | **Wayland with `labwc`** | Default for Pi 5 in Trixie. Hardware video acceleration through KMS works correctly. X11 still works but is the legacy path; the active development is Wayland. |
 | Browser | Chromium (from Raspberry Pi OS repo, not snap/flatpak) | The packaged Chromium has the proprietary V4L2/MMAL bits configured. Same browser the Pi Foundation tests against. |
-| Launcher | `~/.config/labwc/autostart` invoking a `start-kiosk.sh` script | `start-kiosk.sh` runs the browser with the right flags (`--kiosk`, `--noerrdialogs`, `--disable-infobars`, `--no-first-run`, `--password-store=basic`, `--ozone-platform=wayland`, `--app=http://lux.local:PORT/`). `--password-store=basic` avoids the keyring unlock dialog on boot. |
+| Launcher | `~/.config/labwc/autostart` invoking a `start-kiosk.sh` script | `start-kiosk.sh` runs the browser with the right flags (`--kiosk`, `--noerrdialogs`, `--disable-infobars`, `--no-first-run`, `--password-store=basic`, `--ozone-platform=wayland`, `--app=http://your-server.local:PORT/`). `--password-store=basic` avoids the keyring unlock dialog on boot. |
 | Supervision / auto-restart | `systemd --user` unit that owns the Chromium process, with `Restart=always` and a small `RestartSec` | Browser crash or memory leak → automatic restart with clean logs via `journalctl --user`. More reliable than respawn loops in shell scripts. |
 | Cursor hide | `seatd` + Wayland-native cursor hiding via labwc config | `unclutter` is X11-only and broken under Wayland. |
 | Screen blanking | Disabled via labwc/Wayland idle settings | Black-screen-on-idle is in scope for v1 *as a product behavior* — implement at the app level (CSS+JS), not by letting the compositor blank the screen, so the offline banner stays reachable on touch. |
@@ -290,7 +290,9 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 <!-- GSD:architecture-start source:ARCHITECTURE.md -->
 ## Architecture
 
-Architecture not yet mapped. Follow existing patterns found in the codebase.
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the Phase 1–8 design:
+data model, API surface, position estimation, LED contract, realtime, observability,
+and deploy model.
 <!-- GSD:architecture-end -->
 
 <!-- GSD:skills-start source:skills/ -->

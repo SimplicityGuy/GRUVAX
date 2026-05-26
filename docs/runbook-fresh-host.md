@@ -1,8 +1,8 @@
 # GRUVAX Fresh-Host Bring-Up Runbook
 
 This runbook covers the first-time deployment of the GRUVAX Docker Compose stack on a
-fresh host (e.g. `lux`). It documents volume permissions, healthcheck verification, and
-the expected bring-up sequence.
+fresh deployment host (e.g. `your-server.local`). It documents volume permissions,
+healthcheck verification, and the expected bring-up sequence.
 
 ## Prerequisites
 
@@ -46,21 +46,29 @@ cd GRUVAX
 cp .env.example .env   # or create from scratch (see Prerequisites above)
 $EDITOR .env
 
-# 3. Build and start all services in detached mode
+# 3a. Production host (pull-based deploy — do NOT have compose.override.yaml present):
+docker compose pull
+docker compose up -d
+# Note: the prod host pulls the published GHCR image (ghcr.io/simplicityguy/gruvax:latest).
+# Never copy compose.override.yaml to the prod host — if present, docker compose up
+# will auto-load it and try to build from source instead of pulling (Pitfall 3).
+
+# 3b. Local dev (build from source via the override):
+#   cp compose.override.yaml.example compose.override.yaml
 just up-d
-# Equivalent to: docker compose up --build -d
+# Equivalent to: docker compose up --build -d  (override auto-merges, builds locally)
 
 # 4. Verify all services are healthy (may take 30–60 s on first boot)
 docker compose ps
 ```
 
-Expected output of `docker compose ps` when healthy:
+Expected output of `docker compose ps` when healthy (production host):
 
 ```
-NAME            IMAGE                           STATUS                    PORTS
-gruvax-api-1    gruvax-api:local                Up (healthy)              0.0.0.0:8000->8000/tcp
-gruvax-dev-pg   postgres:18                     Up (healthy)              0.0.0.0:5432->5432/tcp
-gruvax-...      eclipse-mosquitto:2.1.2-alpine  Up (healthy)
+NAME            IMAGE                                   STATUS                    PORTS
+gruvax-api-1    ghcr.io/simplicityguy/gruvax:latest     Up (healthy)              0.0.0.0:8000->8000/tcp
+gruvax-dev-pg   postgres:18                             Up (healthy)              0.0.0.0:5432->5432/tcp
+gruvax-...      eclipse-mosquitto:2.1.2-alpine          Up (healthy)
 ```
 
 All three non-debug services must show `(healthy)` before the kiosk can load.

@@ -8,7 +8,7 @@
 
 <br><br>
 
-[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm--NC--1.0.0-0051A2)](https://polyformproject.org/licenses/noncommercial/1.0.0/) ![Python 3.13+](https://img.shields.io/badge/python-3.13+-0051A2.svg?logo=python&logoColor=white)
+[![License: PolyForm Noncommercial 1.0.0](https://img.shields.io/badge/license-PolyForm--NC--1.0.0-0051A2)](https://polyformproject.org/licenses/noncommercial/1.0.0/) ![Python 3.14+](https://img.shields.io/badge/python-3.14+-0051A2.svg?logo=python&logoColor=white)
 
 **A touchscreen kiosk + REST API for finding any record in a ~3,000-LP collection across IKEA Kallax shelving — type an artist, title, label, or catalog number and watch the right cube light up.**
 
@@ -16,13 +16,13 @@
 
 <p align="center">
 
-[🔍 How It Works](#-how-it-works) | [🧱 Hardware](#-hardware) | [🧰 Stack](#-stack) | [✨ Features](#-v1-features) | [🎨 Design](#-design) | [🗺️ Planning](#-planning-artifacts)
+[🔍 How It Works](#-how-it-works) | [🧱 Hardware](#-hardware) | [🧰 Stack](#-stack) | [✨ Features](#-v1-features) | [🏛️ Architecture](#-architecture) | [🎨 Design](#-design) | [🗺️ Planning](#-planning-artifacts)
 
 </p>
 
 GRUVAX is a vinyl shelf navigator built around a single idea: a record's physical location can be **computed**, not tracked. The collection is deterministically organized — alphabetical by label, then by catalog number within label — so a small per-cube boundary table is enough to place any of ~3,000 records on the shelves. No RFID, no barcodes, no per-record stickers.
 
-The name comes from Swedish _gruv_ (groove — as in a record groove; also _to dig_) plus the `-ax` suffix common to IKEA product names (KALLAX, EKBY). Pronounced "GROO-vax." It runs alongside [discogsography](https://github.com/SimplicityGuy/discogsography) on the home server `lux` and reads its collection data.
+The name comes from Swedish _gruv_ (groove — as in a record groove; also _to dig_) plus the `-ax` suffix common to IKEA product names (KALLAX, EKBY). Pronounced "GROO-vax." It runs alongside [discogsography](https://github.com/SimplicityGuy/discogsography) on the home server and reads its collection data.
 
 ## 🔍 How It Works
 
@@ -39,7 +39,7 @@ The system relies on a _deterministic shelf ordering_ — alphabetical by label,
 | -------------------------- | ---------------------------------------------------------- |
 | Raspberry Pi 5             | Kiosk host — 4 GB RAM, 512 GB M.2 SSD                       |
 | 7" touchscreen             | Primary UI surface, Chromium kiosk mode under Wayland/labwc |
-| Home server (`lux`)        | Runs the FastAPI backend and shares Postgres + Mosquitto    |
+| Deployment host            | Runs the FastAPI backend and shares Postgres + Mosquitto    |
 | ESP32 (per Kallax unit)    | LED driver — _future milestone, not in v1_                  |
 | WS2812B LED strip per cube | Per-cube illumination — _future milestone, not in v1_       |
 
@@ -47,11 +47,12 @@ Initial deployment: two 4×4 IKEA Kallax units side-by-side (32 cubes total). Th
 
 ## 🧰 Stack
 
-- **Backend** — Python 3.13 + FastAPI, deployed via Docker Compose alongside [discogsography](https://github.com/SimplicityGuy/discogsography) on the home server.
+- **Backend** — Python 3.14 + FastAPI, deployed via Docker Compose alongside [discogsography](https://github.com/SimplicityGuy/discogsography) on the home server. Structured JSON logging via `structlog` + `orjson`.
 - **Database** — Shared PostgreSQL instance; GRUVAX owns a dedicated `gruvax` schema and reads discogsography's collection data through a read-only `gruvax.v_collection` view.
-- **Frontend** — Single-page app served by the backend; runs fullscreen in Chromium kiosk mode on the Pi and is responsive enough to double as the mobile admin UI. Final framework choice lands in the UI design phase; the working baseline is Vite + React 19.
+- **Frontend** — Single-page app served by the backend; runs fullscreen in Chromium kiosk mode on the Pi and is responsive enough to double as the mobile admin UI. Final framework choice lands in the UI design phase; the working baseline is Vite 8 + React 19.
 - **Realtime** — Server-Sent Events for kiosk updates on boundary edits.
 - **LED control plane** — `aiomqtt` publishing to an internal `eclipse-mosquitto` broker; the contract is locked in v1 even though the hardware milestone (ESP32 firmware + WS2812B wiring) lands later.
+- **Deploy** — Pull-based: `docker compose pull && docker compose up -d` using the pre-built `ghcr.io/simplicityguy/gruvax:latest` image from GitHub Container Registry. No build step required on the deployment host.
 - **Metadata** — comes from the [discogsography](https://github.com/SimplicityGuy/discogsography) project, which handles Discogs OAuth sync, full-text search, and the music graph.
 
 ## ✨ v1 Features
@@ -67,6 +68,18 @@ Initial deployment: two 4×4 IKEA Kallax units side-by-side (32 cubes total). Th
 - **Docker Compose deployment** with healthchecks, log limits, and Alembic migrations.
 
 Deferred to later milestones: real LED hardware integration (firmware + WS2812B wiring), screensaver / cover-art browse mode, periodic JSON export of boundaries to git, per-visitor PIN, service-worker offline cache.
+
+## 🏛️ Architecture
+
+The canonical Phase 1–8 design reference is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). It covers:
+
+- **Data model** — `gruvax` schema tables and the `gruvax.v_collection` read-only contract over discogsography
+- **API surface** — all public `/api/*` and PIN-gated `/api/admin/*` endpoints
+- **Position estimation** — two-level segment-aware interpolation and the `LocateResult` contract
+- **LED contract** — MQTT topic structure, Pydantic payloads, `HighlightRegistry` TTL
+- **Realtime** — SSE event types and the `EventBus` decoupling pattern
+- **Observability** — `/api/health` subsystems, in-memory log/slow-query rings, `/api/admin/diagnostics`
+- **Deploy** — Compose services, pull-based GHCR image, startup lifespan sequence, CI orchestration
 
 ## 🎨 Design
 

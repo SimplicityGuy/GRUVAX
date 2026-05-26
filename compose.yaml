@@ -12,7 +12,7 @@
 #      to the api service (already done below).
 #      DATABASE_URL must use host.docker.internal instead of localhost.
 #
-#   2. The shared discogsography Postgres (production on `lux`):
+#   2. The shared discogsography Postgres (production on the deployment host):
 #      Uncomment the `discogsography_default` network references and set
 #      DATABASE_URL to point at the shared Postgres container name.
 #      The external network must be created by the discogsography stack first:
@@ -32,7 +32,7 @@
 # gruvax-dev-pg data volume is first created. To re-seed from scratch, remove the
 # data volume: `docker compose down && docker volume rm gruvax_gruvax-dev-pg-data`.
 #
-# To point at the shared discogsography Postgres on `lux` instead of the bundled
+# To point at the shared discogsography Postgres on the deployment host instead of the bundled
 # dev Postgres, set GRUVAX_DB_HOST/PORT/USER/PASSWORD/NAME in the environment
 # before `docker compose up` (the dev-pg service can be left running or stopped).
 #
@@ -42,10 +42,20 @@
 services:
 
   api:
+    image: ghcr.io/simplicityguy/gruvax:latest
+    # Build-or-pull: local dev (`just up` / `just build`, which use `--build`)
+    # builds this image from source and tags it as the `image:` name above;
+    # production deploys `docker compose pull` the same tag published by CI to
+    # GHCR. With both `build:` and `image:` present, a plain `docker compose up`
+    # also builds the image locally when it isn't already cached, instead of
+    # failing to pull an unpublished tag.
     build:
       context: .
       dockerfile: Dockerfile
-    image: gruvax-api:local
+      args:
+        GIT_SHA: "${GIT_SHA:-unknown}"
+        BUILD_TIMESTAMP: "${BUILD_TIMESTAMP:-unknown}"
+        GRUVAX_ENV: "${GRUVAX_ENV:-production}"
     env_file:
       # Loads SESSION_SECRET (and any other secrets not listed below).
       # Explicit environment: entries below override values from .env.
@@ -53,7 +63,7 @@ services:
         required: false
     environment:
       # Default: the bundled gruvax-dev-pg service (same compose network).
-      # Override GRUVAX_DB_HOST (e.g. to the shared discogsography Postgres on lux)
+      # Override GRUVAX_DB_HOST (e.g. to the shared discogsography Postgres on the deployment host)
       # to point elsewhere without editing this file.
       DATABASE_URL: "postgresql+psycopg://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-gruvax-dev-pg}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}"
       OBSERVED_DISCOGSOGRAPHY_SCHEMA: "${OBSERVED_DISCOGSOGRAPHY_SCHEMA:-gruvax_dev}"
@@ -98,7 +108,7 @@ services:
   # start the mounted fixtures/synth_collection.sql runs via initdb, creating the
   # gruvax_dev schema + ~200 synthetic records BEFORE the api service migrates (so
   # the v_collection view in migration 0002 resolves). The api service seeds cube
-  # boundaries on startup. To use lux instead, set GRUVAX_DB_HOST (see header).
+  # boundaries on startup. To use the deployment host instead, set GRUVAX_DB_HOST (see header).
   gruvax-dev-pg:
     image: postgres:18
     container_name: gruvax-dev-pg

@@ -37,10 +37,7 @@ CREATE TABLE gruvax.record_stats (
 )
 """
 
-_CREATE_IDX = (
-    "CREATE INDEX ix_record_stats_search_count "
-    "ON gruvax.record_stats (search_count DESC)"
-)
+_CREATE_IDX = "CREATE INDEX ix_record_stats_search_count ON gruvax.record_stats (search_count DESC)"
 
 _DROP_IDX = "DROP INDEX IF EXISTS gruvax.ix_record_stats_search_count"
 _DROP_TABLE = "DROP TABLE IF EXISTS gruvax.record_stats"

@@ -234,10 +234,12 @@ async def fan_out_illuminate(
         )
 
         # Retained state for primary cube
-        state_publishes.append((
-            topics.state_topic(prefix, u, r, c),
-            ill_bytes,
-        ))
+        state_publishes.append(
+            (
+                topics.state_topic(prefix, u, r, c),
+                ill_bytes,
+            )
+        )
 
     # Span (all label-span cubes) — LED-02
     if label_span:
@@ -268,10 +270,12 @@ async def fan_out_illuminate(
         # Retained state for each span cube
         for cube in label_span:
             su, sr, sc = cube["unit_id"], cube["row"], cube["col"]
-            state_publishes.append((
-                topics.state_topic(prefix, su, sr, sc),
-                span_bytes,
-            ))
+            state_publishes.append(
+                (
+                    topics.state_topic(prefix, su, sr, sc),
+                    span_bytes,
+                )
+            )
 
     # Sub-interval — LED-03
     if sub_interval is not None and primary is not None:
@@ -290,18 +294,26 @@ async def fan_out_illuminate(
             logger.warning(
                 "illuminate: sub_cube_interval missing start/end (start=%r end=%r) — "
                 "skipping sub publish for cube %s/%s/%s (WR-08)",
-                raw_start, raw_end, u, r, c,
+                raw_start,
+                raw_end,
+                u,
+                r,
+                c,
             )
             sub_ok = False
         else:
             try:
                 start_f = float(raw_start)
                 end_f = float(raw_end)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 logger.warning(
                     "illuminate: non-numeric sub_cube_interval (start=%r end=%r) — "
                     "skipping sub publish for cube %s/%s/%s (WR-08)",
-                    raw_start, raw_end, u, r, c,
+                    raw_start,
+                    raw_end,
+                    u,
+                    r,
+                    c,
                 )
                 sub_ok = False
             else:
@@ -309,7 +321,11 @@ async def fan_out_illuminate(
                     logger.warning(
                         "illuminate: out-of-range sub_cube_interval (start=%s end=%s) — "
                         "skipping sub publish for cube %s/%s/%s (WR-08)",
-                        start_f, end_f, u, r, c,
+                        start_f,
+                        end_f,
+                        u,
+                        r,
+                        c,
                     )
                     sub_ok = False
 
@@ -392,9 +408,7 @@ async def publish_ambient(
     Degraded mode: if ``client`` is None, logs a warning and returns 0.
     """
     if client is None:
-        logger.warning(
-            "MQTT not connected — publish_ambient skipped (degraded mode)"
-        )
+        logger.warning("MQTT not connected — publish_ambient skipped (degraded mode)")
         return 0
 
     prefix = settings.MQTT_TOPIC_PREFIX
@@ -403,15 +417,14 @@ async def publish_ambient(
 
     # ── Resolve ambient settings ──────────────────────────────────────────────
     # D-24: use led_brightness.ambient (idle key), NOT led_brightness.span.
-    ambient_hex: str = str(
-        settings_cache.get("led_color.ambient", '"#0051A2"')
-    ).strip('"')
+    ambient_hex: str = str(settings_cache.get("led_color.ambient", '"#0051A2"')).strip('"')
     ambient_brightness: int = clamp_brightness(
         int(settings_cache.get("led_brightness.ambient", 40)), 255
     )
     r, g, b = hex_to_rgb(ambient_hex)
 
     from datetime import UTC, datetime
+
     now_iso = datetime.now(UTC).isoformat()
 
     # Build the ambient payload dict (minimal — firmware only needs color + brightness).
@@ -452,13 +465,12 @@ async def publish_ambient(
                 unit_rows = await cur.fetchall()
         except Exception as exc:
             logger.warning(
-                "publish_ambient: failed to enumerate cubes from gruvax.units "
-                "(returning 0): %s",
+                "publish_ambient: failed to enumerate cubes from gruvax.units (returning 0): %s",
                 exc,
             )
             return 0
         # Connection closed — no long-held conn during the publish loop.
-        for (unit_id, row_count, col_count) in unit_rows:
+        for unit_id, row_count, col_count in unit_rows:
             for row in range(row_count):
                 for col in range(col_count):
                     cube_list.append({"unit_id": unit_id, "row": row, "col": col})
@@ -483,10 +495,7 @@ async def publish_ambient(
             timeout=0.5,
         )
 
-    publish_coros = [
-        _publish_one(cube["unit_id"], cube["row"], cube["col"])
-        for cube in cube_list
-    ]
+    publish_coros = [_publish_one(cube["unit_id"], cube["row"], cube["col"]) for cube in cube_list]
     results = await asyncio.gather(*publish_coros, return_exceptions=True)
 
     errors = [r for r in results if isinstance(r, Exception)]
@@ -536,9 +545,7 @@ async def publish_all_off(
     retained messages are cleared (or were already cleared), no error raised.
     """
     if client is None:
-        logger.warning(
-            "MQTT not connected — publish_all_off skipped (degraded mode)"
-        )
+        logger.warning("MQTT not connected — publish_all_off skipped (degraded mode)")
         return 0
 
     prefix = settings.MQTT_TOPIC_PREFIX
@@ -560,7 +567,7 @@ async def publish_all_off(
                     safe_publish(
                         client,
                         topics.state_topic(prefix, unit_id, r, c),
-                        b'',
+                        b"",
                         qos=1,
                         retain=True,
                         timeout=0.5,
@@ -579,7 +586,7 @@ async def publish_all_off(
     await safe_publish(
         client,
         topics.all_off_topic(prefix),
-        b'{}',
+        b"{}",
         qos=1,
         retain=False,
         timeout=0.5,
@@ -659,7 +666,7 @@ async def run_diagnostic(
     # while holding the status/# subscription open.
     try:
         inter_cube_ms = int(settings_cache.get("led_diagnostic.inter_cube_ms", 200))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         logger.warning(
             "run_diagnostic run_id=%s: invalid led_diagnostic.inter_cube_ms %r; using 200ms",
             run_id,
@@ -670,18 +677,10 @@ async def run_diagnostic(
     inter_cube_delay_s: float = inter_cube_ms / 1000.0
 
     # Resolve state colors (strip JSON string quotes — stored as '"#RRGGBB"')
-    color_span: str = str(
-        settings_cache.get("led_color.label_span", '"#7C3AED"')
-    ).strip('"')
-    color_position: str = str(
-        settings_cache.get("led_color.position", '"#FFD700"')
-    ).strip('"')
-    color_error: str = str(
-        settings_cache.get("led_color.error", '"#E63946"')
-    ).strip('"')
-    color_setup: str = str(
-        settings_cache.get("led_color.setup", '"#0077B6"')
-    ).strip('"')
+    color_span: str = str(settings_cache.get("led_color.label_span", '"#7C3AED"')).strip('"')
+    color_position: str = str(settings_cache.get("led_color.position", '"#FFD700"')).strip('"')
+    color_error: str = str(settings_cache.get("led_color.error", '"#E63946"')).strip('"')
+    color_setup: str = str(settings_cache.get("led_color.setup", '"#0077B6"')).strip('"')
     color_off: str = "#000000"
 
     # D-24: span state uses led_brightness.span; active states use led_brightness.active.
@@ -699,11 +698,11 @@ async def run_diagnostic(
 
     # State sequence: (color_hex, brightness, state_label)
     state_sequence = [
-        (color_span,     brightness_span,   "label-span"),
+        (color_span, brightness_span, "label-span"),
         (color_position, brightness_active, "position"),
-        (color_error,    brightness_active, "error"),
-        (color_setup,    brightness_active, "setup"),
-        (color_off,      brightness_off,    "off"),
+        (color_error, brightness_active, "error"),
+        (color_setup, brightness_active, "setup"),
+        (color_off, brightness_off, "off"),
     ]
 
     # ── Enumerate all cubes (short-lived connection — close before loop) ──────
@@ -725,7 +724,7 @@ async def run_diagnostic(
                 for color_hex, brightness, state_label in state_sequence:
                     if brightness == 0 or color_hex == "#000000":
                         # Off state: publish empty retained payload to clear state
-                        payload_bytes = b''
+                        payload_bytes = b""
                         await safe_publish(
                             client,
                             state_t,
@@ -758,7 +757,12 @@ async def run_diagnostic(
                         )
                     logger.info(
                         "LED diagnostic run_id=%s cube=%s/%d/%d state=%s brightness=%d",
-                        run_id, unit_id, r, c, state_label, brightness,
+                        run_id,
+                        unit_id,
+                        r,
+                        c,
+                        state_label,
+                        brightness,
                     )
 
                 # Yield the event loop between cubes (D-08 — don't block)
@@ -817,6 +821,4 @@ async def run_diagnostic(
     # next search or restart.
     await publish_ambient(client, pool, settings_cache)
 
-    logger.info(
-        "LED diagnostic run_id=%s complete; ambient baseline restored", run_id
-    )
+    logger.info("LED diagnostic run_id=%s complete; ambient baseline restored", run_id)

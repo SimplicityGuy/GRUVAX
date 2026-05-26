@@ -137,9 +137,7 @@ async def test_draft_persists() -> None:
     for key in restored["cuts"]:
         parts = key.split("/")
         assert len(parts) == 3, f"Cut key must be unit/row/col format, got: {key}"
-        assert all(p.isdigit() for p in parts), (
-            f"Cut key parts must be integers, got: {key}"
-        )
+        assert all(p.isdigit() for p in parts), f"Cut key parts must be integers, got: {key}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -187,9 +185,7 @@ async def test_resume_revalidates_stale_cut(client) -> None:  # type: ignore[no-
         f"Expected 200 from validate dry-run, got {response.status_code}: {response.text}"
     )
     body = response.json()
-    assert body.get("valid") is False, (
-        f"Expected valid=false for stale-cut validate, got: {body}"
-    )
+    assert body.get("valid") is False, f"Expected valid=false for stale-cut validate, got: {body}"
     results = body.get("results", [])
     assert results, f"Expected non-empty results for stale-cut validate, got: {body}"
     # At least one result must flag the phantom (D-06 stale-draft re-validate)

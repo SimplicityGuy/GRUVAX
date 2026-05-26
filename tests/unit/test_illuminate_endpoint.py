@@ -12,11 +12,10 @@ Tests use httpx AsyncClient against the app with app.state.mqtt as an AsyncMock
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, patch
 
 import pytest
 from httpx import ASGITransport, AsyncClient
-
 
 # ── shared body fixture ───────────────────────────────────────────────────────
 
@@ -86,9 +85,7 @@ async def test_fan_out_count() -> None:
 
     # Patch asyncio.create_task to verify it's called (fire-and-forget)
     with patch("gruvax.api.illuminate.asyncio.create_task") as mock_create_task:
-        async with AsyncClient(
-            transport=ASGITransport(app=app), base_url="http://test"
-        ) as client:
+        async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             res = await client.post("/api/illuminate", json=VALID_BODY)
 
     assert res.status_code == 200, f"Expected 200; got {res.status_code}: {res.text}"
@@ -109,9 +106,7 @@ async def test_illuminate_degraded() -> None:
     """
     app = _make_app_with_mqtt(None)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         res = await client.post("/api/illuminate", json=VALID_BODY)
 
     assert res.status_code == 200, f"Expected 200; got {res.status_code}: {res.text}"
@@ -131,10 +126,10 @@ async def test_illuminate_invalid_body() -> None:
     """
     app = _make_app_with_mqtt(None)
 
-    async with AsyncClient(
-        transport=ASGITransport(app=app), base_url="http://test"
-    ) as client:
+    async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
         # Missing 'release_id' and other required fields
         res = await client.post("/api/illuminate", json={"bad_field": "value"})
 
-    assert res.status_code == 422, f"Expected 422 for malformed body; got {res.status_code}: {res.text}"
+    assert res.status_code == 422, (
+        f"Expected 422 for malformed body; got {res.status_code}: {res.text}"
+    )

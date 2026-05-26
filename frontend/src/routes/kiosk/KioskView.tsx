@@ -236,38 +236,50 @@ export function KioskView() {
     }
 
     // boundary_changed: admin edit committed → re-render affected cubes (D-04, D-03)
+    // IN-02: wrapped in try/catch so a malformed or mis-keyed frame degrades gracefully
+    // instead of throwing an uncaught TypeError that terminates the handler.
     es.addEventListener('boundary_changed', (e: MessageEvent) => {
-      const { cube_ids } = JSON.parse(e.data) as {
-        cube_ids: ShimmerCube[]
-        change_set_id: string
+      try {
+        const { cube_ids } = JSON.parse(e.data) as {
+          cube_ids: ShimmerCube[]
+          change_set_id: string
+        }
+        // Invalidate kiosk-owned query keys only (D-08 — see resync note above)
+        void queryClient.invalidateQueries({ queryKey: ['cubes'] })
+        void queryClient.invalidateQueries({ queryKey: ['units'] })
+        for (const c of cube_ids) {
+          void queryClient.invalidateQueries({
+            queryKey: ['cube-contents', c.unit, c.row, c.col],
+          })
+        }
+        // D-03: primary on-commit shimmer clear
+        useGruvaxStore.getState().clearShimmerCubes(cube_ids)
+        // D-05: if visitor has an active selection, re-run locate so the highlight
+        // follows the record to its new cube. setLocateResult bumps animationToken
+        // → existing GSAP useLayoutEffect fires → old cube fades off, new cube
+        // springs on (D-06 re-glow). No new animation code needed.
+        relocateActiveSelection()
+      } catch (err) {
+        console.error('[SSE] boundary_changed parse error — degrading gracefully', err)
       }
-      // Invalidate kiosk-owned query keys only (D-08 — see resync note above)
-      void queryClient.invalidateQueries({ queryKey: ['cubes'] })
-      void queryClient.invalidateQueries({ queryKey: ['units'] })
-      for (const c of cube_ids) {
-        void queryClient.invalidateQueries({
-          queryKey: ['cube-contents', c.unit, c.row, c.col],
-        })
-      }
-      // D-03: primary on-commit shimmer clear
-      useGruvaxStore.getState().clearShimmerCubes(cube_ids)
-      // D-05: if visitor has an active selection, re-run locate so the highlight
-      // follows the record to its new cube. setLocateResult bumps animationToken
-      // → existing GSAP useLayoutEffect fires → old cube fades off, new cube
-      // springs on (D-06 re-glow). No new animation code needed.
-      relocateActiveSelection()
     })
 
     // admin_editing: admin has opened the editor for these cubes → shimmer them
+    // IN-02: wrapped in try/catch so a mis-keyed frame does not propagate as
+    // an uncaught TypeError into the Zustand reducers (cube_ids: undefined risk).
     es.addEventListener('admin_editing', (e: MessageEvent) => {
-      const { cube_ids, editing } = JSON.parse(e.data) as {
-        cube_ids: ShimmerCube[]
-        editing: boolean
-      }
-      if (editing) {
-        useGruvaxStore.getState().setShimmerCubes(cube_ids)
-      } else {
-        useGruvaxStore.getState().clearShimmerCubes(cube_ids)
+      try {
+        const { cube_ids, editing } = JSON.parse(e.data) as {
+          cube_ids: ShimmerCube[]
+          editing: boolean
+        }
+        if (editing) {
+          useGruvaxStore.getState().setShimmerCubes(cube_ids)
+        } else {
+          useGruvaxStore.getState().clearShimmerCubes(cube_ids)
+        }
+      } catch (err) {
+        console.error('[SSE] admin_editing parse error — degrading gracefully', err)
       }
     })
 

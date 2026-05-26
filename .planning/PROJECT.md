@@ -110,4 +110,6 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-25 after Phase 8 (Observability + Deployment Hardening) completion*
+*Last updated: 2026-05-25 after Phase 10 (Close Milestone Gaps) completion — the two cross-phase integration blockers from the v1.0 milestone audit are closed: INT-A (segment-edit SSE payload shape now emits canonical `cube_ids`/`unit`, dropping `type`; KioskView SSE handlers hardened with try/catch) restores highlight-follows-record + shimmer-clear on segment edits; INT-B (history-revert now re-derives SegmentCache + publishes `boundary_changed`) makes an admin undo update `/api/locate` and live-re-render the kiosk immediately. Requirement traceability reconciled (SEG-01..08 → Complete; count drift fixed to 84 = 75 satisfied + 9 deferred). 5 new integration regression tests guard both seams. Two manual kiosk checks deferred to device-acceptance (10-HUMAN-UAT.md). All v1.0 milestone phases (1–10) complete; admin-edit live-propagation seams now work end-to-end. v1.x runway cleared for the v2.0 multi-user milestone.*
+
+*Prior (Phase 9): v1.x developer-experience debt closed (structlog logging, six-workflow GitHub Actions CI with honest-green gate, pre-commit/dependabot/update-script, pull-based GHCR deploy, docs/ARCHITECTURE.md).*

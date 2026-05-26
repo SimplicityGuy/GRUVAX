@@ -21,7 +21,8 @@ The first user-observable slice (Phase 1) exercises the Core Value end-to-end ag
 - [x] **Phase 6: LED Contract over MQTT (Hardware Stubbed)** - Illuminate / span / sub-interval / all-off / diagnostic endpoints publish versioned, validated payloads to an internal Mosquitto broker; admin tunes colors and brightness; a configurable idle/ambient baseline with timed highlight revert (server-scheduled) and an optional recently-found retain mode. (completed 2026-05-24)
 - [x] **Phase 7: Wizards + Import/Export** - Guided setup wizard, atomic reshuffle wizard, CSV/YAML seed import, boundary + settings export — boundary maintenance is fast and recoverable. (completed 2026-05-24)
 - [x] **Phase 8: Observability + Deployment Hardening** - Healthz with subsystem status, slow-query log, sync staleness, aggregate usage stats, Compose log limits, healthchecks, version endpoint, SLO proof. (completed 2026-05-25)
-- [ ] **Phase 9: Tooling and docs hardening** - structlog + env-driven log level, GitHub Actions CI (incl. cleanup-cache + cleanup-images) + dependabot + pre-commit, update-project script, and a Phase 1–8 docs refresh (strip lux/nox). Closes out v1.x before the v2.0 multi-user milestone.
+- [x] **Phase 9: Tooling and docs hardening** - structlog + env-driven log level, GitHub Actions CI (incl. cleanup-cache + cleanup-images) + dependabot + pre-commit, update-project script, and a Phase 1–8 docs refresh (strip lux/nox). Closes out v1.x before the v2.0 multi-user milestone. (completed 2026-05-25)
+- [x] **Phase 10: Close Milestone Gaps** - Fix the two confirmed cross-phase integration blockers from the v1.0 audit (INT-A: segment-edit SSE payload shape; INT-B: undo re-derive + publish) and reconcile requirement traceability (flip stale-Pending SEG-01..08 to Complete, fix the 81-vs-84 count). Closes the v1.0 milestone audit. *(ADDED 2026-05-25 — integer append closing `.planning/v1.0-MILESTONE-AUDIT.md` gaps)* (completed 2026-05-25)
 
 ## Phase Details
 
@@ -315,6 +316,8 @@ Plans:
 | 6. LED Contract over MQTT (Hardware Stubbed) | 4/4 | Complete    | 2026-05-24 |
 | 7. Wizards + Import/Export | 8/8 | Complete    | 2026-05-25 |
 | 8. Observability + Deployment Hardening | 6/6 | Complete    | 2026-05-25 |
+| 9. Tooling and docs hardening | 6/6 | Complete    | 2026-05-25 |
+| 10. Close Milestone Gaps | 3/3 | Complete    | 2026-05-25 |
 
 ## Critical-Path Notes (carried from research)
 
@@ -329,7 +332,7 @@ These are roadmapper-level reminders surfaced from ARCHITECTURE.md, PITFALLS.md,
 
 ## Traceability
 
-The 73 v1 requirements map to phases as follows. The full per-requirement table lives in REQUIREMENTS.md `## Traceability`.
+The 84 v1 requirements (73 original + 8 SEG + 3 LED idle/ambient = 84) map to phases as follows. The full per-requirement table lives in REQUIREMENTS.md `## Traceability`.
 
 | Phase | Categories represented | Requirement count |
 |-------|------------------------|-------------------|
@@ -341,6 +344,7 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
 | 6 | LED (1–13), DEP (3) | 14 |
 | 7 | ADMN (4,5,10), BAK (1,2) | 5 |
 | 8 | OBS (1–7), DEP (4,5) | 9 |
+| 10 | Gap closure — INT-A/INT-B integration repairs + traceability reconcile (touches RTM-01, ADMN-09/11, SEG-07/08, CUBE-08; 0 new) | 0 |
 | **Total** | | **84** |
 
 ---
@@ -361,10 +365,46 @@ The 73 v1 requirements map to phases as follows. The full per-requirement table 
   6. **`scripts/update-project.sh`** — adapt from `discogsography/scripts/update-project.sh` (justfile-delegating), specialized for GRUVAX.
   7. **Docs refresh** — capture the final Phase 1–8 design and **remove all `lux`/`nox` host references** from docs/CLAUDE.md.
 
-**Plans:** 0 plans
+**Plans:** 8/6 plans complete
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 9 to break down)
+**Wave 1**
+- [x] 09-01-PLAN.md — structlog migration (preserve log-ring shape + gruvax-logger scoping) + env-driven LOG_LEVEL + Wave-0 regression assertions
+- [x] 09-02-PLAN.md — Six-workflow CI: build orchestrator gating code-quality -> test/security/build (GHCR publish) + cleanup-cache/cleanup-images; supersede ci.yml
+
+**Wave 2** *(09-03 blocked on 09-02; 09-04 blocked on 09-01)*
+- [x] 09-03-PLAN.md — pre-commit (SHA-frozen, no cargo, +frontend/mypy hooks) + .yamllint + prettier install + dependabot + update-project.sh + just lint-precommit
+- [x] 09-04-PLAN.md — Isolated lint cleanup (D-07): fix all 69 ruff errors (48 auto + 21 manual) -> honest-green gate, suite stays green
+
+**Wave 3** *(blocked on 09-02 + 09-03)*
+- [x] 09-05-PLAN.md — Pull-based deploy flip: compose.yaml->GHCR image + gitignored compose.override.yaml (+.example) + runbook lux-strip
+
+**Wave 4** *(blocked on 09-05)*
+- [x] 09-06-PLAN.md — Docs refresh: new docs/ARCHITECTURE.md (Mermaid) + README/CLAUDE.md point at it + remaining lux-strip
+
+### Phase 10: Close Milestone Gaps
+
+**Goal:** Close the two confirmed cross-phase integration blockers and the documentation/traceability drift surfaced by the v1.0 milestone audit (`.planning/v1.0-MILESTONE-AUDIT.md`), so the v1.0 admin-edit live-propagation seams work end-to-end and requirement traceability reflects reality. This is the closure phase the audit recommends ("a single closure phase can absorb items 1, 2, and 4").
+**Mode:** mvp (closure — repairs cross-phase seams behind the existing Core Value loop)
+**Depends on:** Phase 3 (history revert — INT-B origin), Phase 4 (kiosk SSE consumer — INT-A victim), Phase 5 (SegmentCache + segments.py publishers — INT-A source)
+**Requirements:** No new product REQ-IDs — repairs existing RTM-01, ADMN-09, ADMN-11, SEG-07, SEG-08, CUBE-08 (integration + traceability), per the v1.0 audit.
+**Scope** (the three audit-recommended closure items 1, 2, 4 — see audit "Recommended path to close"):
+
+  1. **INT-A — segment-edit SSE payload shape.** Rename `cubes`→`cube_ids` and `unit_id`→`unit` in all three `segments.py` `boundary_changed` publishes (cut / override / insert-cut) and drop the redundant top-level `type` key, so the kiosk SSE consumer's `for (const c of cube_ids)` no longer throws `TypeError` — restoring highlight-follows-record (D-05/D-06) and shimmer-clear on segment edits. Harden `KioskView.tsx` SSE handlers with try/catch (IN-02) so future payload drift degrades gracefully instead of throwing. (RTM-01, ADMN-11, SEG-07, SEG-08)
+  2. **INT-B — undo re-derive + publish.** Wire `get_segment_cache` + `get_collection_snapshot` + `get_event_bus` into `history.py::revert_change_set`; after `BoundaryCache.load()`, re-derive `SegmentCache` and publish `boundary_changed` (mirror `cubes.py:341-362`) so an admin undo updates `/api/locate` sub-cube positions immediately and live-re-renders the kiosk. (ADMN-09, RTM-01, ADMN-11, SEG-07)
+  3. **Traceability reconcile.** Flip the stale-Pending SEG-01..08 traceability rows in `REQUIREMENTS.md` to Complete (tick their `[x]`; CUBE-08's traceability row is already Complete — leave it) and reconcile the requirement-count drift (header 81 vs coverage 84 vs traceability intro 73) to a single correct number (84 total = 75 satisfied + 9 deferred).
+
+**Out of scope (separate decisions, not this phase):** the 9 deferred requirements (SRCH-09, OFF-01..04, PRIV-01..04) still need a relocate-to-v2/backlog-vs-close-in-v1 scope decision (audit item 3); the Phase 2 VALIDATION.md nyquist reconcile (`/gsd-validate-phase 2`); and the Phase 6/8 manual human-verify checkpoints (live-broker MQTT-5 + browser visual, audit item 5).
+
+**Plans:** 3/3 plans complete
+Plans:
+**Wave 1** *(all parallel — disjoint files_modified; safe under worktree isolation)*
+
+- [x] 10-01-PLAN.md — INT-A: fix all three segments.py boundary_changed publishes to canonical cube_ids/unit shape (drop type key) + harden KioskView SSE handlers with try/catch + 3 SpyEventBus payload-contract tests (RTM-01, ADMN-11, SEG-07, SEG-08)
+- [x] 10-02-PLAN.md — INT-B: wire get_segment_cache + get_collection_snapshot + get_event_bus into history.py::revert_change_set; post-commit SegmentCache re-derive (re-read overrides) + boundary_changed publish mirroring cubes.py:342-362 + 2 revert re-derive/publish tests (ADMN-09, RTM-01, ADMN-11, SEG-07)
+- [x] 10-03-PLAN.md — Traceability reconcile (docs-only): flip SEG-01..08 to Complete (table + body) + correct REQUIREMENTS.md header 81→84 + reconcile ROADMAP.md traceability intro 73→84 (SEG-07, SEG-08, CUBE-08, RTM-01)
+
+**UI hint:** no (backend integration repair + frontend SSE hardening + docs; no new UI surface)
 
 ## Backlog
 
