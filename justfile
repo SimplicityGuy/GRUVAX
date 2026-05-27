@@ -154,9 +154,13 @@ compose-smoke:
     set -euo pipefail
     docker compose up --build -d api fake-discogsography init-sync
     # Wait up to 60s for init-sync to exit (it's a one-shot — restart: "no").
-    timeout 60 bash -c 'until docker compose ps init-sync --status exited --format "{{{{.Name}}}}" 2>/dev/null | grep -q init-sync; do sleep 2; done' \
+    # Just escape note: `{{{{` → literal `{{` after Just templating, but `}}` is
+    # not escaped (Just only treats `{{...}}` as interpolation). So a Go template
+    # `{{.X}}` in a justfile is written `{{{{.X}}` — 4 leading braces, 2 trailing.
+    # (Writing 4 trailing braces produces literal `}}}}`, corrupting docker output.)
+    timeout 60 bash -c 'until docker compose ps init-sync --status exited --format "{{{{.Name}}" 2>/dev/null | grep -q init-sync; do sleep 2; done' \
         || { echo "init-sync did not exit within 60s"; docker compose logs init-sync; docker compose down -v; exit 1; }
-    EXIT_CODE=$(docker inspect gruvax-init-sync --format '{{{{.State.ExitCode}}}}')
+    EXIT_CODE=$(docker inspect gruvax-init-sync --format '{{{{.State.ExitCode}}')
     if [ "$EXIT_CODE" != "0" ]; then
         echo "init-sync exited non-zero: $EXIT_CODE"
         docker compose logs init-sync
