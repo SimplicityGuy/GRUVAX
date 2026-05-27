@@ -9,6 +9,12 @@
 #     -> run-security (needs: code-quality)
 #       -> build (needs: run-tests + run-security, packages: write)
 #         -> aggregate-results (always)
+#
+# Round-trip gate (Plan 01-01 / D-19): the Alembic upgrade -> downgrade ->
+# upgrade round-trip lives inside the called `run-tests` workflow
+# (test.yml). The gate exercises migration 0009's drop-and-recreate of
+# `gruvax.v_collection` and fails the build on any non-zero alembic exit
+# (see test.yml step `Alembic round-trip`).
 
 name: Build
 

@@ -1,12 +1,17 @@
 # GRUVAX Test Suite — called by build.yml after the code-quality gate passes.
 #
 # Runs on every push and pull_request to main (via workflow_call from build.yml).
-# Uses the SYNTHETIC dataset only (fixtures/synth_collection.sql).
-# NEVER seeds the real collection CSV or background/ — those are gitignored
-# local-only references and must never enter CI or any Docker image.
+# Uses the SYNTHETIC dataset only (tests/fixtures/legacy/synth_collection.sql
+# for the v_collection downgrade target; tests/fixtures/synth_profile_collection.sql
+# for post-P1 positioning tests). NEVER seeds the real collection CSV or
+# background/ — those are gitignored local-only references and must never
+# enter CI or any Docker image.
 #
 # Key gates (hard-fail, no continue-on-error):
-#   1. Alembic round-trip (upgrade head -> downgrade base -> upgrade head) — OBS-03
+#   1. Alembic round-trip (upgrade head -> downgrade base -> upgrade head) —
+#      OBS-03 + Plan 01-01 D-19. Migration 0009's downgrade re-creates
+#      gruvax.v_collection over gruvax_dev (seeded above) via an explicit
+#      SET LOCAL search_path widening (Pitfall 5).
 #   2. Benchmark SLO gate via scripts/check_benchmark.py — SC5
 #      search p95 <= 200 ms, locate p95 <= 50 ms on synthetic data
 
@@ -45,8 +50,21 @@ jobs:
 
     env:
       DATABASE_URL: "postgresql+psycopg://gruvax:gruvax@localhost:5432/gruvax"
+      # OBSERVED_DISCOGSOGRAPHY_SCHEMA is no longer consumed by the runtime
+      # (Plan 01-01 / D-12 removed it from gruvax.settings). The env entry is
+      # kept here as a documentation marker for the downgrade-leg context —
+      # migration 0009's downgrade re-broadens search_path to include
+      # gruvax_dev so the recreated v_collection's unqualified body resolves
+      # against the legacy seed loaded below (Pitfall 5).
       OBSERVED_DISCOGSOGRAPHY_SCHEMA: "gruvax_dev"
       SESSION_SECRET: "ci-test-secret-not-real"
+      # Fernet key validated at boot (Plan 01-01 / D-01) — generated for CI
+      # only; never reused for real deployments.
+      GRUVAX_SECRET_KEY: "tcS1ujQX9eFv2gXr9w8t1V0qBu3UdMVqJTrYqDQ7Wxg="
+      # DISCOGSOGRAPHY_BASE_URL must be present for boot (D-18); the CI test
+      # suite never hits a real upstream — pytest fixtures stub the HTTP
+      # client and route to the in-process fake-discogsography.
+      DISCOGSOGRAPHY_BASE_URL: "http://fake-discogsography:8004"
       LOG_LEVEL: "WARNING"
 
     steps:
@@ -73,16 +91,18 @@ jobs:
         run: uv sync --frozen
 
       # Seed ONLY the synthetic dataset — never the real collection CSV or background/
-      - name: Seed synthetic collection
-        run: psql postgresql://gruvax:gruvax@localhost:5432/gruvax < fixtures/synth_collection.sql
+      # Plan 01-00 moved this file from fixtures/ to tests/fixtures/legacy/ so the
+      # downgrade leg of the round-trip (migration 0009) can resolve gruvax_dev's
+      # source tables via the SET LOCAL search_path widening (Pitfall 5).
+      - name: Seed legacy synthetic collection (for v_collection downgrade target)
+        run: psql postgresql://gruvax:gruvax@localhost:5432/gruvax < tests/fixtures/legacy/synth_collection.sql
 
-      # OBS-03: Alembic round-trip — must exercise all migrations
-      # upgrade head -> downgrade base -> upgrade head confirms both paths are clean
+      # OBS-03 + Plan 01-01 D-19: Alembic round-trip — must exercise all
+      # migrations including 0009's drop-and-recreate of gruvax.v_collection.
+      # The legacy seed loaded above creates the gruvax_dev.{artists, releases,
+      # collection_items} tables that 0009's downgrade CREATE VIEW depends on.
       - name: Alembic round-trip
-        run: |
-          uv run alembic upgrade head
-          uv run alembic downgrade base
-          uv run alembic upgrade head
+        run: just migrate-roundtrip
 
       # Seed cube_boundaries from the canonical fixture so tests have the (1,0,0)..
       # baseline rows the boundary-editor / locate / segment tests assume. The
