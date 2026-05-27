@@ -274,13 +274,22 @@ services:
       fake-discogsography:
         condition: service_healthy
     entrypoint: ["/bin/sh", "-c"]
-    # The precheck DSN (PSQL_DSN) is the libpq form; the runtime DATABASE_URL
-    # is the SQLAlchemy form (postgresql+psycopg://...). psql only understands
-    # the libpq form, so we use a separate var here.
+    # D-16 idempotency precheck uses the in-venv psycopg (no psql binary —
+    # python:3.14-slim doesn't ship postgresql-client and we don't add it just
+    # for this 1-statement query). DATABASE_URL is the SQLAlchemy form
+    # (postgresql+psycopg://...) used by the rest of the app; psycopg.connect
+    # accepts the libpq form, so we strip the SQLAlchemy prefix inline.
     command:
       - |
         set -e
-        COUNT=$(psql "$$PSQL_DSN" -At -c "SELECT COUNT(*) FROM gruvax.profile_collection WHERE profile_id = '00000000-0000-0000-0000-000000000001'")
+        COUNT=$(/app/.venv/bin/python - <<'PY'
+        import os, psycopg
+        dsn = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://", 1)
+        with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+            cur.execute("SELECT COUNT(*) FROM gruvax.profile_collection WHERE profile_id = '00000000-0000-0000-0000-000000000001'")
+            print(cur.fetchone()[0])
+        PY
+        )
         if [ "$$COUNT" -gt 0 ]; then
           echo "profile_collection already populated for default profile; skipping initial sync"
           exit 0
@@ -289,10 +298,8 @@ services:
         echo "$$GRUVAX_ADMIN_PIN" | gruvax-sync --profile default
     environment:
       GRUVAX_BASE_URL: "http://api:8000"
-      # libpq DSN for psql precheck (NOT the SQLAlchemy form).
-      PSQL_DSN: "postgresql://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-gruvax-dev-pg}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}"
-      # SQLAlchemy form, kept for any in-process app code path the init image
-      # may import.
+      # SQLAlchemy form, used by the in-venv psycopg precheck above AND by any
+      # in-process app code path the init image imports.
       DATABASE_URL: "postgresql+psycopg://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-gruvax-dev-pg}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}"
       DISCOGSOGRAPHY_BASE_URL: "${DISCOGSOGRAPHY_BASE_URL:-http://fake-discogsography:8004}"
       GRUVAX_SECRET_KEY: "${GRUVAX_SECRET_KEY:?GRUVAX_SECRET_KEY must be set in .env}"
