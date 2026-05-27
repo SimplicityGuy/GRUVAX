@@ -111,10 +111,9 @@ def test_seed_yaml_has_at_least_2900_releases() -> None:
     assert seed_path.exists(), f"Missing {seed_path}"
     data = yaml.safe_load(seed_path.read_text())
     releases = data.get("releases")
-    assert releases is not None, f"seed.yaml missing top-level 'releases' key"
+    assert releases is not None, "seed.yaml missing top-level 'releases' key"
     assert len(releases) >= 2900, (
-        f"seed.yaml should have >= 2900 releases (Plan 01-00 generates ~3000); "
-        f"got {len(releases)}"
+        f"seed.yaml should have >= 2900 releases (Plan 01-00 generates ~3000); got {len(releases)}"
     )
 
 
@@ -190,13 +189,11 @@ def test_compose_has_init_sync_service() -> None:
     # Depends on api + fake-discogsography healthy
     depends = svc.get("depends_on", {})
     for upstream in ("api", "fake-discogsography"):
-        assert upstream in depends, (
-            f"init-sync.depends_on must include {upstream}"
-        )
+        assert upstream in depends, f"init-sync.depends_on must include {upstream}"
         cond = depends[upstream]
-        assert (
-            isinstance(cond, dict) and cond.get("condition") == "service_healthy"
-        ), f"init-sync must depend on {upstream} service_healthy, got {cond!r}"
+        assert isinstance(cond, dict) and cond.get("condition") == "service_healthy", (
+            f"init-sync must depend on {upstream} service_healthy, got {cond!r}"
+        )
 
 
 def test_init_sync_command_contains_d16_idempotency_precheck() -> None:
@@ -212,10 +209,7 @@ def test_init_sync_command_contains_d16_idempotency_precheck() -> None:
     # The command is typically a list (with sh -c entrypoint) or a single
     # string. Flatten to one searchable string.
     command = svc.get("command")
-    if isinstance(command, list):
-        cmd_str = " ".join(str(c) for c in command)
-    else:
-        cmd_str = str(command or "")
+    cmd_str = " ".join(str(c) for c in command) if isinstance(command, list) else str(command or "")
     assert "SELECT COUNT(*)" in cmd_str, (
         "init-sync.command must contain the D-16 idempotency precheck "
         "(SELECT COUNT(*) FROM gruvax.profile_collection WHERE profile_id = ...)"
@@ -265,9 +259,7 @@ def test_justfile_has_compose_smoke_recipe() -> None:
         "justfile must declare a `compose-smoke` recipe per Blocker #2 RESOLUTION"
     )
     # The recipe should bring up the stack, assert init-sync exits 0, and tear down.
-    assert "docker compose up" in content, (
-        "compose-smoke recipe must call docker compose up"
-    )
+    assert "docker compose up" in content, "compose-smoke recipe must call docker compose up"
     assert "docker compose down" in content, (
         "compose-smoke recipe must tear down the stack at the end"
     )

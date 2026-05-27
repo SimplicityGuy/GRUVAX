@@ -60,9 +60,7 @@ async def get_health(request: Request) -> JSONResponse:
     # D-13 three-state derivation per CONTEXT.md + UI-SPEC §/api/health state mapping
     # table + Warning #4 RESOLUTION (in_progress → 'ok' — an active sync is healthy
     # state; the 5-min watchdog in Plan 03 flips hung syncs to 'failed').
-    last_sync_at: datetime | None = getattr(
-        request.app.state, "default_profile_last_sync_at", None
-    )
+    last_sync_at: datetime | None = getattr(request.app.state, "default_profile_last_sync_at", None)
     last_sync_status: str | None = getattr(
         request.app.state, "default_profile_last_sync_status", None
     )

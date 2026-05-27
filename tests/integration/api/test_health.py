@@ -90,9 +90,7 @@ async def test_field_rename_present(client) -> None:  # type: ignore[no-untyped-
     response = await ac.get("/api/health")
     assert response.status_code == 200
     body = response.json()
-    assert "discogsography_api_check" in body, (
-        f"Missing discogsography_api_check: {body.keys()}"
-    )
+    assert "discogsography_api_check" in body, f"Missing discogsography_api_check: {body.keys()}"
     assert "discogsography_view_check" not in body, (
         f"Legacy discogsography_view_check field must be removed: {body.keys()}"
     )
@@ -324,8 +322,7 @@ async def test_sync_age_seconds_source_swap(client) -> None:  # type: ignore[no-
         age = body.get("sync_age_seconds")
         assert age is not None, "sync_age_seconds must be set when last_sync_at is non-null"
         assert 55 <= age <= 65, (
-            f"sync_age_seconds should be ~60 (in [55,65]) when last_sync_at is now-60s; "
-            f"got: {age}"
+            f"sync_age_seconds should be ~60 (in [55,65]) when last_sync_at is now-60s; got: {age}"
         )
     finally:
         app.state.default_profile_last_sync_at = original_at
@@ -469,9 +466,7 @@ async def test_health_keys(client) -> None:  # type: ignore[no-untyped-def]
         "version",
         "sync_age_seconds",
     }
-    assert required_keys.issubset(body.keys()), (
-        f"Missing keys: {required_keys - body.keys()}"
-    )
+    assert required_keys.issubset(body.keys()), f"Missing keys: {required_keys - body.keys()}"
 
 
 @pytest.mark.asyncio(loop_scope="session")

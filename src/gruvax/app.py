@@ -142,8 +142,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     try:
         async with pool.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT 1 FROM gruvax.profile_collection "
-                "WHERE profile_id = %s::uuid LIMIT 1",
+                "SELECT 1 FROM gruvax.profile_collection WHERE profile_id = %s::uuid LIMIT 1",
                 (DEFAULT_PROFILE_UUID,),
             )
             await cur.fetchone()
@@ -255,9 +254,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                     app.state.default_profile_last_sync_status = row[1]
                     app.state.default_profile_app_token_revoked = bool(row[2])
                     now = datetime.now(UTC)
-                    app.state.sync_age_seconds = (
-                        (now - row[0]).total_seconds() if row[0] else None
-                    )
+                    app.state.sync_age_seconds = (now - row[0]).total_seconds() if row[0] else None
             except Exception as exc:
                 logger.warning("default profile state refresh failed: %s", exc)
             await asyncio.sleep(60)
