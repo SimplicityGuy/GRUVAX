@@ -111,9 +111,7 @@ async def _run_sync(profile_name: str, api_url: str) -> None:
     async with httpx.AsyncClient(base_url=api_url, timeout=timeout) as client:
         login_resp = await client.post("/api/admin/login", json={"pin": pin})
         if login_resp.status_code != 200:
-            sys.exit(
-                f"Admin login failed: HTTP {login_resp.status_code} — {login_resp.text}"
-            )
+            sys.exit(f"Admin login failed: HTTP {login_resp.status_code} — {login_resp.text}")
         csrf = login_resp.cookies.get("gruvax_csrf") or login_resp.json().get("csrf_token")
         if not csrf:
             sys.exit("Admin login returned no CSRF token — cannot proceed.")
@@ -125,9 +123,7 @@ async def _run_sync(profile_name: str, api_url: str) -> None:
         if sync_resp.status_code != 200:
             # Plain-text status + body to stderr; exit non-zero so init-sync
             # containers fail loudly and Compose surfaces the error.
-            sys.stderr.write(
-                f"Sync failed: HTTP {sync_resp.status_code} — {sync_resp.text}\n"
-            )
+            sys.stderr.write(f"Sync failed: HTTP {sync_resp.status_code} — {sync_resp.text}\n")
             sys.exit(1)
 
         # Plain text on stdout (Open Q2: operators run in compose-exec and

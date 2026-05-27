@@ -444,7 +444,12 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
         # the swap transaction (xact_lock auto-releases on COMMIT).
         async with conn.cursor() as cur:
             await cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
-            acquired = bool((await cur.fetchone())[0])
+            row = await cur.fetchone()
+            if row is None:
+                raise RuntimeError(
+                    "pg_try_advisory_lock returned no row (psycopg invariant violation)"
+                )
+            acquired = bool(row[0])
 
         if not acquired:
             # Pitfall 1 — if the lock isn't held because a stale in_progress

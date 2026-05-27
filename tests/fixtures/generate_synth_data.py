@@ -170,7 +170,7 @@ class _IndentedDumper(yaml.SafeDumper):
     # yamllint requires `indent-sequences: true`; PyYAML's default representer
     # produces flush-left dashes. Forcing `indentless=False` indents sequence
     # items under their parent key (matches .yamllint `indentation.spaces: 2`).
-    def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:  # noqa: ARG002
+    def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:
         return super().increase_indent(flow, False)
 
 

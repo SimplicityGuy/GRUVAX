@@ -73,9 +73,7 @@ def test_queries_module_has_no_v_collection_FROM_clause() -> None:
     (the success-criteria grep gate uses ``gruvax\\.v_collection|FROM
     v_collection`` over .py files, which catches both forms in SQL bodies).
     """
-    queries_src_path = (
-        Path(__file__).resolve().parents[3] / "src" / "gruvax" / "db" / "queries.py"
-    )
+    queries_src_path = Path(__file__).resolve().parents[3] / "src" / "gruvax" / "db" / "queries.py"
     text = queries_src_path.read_text()
     # The qualified SQL form must be entirely absent (allowing the historical
     # mention in the module docstring's "Plan 01-06" provenance line).
@@ -84,9 +82,7 @@ def test_queries_module_has_no_v_collection_FROM_clause() -> None:
         for line in text.splitlines()
         if "gruvax.v_collection" in line and "FROM gruvax.v_collection" in line
     ]
-    assert sql_hits == [], (
-        f"queries.py still has FROM gruvax.v_collection lines: {sql_hits}"
-    )
+    assert sql_hits == [], f"queries.py still has FROM gruvax.v_collection lines: {sql_hits}"
     # FROM v_collection (unqualified) must also be absent.
     assert "FROM v_collection" not in text, "queries.py still uses unqualified FROM v_collection"
 
@@ -162,7 +158,7 @@ async def test_search_returns_canonical_catalog_row(db_pool) -> None:  # type: i
     in the Blue Note label. The catalog-boost path is the dominant scorer for
     is_catalog_query("BLP 1000") → True.
     """
-    rows, took_ms, did_you_mean = await search_collection(db_pool, "BLP 1000", limit=10)
+    rows, took_ms, _did_you_mean = await search_collection(db_pool, "BLP 1000", limit=10)
     assert rows, f"Expected a hit for 'BLP 1000', got empty (took_ms={took_ms})"
     # Response-shape compatibility: primary_artist + collection_item_id + format
     # keys must be present (Plan 01-06 SQL alias compatibility decision).
@@ -244,6 +240,5 @@ def test_collection_snapshot_pitfall_c_casefold_preserved() -> None:
         executable_lines.append(line)
     executable_text = "\n".join(executable_lines)
     assert "normalize_catalog(" not in executable_text, (
-        "collection_snapshot.py calls normalize_catalog() in executable code "
-        "— Pitfall C regression"
+        "collection_snapshot.py calls normalize_catalog() in executable code — Pitfall C regression"
     )

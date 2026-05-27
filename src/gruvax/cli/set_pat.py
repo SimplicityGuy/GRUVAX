@@ -85,7 +85,9 @@ def _validate_pat_shape(pat: str) -> None:
     secret. The discogsography contract pins the prefix to ``dscg_``.
     """
     if not pat:
-        sys.exit("No PAT provided on stdin. Pipe via `echo $PAT | gruvax-set-pat ...` or run interactively.")
+        sys.exit(
+            "No PAT provided on stdin. Pipe via `echo $PAT | gruvax-set-pat ...` or run interactively."
+        )
     if not pat.startswith("dscg_"):
         sys.exit("PAT must start with 'dscg_' (the discogsography v2 contract prefix). Not stored.")
     if len(pat) < 50:
@@ -207,13 +209,10 @@ async def _set_pat(profile_name: str) -> None:
             "Try again in a minute. Not stored."
         )
     except ServerError as exc:
-        sys.exit(
-            f"discogsography returned a server error after retries ({exc}). Not stored."
-        )
+        sys.exit(f"discogsography returned a server error after retries ({exc}). Not stored.")
     except NetworkError as exc:
         sys.exit(
-            f"Could not reach discogsography ({exc}). Check DISCOGSOGRAPHY_BASE_URL. "
-            "Not stored."
+            f"Could not reach discogsography ({exc}). Check DISCOGSOGRAPHY_BASE_URL. Not stored."
         )
 
     new_user_id, _sample = _validate_envelope(envelope)

@@ -20,6 +20,8 @@
 FROM python:3.14-slim AS runtime
 
 # uv is installed for the package install only; runtime invokes uvicorn directly.
+# Test-fixture image; intentionally tracks latest uv to match astral-sh/uv:latest in the api image.
+# hadolint ignore=DL3013
 RUN pip install --no-cache-dir uv
 
 WORKDIR /app

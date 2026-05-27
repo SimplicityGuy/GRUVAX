@@ -1,10 +1,10 @@
 {
-  "source_path": "/Users/Robert/Code/public/GRUVAX/docs/superpowers/specs/2026-05-25-v2-multi-user-collections-design.md",
-  "type": "SPEC",
   "confidence": "high",
+  "cross_refs": [],
+  "locked": false,
   "manifest_override": true,
-  "title": "GRUVAX v2.0 — Multi-User Collections via discogsography API",
-  "summary": "Cross-repo design re-architecting GRUVAX from direct-DB reads to discogsography's HTTP API with scoped PATs, per-profile collection caching, and RPi-to-profile device binding.",
+  "notes": "Manifest declared SPEC (authoritative). Document contains explicit 'Locked Decisions' table (D1\u2013D7) with ADR-like trade-off rationale, plus data-model schemas, endpoint references, and phase decomposition \u2014 fits SPEC (contracts/data models) classification. ADR-style decisions are embedded; synthesizer may want to surface D1\u2013D7 as constraints. Status header reads 'Approved (design)' but file is not a single-decision ADR. No explicit markdown cross-references to other docs found in body.",
+  "precedence": 0,
   "scope": [
     "v2.0 milestone",
     "multi-user collections",
@@ -23,8 +23,8 @@
     "GitHub workflows adapted from discogsography",
     "OAuth2 device-authorization grant (deferred)"
   ],
-  "cross_refs": [],
-  "locked": false,
-  "precedence": 0,
-  "notes": "Manifest declared SPEC (authoritative). Document contains explicit 'Locked Decisions' table (D1–D7) with ADR-like trade-off rationale, plus data-model schemas, endpoint references, and phase decomposition — fits SPEC (contracts/data models) classification. ADR-style decisions are embedded; synthesizer may want to surface D1–D7 as constraints. Status header reads 'Approved (design)' but file is not a single-decision ADR. No explicit markdown cross-references to other docs found in body."
+  "source_path": "/Users/Robert/Code/public/GRUVAX/docs/superpowers/specs/2026-05-25-v2-multi-user-collections-design.md",
+  "summary": "Cross-repo design re-architecting GRUVAX from direct-DB reads to discogsography's HTTP API with scoped PATs, per-profile collection caching, and RPi-to-profile device binding.",
+  "title": "GRUVAX v2.0 \u2014 Multi-User Collections via discogsography API",
+  "type": "SPEC"
 }

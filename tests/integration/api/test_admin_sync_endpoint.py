@@ -483,9 +483,7 @@ async def test_pitfall_6_handler_does_not_hold_pool_during_sync(  # type: ignore
         await sync_task
 
 
-def _make_slow_fake_app(
-    *, seed_pages: int = 5, page_size: int = 200, page_sleep_s: float = 0.5
-):  # type: ignore[no-untyped-def]
+def _make_slow_fake_app(*, seed_pages: int = 5, page_size: int = 200, page_sleep_s: float = 0.5):  # type: ignore[no-untyped-def]
     """A fake-discogsography app that sleeps `page_sleep_s` per page fetch (Test 10 helper)."""
     app = FastAPI()
     total_rows = seed_pages * page_size
