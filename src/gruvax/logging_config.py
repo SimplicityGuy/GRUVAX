@@ -33,6 +33,8 @@ from typing import TYPE_CHECKING, Any
 import orjson
 import structlog
 
+from gruvax.discogsography.log_redactor import redact_dscg_tokens
+
 
 if TYPE_CHECKING:
     from collections import deque
@@ -136,6 +138,10 @@ def configure_logging(log_level: str, ring: deque[dict[str, Any]]) -> None:
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
+        # P1: mask dscg_* PATs (T-01-PAT-leak) — broader regex covers exception messages.
+        # Placed BEFORE format_exc_info so the exception-info tuple's rendered strings
+        # flow through the substring masker on the same event_dict walk.
+        redact_dscg_tokens,
         structlog.processors.format_exc_info,
     ]
 
