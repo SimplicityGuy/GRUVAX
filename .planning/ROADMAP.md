@@ -74,7 +74,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 01-03-PLAN.md — sync_profile(profile_id) staging-swap routine (advisory lock + COPY + atomic DELETE/INSERT/UPDATE + inline cache refresh per D-14)
+- [x] 01-03-PLAN.md — sync_profile(profile_id) staging-swap routine (advisory lock + COPY + atomic DELETE/INSERT/UPDATE + inline cache refresh per D-14)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -139,7 +139,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
-| 1. First Search → Cube Highlight | v1.0 | 3/7 | In Progress|  |
+| 1. First Search → Cube Highlight | v1.0 | 4/7 | In Progress|  |
 | 2. Real Position Estimation | v1.0 | 4/4 | Complete | 2026-05-20 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
