@@ -26,7 +26,9 @@ pytest in a single connection.
 
 from __future__ import annotations
 
+import asyncio
 from pathlib import Path
+import subprocess
 from typing import TYPE_CHECKING
 
 import psycopg
@@ -54,26 +56,44 @@ def _conninfo() -> str:
 
 
 async def _alembic(action: str, target: str) -> None:
-    """Run ``alembic <action> <target>`` programmatically inside the test process.
+    """Run ``alembic <action> <target>`` via subprocess inside the test process.
 
-    Uses ``alembic.config.Config`` + ``alembic.command`` so the failure surface
-    matches ``just migrate-roundtrip`` while staying inside pytest.
+    Closes Gap #2 from 01-VERIFICATION.md: the previous programmatic
+    ``alembic.command.upgrade()`` path failed because env.py's
+    ``asyncio.run(run_async_migrations())`` cannot be called from within
+    pytest-asyncio's existing event loop. The subprocess has its own Python
+    interpreter and no parent event loop, so env.py's ``asyncio.run()`` succeeds.
+
+    The argv mirrors the canonical ``just migrate-roundtrip`` recipe
+    (justfile:47-50), so the failure surface in tests matches the CI gate
+    exactly. ``subprocess.run`` is wrapped in ``asyncio.to_thread`` so the
+    test event loop is not blocked during the multi-second migration.
     """
-    # Local imports keep the test module import-light; alembic startup
-    # is non-trivial because it spins its own async engine.
-    from alembic import command
-    from alembic.config import Config
-
-    # alembic.ini lives at repo root; find it relative to this test file.
-    alembic_ini = Path(__file__).resolve().parents[2] / "alembic.ini"
-    cfg = Config(str(alembic_ini))
-    # env.py picks up DATABASE_URL from gruvax.settings — no override needed.
-    if action == "upgrade":
-        command.upgrade(cfg, target)
-    elif action == "downgrade":
-        command.downgrade(cfg, target)
-    else:
+    if action not in ("upgrade", "downgrade"):
         raise ValueError(action)
+
+    # Repo root — alembic auto-discovers alembic.ini here (no -c flag needed,
+    # matching the justfile recipe).
+    cwd = Path(__file__).resolve().parents[2]
+    cmd = ["uv", "run", "alembic", action, target]
+
+    result = await asyncio.to_thread(
+        subprocess.run,
+        cmd,
+        cwd=str(cwd),
+        capture_output=True,
+        text=True,
+        timeout=120,
+    )
+
+    if result.returncode != 0:
+        # Custom AssertionError carries full stdout/stderr into the pytest
+        # report; CalledProcessError truncates by default.
+        raise AssertionError(
+            f"alembic {action} {target} failed (exit {result.returncode}):\n"
+            f"--- stdout ---\n{result.stdout}\n"
+            f"--- stderr ---\n{result.stderr}"
+        )
 
 
 @pytest_asyncio.fixture
