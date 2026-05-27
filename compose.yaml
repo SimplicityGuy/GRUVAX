@@ -87,6 +87,16 @@ services:
       MQTT_USERNAME: "${MQTT_USERNAME:-gruvax-api}"
       MQTT_PASSWORD: "${MQTT_PASSWORD:-}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
+      # Plan 01-10 (Rule 3 auto-fix): expose GRUVAX_ENV at runtime so the
+      # entrypoint's dev-only blocks fire under `just compose-smoke`. The
+      # existing build-arg (lines 55-58) bakes GRUVAX_ENV into _version.py at
+      # build time but is NOT visible to the running process — without this
+      # entry, the entrypoint sees the `${GRUVAX_ENV:-production}` default and
+      # silently skips both the gruvax_dev stub bootstrap (Plan 01-10) AND
+      # the existing synth-seed (Plan 01-06). Production-safe by default:
+      # absence of operator override resolves to `production`, matching the
+      # build-arg default and the entrypoint guards' fallback.
+      GRUVAX_ENV: "${GRUVAX_ENV:-production}"
     ports:
       - "8000:8000"
     volumes:

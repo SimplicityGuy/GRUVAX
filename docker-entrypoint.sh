@@ -26,6 +26,72 @@ do
 done
 echo "Database is up."
 
+# Plan 01-10: dev-only gruvax_dev stub schema bootstrap.
+#
+# WHY: Migration 0002 (CREATE VIEW gruvax.v_collection AS SELECT ... FROM
+# collection_items / releases / artists — see migrations/versions/0002_v_collection_view.py)
+# uses UNQUALIFIED table names. The runtime pool's search_path is `gruvax, public`
+# (D-12), so unqualified references resolve via the public-search-path fallback
+# to gruvax_dev in dev/CI (or to discogsography in production). On a virgin
+# compose `postgres:18` volume the gruvax_dev schema does NOT exist, so 0002
+# crashes the `alembic upgrade head` step and the api container crash-loops
+# BEFORE migration 0009 (which DROPs the view per D-19) gets a chance to run.
+#
+# WHAT: This block creates empty STUB tables (collection_items, releases, artists)
+# under gruvax_dev so 0002 parses cleanly. The stubs become dead weight once 0009
+# drops the view — that is the intended end state for compose-only scope. The
+# stubs MUST NEVER be seeded with real data; their only purpose is to let the
+# alembic chain reach 0009. The synth-seed block farther down (lines 36-64 of
+# this script before this insert; renumbered after) populates the real
+# gruvax.profile_collection AFTER alembic completes, against the v2 schema.
+#
+# PRODUCTION SAFETY: The GRUVAX_ENV=development guard mirrors the existing
+# synth-seed guard verbatim (search for `GRUVAX_ENV:-production` to find both
+# gates). Production deployments target the real `discogsography` schema per
+# D-12 and MUST NOT run this bootstrap.
+#
+# IDEMPOTENCY: `CREATE SCHEMA IF NOT EXISTS` + `CREATE TABLE IF NOT EXISTS`
+# make this a no-op on dev databases that already contain the discogsography-mock
+# tables from `tests/fixtures/legacy/synth_collection.sql` (per the
+# integration_test_harness memory note: "shared dev Postgres … gruvax_dev
+# populated by hand-managed seed scripts"). The richer columns/constraints on
+# any pre-existing tables are preserved unchanged.
+#
+# Reference: .planning/phases/01-walking-skeleton-api-client-single-profile-sync/01-10-PLAN.md
+# Reference: 01-HUMAN-UAT.md `## Gaps` second entry (migration-0002 sub-blocker).
+if [ "${GRUVAX_ENV:-production}" = "development" ]; then
+    echo "Ensuring gruvax_dev stub schema for migration 0002 (dev-only)..."
+    "$PYTHON" - <<'PY'
+import os, psycopg
+dsn = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://")
+with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+    cur.execute("""
+        CREATE SCHEMA IF NOT EXISTS gruvax_dev;
+        CREATE TABLE IF NOT EXISTS gruvax_dev.artists (
+            id   BIGINT PRIMARY KEY,
+            name TEXT
+        );
+        CREATE TABLE IF NOT EXISTS gruvax_dev.releases (
+            id                BIGINT PRIMARY KEY,
+            title             TEXT,
+            label             TEXT,
+            catalog_number    TEXT,
+            format            TEXT,
+            year              INT,
+            fts_vector        TSVECTOR,
+            primary_artist_id BIGINT
+        );
+        CREATE TABLE IF NOT EXISTS gruvax_dev.collection_items (
+            id         BIGINT PRIMARY KEY,
+            release_id BIGINT,
+            updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+        );
+    """)
+    conn.commit()
+print("gruvax_dev stub tables ensured (idempotent; required for migration 0002 v_collection view).")
+PY
+fi
+
 # Run Alembic migrations
 "$PYTHON" -m alembic upgrade head
 
