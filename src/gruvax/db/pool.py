@@ -1,14 +1,16 @@
 """Async psycopg connection pool factory.
 
 The pool sets ``search_path`` on every connection checkout so that:
-  - ``gruvax.v_collection`` resolves correctly against the gruvax schema.
-  - Unqualified table names in the view body (collection_items, releases,
-    artists) resolve against the schema named by
-    ``settings.OBSERVED_DISCOGSOGRAPHY_SCHEMA`` — "gruvax_dev" in dev/CI,
-    "discogsography" in production.
+  - ``gruvax.*`` unqualified references resolve against the gruvax schema.
+  - PostgreSQL built-ins and shared extensions (``pg_trgm`` lives in
+    ``public``) remain reachable.
 
-This is the sole place in application code that handles the dev/prod schema
-branch; everything else uses ``gruvax.v_collection`` unqualified.
+Post-P1 (D-12): the cross-schema dependency on ``gruvax.v_collection`` is
+retired in migration 0009; the pool no longer branches on the
+legacy observed-discogsography-schema setting. The legacy dual-schema
+search_path (``gruvax, gruvax_dev, public``) is re-introduced ONLY inside
+migration 0009's downgrade body so the recreated ``v_collection`` view
+can resolve its unqualified source-schema tables (Pitfall 5).
 """
 
 from contextlib import asynccontextmanager
@@ -45,26 +47,21 @@ def _conninfo(database_url: str) -> str:
 async def _configure_connection(conn: AsyncConnection) -> None:
     """Pool ``configure`` callback: set search_path on each new connection.
 
-    search_path order:
-      1. ``gruvax``      — owns units, cube_boundaries, v_collection.
-      2. The observed discogsography schema — "gruvax_dev" (dev) or
-         "discogsography" (prod).  This makes the unqualified table names in
-         the v_collection view body resolve to the right source schema.
-      3. ``public``      — PostgreSQL built-ins, extensions.
-
-    ``pg_catalog.set_config`` accepts a parameterised value so this is safe
-    against injection even though OBSERVED_DISCOGSOGRAPHY_SCHEMA comes from
-    validated settings (not end-user input).
+    Per D-12 the search_path is a single literal ``gruvax, public`` — the
+    pre-P1 dev/prod dual-schema branch (gruvax_dev / discogsography) was
+    removed when ``gruvax.v_collection`` retired in migration 0009. The
+    gruvax_dev path is re-introduced INSIDE migration 0009's downgrade only
+    (Pitfall 5), never in runtime code.
 
     The configure callback MUST leave the connection in ``IDLE`` transaction
     status (psycopg_pool enforces this and discards the connection otherwise).
     We use ``autocommit=True`` around the set_config call so no implicit
     transaction is started.
     """
-    schema = settings.OBSERVED_DISCOGSOGRAPHY_SCHEMA
     # pg_catalog.set_config(setting, value, is_local) fully parameterises the
-    # value, avoiding any SQL injection risk from the schema name.
-    search_path_value = f"gruvax, {schema}, public"
+    # value, preserving the SQLi-safe convention from the prior dual-schema
+    # implementation.
+    search_path_value = "gruvax, public"
     await conn.set_autocommit(True)
     try:
         await conn.execute(

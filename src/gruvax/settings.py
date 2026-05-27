@@ -4,6 +4,7 @@ All configuration is validated at startup via pydantic-settings; a missing or
 malformed value crashes boot rather than surfacing at request time.
 """
 
+from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,9 +21,10 @@ class Settings(BaseSettings):
     # SQLAlchemy / Alembic async form: postgresql+psycopg://user:pass@host/db
     DATABASE_URL: str
 
-    # The discogsography schema visible through gruvax.v_collection.
-    # Dev/CI: "gruvax_dev" (synthetic tables).  Prod: "discogsography".
-    OBSERVED_DISCOGSOGRAPHY_SCHEMA: str = "gruvax_dev"
+    # ── discogsography integration (P1, D-18) ────────────────────────────────
+    # No default — missing value crashes boot (mirrors DATABASE_URL convention).
+    # Prod = http://discogsography-api:8004; dev compose = http://fake-discogsography:8004.
+    DISCOGSOGRAPHY_BASE_URL: str
 
     # ── MQTT ─────────────────────────────────────────────────────────────────
     MQTT_HOST: str = "localhost"
@@ -47,8 +49,35 @@ class Settings(BaseSettings):
     # Sliding idle TTL for admin sessions in seconds (D-04, default 10 min).
     SESSION_TTL_SECONDS: int = 600
 
+    # ── Fernet encryption for PAT-at-rest (P1, D-01) ─────────────────────────
+    # URL-safe base64-encoded 32 random bytes. No default — boot fails with a
+    # clear pydantic ValidationError when missing or malformed. Generate with:
+    #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+    # ``SecretStr`` hides the value from ``repr``/``str`` so it never lands in
+    # logs by accident (T-01-secret-leak-via-repr mitigation).
+    GRUVAX_SECRET_KEY: SecretStr
+
     # ── Logging ───────────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"
+
+    @field_validator("GRUVAX_SECRET_KEY")
+    @classmethod
+    def _validate_fernet_key(cls, v: SecretStr) -> SecretStr:
+        """Reject malformed Fernet keys at boot, not at first decrypt.
+
+        Constructs ``Fernet(v)`` — the constructor raises ``ValueError`` if the
+        key is not 32 url-safe base64 bytes, which pydantic surfaces as a
+        precise ValidationError naming this field. Import inside the validator
+        to avoid any module-import ordering surprises in tooling that loads
+        settings before its third-party deps are ready.
+        """
+        # Local import: plan 01-01 calls for the Fernet import to live inside
+        # the validator so settings-loading tooling can run before its
+        # third-party deps resolve. The PLC0415 lint is intentionally silenced.
+        from cryptography.fernet import Fernet  # noqa: PLC0415
+
+        Fernet(v.get_secret_value().encode())
+        return v
 
 
 # Module-level singleton — import this everywhere.

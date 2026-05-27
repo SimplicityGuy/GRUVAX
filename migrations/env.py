@@ -96,12 +96,16 @@ async def _make_engine() -> AsyncEngine:
     probe — not our set_config call — so ``_in_external_transaction`` stays
     False and Alembic retains full transaction ownership.
 
-    The search_path ``gruvax, {schema}, public`` lets the ``v_collection``
-    view body (which uses unqualified table names) resolve against the correct
-    source schema at DDL validation time during migration 0002.
+    Post-P1 (D-12): the search_path is the simplified runtime value
+    ``gruvax, gruvax_dev, public``. The ``gruvax_dev`` middle segment is
+    retained ONLY for the legacy 0001→0008 forward path (migration 0002's
+    ``v_collection`` body and migration 0009's downgrade both rely on it
+    when the downgrade phase of the round-trip CI gate runs). Application
+    runtime (``gruvax.db.pool``) uses the trimmed ``gruvax, public`` instead;
+    keeping a separate value here scopes the legacy schema concern to
+    migration ownership without re-introducing the old settings field.
     """
-    schema = settings.OBSERVED_DISCOGSOGRAPHY_SCHEMA
-    search_path_value = f"gruvax, {schema}, public"
+    search_path_value = "gruvax, gruvax_dev, public"
 
     connectable = async_engine_from_config(
         config.get_section(config.config_ini_section, {}),
