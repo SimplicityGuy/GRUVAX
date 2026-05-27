@@ -150,7 +150,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
-| 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete   | 2026-05-27 |
+| 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
 | 2. Real Position Estimation | v1.0 | 4/4 | Complete | 2026-05-20 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |

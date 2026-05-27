@@ -1,9 +1,16 @@
 ---
 phase: 01-walking-skeleton-api-client-single-profile-sync
-verified: 2026-05-27T18:45:00Z
-status: human_needed
+verified: 2026-05-27T23:40:00Z
+status: complete
 score: 5/5 must-haves verified
 overrides_applied: 0
+uat_closure:
+  uat_file: 01-HUMAN-UAT.md
+  uat_status: complete
+  tests_passed: 5
+  tests_total: 5
+  ci_run: "26544940172 (HEAD 289cb29) — all jobs green"
+  sub_gaps_closed_during_uat: 13
 re_verification:
   previous_status: gaps_found
   previous_score: 4/5

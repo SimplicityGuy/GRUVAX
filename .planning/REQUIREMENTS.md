@@ -20,19 +20,19 @@
 
 - [ ] **PROF-01** — `profiles` table with Fernet-encrypted PAT storage, soft-delete via `deleted_at`, partial-unique indexes on `display_name` (case-insensitive) and `discogsography_user_id`
 - [ ] **PROF-02** — Profile manager admin UI (mobile-first, PIN-gated): list profiles with status badges; create / connect-PAT / rotate-PAT / rename / soft-delete; per-profile connection status view (last_sync, PAT health); "Sync now" button per profile
-- [ ] **PROF-03** — v1 data backfill to a deterministic "default" profile during `profile_id` migration (id `00000000-0000-0000-0000-000000000001`, display_name `'Default'`, owner-renameable post-migration)
+- [x] **PROF-03** — v1 data backfill to a deterministic "default" profile during `profile_id` migration (id `00000000-0000-0000-0000-000000000001`, display_name `'Default'`, owner-renameable post-migration)
 - [ ] **PROF-04** — `profile_id NOT NULL` migration across 7 v1 tables (`cube_boundaries`, `segments`, `change_log`, `change_sets`, `settings`, `record_stats`, `ambient_baseline`) with composite-uniqueness updates and clean Alembic upgrade↔downgrade round-trip (v1.0 CI invariant)
 
 ### API client + cache (API)
 
-- [ ] **API-01** — `DiscogsographyClient` paged collection sync with bearer-PAT auth, retry semantics (401/403 raise PATRejected; 429 honor Retry-After + exp backoff ≤3; 5xx exp backoff ≤3; network 1 retry → fail)
-- [ ] **API-02** — Positioning (parser/comparator, v1 Phase 2 §4.1 / Phase 5 segment-aware estimator), search (FTS), and `/api/locate` all run off the local `profile_collection` cache; p95 `/api/search` ≤ 200 ms and p95 `/api/locate` ≤ 50 ms SLOs preserved (v1.0 Phase 8 CI gate)
-- [ ] **API-03** — Retire `gruvax.v_collection` view + revoke read-only Postgres grant in the same Alembic migration; health probe code updated to check discogsography HTTP API reachability instead of cross-schema view
+- [x] **API-01** — `DiscogsographyClient` paged collection sync with bearer-PAT auth, retry semantics (401/403 raise PATRejected; 429 honor Retry-After + exp backoff ≤3; 5xx exp backoff ≤3; network 1 retry → fail)
+- [x] **API-02** — Positioning (parser/comparator, v1 Phase 2 §4.1 / Phase 5 segment-aware estimator), search (FTS), and `/api/locate` all run off the local `profile_collection` cache; p95 `/api/search` ≤ 200 ms and p95 `/api/locate` ≤ 50 ms SLOs preserved (v1.0 Phase 8 CI gate)
+- [x] **API-03** — Retire `gruvax.v_collection` view + revoke read-only Postgres grant in the same Alembic migration; health probe code updated to check discogsography HTTP API reachability instead of cross-schema view
 
 ### Sync (SYN)
 
 - [ ] **SYN-01** — Three sync trigger modes: on profile connect (synchronous `per_page=1` test sync → captures `user_id` → kicks off full async sync), manual "Sync now" admin button (PIN-gated, progress UI + completion toast), nightly background scheduler (`asyncio.create_task` in lifespan, 03:00 local default, cadence configurable: 24h / 12h / 6h / off)
-- [ ] **SYN-02** — Staleness redefinition from `max(v_collection.synced_at)` to per-profile `now() - profiles.last_sync_at`; v1.0 Phase 8 thresholds (3d/14d) carry over verbatim; banner per-kiosk-view per-profile
+- [x] **SYN-02** — Staleness redefinition from `max(v_collection.synced_at)` to per-profile `now() - profiles.last_sync_at`; v1.0 Phase 8 thresholds (3d/14d) carry over verbatim; banner per-kiosk-view per-profile
 
 ### Devices + pairing (DEV)
 
