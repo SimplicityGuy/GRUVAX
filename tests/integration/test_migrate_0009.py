@@ -282,14 +282,19 @@ async def test_profile_collection_pk_is_composite(
 
 # Per-v1-table NULL-count SELECTs as static literals (avoids any runtime SQL
 # concatenation, mirroring the migration's static-statement approach).
+#
+# RECONCILED 2026-05-27 (Plan 01-03 deviation Rule 3 / blocking issue):
+# Realigned to the real v1 tables that exist after `alembic upgrade 0008`
+# (see migration 0009's `_V1_TABLES` docstring for the full history of why
+# the original Plan 01-01 list was wrong).
 _V1_NULL_COUNT_QUERIES: dict[str, str] = {
+    "admin_sessions": "SELECT COUNT(*) FROM gruvax.admin_sessions WHERE profile_id IS NULL",
+    "boundary_history": "SELECT COUNT(*) FROM gruvax.boundary_history WHERE profile_id IS NULL",
     "cube_boundaries": "SELECT COUNT(*) FROM gruvax.cube_boundaries WHERE profile_id IS NULL",
-    "segments": "SELECT COUNT(*) FROM gruvax.segments WHERE profile_id IS NULL",
-    "change_log": "SELECT COUNT(*) FROM gruvax.change_log WHERE profile_id IS NULL",
-    "change_sets": "SELECT COUNT(*) FROM gruvax.change_sets WHERE profile_id IS NULL",
-    "settings": "SELECT COUNT(*) FROM gruvax.settings WHERE profile_id IS NULL",
+    "idempotency_keys": "SELECT COUNT(*) FROM gruvax.idempotency_keys WHERE profile_id IS NULL",
     "record_stats": "SELECT COUNT(*) FROM gruvax.record_stats WHERE profile_id IS NULL",
-    "ambient_baseline": "SELECT COUNT(*) FROM gruvax.ambient_baseline WHERE profile_id IS NULL",
+    "segment_overrides": "SELECT COUNT(*) FROM gruvax.segment_overrides WHERE profile_id IS NULL",
+    "settings": "SELECT COUNT(*) FROM gruvax.settings WHERE profile_id IS NULL",
 }
 
 

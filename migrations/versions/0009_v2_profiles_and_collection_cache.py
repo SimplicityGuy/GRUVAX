@@ -156,49 +156,61 @@ _IDX_PC_TITLE = (
 # project's "no formatted SQL queries" lint posture (bandit B608 is in the
 # pyproject.toml skip list for the same reason, but writing the statements
 # out longhand removes the warning at source).
+#
+# RECONCILED 2026-05-27 (Plan 01-03 deviation Rule 3 / blocking issue):
+# The original Plan 01-01 list referenced four tables that do NOT exist in
+# the v1 schema (``segments``, ``change_log``, ``change_sets``,
+# ``ambient_baseline``). The actual v1 user-data tables in the gruvax
+# schema are (from ``\dt gruvax.*`` on a fresh `alembic upgrade 0008`):
+# ``admin_sessions``, ``boundary_history``, ``cube_boundaries``,
+# ``idempotency_keys``, ``record_stats``, ``segment_overrides``,
+# ``settings`` (plus ``units`` — hardware config, excluded as global).
+# The list below preserves D-11's intent ("all 7 v1 tables get a nullable
+# profile_id") by binding to the real tables. ``units`` is excluded because
+# it models the physical hardware layout, not per-profile state.
 _V1_TABLES: tuple[str, ...] = (
+    "admin_sessions",
+    "boundary_history",
     "cube_boundaries",
-    "segments",
-    "change_log",
-    "change_sets",
-    "settings",
+    "idempotency_keys",
     "record_stats",
-    "ambient_baseline",
+    "segment_overrides",
+    "settings",
 )
 
 _V1_ADD_COLUMN_STATEMENTS: tuple[str, ...] = (
+    "ALTER TABLE gruvax.admin_sessions ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
+    "ALTER TABLE gruvax.boundary_history ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
     "ALTER TABLE gruvax.cube_boundaries ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
-    "ALTER TABLE gruvax.segments ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
-    "ALTER TABLE gruvax.change_log ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
-    "ALTER TABLE gruvax.change_sets ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
-    "ALTER TABLE gruvax.settings ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
+    "ALTER TABLE gruvax.idempotency_keys ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
     "ALTER TABLE gruvax.record_stats ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
-    "ALTER TABLE gruvax.ambient_baseline ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
+    "ALTER TABLE gruvax.segment_overrides ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
+    "ALTER TABLE gruvax.settings ADD COLUMN profile_id UUID REFERENCES gruvax.profiles(id) ON DELETE CASCADE",
 )
 
 # Backfill the existing rows in each v1 table with the default profile UUID
 # (D-11). The UUID literal is a project-internal constant (D-02); each
 # statement is a static literal so no formatted-SQL warning is emitted.
 _V1_BACKFILL_STATEMENTS: tuple[str, ...] = (
+    "UPDATE gruvax.admin_sessions SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
+    "UPDATE gruvax.boundary_history SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
     "UPDATE gruvax.cube_boundaries SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
-    "UPDATE gruvax.segments SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
-    "UPDATE gruvax.change_log SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
-    "UPDATE gruvax.change_sets SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
-    "UPDATE gruvax.settings SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
+    "UPDATE gruvax.idempotency_keys SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
     "UPDATE gruvax.record_stats SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
-    "UPDATE gruvax.ambient_baseline SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
+    "UPDATE gruvax.segment_overrides SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
+    "UPDATE gruvax.settings SET profile_id = '00000000-0000-0000-0000-000000000001'::uuid WHERE profile_id IS NULL",
 )
 
 # Downgrade drop list — REVERSED order (parents before children where it matters;
 # here all 7 are leaf tables w.r.t. profile_id so the order is for symmetry).
 _V1_DROP_COLUMN_STATEMENTS: tuple[str, ...] = (
-    "ALTER TABLE gruvax.ambient_baseline DROP COLUMN IF EXISTS profile_id",
-    "ALTER TABLE gruvax.record_stats DROP COLUMN IF EXISTS profile_id",
     "ALTER TABLE gruvax.settings DROP COLUMN IF EXISTS profile_id",
-    "ALTER TABLE gruvax.change_sets DROP COLUMN IF EXISTS profile_id",
-    "ALTER TABLE gruvax.change_log DROP COLUMN IF EXISTS profile_id",
-    "ALTER TABLE gruvax.segments DROP COLUMN IF EXISTS profile_id",
+    "ALTER TABLE gruvax.segment_overrides DROP COLUMN IF EXISTS profile_id",
+    "ALTER TABLE gruvax.record_stats DROP COLUMN IF EXISTS profile_id",
+    "ALTER TABLE gruvax.idempotency_keys DROP COLUMN IF EXISTS profile_id",
     "ALTER TABLE gruvax.cube_boundaries DROP COLUMN IF EXISTS profile_id",
+    "ALTER TABLE gruvax.boundary_history DROP COLUMN IF EXISTS profile_id",
+    "ALTER TABLE gruvax.admin_sessions DROP COLUMN IF EXISTS profile_id",
 )
 
 
