@@ -74,6 +74,18 @@ regen-synth-data:
         --yaml services/fake-discogsography/seed.yaml \
         --sql tests/fixtures/synth_profile_collection.sql
 
+# Plan 01-06: seed the local dev Postgres (gruvax-dev-pg container) with the
+# synthetic profile_collection fixture. Idempotent — the SQL TRUNCATEs and
+# re-INSERTs the default-profile rows. Use after `just migrate` on a fresh DB.
+seed-synth:
+    docker exec -i gruvax-dev-pg psql -U gruvax -d gruvax < tests/fixtures/synth_profile_collection.sql
+
+# Plan 01-06: SLO benchmark gate — p95 /api/search ≤ 200ms, p95 /api/locate ≤ 50ms
+# Runs pytest-benchmark over the search benchmark; CI invokes the same recipe.
+# Requires a populated profile_collection (run `just seed-synth` first if needed).
+slo:
+    uv run pytest tests/integration/test_search_benchmark.py --benchmark-only --benchmark-min-rounds=5
+
 # ── provisioning ─────────────────────────────────────────────────────────────
 
 # Provision DB roles and grants (run once by operator; never by application)
@@ -142,9 +154,9 @@ compose-smoke:
     set -euo pipefail
     docker compose up --build -d api fake-discogsography init-sync
     # Wait up to 60s for init-sync to exit (it's a one-shot — restart: "no").
-    timeout 60 bash -c 'until docker compose ps init-sync --status exited --format "{{.Name}}" 2>/dev/null | grep -q init-sync; do sleep 2; done' \
+    timeout 60 bash -c 'until docker compose ps init-sync --status exited --format "{{{{.Name}}}}" 2>/dev/null | grep -q init-sync; do sleep 2; done' \
         || { echo "init-sync did not exit within 60s"; docker compose logs init-sync; docker compose down -v; exit 1; }
-    EXIT_CODE=$(docker inspect gruvax-init-sync --format '{{.State.ExitCode}}')
+    EXIT_CODE=$(docker inspect gruvax-init-sync --format '{{{{.State.ExitCode}}}}')
     if [ "$EXIT_CODE" != "0" ]; then
         echo "init-sync exited non-zero: $EXIT_CODE"
         docker compose logs init-sync

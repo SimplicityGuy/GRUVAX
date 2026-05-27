@@ -89,6 +89,12 @@ services:
       LOG_LEVEL: "${LOG_LEVEL:-info}"
     ports:
       - "8000:8000"
+    volumes:
+      # Plan 01-06: dev-only synthetic seed for gruvax.profile_collection.
+      # The entrypoint loads this AFTER alembic migrations succeed when
+      # GRUVAX_ENV=development AND profile_collection is empty (idempotent).
+      # In production the env is non-development so this mount is unused.
+      - ./tests/fixtures/synth_profile_collection.sql:/app/tests/fixtures/synth_profile_collection.sql:ro
     networks:
       - internal
       # Uncomment to attach to the shared discogsography Postgres network (production):
@@ -126,10 +132,15 @@ services:
         max-file: "3"
 
   # Local dev Postgres. A single `just up` brings this up with data: on first
-  # start the mounted fixtures/synth_collection.sql runs via initdb, creating the
-  # gruvax_dev schema + ~200 synthetic records BEFORE the api service migrates (so
-  # the v_collection view in migration 0002 resolves). The api service seeds cube
-  # boundaries on startup. To use the deployment host instead, set GRUVAX_DB_HOST (see header).
+  # start the api service runs `alembic upgrade head` then loads the synthetic
+  # profile_collection seed from tests/fixtures/synth_profile_collection.sql.
+  # (Plan 01-06: the v1 initdb mount was retired because the new fixture
+  # references gruvax.profiles + gruvax.profile_collection which only exist
+  # AFTER migration 0009 — initdb runs BEFORE alembic, so the old approach
+  # cannot seed v2 schema. The api entrypoint owns post-migration seeding
+  # via psql; the fixture is mounted into the api container instead.)
+  # The api service also seeds cube boundaries on startup. To use the
+  # deployment host instead, set GRUVAX_DB_HOST (see header).
   gruvax-dev-pg:
     image: postgres:18
     container_name: gruvax-dev-pg
@@ -143,7 +154,6 @@ services:
       # postgres:18+ stores data in a major-version subdir under this mount
       # point — mount at /var/lib/postgresql (NOT /var/lib/postgresql/data).
       - gruvax-dev-pg-data:/var/lib/postgresql
-      - ./fixtures/synth_collection.sql:/docker-entrypoint-initdb.d/10-synth_collection.sql:ro
     networks:
       - internal
     healthcheck:
