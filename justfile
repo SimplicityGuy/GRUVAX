@@ -152,6 +152,9 @@ build-version:
 compose-smoke:
     #!/usr/bin/env bash
     set -euo pipefail
+    # Dump api/dev-pg/init-sync logs on ANY exit so CI failures during
+    # `docker compose up` (api unhealthy or Error state) are debuggable.
+    trap 'echo "=== compose-smoke failed; dumping logs ===" >&2; docker compose logs api gruvax-dev-pg init-sync fake-discogsography 2>&1 | tail -200 >&2; docker compose down -v >/dev/null 2>&1 || true' ERR
     docker compose up --build -d api fake-discogsography init-sync
     # Wait up to 60s for init-sync to exit (it's a one-shot — restart: "no").
     # Just brace-escape: 4 leading braces escape to a literal opening pair, but
