@@ -111,17 +111,28 @@ jobs:
       - name: Seed cube_boundaries
         run: uv run python -m gruvax.db.seed_boundaries fixtures/boundaries.yaml
 
+      # Plan 01-06: seed gruvax.profile_collection from the canonical synthetic
+      # fixture so search + locate paths return real rows. Migration 0009's
+      # round-trip is exercised above; the final upgrade leaves
+      # profile_collection empty.  The benchmark + search/locate suites need
+      # rows to exercise the index-backed FTS path within SLO.
+      - name: Seed synthetic profile_collection
+        run: psql postgresql://gruvax:gruvax@localhost:5432/gruvax < tests/fixtures/synth_profile_collection.sql
+
       # Full test suite (benchmarks are skipped by addopts --benchmark-disable)
       - name: Test suite
         run: uv run pytest tests/ -q --tb=short
 
       # SC5: Benchmark SLO gate — HARD FAIL on regression (no continue-on-error)
-      # Runs locate benchmark (test_algorithm.py) + HTTP search benchmark (test_search_benchmark.py)
-      # then checks p95 via scripts/check_benchmark.py (search<=200ms, locate<=50ms)
+      # Plan 01-06: ``just slo`` is the single source of truth — runs locally
+      # and in CI so the gate executes the same code path everywhere.  The
+      # unit-level locate benchmark is run separately so a code-only
+      # regression in estimator/algorithm.py is caught even when
+      # profile_collection re-seeding fails (independent failure mode).
       - name: Benchmark SLO gate
         run: |
+          just slo
           uv run pytest \
             tests/unit/test_algorithm.py::test_locate_benchmark \
-            tests/integration/test_search_benchmark.py::test_search_slo_benchmark \
             --benchmark-only --benchmark-json=benchmark.json -q
           uv run python scripts/check_benchmark.py benchmark.json
