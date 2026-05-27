@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-User Collections
-status: planning
-last_updated: "2026-05-26T22:30:00.000Z"
+status: Not started (waiting on DGS-PREREQ — discogsography v2 contract artifact at `docs/specs/v2-gruvax-integration.md`)
+last_updated: "2026-05-27T00:58:29.052Z"
 last_activity: 2026-05-26
 progress:
-  total_phases: 4
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
