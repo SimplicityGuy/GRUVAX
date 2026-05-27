@@ -82,6 +82,10 @@ services:
       #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
       # and add to `.env` (see README "Secrets bootstrap" section).
       GRUVAX_SECRET_KEY: "${GRUVAX_SECRET_KEY:?GRUVAX_SECRET_KEY must be set in .env}"
+      # Starlette SessionMiddleware key — required by Settings() at api boot.
+      # Locally inherited from .env via env_file above; CI sets via workflow env.
+      # The :? guard rejects compose-up if neither path supplies it.
+      SESSION_SECRET: "${SESSION_SECRET:?SESSION_SECRET must be set in .env}"
       MQTT_HOST: "mosquitto"
       MQTT_PORT: "1883"
       MQTT_USERNAME: "${MQTT_USERNAME:-gruvax-api}"
@@ -303,6 +307,7 @@ services:
       DATABASE_URL: "postgresql+psycopg://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-gruvax-dev-pg}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}"
       DISCOGSOGRAPHY_BASE_URL: "${DISCOGSOGRAPHY_BASE_URL:-http://fake-discogsography:8004}"
       GRUVAX_SECRET_KEY: "${GRUVAX_SECRET_KEY:?GRUVAX_SECRET_KEY must be set in .env}"
+      SESSION_SECRET: "${SESSION_SECRET:?SESSION_SECRET must be set in .env}"
       GRUVAX_ADMIN_PIN: "${GRUVAX_ADMIN_PIN:?GRUVAX_ADMIN_PIN must be set in .env for init-sync}"
     restart: "no"
     networks:
