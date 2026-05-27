@@ -1,0 +1,1 @@
+"""Discogsography client fixtures."""
