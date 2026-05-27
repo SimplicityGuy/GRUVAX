@@ -35,6 +35,8 @@ dependencies = [
 [project.scripts]
 gruvax = "gruvax:main"
 gruvax-set-pin = "gruvax.cli.set_pin:main"
+gruvax-set-pat = "gruvax.cli.set_pat:main"
+gruvax-sync = "gruvax.cli.sync_cli:main"
 
 [build-system]
 requires = ["uv_build>=0.11.15,<0.12.0"]

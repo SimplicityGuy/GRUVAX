@@ -31,16 +31,13 @@ Harness:
 
 from __future__ import annotations
 
-import asyncio
 import os
 import socket
 import subprocess
-import sys
 import threading
 from typing import TYPE_CHECKING
 
 from fastapi import FastAPI, Header, HTTPException, Query
-import psycopg
 import pytest
 import pytest_asyncio
 import uvicorn
@@ -52,7 +49,7 @@ if TYPE_CHECKING:
 
 DEFAULT_PROFILE_NAME = "Default"
 DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
-VALID_PAT = "dscg_test_pat_set_pat_LEAK_DETECTOR_secret_aaaa"
+VALID_PAT = "dscg_test_pat_set_pat_LEAK_DETECTOR_secret_aaaa_50chars_ok"  # ≥ 50 chars
 USER_AAA = "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
 USER_BBB = "bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb"
 
@@ -240,13 +237,15 @@ def _run_cli(
     args = ["uv", "run", "gruvax-set-pat", "--profile", DEFAULT_PROFILE_NAME]
     if extra_args:
         args.extend(extra_args)
-    return subprocess.run(
+    # subprocess: test harness drives the CLI under test; args are all literals.
+    return subprocess.run(  # noqa: S603
         args,
         input=stdin,
         capture_output=True,
         text=True,
         env=env,
         timeout=30,
+        check=False,
     )
 
 
