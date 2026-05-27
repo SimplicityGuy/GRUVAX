@@ -247,14 +247,16 @@ services:
   # fails compose-up clearly when unset (T-01-init-sync-pin mitigation; never
   # silently boots without auth).
   init-sync:
+    # init-sync intentionally has NO `build:` block — it reuses the image
+    # already built and tagged by the `api` service above
+    # (`ghcr.io/simplicityguy/gruvax:latest`). The `depends_on.api:
+    # { condition: service_healthy }` below guarantees api is built and
+    # healthy before init-sync starts, so the tagged image already exists
+    # in the local daemon. Per Plan 01-05 PLAN.md line 449 intent and the
+    # D-16 idempotent-precheck contract — do not re-introduce a parallel
+    # `build:` block here (it triggers BuildKit duplicate-tag export
+    # failure: "image ghcr.io/simplicityguy/gruvax:latest already exists").
     image: ghcr.io/simplicityguy/gruvax:latest
-    build:
-      context: .
-      dockerfile: Dockerfile
-      args:
-        GIT_SHA: "${GIT_SHA:-unknown}"
-        BUILD_TIMESTAMP: "${BUILD_TIMESTAMP:-unknown}"
-        GRUVAX_ENV: "${GRUVAX_ENV:-production}"
     container_name: gruvax-init-sync
     depends_on:
       api:
