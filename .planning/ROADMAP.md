@@ -78,8 +78,8 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 01-04-PLAN.md — POST /api/admin/profiles/{id}/sync (PIN-gated) + gruvax-set-pat CLI (stdin-only, strict rotation per D-09) + gruvax-sync CLI
-- [ ] 01-05-PLAN.md — /api/health field rename (discogsography_view_check → discogsography_api_check, 3-state per D-13) + lifespan rewire (profile_collection probe + default_profile_* background task) + Compose fake-discogsography sibling + init-sync container
+- [x] 01-04-PLAN.md — POST /api/admin/profiles/{id}/sync (PIN-gated) + gruvax-set-pat CLI (stdin-only, strict rotation per D-09) + gruvax-sync CLI
+- [x] 01-05-PLAN.md — /api/health field rename (discogsography_view_check → discogsography_api_check, 3-state per D-13) + lifespan rewire (profile_collection probe + default_profile_* background task) + Compose fake-discogsography sibling + init-sync container
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -139,7 +139,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
-| 1. First Search → Cube Highlight | v1.0 | 4/7 | In Progress|  |
+| 1. First Search → Cube Highlight | v1.0 | 6/7 | In Progress|  |
 | 2. Real Position Estimation | v1.0 | 4/4 | Complete | 2026-05-20 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
