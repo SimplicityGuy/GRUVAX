@@ -64,7 +64,13 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
   3. `gruvax.v_collection` is dropped and the read-only Postgres grant to discogsography's collection tables is revoked in the same Alembic migration; the round-trip (`upgrade head → downgrade base → upgrade head`) is clean.
   4. The default profile's first sync (`id = 00000000-0000-0000-0000-000000000001`, `display_name = 'Default'`) completes with `last_sync_status = 'ok'` and `last_sync_item_count` ≥ the v1 baseline (~3,000 items).
   5. `/api/health` reports discogsography reachability via HTTP probe (not cross-schema view); kiosk staleness banner reads from `now() - profiles.last_sync_at` for the single default profile.
-**Plans**: TBD
+**Plans**: 6 plans (4 waves; W1 parallel: 01-01 + 01-02 | W2: 01-03 | W3 parallel: 01-04 + 01-05 | W4: 01-06)
+- [ ] 01-01-PLAN.md — Schema migration 0009 + settings (DISCOGSOGRAPHY_BASE_URL, GRUVAX_SECRET_KEY) + pool search_path simplification + Alembic round-trip CI gate
+- [ ] 01-02-PLAN.md — DiscogsographyClient (httpx + stamina retry) + Fernet PAT crypto + structlog dscg_* redactor + in-process fake-discogsography FastAPI fixture
+- [ ] 01-03-PLAN.md — sync_profile(profile_id) staging-swap routine (advisory lock + COPY + atomic DELETE/INSERT/UPDATE + inline cache refresh per D-14)
+- [ ] 01-04-PLAN.md — POST /api/admin/profiles/{id}/sync (PIN-gated) + gruvax-set-pat CLI (stdin-only, strict rotation per D-09) + gruvax-sync CLI
+- [ ] 01-05-PLAN.md — /api/health field rename (discogsography_view_check → discogsography_api_check, 3-state per D-13) + lifespan rewire (profile_collection probe + default_profile_* background task) + Compose fake-discogsography sibling + init-sync container
+- [ ] 01-06-PLAN.md — Rewire src/gruvax/db/queries.py + estimator/collection_snapshot.py from v_collection → profile_collection + synth_profile_collection.sql fixture + SLO benchmark gate (p95 search ≤200ms, locate ≤50ms)
 **UI hint**: yes
 
 ### Phase 2: Multi-profile migration + profile manager
@@ -120,7 +126,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 | 8. Observability + Deployment Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
-| 1. Walking skeleton — API client + single-profile sync | v2.0 | 0/0 | Not started (waiting on DGS-PREREQ) | — |
+| 1. Walking skeleton — API client + single-profile sync | v2.0 | 0/6 | Planned (4 waves) | — |
 | 2. Multi-profile migration + profile manager | v2.0 | 0/0 | Not started | — |
 | 3. Devices + pairing | v2.0 | 0/0 | Not started | — |
 | 4. Sync polish + diagnostics | v2.0 | 0/0 | Not started | — |
