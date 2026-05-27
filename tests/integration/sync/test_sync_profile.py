@@ -23,16 +23,15 @@ the in-process FAKE app via a `_make_client` monkeypatch hook.
 
 from __future__ import annotations
 
-import asyncio
 import os
 import types
 from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
+from httpx import ASGITransport, AsyncClient
 import psycopg
 import pytest
 import pytest_asyncio
-from httpx import ASGITransport, AsyncClient
 
 from gruvax._internal.fake_discogsography import create_fake_app
 from gruvax.discogsography.client import DiscogsographyClient
@@ -129,24 +128,21 @@ def _make_app_state(db_pool) -> types.SimpleNamespace:  # type: ignore[no-untype
     )
 
 
-def _client_factory_for(app) -> "type[DiscogsographyClient]":
+def _client_factory_for(app) -> type[DiscogsographyClient]:
     """Build a factory that returns a DiscogsographyClient routed at `app`.
 
     The factory mirrors the DiscogsographyClient constructor signature so
-    the production code can be substituted without touching its API.
+    the production code can be substituted without touching its API. It
+    constructs a fresh DiscogsographyClient whose internal ``_client``
+    references an ASGITransport-bound httpx AsyncClient. The prod ``_client``
+    that DiscogsographyClient's constructor builds is unused (small leak
+    is acceptable in tests; would matter only on a long-running suite).
     """
 
     def _factory(base_url: str, pat: str) -> DiscogsographyClient:
-        client = DiscogsographyClient(base_url=base_url, pat=pat)
+        # Bypass the prod __init__ that builds an unused real httpx client.
+        client = DiscogsographyClient.__new__(DiscogsographyClient)
         transport = ASGITransport(app=app)
-        # Replace the inner httpx client with one bound to the in-process fake.
-        # NB: the prod constructor sets headers={"Authorization": f"Bearer {pat}"}.
-        async def _aclose_then_new() -> None:
-            await client._client.aclose()
-
-        # Schedule the close on the same loop the caller is using.
-        loop = asyncio.get_event_loop()
-        loop.create_task(_aclose_then_new())
         client._client = AsyncClient(
             transport=transport,
             base_url="http://fake",
@@ -169,8 +165,8 @@ def _ensure_secret_key(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GRUVAX_SECRET_KEY", Fernet.generate_key().decode())
 
 
-@pytest_asyncio.fixture
-async def clean_db(db_pool) -> "AsyncIterator[None]":  # type: ignore[no-untyped-def]
+@pytest_asyncio.fixture(loop_scope="session")
+async def clean_db(db_pool) -> AsyncIterator[None]:  # type: ignore[no-untyped-def]
     """Reset profiles + profile_collection to a known starting state."""
     await _seed_default_profile(db_pool)
     await _truncate_profile_collection(db_pool)
@@ -224,7 +220,16 @@ async def test_sync_replaces_existing_rows_atomically(  # type: ignore[no-untype
                 "INSERT INTO gruvax.profile_collection "
                 "(profile_id, release_id, folder_id, artist, title, label, catalog_number, year) "
                 "VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, %s)",
-                (DEFAULT_UUID, 90000 + i, 1, f"Old {i}", f"Old Title {i}", "Old Label", f"OLD-{i:03d}", 2000),
+                (
+                    DEFAULT_UUID,
+                    90000 + i,
+                    1,
+                    f"Old {i}",
+                    f"Old Title {i}",
+                    "Old Label",
+                    f"OLD-{i:03d}",
+                    2000,
+                ),
             )
         await conn.commit()
 
@@ -410,9 +415,8 @@ async def test_sync_network_error_tag(  # type: ignore[no-untyped-def]
             raise httpx.ConnectError("simulated network failure")
 
     def _make_failing_client(base_url: str, pat: str) -> DiscogsographyClient:
-        client = DiscogsographyClient(base_url=base_url, pat=pat)
-        # Schedule close of the prod client to avoid resource warnings.
-        asyncio.get_event_loop().create_task(client._client.aclose())
+        # Bypass the prod __init__ to avoid creating an unused real httpx client.
+        client = DiscogsographyClient.__new__(DiscogsographyClient)
         client._client = httpx.AsyncClient(
             transport=_AlwaysFails(),
             base_url="http://fake",
@@ -474,15 +478,17 @@ async def test_sync_release_id_bigint_overflow(  # type: ignore[no-untyped-def]
 ) -> None:
     """Test 10: D-04 — release_id stored as BIGINT survives 13-digit ids."""
     big_id = 9999999999999  # 13 digits, > 2^31, < 2^63
-    seed = [{
-        "id": str(big_id),
-        "title": "Big",
-        "year": 2020,
-        "catalog_number": "BIG-001",
-        "artist": "Big Artist",
-        "label": "Big Label",
-        "folder_id": 1,
-    }]
+    seed = [
+        {
+            "id": str(big_id),
+            "title": "Big",
+            "year": 2020,
+            "catalog_number": "BIG-001",
+            "artist": "Big Artist",
+            "label": "Big Label",
+            "folder_id": 1,
+        }
+    ]
     app = create_fake_app(seed=seed)
     monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app))
     result = await sync_profile(DEFAULT_UUID, _make_app_state(db_pool))
