@@ -18,9 +18,10 @@ Plan 01-06 swap notes:
     view was dropped in migration 0009).
   - Seed fixture is ``tests/fixtures/synth_profile_collection.sql`` (Plan 01-00
     generator output); the fixture is loaded into the dev Postgres by the
-    module-scope ``_seeded_profile_collection`` fixture below so the benchmark
-    is reproducible regardless of test ordering (other modules may have
-    truncated the table mid-suite).
+    module-scoped autouse fixture in ``tests/integration/conftest.py``
+    (lifted from this module by Plan 01-07 so every integration test gets the
+    seed without per-module boilerplate). Re-applying is idempotent (the SQL
+    file starts with TRUNCATE), so subsequent modules cannot race the seed.
   - Query string is now an artist family present in the v2 seed (``Artist 1``)
     since the v1 ``Miles Davis`` rows no longer exist.
 
@@ -32,7 +33,6 @@ the pool is open before the ASGI app boots.
 from __future__ import annotations
 
 import asyncio
-from pathlib import Path
 
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
@@ -42,41 +42,8 @@ import pytest_asyncio
 from gruvax.app import create_app
 
 
-_SYNTH_SQL_PATH = (
-    Path(__file__).resolve().parents[1] / "fixtures" / "synth_profile_collection.sql"
-)
-
-
-@pytest.fixture(scope="module")
-def _seeded_profile_collection() -> None:
-    """Ensure profile_collection holds the canonical synthetic seed.
-
-    Other modules in the shared dev DB may have truncated the table mid-suite
-    (sync tests, migrate tests). Re-applying the SQL file is idempotent: it
-    runs ``TRUNCATE gruvax.profile_collection RESTART IDENTITY CASCADE``
-    then re-INSERTs all 3000 default-profile rows.
-
-    Uses a fresh sync psycopg connection rather than the session-scoped
-    ``db_pool`` async pool so the seeding does not race with pytest-asyncio's
-    event-loop scope (the benchmark tests are synchronous, the pool fixture
-    is session-scoped async — a module-scoped async fixture between them
-    deadlocks on the pool's first ``getconn``).
-    """
-    import os
-
-    import psycopg
-
-    dsn = os.environ["DATABASE_URL"].replace("postgresql+psycopg://", "postgresql://", 1)
-    sql = _SYNTH_SQL_PATH.read_text()
-    with psycopg.connect(dsn) as conn, conn.cursor() as cur:
-        cur.execute(sql)
-        conn.commit()
-    yield
-    # No teardown — the table stays seeded for subsequent suites.
-
-
 @pytest_asyncio.fixture(scope="module")
-async def search_client(db_pool, _seeded_profile_collection):  # type: ignore[no-untyped-def]
+async def search_client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped ASGI client with full lifespan for benchmark tests."""
     app = create_app()
     async with (
@@ -126,7 +93,8 @@ def test_locate_slo_benchmark(benchmark, search_client) -> None:  # type: ignore
 
     Plan 01-06: release_id=1 is the canonical first synthetic record
     (Blue Note BLP 1000) which is guaranteed present in profile_collection by
-    the ``_seeded_profile_collection`` fixture.  /api/locate hits the
+    the suite-wide autouse seed fixture in ``tests/integration/conftest.py``
+    (added by Plan 01-07; was a module-local fixture here pre-01-07). /api/locate hits the
     in-memory snapshot + segment cache (POS-03 — CPU only, no DB after the
     initial get_release_for_locate lookup) so this measures the locate path
     end-to-end including the DB metadata fetch.
