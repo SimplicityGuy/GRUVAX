@@ -121,17 +121,17 @@ def _ensure_session_secret() -> None:
         os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def fake_disco_port() -> int:
     return _find_free_port()
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="module")
 def gruvax_api_port() -> int:
     return _find_free_port()
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="module", autouse=False)
 def fake_disco_server(fake_disco_port) -> Iterator[None]:  # type: ignore[no-untyped-def]
     """Run the fake-discogsography uvicorn for the whole test session."""
     outer = _build_fake_outer()
@@ -161,7 +161,7 @@ def fake_disco_server(fake_disco_port) -> Iterator[None]:  # type: ignore[no-unt
     thread.join(timeout=5.0)
 
 
-@pytest.fixture(scope="session", autouse=False)
+@pytest.fixture(scope="module", autouse=False)
 def gruvax_api_server(gruvax_api_port, fake_disco_port, fake_disco_server) -> Iterator[None]:  # type: ignore[no-untyped-def]
     """Run the real GRUVAX FastAPI on an ephemeral port for the session.
 
@@ -170,33 +170,33 @@ def gruvax_api_server(gruvax_api_port, fake_disco_port, fake_disco_server) -> It
     Settings singleton picks up the fake-disco port.
     """
     os.environ["DISCOGSOGRAPHY_BASE_URL"] = f"http://127.0.0.1:{fake_disco_port}"
-    # Force settings reload — pydantic-settings caches at module load time, and
-    # the test conftest may already have imported gruvax.settings with a
-    # different value. We reset by re-instantiating the Settings class.
+    # Force settings to reflect the new base URL even though other modules have
+    # already done `from gruvax.settings import settings` (singleton-by-import
+    # pattern). Re-instantiate AND mutate the live singleton's attribute so
+    # cached references in sync_profile / set_pat see the test fake-disco port.
     import gruvax.settings as _settings_mod
 
-    _settings_mod.settings = _settings_mod.Settings()  # type: ignore[call-arg]
+    _settings_mod.settings.DISCOGSOGRAPHY_BASE_URL = (  # type: ignore[misc]
+        f"http://127.0.0.1:{fake_disco_port}"
+    )
 
     from gruvax.app import create_app
 
+    # Patch sync_profile._refresh_app_caches to a no-op while THIS server is
+    # running — the in-process sync triggered by the CLI subprocess would
+    # otherwise hit Plan 06's pending collection_snapshot read path
+    # (gruvax.v_collection). We restore the original at fixture teardown so
+    # we don't leak into other test modules' cache-refresh assertions.
+    from gruvax.sync import profile_sync as _profile_sync_mod
+
+    _original_refresh = _profile_sync_mod._refresh_app_caches
+
+    async def _noop_refresh(_app_state) -> None:  # type: ignore[no-untyped-def]
+        return None
+
+    _profile_sync_mod._refresh_app_caches = _noop_refresh  # type: ignore[assignment]
+
     app = create_app()
-
-    # Substitute AsyncMock cache hooks so the inline cache refresh in
-    # sync_profile doesn't hit Plan 06's pending collection_snapshot rewire.
-    # We do this in a startup callback so app.state is set up after lifespan.
-    from unittest.mock import AsyncMock
-
-    @app.on_event("startup")
-    async def _swap_caches() -> None:
-        snapshot = AsyncMock()
-        snapshot.invalidate = lambda: None
-        boundary = AsyncMock()
-        boundary.overrides = {}
-        segment = AsyncMock()
-        segment.derive = lambda *a, **kw: None
-        app.state.collection_snapshot = snapshot
-        app.state.boundary_cache = boundary
-        app.state.segment_cache = segment
 
     config = uvicorn.Config(
         app, host="127.0.0.1", port=gruvax_api_port, log_level="warning", loop="asyncio"
@@ -237,6 +237,8 @@ def gruvax_api_server(gruvax_api_port, fake_disco_port, fake_disco_server) -> It
     yield
     server.should_exit = True
     thread.join(timeout=5.0)
+    # Restore the original cache-refresh so cross-module tests are unaffected.
+    _profile_sync_mod._refresh_app_caches = _original_refresh  # type: ignore[assignment]
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -399,7 +401,7 @@ async def test_pin_via_stdin_pipe_non_tty(  # type: ignore[no-untyped-def]
     env = os.environ.copy()
     env["GRUVAX_BASE_URL"] = f"http://127.0.0.1:{gruvax_api_port}"
     env["GRUVAX_ADMIN_PIN"] = TEST_PIN
-    result = subprocess.run(  # noqa: S603
+    result = subprocess.run(
         [  # noqa: S607
             "sh",
             "-c",
