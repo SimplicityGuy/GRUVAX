@@ -69,8 +69,8 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 **Wave 1**
 
-- [ ] 01-01-PLAN.md — Schema migration 0009 + settings (DISCOGSOGRAPHY_BASE_URL, GRUVAX_SECRET_KEY) + pool search_path simplification + Alembic round-trip CI gate
-- [ ] 01-02-PLAN.md — DiscogsographyClient (httpx + stamina retry) + Fernet PAT crypto + structlog dscg_* redactor + in-process fake-discogsography FastAPI fixture
+- [x] 01-01-PLAN.md — Schema migration 0009 + settings (DISCOGSOGRAPHY_BASE_URL, GRUVAX_SECRET_KEY) + pool search_path simplification + Alembic round-trip CI gate
+- [x] 01-02-PLAN.md — DiscogsographyClient (httpx + stamina retry) + Fernet PAT crypto + structlog dscg_* redactor + in-process fake-discogsography FastAPI fixture
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -139,7 +139,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
-| 1. First Search → Cube Highlight | v1.0 | 1/7 | In Progress|  |
+| 1. First Search → Cube Highlight | v1.0 | 3/7 | In Progress|  |
 | 2. Real Position Estimation | v1.0 | 4/4 | Complete | 2026-05-20 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
