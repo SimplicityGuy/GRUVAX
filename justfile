@@ -129,6 +129,33 @@ build-version:
     printf 'GIT_SHA = "%s"\nBUILD_TIMESTAMP = "%s"\nENVIRONMENT = "development"\n' "$sha" "$ts" > src/gruvax/_version.py
     echo "Wrote src/gruvax/_version.py (GIT_SHA=$sha)"
 
+# Plan 01-05 / Blocker #2 RESOLUTION: full compose-up smoke gate.
+# Brings up api + fake-discogsography + init-sync, asserts init-sync exits 0
+# (D-16 contract: idempotent — runs gruvax-sync on the first boot and skips
+# on subsequent boots). Asserts fake-discogsography serves rows. Tears down
+# with `docker compose down -v` so the run is reproducible in CI.
+#
+# Slow (~60-90s on a clean cache). Runs in CI; locally for verifying the
+# end-to-end first-boot path.
+compose-smoke:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    docker compose up --build -d api fake-discogsography init-sync
+    # Wait up to 60s for init-sync to exit (it's a one-shot — restart: "no").
+    timeout 60 bash -c 'until docker compose ps init-sync --status exited --format "{{.Name}}" 2>/dev/null | grep -q init-sync; do sleep 2; done' \
+        || { echo "init-sync did not exit within 60s"; docker compose logs init-sync; docker compose down -v; exit 1; }
+    EXIT_CODE=$(docker inspect gruvax-init-sync --format '{{.State.ExitCode}}')
+    if [ "$EXIT_CODE" != "0" ]; then
+        echo "init-sync exited non-zero: $EXIT_CODE"
+        docker compose logs init-sync
+        docker compose down -v
+        exit 1
+    fi
+    # Assert fake-discogsography serves rows.
+    docker compose exec -T fake-discogsography python -c \
+        "import urllib.request as u, json; req = u.Request('http://127.0.0.1:8004/api/user/collection?limit=1', headers={'Authorization': 'Bearer dscg_dev_seed'}); body = json.loads(u.urlopen(req).read()); assert len(body['releases']) > 0, body"
+    docker compose down -v
+
 # Core Value smoke test: docker compose up → search → locate → assert SLO (SC5)
 demo:
     #!/usr/bin/env bash

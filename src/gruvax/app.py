@@ -6,11 +6,16 @@ Factory function ``create_app()`` is the ASGI entry point::
 
 Lifespan sequence (startup):
   1. Open the psycopg ``AsyncConnectionPool``.
-  2. Probe ``SELECT 1 FROM gruvax.v_collection LIMIT 1`` (D-07, Pitfall 5).
-     On failure: log error, set ``app.state.discogsography_view_ok = False``.
-     Never crash — search returns 503, health reports degraded.
+  2. Probe ``SELECT COUNT(*) FROM gruvax.profile_collection WHERE profile_id =
+     DEFAULT_PROFILE_UUID`` (Plan 01-05, D-13). On failure: log error, set
+     ``app.state.profile_collection_ready = False``. Never crash — search
+     returns 503, health reports degraded. Replaces v1's v_collection probe
+     (the view was dropped in migration 0009).
   3. Load the ``BoundaryCache`` from ``gruvax.cube_boundaries`` (POS-04, D-03).
   4. Attempt MQTT connection (non-blocking best-effort; DEP-01, T-01-11).
+  5. Schedule the 60s ``_refresh_default_profile_state`` background task —
+     replaces v1's ``_refresh_sync_age`` (which read max(v_collection.synced_at);
+     P1's task reads ``profiles.last_sync_at`` for the default profile).
 
 Router registration order (CRITICAL — Pitfall 3):
   All ``include_router`` calls MUST precede the ``StaticFiles`` mount.
@@ -62,6 +67,13 @@ if TYPE_CHECKING:
 
 
 logger = logging.getLogger(__name__)
+
+
+# Plan 01-05 / D-02: the single-profile UUID seeded by migration 0009. Used by
+# the lifespan startup probe + the 60s default-profile-state background task.
+# Mirrors ``tests/conftest.py::default_profile_uuid`` and the constant baked
+# into migration 0009.
+DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
 
 
 class SpaStaticFiles(StaticFiles):
@@ -124,17 +136,23 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Set before scheduling the task so health.py never KeyErrors on this attribute.
     app.state.sync_age_seconds = None  # float | None
 
-    # ── 2. v_collection startup probe (D-07, Pitfall 5) ─────────────────────
+    # ── 2. profile_collection startup probe (Plan 01-05, D-13) ──────────────
+    # Replaces v1's v_collection probe — the view was dropped in migration 0009.
+    # Same "never crash on startup, log + flip flag + continue" pattern as v1.
     try:
-        async with pool.connection() as conn:
-            await conn.execute("SELECT 1 FROM gruvax.v_collection LIMIT 1")
-        app.state.discogsography_view_ok = True
-        logger.info("v_collection probe: OK")
+        async with pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT 1 FROM gruvax.profile_collection WHERE profile_id = %s::uuid LIMIT 1",
+                (DEFAULT_PROFILE_UUID,),
+            )
+            await cur.fetchone()
+        app.state.profile_collection_ready = True
+        logger.info("profile_collection probe: OK")
     except Exception as exc:
-        app.state.discogsography_view_ok = False
+        app.state.profile_collection_ready = False
         logger.error(
-            "v_collection probe FAILED — search will return 503 until resolved. "
-            "Upstream schema change? Details: %s",
+            "profile_collection probe FAILED — search will return 503 until resolved. "
+            "Run `alembic upgrade head` and `gruvax-sync --profile default`. Details: %s",
             exc,
         )
 
@@ -206,37 +224,56 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # reuses this same set (see gruvax.api.illuminate).
     app.state.background_tasks = set()
 
-    # ── 1c. Sync-staleness background refresh (OBS-06, D-03) ─────────────────
-    # Refresh app.state.sync_age_seconds every 60 s from gruvax.v_collection.
-    # Uses the pool (Pitfall 1 — search_path includes gruvax via configure_connection).
-    # Never blocks a request; failures are logged + set None (degraded, not crash).
-    async def _refresh_sync_age() -> None:
+    # ── 1c. Default-profile-state background refresh (Plan 01-05, D-13) ─────
+    # Replaces v1's _refresh_sync_age. Reads gruvax.profiles.last_sync_at +
+    # last_sync_status + app_token_revoked for the default profile every 60s
+    # and caches on app.state.default_profile_* (consumed by health.py).
+    # sync_age_seconds is derived from last_sync_at (NOT from
+    # max(v_collection.synced_at) — that view was dropped in migration 0009).
+    # Initial safe defaults (set BEFORE scheduling so health.py never KeyErrors
+    # if a request races the first task iteration):
+    app.state.default_profile_last_sync_at = None
+    app.state.default_profile_last_sync_status = None
+    # Default to True so health derives 'failed' until first task iteration
+    # confirms otherwise. Better-default-safe than to optimistically claim 'ok'.
+    app.state.default_profile_app_token_revoked = True
+
+    async def _refresh_default_profile_state() -> None:
         while True:
             try:
                 async with pool.connection() as conn, conn.cursor() as cur:
                     await cur.execute(
-                        "SELECT EXTRACT(EPOCH FROM (now() - max(synced_at)))"
-                        " FROM gruvax.v_collection"
+                        "SELECT last_sync_at, last_sync_status, app_token_revoked "
+                        "FROM gruvax.profiles "
+                        "WHERE id = %s::uuid AND deleted_at IS NULL",
+                        (DEFAULT_PROFILE_UUID,),
                     )
                     row = await cur.fetchone()
-                app.state.sync_age_seconds = float(row[0]) if (row and row[0] is not None) else None
+                if row is not None:
+                    app.state.default_profile_last_sync_at = row[0]
+                    app.state.default_profile_last_sync_status = row[1]
+                    app.state.default_profile_app_token_revoked = bool(row[2])
+                    now = datetime.now(UTC)
+                    app.state.sync_age_seconds = (now - row[0]).total_seconds() if row[0] else None
             except Exception as exc:
-                logger.warning("sync_age refresh failed: %s", exc)
-                app.state.sync_age_seconds = None
+                logger.warning("default profile state refresh failed: %s", exc)
             await asyncio.sleep(60)
 
-    _age_task = asyncio.create_task(_refresh_sync_age())
+    _state_task = asyncio.create_task(_refresh_default_profile_state())
     # CR-01: strong reference so the GC cannot cancel the task mid-flight.
-    app.state.background_tasks.add(_age_task)
-    _age_task.add_done_callback(app.state.background_tasks.discard)
+    app.state.background_tasks.add(_state_task)
+    _state_task.add_done_callback(app.state.background_tasks.discard)
 
     # Pitfall 2: log exceptions from the background refresh task.
-    def _log_age_task_exc(t: asyncio.Task) -> None:  # type: ignore[type-arg]
+    def _log_state_task_exc(t: asyncio.Task) -> None:  # type: ignore[type-arg]
         if not t.cancelled() and t.exception() is not None:
-            logger.warning("sync_age background task exited unexpectedly: %s", t.exception())
+            logger.warning(
+                "default_profile_state background task exited unexpectedly: %s",
+                t.exception(),
+            )
 
-    _age_task.add_done_callback(_log_age_task_exc)
-    logger.info("sync_age background refresh task scheduled (60s cadence)")
+    _state_task.add_done_callback(_log_state_task_exc)
+    logger.info("default_profile_state background refresh task scheduled (60s cadence)")
 
     # Publish ambient baseline for every cube — best-effort.  Never blocks startup.
     # Guard: only attempt when MQTT is connected (degraded mode → mqtt is None).
@@ -336,9 +373,9 @@ def create_app() -> FastAPI:
 
 # Module-level ASGI app so `uvicorn gruvax.app:app` (the Dockerfile CMD and
 # standard tooling entrypoint) resolves. create_app() is side-effect-free at
-# construction — the DB pool open, v_collection probe, and boundary-cache load
-# all run in the lifespan on server startup, not at import time. Tests still call
-# create_app() directly for isolated instances.
+# construction — the DB pool open, profile_collection probe, and boundary-cache
+# load all run in the lifespan on server startup, not at import time. Tests
+# still call create_app() directly for isolated instances.
 app = create_app()
 
 
