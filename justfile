@@ -58,11 +58,21 @@ migrate-roundtrip:
 #       can resolve the unqualified table names at DDL validation time)
 #   3. migration 0002 — creates gruvax.v_collection over gruvax_dev
 #   4. boundary loader — INSERTs fixtures/boundaries.yaml into cube_boundaries
+#
+# Note: the v1.0 synth_collection.sql lives at tests/fixtures/legacy/ post-Plan-01-00.
 seed-dev:
     uv run alembic upgrade 0001
-    docker exec -i gruvax-dev-pg psql -U gruvax -d gruvax < fixtures/synth_collection.sql
+    docker exec -i gruvax-dev-pg psql -U gruvax -d gruvax < tests/fixtures/legacy/synth_collection.sql
     uv run alembic upgrade head
     uv run python -m gruvax.db.seed_boundaries fixtures/boundaries.yaml
+
+# Regenerate synthetic seed (YAML for fake-discogsography + SQL for profile_collection)
+# from the single canonical generator (D-15, D-17). Both outputs are byte-for-byte
+# reproducible (seed=42). Plan 06 Task 1 re-runs this as a final post-rewire sweep.
+regen-synth-data:
+    uv run python tests/fixtures/generate_synth_data.py \
+        --yaml services/fake-discogsography/seed.yaml \
+        --sql tests/fixtures/synth_profile_collection.sql
 
 # ── provisioning ─────────────────────────────────────────────────────────────
 

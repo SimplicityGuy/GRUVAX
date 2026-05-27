@@ -264,3 +264,42 @@ def thirty_two_cube_boundaries() -> list[dict[str, Any]]:
                     }
                 )
     return cubes
+
+
+# ── P1 Wave 0 fixtures (added by plan 01-00) ─────────────────────────────────
+#
+# These fixtures back Plans 02-06 of Phase 1:
+#   - ``default_profile_uuid``       — the single-profile UUID constant (D-02).
+#   - ``fake_discogsography_app``    — empty-seed canonical fake app (D-15 single-module).
+#   - ``fake_discogsography_client`` — httpx.AsyncClient bound to the fake via ASGITransport.
+#
+# Plan 02 tests that want a non-empty seed call ``create_fake_app(seed=[...])``
+# directly; the ``fake_discogsography_app`` fixture is the "empty default" used by
+# tests that only need the app surface to exist.
+
+from httpx import ASGITransport, AsyncClient  # noqa: E402
+
+
+@pytest.fixture
+def default_profile_uuid() -> str:
+    """Single-profile UUID (D-02). Constant across the entire test suite."""
+    return "00000000-0000-0000-0000-000000000001"
+
+
+@pytest.fixture
+def fake_discogsography_app():  # type: ignore[no-untyped-def]
+    """Canonical fake-discogsography FastAPI app with an empty seed.
+
+    Resolves to ``gruvax._internal.fake_discogsography.create_fake_app`` (D-15).
+    """
+    from gruvax._internal.fake_discogsography import create_fake_app
+
+    return create_fake_app(seed=[])
+
+
+@pytest_asyncio.fixture
+async def fake_discogsography_client(fake_discogsography_app):  # type: ignore[no-untyped-def]
+    """httpx.AsyncClient bound to the canonical fake-discogsography via ASGITransport."""
+    transport = ASGITransport(app=fake_discogsography_app)
+    async with AsyncClient(transport=transport, base_url="http://fake") as client:
+        yield client
