@@ -93,8 +93,8 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 **Wave 5 — gap closure** *(blocked on Wave 4 completion; closes 01-VERIFICATION.md gaps)*
 
-- [ ] 01-07-PLAN.md — Integration-test conftest seed fixture (lifts Plan 01-06 sync-psycopg pattern suite-wide) + fixtures/boundaries.yaml realignment to v2 generator catalog numbers (closes Gap #1 BLOCKER + Gap #3 cascade)
-- [ ] 01-08-PLAN.md — Rewrite test_migrate_0009.py::_alembic to subprocess.run via asyncio.to_thread (closes Gap #2 WARNING — asyncio.run-from-async event-loop conflict)
+- [x] 01-07-PLAN.md — Integration-test conftest seed fixture (lifts Plan 01-06 sync-psycopg pattern suite-wide) + fixtures/boundaries.yaml realignment to v2 generator catalog numbers (closes Gap #1 BLOCKER + Gap #3 cascade)
+- [x] 01-08-PLAN.md — Rewrite test_migrate_0009.py::_alembic to subprocess.run via asyncio.to_thread (closes Gap #2 WARNING — asyncio.run-from-async event-loop conflict)
 
 **UI hint**: yes
 
@@ -150,7 +150,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
-| 1. First Search → Cube Highlight | v1.0 | 7/7 | Complete   | 2026-05-27 |
+| 1. First Search → Cube Highlight | v1.0 | 9/9 | Complete   | 2026-05-27 |
 | 2. Real Position Estimation | v1.0 | 4/4 | Complete | 2026-05-20 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
