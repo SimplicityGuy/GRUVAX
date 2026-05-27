@@ -531,6 +531,7 @@ dependencies = [
     { name = "asgi-lifespan" },
     { name = "cryptography" },
     { name = "fastapi" },
+    { name = "httpx" },
     { name = "itsdangerous" },
     { name = "limits" },
     { name = "orjson" },
@@ -551,7 +552,6 @@ dependencies = [
 [package.dev-dependencies]
 dev = [
     { name = "bandit" },
-    { name = "httpx" },
     { name = "hypothesis" },
     { name = "mypy" },
     { name = "natsort" },
@@ -574,6 +574,7 @@ requires-dist = [
     { name = "asgi-lifespan", specifier = ">=2.1.0" },
     { name = "cryptography", specifier = ">=48.0.0" },
     { name = "fastapi", specifier = ">=0.136.1" },
+    { name = "httpx", specifier = ">=0.28.1" },
     { name = "itsdangerous", specifier = ">=2.2" },
     { name = "limits", specifier = ">=5.8" },
     { name = "orjson", specifier = ">=3.11.9" },
@@ -594,7 +595,6 @@ requires-dist = [
 [package.metadata.requires-dev]
 dev = [
     { name = "bandit", specifier = ">=1.9" },
-    { name = "httpx", specifier = ">=0.28.1" },
     { name = "hypothesis", specifier = ">=6.152.9" },
     { name = "mypy", specifier = ">=2.1.0" },
     { name = "natsort", specifier = ">=8.4" },
