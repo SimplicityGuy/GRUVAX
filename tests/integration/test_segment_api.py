@@ -403,10 +403,11 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
     """SEG-08 regression: the insert cascade must not drop the bin past the absorber.
 
     The fixture has an empty cube at (1,2,3) directly followed by a non-empty bin at
-    (1,3,0) = Columbia C2S 841. A cut inserted earlier in the unit cascades right
-    until the empty cube absorbs the shift. A prior off-by-one (`break` on
+    (1,3,0) = Riverside RLP 1075 (Plan 01-07 v2 layout — was Columbia C2S 841 in
+    the v1 fixture). A cut inserted earlier in the unit cascades right until the
+    empty cube absorbs the shift. A prior off-by-one (`break` on
     ``curr.is_empty`` instead of ``nxt.is_empty``) copied the empty cube's blank
-    value onto (1,3,0), silently deleting Columbia. This guards the invariant:
+    value onto (1,3,0), silently deleting the cut. This guards the invariant:
     inserting a cut adds exactly one occupied bin and loses no existing cut point.
     """
     await _seed_test_pin(db_pool)
@@ -433,7 +434,11 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
             "after_row": 0,
             "after_col": 0,
             "new_first_label": "Blue Note",
-            "new_first_catalog": "BLP 4010",
+            # Plan 01-07: use a v2-aligned catalog hint (was BLP 4010 in v1 fixture
+            # context). force=True bypasses the phantom check, so any string would
+            # be accepted, but matching the v2 generator's BLP 1000-series keeps
+            # the test self-consistent.
+            "new_first_catalog": "BLP 1010",
             "force": True,
         },
         cookies=auth["cookies"],
@@ -452,15 +457,16 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
         after = unit1_cuts(after_res.json())
 
         # The bin just past the empty absorber must survive (the original bug wiped it).
-        assert "C2S 841" in after.values(), (
-            "Columbia C2S 841 (the bin after the empty absorber) was dropped by the cascade"
+        # Plan 01-07 v2 layout: (1,3,0) is Riverside RLP 1075 (was Columbia C2S 841 in v1).
+        assert "RLP 1075" in after.values(), (
+            "Riverside RLP 1075 (the bin after the empty absorber) was dropped by the cascade"
         )
         # Exactly one new occupied bin, and no existing cut point lost (multiset check).
         assert len(after) == len(before) + 1, (
             f"insert-cut should add exactly one occupied bin: {len(before)} -> {len(after)}"
         )
         assert sorted(filter(None, after.values())) == sorted(
-            [*filter(None, before.values()), "BLP 4010"]
+            [*filter(None, before.values()), "BLP 1010"]
         ), "insert-cut changed the set of cut points beyond adding the new one"
     finally:
         # Full cleanup — the suite shares the dev DB, so restore everything this
@@ -525,7 +531,9 @@ async def test_list_catalogs_for_label(client, db_pool) -> None:  # type: ignore
             f"each entry must have release_id + catalog_number: {item}"
         )
     catalogs = [item["catalog_number"] for item in body]
-    assert "BLP 4001" in catalogs, "fixture catalog 'BLP 4001' should be present"
+    # Plan 01-07: v2 synth seed first Blue Note BLP catalog is "BLP 1000" (was
+    # "BLP 4001" in the retired v1 fixtures/synth_collection.sql).
+    assert "BLP 1000" in catalogs, "fixture catalog 'BLP 1000' should be present"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -547,21 +555,21 @@ async def test_labels_requires_admin_401() -> None:  # type: ignore[no-untyped-d
 async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> None:  # type: ignore[no-untyped-def]
     """SEG-05 regression: PUT /cut that scatters a label is rejected 400 contiguity_error.
 
-    Scatter scenario (boundaries.yaml unit 1, row 0):
-      (1,0,0) = Blue Note BLP 4001
-      (1,0,1) = Blue Note BST 84001
-      (1,0,2) = Creole CRLP 501
-      (1,0,3) = KC KC 32731
+    Scatter scenario (boundaries.yaml unit 1, row 0 — v2 layout per Plan 01-07):
+      (1,0,0) = Blue Note BLP 1000
+      (1,0,1) = Blue Note BST 1001
+      (1,0,2) = Columbia KC1000
+      (1,0,3) = ECM ECM 1000
 
     If we PUT (1,0,3) to first_label="Blue Note", the sequence becomes:
-      Blue Note, Blue Note, Creole, Blue Note
-    Blue Note starts at positions 0, 1, and 3 — with Creole between positions 1
-    and 3 — which is a contiguity violation (SEG-05 / D-09).
+      Blue Note, Blue Note, Columbia, Blue Note
+    Blue Note starts at positions 0, 1, and 3 — with Columbia between positions
+    1 and 3 — which is a contiguity violation (SEG-05 / D-09).
 
     Assertions:
     1. Response is HTTP 400 with type="contiguity_error".
     2. The error message mentions scatter or non-adjacent (validator's copy).
-    3. GET /api/admin/cubes confirms (1,0,3) is STILL "KC" (no DB write occurred).
+    3. GET /api/admin/cubes confirms (1,0,3) is STILL "ECM" (no DB write occurred).
 
     Guard: the fixture is restored in finally so later tests see canonical state.
     """
@@ -573,15 +581,16 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
     # The module-scoped client holds a running app whose cache may be stale if a
     # prior mutating test (e.g. test_insert_cut_cascade_preserves_bin_after_empty)
     # restored the DB without triggering a cache reload.  A valid, non-scattering
-    # PUT at (1,0,0) = Blue Note BLP 4001 (already the canonical value) is a no-op
-    # DB-wise but forces `cache.invalidate() + cache.load()` via the handler's
-    # post-commit path — syncing the in-app cache with the restored DB.
+    # PUT at (1,0,0) = Blue Note BLP 1000 (already the canonical value per the
+    # v2 Plan 01-07 layout) is a no-op DB-wise but forces
+    # ``cache.invalidate() + cache.load()`` via the handler's post-commit path
+    # — syncing the in-app cache with the restored DB.
     from gruvax.db.seed_boundaries import load_boundaries
 
     await load_boundaries(_BOUNDARIES_YAML)
     cache_sync_res = await client.put(
         "/api/admin/cubes/1/0/0/cut",
-        json={"first_label": "Blue Note", "first_catalog": "BLP 4001", "force": True},
+        json={"first_label": "Blue Note", "first_catalog": "BLP 1000", "force": True},
         cookies=auth["cookies"],
         headers={"X-CSRF-Token": auth["csrf_token"]},
     )
@@ -593,8 +602,8 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
         "/api/admin/cubes/1/0/3/cut",
         json={
             "first_label": "Blue Note",
-            "first_catalog": "BLP 4001",
-            "force": True,  # bypass phantom check; Blue Note BLP 4001 IS in the collection
+            "first_catalog": "BLP 1000",
+            "force": True,  # bypass phantom check; Blue Note BLP 1000 IS in the v2 collection
         },
         cookies=auth["cookies"],
         headers={"X-CSRF-Token": auth["csrf_token"]},
@@ -627,7 +636,8 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
             f"contiguity_error must NOT leak the casefolded label 'blue note', got: {raw_msg!r}"
         )
 
-        # Confirm no DB write occurred — (1,0,3) must still be "KC"
+        # Confirm no DB write occurred — (1,0,3) must still be "ECM"
+        # (Plan 01-07 v2 layout: was "KC" in the v1 fixture)
         cubes_res = await client.get("/api/admin/cubes", cookies=auth["cookies"])
         assert cubes_res.status_code == 200, cubes_res.text
         cube_103 = next(
@@ -639,8 +649,8 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
             None,
         )
         assert cube_103 is not None, "cube (1,0,3) not found in GET /admin/cubes response"
-        assert cube_103.get("first_label") == "KC", (
-            f"cube (1,0,3) first_label should still be 'KC' (no write), got: {cube_103.get('first_label')!r}"
+        assert cube_103.get("first_label") == "ECM", (
+            f"cube (1,0,3) first_label should still be 'ECM' (no write), got: {cube_103.get('first_label')!r}"
         )
     finally:
         # Restore the fixture (belt-and-suspenders: no write happens on a rejected cut,

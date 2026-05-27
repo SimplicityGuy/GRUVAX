@@ -29,28 +29,39 @@ from gruvax.estimator.contract import CUBE_ONLY_CONFIDENCE
 
 # ── Seed constants (stable for the synthetic fixture) ────────────────────────
 
-# release_id=1: Blue Note BLP 4001 — covered by unit_id=1, row=0, col=0 boundary.
-# Blue Note has multiple records in the seed (BLP + BST series), so the snapshot
-# should be non-empty and §4.1 estimator should produce a sub_cube_interval.
+# release_id=1: Blue Note BLP 1000 (v2 seed) — covered by unit_id=1, row=0, col=0
+# boundary (cut-point first_label="Blue Note", first_catalog="BLP 1000" per Plan
+# 01-07). Blue Note has multiple records in the v2 seed (~400 BLP + BST rows
+# across cubes (1,0,0) and (1,0,1)), so the snapshot is non-empty and the §4.1
+# estimator should produce a sub_cube_interval.
 COVERED_RELEASE_ID = 1
 COVERED_EXPECTED_CUBE = {"unit_id": 1, "row": 0, "col": 0}
 
-# release_id=999: not in v_collection (max is 152 in the synthetic seed)
-ABSENT_RELEASE_ID = 999
+# release_id=99999: not in profile_collection (max release_id is 3000 in the
+# v2 synth seed; the legacy value 999 is now a real Atlantic SD-1048 record).
+ABSENT_RELEASE_ID = 99999
 
-# release_id=119: Apple PCS 7088 — in v_collection but genuinely uncovered under
-# the cut-point model. Under the cut-point model, records are assigned to bins
-# by global (label.casefold(), parse_key(catalog)) sort. Apple sorts BEFORE the
-# lowest cut-point alphabetically (Apple < Atlantic < Blue Note...), so it falls
-# through without landing in any bin. SegmentCache.get_bins_for_label("Apple")
-# returns [] and get_segment_for_rank returns None → confidence=0.0, primary_cube=None.
+# release_id=951: Atlantic "SD 1000" — in profile_collection but genuinely
+# uncovered under the v2 boundaries.yaml cut-point layout. Plan 01-07
+# DELIBERATELY omits the "Atlantic" label from boundaries.yaml so that this
+# record sorts BEFORE every cut_label (smallest is "blue note" casefold) and
+# SegmentCache's record→bin assignment loop leaves it unassigned. Result:
+# get_segment_for_rank("Atlantic", 0) → None → confidence=0.0,
+# primary_cube=None, label_span=[].
 #
-# Reconciliation note: the old NO_BOUNDARY_RELEASE_ID=111 (Saturn SR-9956-2-LP)
-# relied on the retired last_* range-check semantics (migration 0005 dropped
-# last_label/last_catalog). Saturn is now COVERED via the cut-point at (2,1,3)
-# first_label="Saturn". Apple is the genuine no-boundary case in the seed under
-# the cut-point model (D-12 / SEG-01).
-NO_BOUNDARY_RELEASE_ID = 119
+# Why not Singleton-Label-N (the planner's first guess)? Because every label
+# whose casefold sort key is >= the smallest cut_key gets bucketed into SOME
+# bin by the assignment loop. Singleton Label 45 sorts AFTER Singleton Label
+# 12 (the last SL cut), so its record gets dropped into bin (2,3,2). Only
+# a label sorting BEFORE the alphabetically-first cut (i.e. before "blue
+# note") is genuinely uncoverable, and "atlantic" is the only such label
+# present in the v2 seed — hence Atlantic is omitted from boundaries.yaml.
+#
+# Reconciliation note: the old NO_BOUNDARY_RELEASE_ID=119 was claimed to be
+# "Apple PCS 7088" but is actually Blue Note BLP1118 in the v2 seed (covered
+# by the (1,0,0) Blue Note cut after Plan 01-07). The earlier Phase 5 value
+# of 111 (Saturn) relied on last_* range semantics dropped in migration 0005.
+NO_BOUNDARY_RELEASE_ID = 951
 
 
 @pytest_asyncio.fixture(scope="module")
