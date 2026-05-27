@@ -65,7 +65,13 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
   2. v1.0 SLOs hold: `/api/search` p95 ≤ 200 ms and `/api/locate` p95 ≤ 50 ms on synthetic data (v1.0 Phase 8 CI gate continues to pass).
   3. `gruvax.v_collection` is dropped and the read-only Postgres grant to discogsography's collection tables is revoked in the same Alembic migration; the round-trip (`upgrade head → downgrade base → upgrade head`) is clean.
   4. The default profile's first sync (`id = 00000000-0000-0000-0000-000000000001`, `display_name = 'Default'`) completes with `last_sync_status = 'ok'` and `last_sync_item_count` ≥ the v1 baseline (~3,000 items).
-  5. `/api/health` reports discogsography reachability via HTTP probe (not cross-schema view); kiosk staleness banner reads from `now() - profiles.last_sync_at` for the single default profile.**Plans**: 6 plans (4 waves; W1 parallel: 01-01 + 01-02 | W2: 01-03 | W3 parallel: 01-04 + 01-05 | W4: 01-06)
+  5. `/api/health` reports discogsography reachability via HTTP probe (not cross-schema view); kiosk staleness banner reads from `now() - profiles.last_sync_at` for the single default profile.
+
+**Plans**: 9 plans (5 waves; W0: 01-00 | W1 parallel: 01-01 + 01-02 | W2: 01-03 | W3 parallel: 01-04 + 01-05 | W4: 01-06 | W5 gap-closure parallel: 01-07 + 01-08)
+
+**Wave 0**
+
+- [x] 01-00-PLAN.md — Test scaffolding: package markers, canonical fake-discogsography shell, deterministic synth-data generator (D-15/D-17)
 
 **Wave 1**
 
@@ -84,6 +90,11 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 **Wave 4** *(blocked on Wave 3 completion)*
 
 - [x] 01-06-PLAN.md — Rewire src/gruvax/db/queries.py + estimator/collection_snapshot.py from v_collection → profile_collection + synth_profile_collection.sql fixture + SLO benchmark gate (p95 search ≤200ms, locate ≤50ms)
+
+**Wave 5 — gap closure** *(blocked on Wave 4 completion; closes 01-VERIFICATION.md gaps)*
+
+- [ ] 01-07-PLAN.md — Integration-test conftest seed fixture (lifts Plan 01-06 sync-psycopg pattern suite-wide) + fixtures/boundaries.yaml realignment to v2 generator catalog numbers (closes Gap #1 BLOCKER + Gap #3 cascade)
+- [ ] 01-08-PLAN.md — Rewrite test_migrate_0009.py::_alembic to subprocess.run via asyncio.to_thread (closes Gap #2 WARNING — asyncio.run-from-async event-loop conflict)
 
 **UI hint**: yes
 
