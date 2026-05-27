@@ -166,11 +166,30 @@ Copy `.env.example` to `.env` and set your values. Key variables:
 | `GRUVAX_DB_PASSWORD` | `gruvax` | Postgres password |
 | `GRUVAX_DB_HOST` | `host.docker.internal` | DB hostname (from inside the container) |
 | `GRUVAX_DB_NAME` | `gruvax` | Database name |
-| `OBSERVED_DISCOGSOGRAPHY_SCHEMA` | `gruvax_dev` | Schema holding collection source tables |
+| `DISCOGSOGRAPHY_BASE_URL` | `http://fake-discogsography:8004` | HTTP base URL of the discogsography API (boot-fail-if-missing) |
+| `GRUVAX_SECRET_KEY` | _(required, no default)_ | Fernet key for PAT-at-rest encryption — boot-fail-if-missing or malformed |
 
 **DB connectivity from inside Docker (Linux):** The `api` service container reaches the host Postgres
 via `host.docker.internal`. On Linux, this resolves via the `extra_hosts: host-gateway` line
 in `compose.yaml`. On macOS/Windows, `host.docker.internal` is built in.
+
+### Secrets bootstrap
+
+On first install (and any time a deployment needs to be rebuilt from scratch) the
+`GRUVAX_SECRET_KEY` Fernet key must be generated once and written into `.env` before
+`docker compose up`. The compose file uses `${GRUVAX_SECRET_KEY:?…}` substitution and
+will refuse to start if the variable is missing or empty.
+
+```bash
+# Generate a fresh Fernet key (URL-safe base64, 32 random bytes):
+python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+# Then add the printed value to .env:
+#   GRUVAX_SECRET_KEY=<paste-the-output-here>
+```
+
+Rotating the key orphans every existing `profiles.app_token_encrypted` row — treat the
+generated value as permanent per deployment. (A P4 utility will land for the re-encrypt
+flow; until then, regenerate only as part of a full PAT re-provisioning.)
 
 ## 🗂️ Repository Layout
 

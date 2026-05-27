@@ -66,7 +66,22 @@ services:
       # Override GRUVAX_DB_HOST (e.g. to the shared discogsography Postgres on the deployment host)
       # to point elsewhere without editing this file.
       DATABASE_URL: "postgresql+psycopg://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-gruvax-dev-pg}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}"
-      OBSERVED_DISCOGSOGRAPHY_SCHEMA: "${OBSERVED_DISCOGSOGRAPHY_SCHEMA:-gruvax_dev}"
+      # Plan 01-01 / D-12 retired the legacy observed-discogsography-schema
+      # env entry (removed 2026-05-27); the runtime pool's search_path is now
+      # a single literal `gruvax, public` and no application code branches on
+      # the discogsography schema name.
+      #
+      # Plan 01-01 / D-18: discogsography contact surface is now an HTTP API.
+      # Default points at the Plan 05 fake-discogsography sibling service; in
+      # production override via .env.
+      DISCOGSOGRAPHY_BASE_URL: "${DISCOGSOGRAPHY_BASE_URL:-http://fake-discogsography:8004}"
+      # Plan 01-01 / D-01: Fernet key for PAT-at-rest encryption. The `:?`
+      # substitution form fails `docker compose up` with a clear error if the
+      # variable is empty or unset — never silently boots with no encryption
+      # key. Generate once per deployment with:
+      #   python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+      # and add to `.env` (see README "Secrets bootstrap" section).
+      GRUVAX_SECRET_KEY: "${GRUVAX_SECRET_KEY:?GRUVAX_SECRET_KEY must be set in .env}"
       MQTT_HOST: "mosquitto"
       MQTT_PORT: "1883"
       MQTT_USERNAME: "${MQTT_USERNAME:-gruvax-api}"
