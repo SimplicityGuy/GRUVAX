@@ -166,10 +166,26 @@ def generate_releases(*, count: int = 3000, seed: int = 42) -> list[dict]:
     return releases
 
 
+class _IndentedDumper(yaml.SafeDumper):
+    # yamllint requires `indent-sequences: true`; PyYAML's default representer
+    # produces flush-left dashes. Forcing `indentless=False` indents sequence
+    # items under their parent key (matches .yamllint `indentation.spaces: 2`).
+    def increase_indent(self, flow: bool = False, indentless: bool = False) -> None:  # noqa: ARG002
+        return super().increase_indent(flow, False)
+
+
 def emit_yaml(releases: list[dict], path: Path) -> None:
     """Writes ``{"releases": releases}`` as YAML for the fake-discogsography seed."""
     path.parent.mkdir(parents=True, exist_ok=True)
-    path.write_text(yaml.safe_dump({"releases": releases}, sort_keys=False))
+    path.write_text(
+        yaml.dump(
+            {"releases": releases},
+            Dumper=_IndentedDumper,
+            sort_keys=False,
+            default_flow_style=False,
+            allow_unicode=True,
+        )
+    )
 
 
 def emit_sql(
