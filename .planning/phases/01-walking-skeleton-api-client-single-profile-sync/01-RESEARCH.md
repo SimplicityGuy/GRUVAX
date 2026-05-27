@@ -974,27 +974,17 @@ async def admin_client(db_pool):
 | A8 | The CLI `gruvax-sync` should prompt for the PIN via `getpass` once per invocation, then send it as the `X-Admin-PIN` header (or whatever v1's admin flow uses). Need to confirm the v1 admin flow header name — the existing `set_pin.py` CLI doesn't help here because it talks to the DB directly. Planner discretion (per CONTEXT.md). | Pattern 1 + Pattern 7 | Medium. Planner reads `src/gruvax/api/admin/` to confirm whether PIN gates by session cookie (post-login) or by direct header. **[OPEN QUESTION]** for the planner: does the CLI need to first POST to `/api/admin/login` to get a session cookie, then POST to `/api/admin/profiles/{id}/sync` with that cookie + CSRF, or is there a simpler PIN-header path? |
 | A9 | `pyproject.toml` should pin `cryptography>=46`, `stamina>=26`, `pytest-httpx>=0.36` to lock in current API. Looser pins are fine for the home-LAN deploy story. | Installation block | Low. |
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **PIN flow for `gruvax-sync` CLI (planner discretion per CONTEXT.md)**
-   - What we know: v1's admin flow is session-cookie + CSRF (see `src/gruvax/api/deps.py:require_admin` and `src/gruvax/api/admin/`).
-   - What's unclear: does the simplest CLI UX (a) login-then-call the endpoint, holding the session cookie in-memory for one request, or (b) define a CLI-only header (`X-Admin-PIN: 1234`) that the new `POST /api/admin/profiles/{id}/sync` endpoint accepts in lieu of the session cookie?
-   - Recommendation: **(a)** is more conservative because it reuses the entire `require_admin` enforcement path (sliding TTL, hard cap, CSRF). The CLI does: `httpx.post("/api/admin/login", json={"pin": ...})` → capture cookies + CSRF → `httpx.post("/api/admin/profiles/{id}/sync", cookies=..., headers={"X-CSRF-Token": ...})`. Slightly more code, but no new auth path to test.
+> All four open questions are resolved in the planning artifacts. Decisions are inlined below with pointers to where each choice is implemented.
 
-2. **`gruvax-sync` progress reporting format**
-   - What we know: CONTEXT.md §discretion says "plain log lines preferred for Compose-exec ergonomics."
-   - What's unclear: should progress lines be structlog-JSON (same as the server) or plain text (more shell-friendly)?
-   - Recommendation: plain text on stdout (e.g., `"[sync] fetched page 3/15 (offset=400, last_id=12345)"`); server-side logs remain JSON. The CLI is operator-facing, not log-aggregator-facing.
+1. **PIN flow for `gruvax-sync` CLI** — **RESOLVED:** cookie-based session via the existing `/api/admin/login` endpoint. The CLI uses `httpx.AsyncClient` with a cookie jar; POST `/api/admin/login` with `{"pin": ...}` captures the session cookie + CSRF token, then POST `/api/admin/profiles/{id}/sync` with `X-CSRF-Token` header. Reuses the entire `require_admin` enforcement path (sliding TTL, hard cap, CSRF). No new auth path to test. **See Plan 04 Task 3.**
 
-3. **Where does the `DiscogsographyClient` instance live across the sync?**
-   - What we know: long-lived client is httpx best practice; per-request instantiation re-opens TCP.
-   - What's unclear: for P1, the client is bound to a single profile's PAT. P2 will have multiple PATs. Is the right shape "one client per call to sync_profile (decrypt PAT, construct, sync, close)" or "one client cached on app.state per profile"?
-   - Recommendation: for P1 with one profile and infrequent syncs (manual or nightly later), construct-per-sync is fine and avoids long-term key residence in memory. P2 may revisit.
+2. **`gruvax-sync` progress reporting format** — **RESOLVED:** plain text on stdout (operator-facing). Server-side logs remain JSON via structlog. The CLI is intended for compose-exec ergonomics; not log-aggregator-facing. **See Plan 04 Task 3.**
 
-4. **Should the `dscg_*` log redactor also catch `Authorization: Bearer dscg_...` in raw exception messages?**
-   - What we know: httpx's `HTTPStatusError` embeds the URL but not request headers in `str()`.
-   - What's unclear: does any code path log `repr(request.headers)` or similar?
-   - Recommendation: the redactor uses a regex that catches both `Bearer dscg_*` and bare `dscg_*` to be defensive. Add a property test that asserts `redact_dscg_tokens` masks every form on a large fuzz corpus.
+3. **Where does the `DiscogsographyClient` instance live across the sync?** — **RESOLVED:** construct-per-sync in Plan 03. The client is bound to a single profile's PAT, decrypted at sync start and discarded at sync end. P2 may revisit when multiple profiles + infrequent syncs change the calculus. **See Plan 03 Task 1.**
+
+4. **Should the `dscg_*` log redactor also catch `Authorization: Bearer dscg_...` in raw exception messages?** — **RESOLVED:** yes — the broader regex `(?:Bearer\s+)?dscg_[A-Za-z0-9_-]+` is applied to every event_dict value (including nested dict values and exception strings rendered by `format_exc_info`). A Hypothesis property test asserts plaintext never survives on a 100+-example fuzz corpus; an additional test wraps a logger.exception call to assert the exception path is also masked. **See Plan 02 Task 1.**
 
 ## Environment Availability
 

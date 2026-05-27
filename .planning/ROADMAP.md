@@ -55,60 +55,83 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 ## Phase Details
 
 ### Phase 1: Walking skeleton — API client + single-profile sync
+
 **Goal**: Restore Core Value end-to-end (search → cube highlight ≤ 200 ms) against API-sourced collection data, with `gruvax.v_collection` retired and positioning running off the local `profile_collection` cache for a single default profile.
 **Depends on**: DGS-PREREQ (external — discogsography v2 ships the contract artifact at `docs/specs/v2-gruvax-integration.md`)
 **Requirements**: API-01, API-02 (single-profile flavor), API-03, SYN-02 (single-profile staleness), PROF-03
 **Success Criteria** (what must be TRUE):
+
   1. The search → cube highlight loop works end-to-end against API-sourced data; a typed query (artist / title / label / catalog#) returns the right cube + sub-cube position estimate.
   2. v1.0 SLOs hold: `/api/search` p95 ≤ 200 ms and `/api/locate` p95 ≤ 50 ms on synthetic data (v1.0 Phase 8 CI gate continues to pass).
   3. `gruvax.v_collection` is dropped and the read-only Postgres grant to discogsography's collection tables is revoked in the same Alembic migration; the round-trip (`upgrade head → downgrade base → upgrade head`) is clean.
   4. The default profile's first sync (`id = 00000000-0000-0000-0000-000000000001`, `display_name = 'Default'`) completes with `last_sync_status = 'ok'` and `last_sync_item_count` ≥ the v1 baseline (~3,000 items).
-  5. `/api/health` reports discogsography reachability via HTTP probe (not cross-schema view); kiosk staleness banner reads from `now() - profiles.last_sync_at` for the single default profile.
-**Plans**: 6 plans (4 waves; W1 parallel: 01-01 + 01-02 | W2: 01-03 | W3 parallel: 01-04 + 01-05 | W4: 01-06)
+  5. `/api/health` reports discogsography reachability via HTTP probe (not cross-schema view); kiosk staleness banner reads from `now() - profiles.last_sync_at` for the single default profile.**Plans**: 6 plans (4 waves; W1 parallel: 01-01 + 01-02 | W2: 01-03 | W3 parallel: 01-04 + 01-05 | W4: 01-06)
+
+**Wave 1**
+
 - [ ] 01-01-PLAN.md — Schema migration 0009 + settings (DISCOGSOGRAPHY_BASE_URL, GRUVAX_SECRET_KEY) + pool search_path simplification + Alembic round-trip CI gate
 - [ ] 01-02-PLAN.md — DiscogsographyClient (httpx + stamina retry) + Fernet PAT crypto + structlog dscg_* redactor + in-process fake-discogsography FastAPI fixture
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 01-03-PLAN.md — sync_profile(profile_id) staging-swap routine (advisory lock + COPY + atomic DELETE/INSERT/UPDATE + inline cache refresh per D-14)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 01-04-PLAN.md — POST /api/admin/profiles/{id}/sync (PIN-gated) + gruvax-set-pat CLI (stdin-only, strict rotation per D-09) + gruvax-sync CLI
 - [ ] 01-05-PLAN.md — /api/health field rename (discogsography_view_check → discogsography_api_check, 3-state per D-13) + lifespan rewire (profile_collection probe + default_profile_* background task) + Compose fake-discogsography sibling + init-sync container
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 01-06-PLAN.md — Rewire src/gruvax/db/queries.py + estimator/collection_snapshot.py from v_collection → profile_collection + synth_profile_collection.sql fixture + SLO benchmark gate (p95 search ≤200ms, locate ≤50ms)
+
 **UI hint**: yes
 
 ### Phase 2: Multi-profile migration + profile manager
+
 **Goal**: Multiple owner-managed profiles operate independently with their own collection caches, boundaries, segments, settings, LED config, and stats; browser sessions on LAN can choose which profile to view; admin can create, connect, rotate, rename, and soft-delete profiles.
 **Depends on**: Phase 1
 **Requirements**: PROF-01, PROF-02, PROF-04, API-02 (multi-profile cache routing completion), SYN-02 (per-profile staleness completion)
 **Success Criteria** (what must be TRUE):
+
   1. Owner can create a profile (e.g., "Sam") via the profile manager admin UI, paste a PAT, see a successful synchronous `per_page=1` test sync capture `discogsography_user_id`, and observe the full async sync complete with `last_sync_status = 'ok'`.
   2. Two browser sessions on the LAN can concurrently show different profiles (each picks via the profile picker; session cookie binds `bound_profile_id`); a single-active-profile deployment auto-binds and skips the picker.
   3. The `profile_id NOT NULL` migration across 7 v1 tables (`cube_boundaries`, `segments`, `change_log`, `change_sets`, `settings`, `record_stats`, `ambient_baseline`) backfills v1 data to the deterministic default profile and survives a clean Alembic upgrade↔downgrade round-trip (v1.0 CI invariant carries over).
   4. Per-profile SSE channel `/api/events/{profile_id}` invalidates only the affected profile's `BoundaryCache` / `SegmentCache` / `CollectionSnapshot` on `boundary_changed` and `collection_changed` events; cross-profile data leakage is impossible by construction.
   5. p95 `/api/search` ≤ 200 ms and `/api/locate` ≤ 50 ms SLOs hold with 2+ profiles cached in memory (verified via the v1.0 Phase 8 CI benchmark gate, parameterized over profile_id).
+
 **Plans**: TBD
 **UI hint**: yes
 
 ### Phase 3: Devices + pairing
+
 **Goal**: A headless RPi kiosk can be paired to a profile in under 30 seconds end-to-end via a 4-digit code shown on the kiosk; the binding persists across reboots; admin can rename, change-profile, unbind, or revoke devices from a mobile admin UI.
 **Depends on**: Phase 2
 **Requirements**: DEV-01, DEV-02, DEV-03
 **Success Criteria** (what must be TRUE):
+
   1. A fresh RPi paired to a profile in <30 seconds end-to-end: kiosk renders a 4-digit code (Nordic Grid styling, large DM Mono digits, 5-min countdown, auto-reroll on expiry); admin types code via the v1 in-app numeric keypad, picks a profile, labels the device; kiosk polls and auto-navigates to the bound-profile search UI on success.
   2. RPi reboots → kiosk returns to its bound profile (HttpOnly + SameSite=Strict fingerprint cookie persists across reboot, verified with Chromium `--user-data-dir` on persistent storage).
   3. Revoking a device immediately drops the kiosk to the pairing screen on its next request; re-assigning to a different profile auto-reloads the kiosk via SSE; soft-deleting a profile detaches all bound devices (kiosks revert to the profile-picker).
   4. The devices admin UI shows PENDING / PAIRED / REVOKED groupings with a drawer per device (rename / change-profile / unbind / revoke), all PIN-gated.
   5. Pairing-code brute-force resistance holds: 5-min TTL × 10k keyspace × `consumed_at` one-shot guard × admin PIN-gating on `/api/admin/devices/bind`; concurrent bind attempts on the same code → first wins, second sees "Code not found".
+
 **Plans**: TBD
 **UI hint**: yes
 
 ### Phase 4: Sync polish + diagnostics
+
 **Goal**: Sync runs nightly without owner intervention; PAT revocation surfaces within 24 hours worst case (immediate with manual sync); admin can see per-profile diagnostics; soft-deleted profiles have their caches purged in the background; the "Sync now" path provides progress + completion feedback.
 **Depends on**: Phase 3
 **Requirements**: SYN-01, SYN-02 (closure — staleness UX polish per profile)
 **Success Criteria** (what must be TRUE):
+
   1. Nightly background sync at 03:00 local fires for all non-revoked profiles sequentially via `asyncio.create_task(_sync_loop())` started in lifespan; cadence is configurable in `/admin/settings` (24h / 12h / 6h / off) and the choice persists.
   2. A 401 from discogsography surfaces within ≤24h worst case (immediate when manual "Sync now" is triggered): the profile-list admin UI shows a re-auth-required badge on the affected profile, and the kiosk renders an inline banner directing the owner to rotate the PAT.
   3. Per-profile `/admin/diagnostics` cards accurately report `last_sync_at`, `last_sync_status`, `last_sync_item_count`, and `last_sync_error` for each non-deleted profile; cards continue to use the Nordic Grid typography established in v1.0 Phase 8.
   4. Soft-deleting a profile schedules a cache-purge background task that removes `profile_collection` rows and detaches bound devices without cascading the audit lineage (`change_log` / `change_sets` retain their FKs).
   5. The admin "Sync now" button shows progress until the sync completes and fires a completion toast; all v1.0 invariants — Alembic round-trip clean, p95 SLOs, structured logs, log-ring buffer, in-app keypad — continue to hold at v2.0 close.
+
 **Plans**: TBD
 **UI hint**: yes
 
@@ -151,6 +174,7 @@ Relates to Phase 5 (segment editor) and the CUBE-05 empty-cube desaturated state
 design language.
 
 Plans:
+
 - [ ] TBD (promote with `/gsd-review-backlog` when ready)
 
 ### Phase 999.2: LED "party" mode + "sound-reactive" mode (BACKLOG)
@@ -167,4 +191,5 @@ other LED modes. Not blocking; pure-delight features. (Captured 2026-05-23 durin
 scope expansion.)
 
 Plans:
+
 - [ ] TBD (promote with `/gsd-review-backlog` when ready)
