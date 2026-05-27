@@ -61,4 +61,11 @@ jobs:
         run: npm --prefix frontend install
 
       - name: Run pre-commit (all-files — single source of truth per D-02)
+        # Placeholder secrets so pre-commit's docker-compose-check hook can resolve
+        # the `${VAR:?}` required-variable substitutions in compose.yaml (the same
+        # guards Test 4 validates). These are throwaway CI values — never deployed.
+        env:
+          GRUVAX_ADMIN_PIN: "1234"
+          GRUVAX_SECRET_KEY: "tcS1ujQX9eFv2gXr9w8t1V0qBu3UdMVqJTrYqDQ7Wxg="
+          SESSION_SECRET: "ci-test-secret-not-real"
         run: uv run pre-commit run --all-files
