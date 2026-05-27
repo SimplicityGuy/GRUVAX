@@ -12,8 +12,8 @@ Tests 5-10 (per PLAN.md):
 
 from __future__ import annotations
 
-import pytest
 from httpx import ASGITransport, AsyncClient
+import pytest
 
 
 @pytest.fixture

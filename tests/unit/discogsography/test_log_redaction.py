@@ -14,15 +14,14 @@ Tests 1-5 + Test 7 (per PLAN.md):
 
 from __future__ import annotations
 
+from collections import deque
 import json
 import logging
 import string
-from collections import deque
 from typing import Any
 
+from hypothesis import given, settings, strategies as st
 import pytest
-from hypothesis import given, settings
-from hypothesis import strategies as st
 
 from gruvax.discogsography.log_redactor import _DSCG_PATTERN, redact_dscg_tokens
 from gruvax.logging_config import configure_logging
@@ -137,9 +136,7 @@ def test_pat_does_not_appear_in_captured_stdout(
 
     captured = capsys.readouterr()
     combined = captured.out + captured.err
-    assert secret_pat not in combined, (
-        f"PAT plaintext leaked into stdout/stderr: {combined!r}"
-    )
+    assert secret_pat not in combined, f"PAT plaintext leaked into stdout/stderr: {combined!r}"
 
 
 def test_pat_does_not_appear_in_exception_message(
@@ -161,8 +158,7 @@ def test_pat_does_not_appear_in_exception_message(
     """
     secret_pat = "dscg_secret_LEAK_DETECTOR_xyz"
     exc_message = (
-        f"request failed: GET https://x/y "
-        f"headers={{'Authorization': 'Bearer {secret_pat}'}}"
+        f"request failed: GET https://x/y headers={{'Authorization': 'Bearer {secret_pat}'}}"
     )
     logger = logging.getLogger("gruvax.test_log_redaction_exc")
     try:

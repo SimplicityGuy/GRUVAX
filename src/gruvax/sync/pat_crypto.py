@@ -37,7 +37,7 @@ import os
 from cryptography.fernet import Fernet
 
 
-__all__ = ["encrypt_pat", "decrypt_pat"]
+__all__ = ["decrypt_pat", "encrypt_pat"]
 
 
 _ENV_VAR = "GRUVAX_SECRET_KEY"
@@ -62,8 +62,8 @@ def _fernet() -> Fernet:
         raise RuntimeError(
             f"{_ENV_VAR} is not set — cannot encrypt/decrypt PATs. "
             f"Generate a key with: "
-            f"python -c \"from cryptography.fernet import Fernet; "
-            f"print(Fernet.generate_key().decode())\""
+            f'python -c "from cryptography.fernet import Fernet; '
+            f'print(Fernet.generate_key().decode())"'
         )
     return Fernet(key.encode())
 
