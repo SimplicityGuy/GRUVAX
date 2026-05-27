@@ -62,6 +62,9 @@ updated: 2026-05-27
 | 01-05-02 | 05 | 3 | — | T-01-init-sync-rerun | Compose `up` reaches `gruvax-api` healthy with `fake-discogsography` sibling serving the contract endpoints; init-sync is idempotent (skips if populated) | automated | `just compose-smoke` | ✅ W0 | ⬜ pending |
 | 01-06-01 | 06 | 4 | API-02 | — | SLO benchmark passes: `/api/search` p95 ≤ 200 ms and `/api/locate` p95 ≤ 50 ms on synthetic data | benchmark | `just slo` | ✅ existing (v1.0) | ⬜ pending |
 | 01-06-02 | 06 | 4 | API-02 | — | After v_collection → profile_collection rewire, all 5 query functions (search_collection, get_release_for_locate, get_sync_staleness_seconds, get_phantom_boundary_count, snapshot.load) return identical results | unit | `uv run pytest tests/integration/db/test_queries_rewire.py -q` | ✅ W0 | ⬜ pending |
+| 01-07-01 | 07 | 5 | API-02, API-03, SYN-02, PROF-03 | — | Integration tests pass on fresh checkout: tests/integration/conftest.py autouse fixture seeds gruvax.profile_collection from tests/fixtures/synth_profile_collection.sql via sync psycopg.connect() (lifts Plan 01-06 pattern from test_search_benchmark.py to suite-wide scope; module-local copy removed) | integration | `uv run pytest tests/integration/test_locate.py tests/integration/test_search.py tests/integration/test_segment_api.py tests/integration/db/test_queries_rewire.py tests/integration/test_change_set.py tests/unit/test_collection_snapshot.py::test_snapshot_load_from_db -x -q` | ✅ W0 | ⬜ pending |
+| 01-07-02 | 07 | 5 | API-02 | — | fixtures/boundaries.yaml cut-points reference v2 generator catalog numbers (BLP 1000, BST 1001, KC1000, etc.) — SegmentCache derives non-empty bins; locate(release_id=1) returns cube (1,0,0) with confidence > 0 (SC-1 observably true). test_locate.py::NO_BOUNDARY_RELEASE_ID switched 119→951 (Atlantic SD 1000, genuinely uncovered under new boundaries: "atlantic" casefold sorts before every cut_label so SegmentCache assigns no bin) | integration | `uv run python -m gruvax.db.seed_boundaries fixtures/boundaries.yaml && uv run pytest tests/integration/test_locate.py::test_locate_covered tests/integration/test_locate.py::test_locate_no_boundary -x -q` | ✅ existing | ⬜ pending |
+| 01-08-01 | 08 | 5 | API-03 | — | tests/integration/test_migrate_0009.py::_alembic rewritten to subprocess.run wrapped in asyncio.to_thread — closes Gap #2 RuntimeError(asyncio.run cannot be called from a running event loop); all 7 round-trip / schema-verification tests run without ERROR | integration | `uv run pytest tests/integration/test_migrate_0009.py -x --tb=short -q` | ✅ existing | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -106,5 +109,7 @@ Files / fixtures Plan 01-00 owns (Wave 0 — MUST land BEFORE Wave 1 plans execu
 - [ ] `nyquist_compliant: true` set in frontmatter (pending checker re-review)
 
 **Approval:** pending
+
+**Gap closure (Plans 01-07 + 01-08):** tasks 01-07-01, 01-07-02, and 01-08-01 added per `/gsd-plan-phase 1 --gaps` (closes VERIFICATION.md Gap #1, Gap #2, and Gap #3 cascade). Plan 01-07 owns all VALIDATION.md edits for this wave; Plan 01-08 is test-code-only.
 </content>
 </invoke>
