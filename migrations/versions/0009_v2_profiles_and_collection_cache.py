@@ -254,7 +254,10 @@ LEFT JOIN artists      a  ON a.id = r.primary_artist_id
 
 def upgrade() -> None:
     # pgcrypto provides gen_random_uuid() — needed for profiles.id default.
-    op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto")
+    # Pin to public schema so the extension's schema dep doesn't block 0001's
+    # downgrade `DROP SCHEMA gruvax`. The runtime pool's search_path resolves
+    # gen_random_uuid() via the public-search-path fallback (D-12).
+    op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public")
 
     op.execute(_CREATE_PROFILES)
     op.execute(_IDX_PROFILES_DISPLAY_NAME)
@@ -309,5 +312,8 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS gruvax.uq_profiles_display_name_active")
     op.execute("DROP TABLE IF EXISTS gruvax.profiles")
 
-    # pgcrypto extension is not dropped — it lives in public and may be in use
-    # by other schemas. CREATE EXTENSION IF NOT EXISTS is idempotent on re-upgrade.
+    # 0009 is pgcrypto's only consumer in GRUVAX (profiles.id DEFAULT
+    # gen_random_uuid()). Drop on downgrade so 0001's `DROP SCHEMA gruvax`
+    # has no extension dep blocking it. IF EXISTS keeps the round-trip
+    # idempotent in case the extension was already removed by an operator.
+    op.execute("DROP EXTENSION IF EXISTS pgcrypto")
