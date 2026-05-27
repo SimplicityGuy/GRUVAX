@@ -112,6 +112,11 @@ jobs:
           GRUVAX_ADMIN_PIN: "1234"
           GRUVAX_SECRET_KEY: "tcS1ujQX9eFv2gXr9w8t1V0qBu3UdMVqJTrYqDQ7Wxg="
           SESSION_SECRET: "ci-test-secret-not-real"
+          # Plan 01-10 entrypoint requires GRUVAX_ENV=development to fire the
+          # gruvax_dev stub bootstrap before alembic upgrade head (migration
+          # 0002's CREATE VIEW resolves `collection_items` via search_path).
+          # Production deploys leave GRUVAX_ENV unset (-> production default).
+          GRUVAX_ENV: "development"
           GIT_SHA: ${{ github.sha }}
         run: just compose-smoke
 
