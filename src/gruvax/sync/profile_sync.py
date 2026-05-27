@@ -67,6 +67,20 @@ __all__ = ["sync_profile"]
 logger = logging.getLogger(__name__)
 
 
+class _CacheRefreshFailed(Exception):
+    """Internal sentinel: cache refresh raised AFTER the swap committed.
+
+    Used to distinguish a post-commit refresh failure (DB state stays 'ok')
+    from a sync-body failure (DB state goes to 'failed'). Caught by the
+    outer ``sync_profile`` flow which unwraps and re-raises the original
+    exception without writing a failed-status update.
+    """
+
+    def __init__(self, inner: BaseException) -> None:
+        super().__init__(str(inner))
+        self.inner = inner
+
+
 # ── lock-key derivation (RESEARCH §Pattern 3) ────────────────────────────────
 
 
@@ -473,18 +487,21 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
                 await _swap_inside_tx(conn, profile_id, row_count, user_id)
 
             # Inline cache refresh (D-14). If this fails, the swap is still
-            # durable — the caller (Plan 04 admin endpoint) translates the
-            # raise into a 500 with a clear message.
+            # durable AND last_sync_status is already 'ok' inside the committed
+            # swap TX. We wrap the refresh exception in _CacheRefreshFailed
+            # so the outer except-chain knows NOT to overwrite status='ok'
+            # with 'failed'. The caller (Plan 04 admin endpoint) sees the
+            # original exception via .inner and translates to a 500.
             try:
                 await _refresh_app_caches(app_state)
-            except Exception:
+            except Exception as exc:
                 logger.exception(
                     "sync_profile: cache refresh failed AFTER commit "
                     "(profile=%s, item_count=%d) — DB state intact",
                     profile_id,
                     row_count,
                 )
-                raise
+                raise _CacheRefreshFailed(exc) from exc
 
             took_ms = (time.perf_counter() - t0) * 1000.0
             return {
@@ -493,6 +510,11 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
                 "took_ms": took_ms,
                 "user_id": user_id,
             }
+        except _CacheRefreshFailed as wrapper:
+            # Post-commit cache refresh failure: swap is durable, status='ok'.
+            # Unwrap and re-raise the original exception so the caller sees
+            # the underlying type (e.g. RuntimeError, ConnectionError).
+            raise wrapper.inner from None
         except PATRejected:
             await _record_failure(profile_id, error_tag="pat_rejected", flip_revoked=True)
             raise
