@@ -39,7 +39,7 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
 async def test_phantom_blocked(client) -> None:  # type: ignore[no-untyped-def]
     """POST /api/admin/cubes/{u}/{r}/{c}/boundary with a phantom label/catalog returns 400.
 
-    A phantom is a (label, catalog) pair not found in gruvax.v_collection (D-07).
+    A phantom is a (label, catalog) pair not found in gruvax.profile_collection (D-07).
     The response must include phantom:true and near_misses (ADMN-03, ADMN-06).
     """
     # Login to get a session (may skip if login not implemented)

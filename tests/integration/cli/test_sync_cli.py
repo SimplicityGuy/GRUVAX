@@ -184,8 +184,8 @@ def gruvax_api_server(gruvax_api_port, fake_disco_port, fake_disco_server) -> It
 
     # Patch sync_profile._refresh_app_caches to a no-op while THIS server is
     # running — the in-process sync triggered by the CLI subprocess would
-    # otherwise hit Plan 06's pending collection_snapshot read path
-    # (gruvax.v_collection). We restore the original at fixture teardown so
+    # otherwise hit the live collection_snapshot read path
+    # (gruvax.profile_collection). We restore the original at fixture teardown so
     # we don't leak into other test modules' cache-refresh assertions.
     from gruvax.sync import profile_sync as _profile_sync_mod
 

@@ -5,12 +5,12 @@ The pool sets ``search_path`` on every connection checkout so that:
   - PostgreSQL built-ins and shared extensions (``pg_trgm`` lives in
     ``public``) remain reachable.
 
-Post-P1 (D-12): the cross-schema dependency on ``gruvax.v_collection`` is
+Post-P1 (D-12): the cross-schema dependency on the v1 cross-schema view is
 retired in migration 0009; the pool no longer branches on the
 legacy observed-discogsography-schema setting. The legacy dual-schema
 search_path (``gruvax, gruvax_dev, public``) is re-introduced ONLY inside
-migration 0009's downgrade body so the recreated ``v_collection`` view
-can resolve its unqualified source-schema tables (Pitfall 5).
+migration 0009's downgrade body so the recreated v1 view body can resolve
+its unqualified source-schema tables (Pitfall 5).
 """
 
 from contextlib import asynccontextmanager
@@ -49,7 +49,7 @@ async def _configure_connection(conn: AsyncConnection) -> None:
 
     Per D-12 the search_path is a single literal ``gruvax, public`` — the
     pre-P1 dev/prod dual-schema branch (gruvax_dev / discogsography) was
-    removed when ``gruvax.v_collection`` retired in migration 0009. The
+    removed when the v1 cross-schema view retired in migration 0009. The
     gruvax_dev path is re-introduced INSIDE migration 0009's downgrade only
     (Pitfall 5), never in runtime code.
 

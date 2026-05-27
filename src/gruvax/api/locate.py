@@ -13,7 +13,7 @@ The ``sub_cube_interval`` field (Phase 5) shape (UI-SPEC §TypeScript Type Exten
   derives the cube from context (primary_cube / label_span).
 
 Error semantics:
-  - HTTP 404: release_id not in gruvax.v_collection
+  - HTTP 404: release_id not in gruvax.profile_collection (for the active profile)
     → ``{type: "release_not_in_collection", release_id: <id>}``
   - HTTP 200 with confidence 0.0 / primary_cube null / label_span []:
     release IS in collection but no cube boundary covers its label (D-12).
@@ -76,7 +76,7 @@ async def locate_endpoint(
 ) -> JSONResponse:
     """Return the locked LocateResult for a release.
 
-    Looks up the release in ``gruvax.v_collection``, runs the position estimator
+    Looks up the release in ``gruvax.profile_collection``, runs the position estimator
     dispatcher (segment-aware two-level interpolation primary, §4.8 cube-only fallback),
     and returns the JSON result.
 

@@ -191,7 +191,7 @@ async def test_put_cut_accepted(client) -> None:  # type: ignore[no-untyped-def]
 async def test_put_cut_phantom_rejected(client) -> None:  # type: ignore[no-untyped-def]
     """SEG-08: PUT /api/admin/cubes/:u/:r/:c/cut with phantom catalog returns 400.
 
-    Phantom = not in gruvax.v_collection (D-07).
+    Phantom = not in gruvax.profile_collection (D-07).
     """
     auth = await _login(client)
     if not auth:

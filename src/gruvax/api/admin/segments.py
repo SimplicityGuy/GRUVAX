@@ -203,7 +203,7 @@ async def put_bin_cut(
     """Update the cut point for a bin.
 
     Phantom check (unless force=True): rejects (first_label, first_catalog) pairs
-    not in gruvax.v_collection.  On success: writes to cube_boundaries, logs to
+    not in gruvax.profile_collection.  On success: writes to cube_boundaries, logs to
     boundary_history (source='manual'), then invalidates + re-derives SegmentCache
     and publishes boundary_changed (Pitfall A: after transaction commit).
 

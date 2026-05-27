@@ -40,63 +40,74 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_catalog_path(client) -> None:  # type: ignore[no-untyped-def]
-    """Catalog path: 'BLP 4001' hits Blue Note BLP 4001 record."""
-    response = await client.get("/api/search", params={"q": "BLP 4001"})
+    """Catalog path: 'BLP 1000' hits Blue Note BLP 1000 record."""
+    response = await client.get("/api/search", params={"q": "BLP 1000"})
     assert response.status_code == 200
     body = response.json()
     assert "items" in body
     assert "took_ms" in body
 
     release_ids = [item["release_id"] for item in body["items"]]
-    assert release_ids, f"Expected at least one result for BLP 4001, got none. body={body}"
+    assert release_ids, f"Expected at least one result for BLP 1000, got none. body={body}"
 
-    # The record with catalog_number "BLP 4001" is release_id 1 in the seed
+    # The record with catalog_number "BLP 1000" is release_id 1 in the seed
     catalog_numbers = [item["catalog_number"] for item in body["items"]]
-    assert any("BLP 4001" in cn for cn in catalog_numbers), (
-        f"Expected BLP 4001 in catalog numbers, got: {catalog_numbers}"
+    assert any("BLP 1000" in cn for cn in catalog_numbers), (
+        f"Expected BLP 1000 in catalog numbers, got: {catalog_numbers}"
     )
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_catalog_path_normalized(client) -> None:  # type: ignore[no-untyped-def]
-    """Normalized catalog path: 'blp4001' (no space/separator) hits BLP 4001."""
-    response = await client.get("/api/search", params={"q": "blp4001"})
+    """Normalized catalog path: 'blp1000' (no space/separator) hits BLP 1000."""
+    response = await client.get("/api/search", params={"q": "blp1000"})
     assert response.status_code == 200
     body = response.json()
     items = body["items"]
-    assert items, "Expected results for 'blp4001', got none"
+    assert items, "Expected results for 'blp1000', got none"
     catalog_numbers = [item["catalog_number"] for item in items]
-    assert any("BLP 4001" in cn for cn in catalog_numbers), (
-        f"Separator-normalized 'blp4001' should match 'BLP 4001'. Got: {catalog_numbers}"
+    assert any("BLP 1000" in cn for cn in catalog_numbers), (
+        f"Separator-normalized 'blp1000' should match 'BLP 1000'. Got: {catalog_numbers}"
     )
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_fts_artist(client) -> None:  # type: ignore[no-untyped-def]
-    """FTS: search by artist name returns matching records."""
-    response = await client.get("/api/search", params={"q": "Miles Davis"})
+    """FTS: search by artist name returns matching records.
+
+    Plan 01-06: the v1 seed had "Miles Davis"; the v2 generator produces
+    "Artist N" placeholders.  We query for a known artist string from the seed
+    (Artist 1 has multiple records since the generator wraps around the
+    artist-id pool).
+    """
+    response = await client.get("/api/search", params={"q": "Artist 1"})
     assert response.status_code == 200
     body = response.json()
     items = body["items"]
-    assert items, "Expected at least one result for 'Miles Davis', got none"
+    assert items, "Expected at least one result for 'Artist 1', got none"
 
     artists = [item["primary_artist"] for item in items]
-    assert any("Miles Davis" in (a or "") for a in artists), (
-        f"Expected Miles Davis in results, got artists: {artists}"
+    assert any("Artist" in (a or "") for a in artists), (
+        f"Expected an 'Artist N' string in results, got artists: {artists}"
     )
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_fts_title(client) -> None:  # type: ignore[no-untyped-def]
-    """FTS: search by album title returns matching record."""
-    response = await client.get("/api/search", params={"q": "Kind of Blue"})
+    """FTS: search by album title returns matching record.
+
+    Plan 01-06: the v1 seed had "Kind of Blue"; the v2 generator produces
+    "<Label> Title <N>" placeholders.  We assert the Blue Note Title prefix
+    appears in the FTS results for "Blue Note".
+    """
+    response = await client.get("/api/search", params={"q": "Blue Note Title"})
     assert response.status_code == 200
     body = response.json()
     items = body["items"]
-    assert items, "Expected results for 'Kind of Blue'"
+    assert items, "Expected results for 'Blue Note Title'"
     titles = [item["title"] for item in items]
-    assert any("Kind of Blue" in (t or "") for t in titles), (
-        f"Expected 'Kind of Blue' in titles. Got: {titles}"
+    assert any("Blue Note Title" in (t or "") for t in titles), (
+        f"Expected 'Blue Note Title' in titles. Got: {titles}"
     )
 
 
@@ -221,28 +232,29 @@ async def test_catalog_boost(client) -> None:  # type: ignore[no-untyped-def]
     """SRCH-08: catalog-like query ranks the catalog record first.
 
     Runs two queries:
-      1. Catalog-like (e.g. "BLP 4001") — should match the catalog record
+      1. Catalog-like (e.g. "BLP 1000") — should match the catalog record
          as top result via the catalog-boost path.
       2. Plain artist text — should return results but NOT via catalog boost.
 
     Both must return 200 and contain the did_you_mean key.
     The catalog query must have the matching catalog record as items[0].
     """
-    # Catalog-like query — is_catalog_query("BLP 4001") → True
-    response = await client.get("/api/search", params={"q": "BLP 4001"})
+    # Catalog-like query — is_catalog_query("BLP 1000") → True
+    response = await client.get("/api/search", params={"q": "BLP 1000"})
     assert response.status_code == 200
     body = response.json()
     assert "did_you_mean" in body, f"Response missing 'did_you_mean' key: {body}"
     items = body["items"]
-    assert items, "Expected at least one result for 'BLP 4001'"
-    # Top result must contain the catalog number BLP 4001
+    assert items, "Expected at least one result for 'BLP 1000'"
+    # Top result must contain the catalog number BLP 1000
     catalog_numbers = [item["catalog_number"] for item in items]
-    assert any("BLP 4001" in (cn or "") for cn in catalog_numbers), (
-        f"Expected BLP 4001 in top results via catalog boost. Got: {catalog_numbers}"
+    assert any("BLP 1000" in (cn or "") for cn in catalog_numbers), (
+        f"Expected BLP 1000 in top results via catalog boost. Got: {catalog_numbers}"
     )
 
-    # Plain artist text query — must also return did_you_mean key
-    response2 = await client.get("/api/search", params={"q": "Miles Davis"})
+    # Plain artist text query — must also return did_you_mean key.
+    # Plan 01-06: seed uses "Artist N" placeholders, not "Miles Davis".
+    response2 = await client.get("/api/search", params={"q": "Artist 1"})
     assert response2.status_code == 200
     body2 = response2.json()
     assert "did_you_mean" in body2, f"Response missing 'did_you_mean' key for artist query: {body2}"

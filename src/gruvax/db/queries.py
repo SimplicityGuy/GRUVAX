@@ -1,7 +1,21 @@
 """Database queries for GRUVAX.
 
 All SQL uses psycopg parameterized placeholders (%s) — never
-f-string interpolation of user input (T-01-07 SQLi protection).
+f-string interpolation of user input (T-01-07 / T-01-sqli-rewire SQLi protection).
+
+Plan 01-06: all read paths that targeted the v1 cross-schema view (dropped
+by migration 0009) have been rewired to ``gruvax.profile_collection`` with a
+``WHERE profile_id = %s::uuid`` binding. Every rewired function accepts a
+``profile_id`` parameter (defaulted to ``DEFAULT_PROFILE_UUID`` for P1
+single-profile compatibility); P2 only needs to flip the call sites to pass the
+session-bound profile_id (D-11).
+
+Response-shape compatibility: ``profile_collection`` simplified the v1 column
+set per D-04 (no ``collection_item_id``, no ``format``; ``primary_artist`` →
+``artist``). The search/locate API response retains the historical key names
+via SQL aliases (``artist AS primary_artist``, ``NULL::bigint AS
+collection_item_id``, ``NULL::text AS format``) so the frontend +
+contract-shape tests are unaffected by the data-source swap.
 
 Functions:
   - ``search_collection``:     FTS + normalized catalog# union search with
@@ -16,11 +30,11 @@ Functions:
                                 into a dict for in-process caching (Phase 3).
 
 Phase 8 — OBS-07 counter + staleness + diagnostics functions:
-  - ``get_sync_staleness_seconds``: seconds since last discogsography sync via v_collection.
+  - ``get_sync_staleness_seconds``: seconds since last sync via profile_collection.synced_at.
   - ``increment_search_count``:     upsert search counters keyed by release_id only (D-04/D-05).
   - ``increment_selection_count``:  upsert selection counters keyed by release_id only (D-04/D-05).
   - ``get_top_searched``:           top-N records by all-time search_count (D-05/D-06).
-  - ``get_phantom_boundary_count``: count non-empty boundaries not in v_collection (OQ7).
+  - ``get_phantom_boundary_count``: count non-empty boundaries not in profile_collection (OQ7).
   - ``reset_record_stats``:         TRUNCATE gruvax.record_stats (admin Reset stats action).
 """
 
@@ -36,6 +50,12 @@ import psycopg.errors
 
 if TYPE_CHECKING:
     from psycopg_pool import AsyncConnectionPool
+
+
+# ── Default profile UUID (D-02 / D-11 — single-profile P1 fallback) ──────────
+# Mirrors migration 0009 and the app.py lifespan constant.  P1's call sites pass
+# this constant; P2 flips them to a per-request value bound from the session.
+DEFAULT_PROFILE_UUID: str = "00000000-0000-0000-0000-000000000001"
 
 
 # ── Catalog-query detection regexes (D-12) ───────────────────────────────────
@@ -75,23 +95,25 @@ def is_catalog_query(q: str) -> bool:
 async def did_you_mean_query(
     pool: AsyncConnectionPool,
     q: str,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> str | None:
     """Return the top trigram-similarity match for *q* over label/artist terms.
 
     Runs only when FTS returned no results (D-11 — conservative).  Queries
-    DISTINCT label and primary_artist values from ``gruvax.v_collection`` via
-    ``pg_trgm similarity()``.
+    DISTINCT label and artist values from ``gruvax.profile_collection`` for the
+    given profile via ``pg_trgm similarity()``.
 
     Graceful degradation (Pitfall E): if ``similarity()`` is undefined (pg_trgm
     not installed), catches ``psycopg.errors.UndefinedFunction`` and returns
     ``None`` so the caller still receives a 200 response.
 
     All user input goes through ``%s`` placeholders — never f-string
-    interpolation (T-01-07, T-02-06).
+    interpolation (T-01-07, T-02-06, T-01-sqli-rewire).
 
     Args:
-        pool: Open psycopg ``AsyncConnectionPool``.
-        q:    Raw user query string (already length-validated at router).
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        q:          Raw user query string (already length-validated at router).
+        profile_id: UUID of the profile to scope the suggestion to (P1: default).
 
     Returns:
         The best-matching term string if similarity > threshold, else ``None``.
@@ -100,12 +122,12 @@ async def did_you_mean_query(
 SELECT term, similarity(term, %s) AS sim
 FROM (
     SELECT DISTINCT label AS term
-    FROM gruvax.v_collection
-    WHERE label IS NOT NULL
+    FROM gruvax.profile_collection
+    WHERE profile_id = %s::uuid AND label IS NOT NULL
     UNION
-    SELECT DISTINCT primary_artist AS term
-    FROM gruvax.v_collection
-    WHERE primary_artist IS NOT NULL
+    SELECT DISTINCT artist AS term
+    FROM gruvax.profile_collection
+    WHERE profile_id = %s::uuid AND artist IS NOT NULL
 ) AS terms
 WHERE similarity(term, %s) > %s
 ORDER BY sim DESC
@@ -113,7 +135,7 @@ LIMIT 1
 """
     try:
         async with pool.connection() as conn, conn.cursor() as cur:
-            await cur.execute(sql, (q, q, DID_YOU_MEAN_THRESHOLD))
+            await cur.execute(sql, (q, profile_id, profile_id, q, DID_YOU_MEAN_THRESHOLD))
             row = await cur.fetchone()
         if row is None:
             return None
@@ -127,8 +149,9 @@ async def search_collection(
     pool: AsyncConnectionPool,
     q: str,
     limit: int,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> tuple[list[SearchRow], float, str | None]:
-    """Execute FTS + catalog-number union search over gruvax.v_collection.
+    """Execute FTS + catalog-number union search over gruvax.profile_collection.
 
     Two parallel search paths (RESEARCH §Pattern 1):
 
@@ -157,10 +180,19 @@ async def search_collection(
     suggestion.  When pg_trgm is unavailable, this returns None gracefully
     (Pitfall E).
 
+    Response-shape compatibility (Plan 01-06): the result dicts preserve the v1
+    column names (``primary_artist``, ``collection_item_id``, ``format``) via
+    SQL aliases (``artist AS primary_artist``, ``NULL::bigint AS
+    collection_item_id``, ``NULL::text AS format``) so the frontend and the
+    contract-shape integration tests do not need to change.  The underlying
+    ``profile_collection`` schema dropped ``collection_item_id`` and ``format``
+    per D-04; those fields are now always ``None`` in the API response.
+
     Args:
-        pool: Open psycopg ``AsyncConnectionPool``.
-        q:    Raw user query string (already length-validated at router).
-        limit: Max rows to return (already range-validated at router).
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        q:          Raw user query string (already length-validated at router).
+        limit:      Max rows to return (already range-validated at router).
+        profile_id: UUID of the profile to search (P1: default).
 
     Returns:
         A ``(rows, took_ms, did_you_mean)`` tuple where ``rows`` is a list of
@@ -172,18 +204,19 @@ async def search_collection(
     # setweight(to_tsvector('english', catalog_number), 'A') promotes catalog
     # tokens to the highest weight tier so ts_rank_cd scores them above body
     # text — catalog match ranks above text match for "BLP 4195".
-    # All %s placeholders are fully parameterized (T-01-07, T-02-07).
+    # All %s placeholders are fully parameterized (T-01-07, T-02-07,
+    # T-01-sqli-rewire). profile_id binds via %s::uuid in every FROM clause.
     if is_catalog_query(q):
         sql = """
 WITH fts AS (
     SELECT
         v.release_id,
-        v.collection_item_id,
+        NULL::bigint AS collection_item_id,
         v.title,
-        v.primary_artist,
+        v.artist                  AS primary_artist,
         v.label,
         v.catalog_number,
-        v.format,
+        NULL::text   AS format,
         v.year,
         ts_rank_cd(
             setweight(to_tsvector('english', coalesce(v.catalog_number, '')), 'A')
@@ -191,27 +224,29 @@ WITH fts AS (
             tsq.query,
             4
         ) AS score
-    FROM gruvax.v_collection v
+    FROM gruvax.profile_collection v
     CROSS JOIN websearch_to_tsquery('english', %s) AS tsq(query)
-    WHERE (
+    WHERE v.profile_id = %s::uuid
+      AND (
         setweight(to_tsvector('english', coalesce(v.catalog_number, '')), 'A')
         || setweight(v.fts_vector, 'C')
-    ) @@ tsq.query
+      ) @@ tsq.query
     LIMIT 40
 ),
 cat AS (
     SELECT
         release_id,
-        collection_item_id,
+        NULL::bigint AS collection_item_id,
         title,
-        primary_artist,
+        artist        AS primary_artist,
         label,
         catalog_number,
-        format,
+        NULL::text    AS format,
         year,
         0.9::float AS score
-    FROM gruvax.v_collection
-    WHERE lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
+    FROM gruvax.profile_collection
+    WHERE profile_id = %s::uuid
+      AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
           LIKE lower(regexp_replace(%s, '[\\s\\-_./]+', '', 'g')) || '%%'
     LIMIT 20
 ),
@@ -238,44 +273,47 @@ FROM combined
 ORDER BY release_id, score DESC
 LIMIT %s
 """
+        params: tuple[Any, ...] = (q, profile_id, profile_id, q, limit)
     else:
         # Standard FTS path (non-catalog query).
         # psycopg uses %s as the placeholder style (Python DB-API 2.0).
-        # The query string itself uses %s; the (q, limit) tuple provides the
+        # The query string itself uses %s; the params tuple provides the
         # values.  This is fully parameterized — q is never interpolated into
-        # SQL (T-01-07).
+        # SQL (T-01-07, T-01-sqli-rewire).
         sql = """
 WITH fts AS (
     -- websearch_to_tsquery is computed ONCE via the cross join (CR/WR-01),
     -- not twice (rank + WHERE). tsq.query is the single derived tsquery.
     SELECT
         v.release_id,
-        v.collection_item_id,
+        NULL::bigint AS collection_item_id,
         v.title,
-        v.primary_artist,
+        v.artist                  AS primary_artist,
         v.label,
         v.catalog_number,
-        v.format,
+        NULL::text   AS format,
         v.year,
         ts_rank_cd(v.fts_vector, tsq.query, 4) AS score
-    FROM gruvax.v_collection v
+    FROM gruvax.profile_collection v
     CROSS JOIN websearch_to_tsquery('english', %s) AS tsq(query)
-    WHERE v.fts_vector @@ tsq.query
+    WHERE v.profile_id = %s::uuid
+      AND v.fts_vector @@ tsq.query
     LIMIT 40
 ),
 cat AS (
     SELECT
         release_id,
-        collection_item_id,
+        NULL::bigint AS collection_item_id,
         title,
-        primary_artist,
+        artist        AS primary_artist,
         label,
         catalog_number,
-        format,
+        NULL::text    AS format,
         year,
         0.9::float AS score
-    FROM gruvax.v_collection
-    WHERE lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
+    FROM gruvax.profile_collection
+    WHERE profile_id = %s::uuid
+      AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
           LIKE lower(regexp_replace(%s, '[\\s\\-_./]+', '', 'g')) || '%%'
     LIMIT 20
 ),
@@ -304,11 +342,11 @@ FROM combined
 ORDER BY release_id, score DESC
 LIMIT %s
 """
+        params = (q, profile_id, profile_id, q, limit)
 
     t0 = time.perf_counter()
     async with pool.connection() as conn, conn.cursor() as cur:
-        # q appears twice: FTS tsquery (cross join) and catalog LIKE path.
-        await cur.execute(sql, (q, q, limit))
+        await cur.execute(sql, params)
         rows_raw = await cur.fetchall()
         # cursor.description gives column names
         cols = [desc[0] for desc in (cur.description or [])]
@@ -322,7 +360,7 @@ LIMIT %s
     # SRCH-07 / D-11: only trigger did-you-mean when FTS finds nothing strong.
     did_you_mean: str | None = None
     if not rows:
-        did_you_mean = await did_you_mean_query(pool, q)
+        did_you_mean = await did_you_mean_query(pool, q, profile_id)
 
     return rows, took_ms, did_you_mean
 
@@ -344,6 +382,10 @@ async def load_settings_cache(
     95))`` to guard against a missing or malformed value.
 
     All SQL uses ``%s`` placeholders — no f-string interpolation (T-01-07).
+
+    Note: settings are global (not per-profile) in P1; the table has a
+    nullable ``profile_id`` column added in migration 0009 for P2 readiness,
+    but this loader returns every row regardless of profile.
 
     Args:
         pool: Open psycopg ``AsyncConnectionPool``.
@@ -367,8 +409,9 @@ LocateRecord = dict[str, Any]
 async def get_release_for_locate(
     pool: AsyncConnectionPool,
     release_id: int,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> LocateRecord | None:
-    """Fetch label and catalog_number for a release_id from v_collection.
+    """Fetch label and catalog_number for a release_id from profile_collection.
 
     Used by ``GET /api/locate`` to retrieve the record metadata needed to
     call the cube-only estimator.
@@ -377,19 +420,20 @@ async def get_release_for_locate(
         pool:       Open psycopg pool.
         release_id: The Discogs release ID to look up (integer, already
                     validated at the router).
+        profile_id: UUID of the profile to scope the lookup to (P1: default).
 
     Returns:
         A dict with keys ``release_id``, ``label``, ``catalog_number``,
-        or ``None`` if the release_id is not in the collection.
+        or ``None`` if the release_id is not in the profile's collection.
     """
     sql = """
 SELECT release_id, label, catalog_number
-FROM gruvax.v_collection
-WHERE release_id = %s
+FROM gruvax.profile_collection v
+WHERE v.profile_id = %s::uuid AND v.release_id = %s
 LIMIT 1
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql, (release_id,))
+        await cur.execute(sql, (profile_id, release_id))
         row = await cur.fetchone()
 
     if row is None:
@@ -413,10 +457,11 @@ async def find_boundary_near_misses(
     label: str,
     catalog: str,
     limit: int = 5,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> list[dict[str, Any]]:
     """Return trigram near-misses for a phantom (label, catalog) pair.
 
-    Queries ``gruvax.v_collection`` for the top ``limit`` rows whose label
+    Queries ``gruvax.profile_collection`` for the top ``limit`` rows whose label
     and/or catalog_number has similarity above ``BOUNDARY_TRGM_THRESHOLD`` to
     the provided inputs.  Uses a combined similarity score (average of label and
     catalog similarities) for ranking.
@@ -427,13 +472,14 @@ async def find_boundary_near_misses(
     receives a valid response.
 
     All user input goes through ``%s`` placeholders — never f-string
-    interpolation (T-01-07, T-03-16).
+    interpolation (T-01-07, T-03-16, T-01-sqli-rewire).
 
     Args:
-        pool:    Open psycopg ``AsyncConnectionPool``.
-        label:   Label from the proposed boundary value.
-        catalog: Catalog number from the proposed boundary value.
-        limit:   Maximum number of near-miss suggestions to return.
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        label:      Label from the proposed boundary value.
+        catalog:    Catalog number from the proposed boundary value.
+        limit:      Maximum number of near-miss suggestions to return.
+        profile_id: UUID of the profile to scope the search to (P1: default).
 
     Returns:
         List of dicts with keys ``label``, ``catalog_number``, ``similarity``.
@@ -443,9 +489,12 @@ async def find_boundary_near_misses(
 SELECT label, catalog_number,
        (similarity(lower(label), lower(%s)) * 0.5
         + similarity(lower(catalog_number), lower(%s)) * 0.5) AS sim
-FROM gruvax.v_collection
-WHERE similarity(lower(label), lower(%s)) > %s
+FROM gruvax.profile_collection
+WHERE profile_id = %s::uuid
+  AND (
+      similarity(lower(label), lower(%s)) > %s
    OR similarity(lower(catalog_number), lower(%s)) > %s
+  )
 ORDER BY sim DESC
 LIMIT %s
 """
@@ -456,6 +505,7 @@ LIMIT %s
                 (
                     label,
                     catalog,  # combined score params
+                    profile_id,
                     label,
                     BOUNDARY_TRGM_THRESHOLD,  # label WHERE
                     catalog,
@@ -477,29 +527,33 @@ LIMIT %s
         return []
 
 
-async def get_distinct_labels(pool: AsyncConnectionPool) -> list[str]:
-    """Return all distinct labels present in gruvax.v_collection, sorted.
+async def get_distinct_labels(
+    pool: AsyncConnectionPool,
+    profile_id: str = DEFAULT_PROFILE_UUID,
+) -> list[str]:
+    """Return all distinct labels present in gruvax.profile_collection, sorted.
 
     Used by the admin cubes editor autocomplete to populate the label picker
-    (D-06).  Source is exclusively v_collection (Pitfall 5 — never reads
-    raw discogsography tables).
+    (D-06).  Source is exclusively profile_collection for the active profile
+    (Pitfall 5 — never reads raw discogsography tables).
 
-    All SQL uses %s placeholders (T-03-16).
+    All SQL uses %s placeholders (T-03-16, T-01-sqli-rewire).
 
     Args:
-        pool: Open psycopg ``AsyncConnectionPool``.
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        profile_id: UUID of the profile to scope the query to (P1: default).
 
     Returns:
         Sorted list of distinct label strings.
     """
     sql = """
 SELECT DISTINCT label
-FROM gruvax.v_collection
-WHERE label IS NOT NULL
+FROM gruvax.profile_collection
+WHERE profile_id = %s::uuid AND label IS NOT NULL
 ORDER BY label
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql)
+        await cur.execute(sql, (profile_id,))
         rows = await cur.fetchall()
     return [str(row[0]) for row in rows]
 
@@ -507,6 +561,7 @@ ORDER BY label
 async def get_catalogs_for_label(
     pool: AsyncConnectionPool,
     label: str,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> list[dict[str, Any]]:
     """Return all release_id + catalog_number for records with the given label.
 
@@ -514,12 +569,13 @@ async def get_catalogs_for_label(
     after a label has been selected (two-step dependent autocomplete, D-06).
     The label comparison is case-insensitive via lower().
 
-    Source is exclusively v_collection (Pitfall 5).
-    All SQL uses %s placeholders (T-03-16).
+    Source is exclusively profile_collection for the active profile (Pitfall 5).
+    All SQL uses %s placeholders (T-03-16, T-01-sqli-rewire).
 
     Args:
-        pool:  Open psycopg ``AsyncConnectionPool``.
-        label: Label to filter by (matched case-insensitively).
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        label:      Label to filter by (matched case-insensitively).
+        profile_id: UUID of the profile to scope the query to (P1: default).
 
     Returns:
         List of dicts with keys ``release_id`` (int) and ``catalog_number`` (str),
@@ -527,12 +583,12 @@ async def get_catalogs_for_label(
     """
     sql = """
 SELECT release_id, catalog_number
-FROM gruvax.v_collection
-WHERE lower(label) = lower(%s)
+FROM gruvax.profile_collection
+WHERE profile_id = %s::uuid AND lower(label) = lower(%s)
 ORDER BY catalog_number
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql, (label,))
+        await cur.execute(sql, (profile_id, label))
         rows = await cur.fetchall()
     return [{"release_id": int(row[0]), "catalog_number": str(row[1])} for row in rows]
 
@@ -880,32 +936,35 @@ async def cube_exact_match(
     pool: AsyncConnectionPool,
     label: str,
     catalog: str,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> bool:
-    """Return True if an exact (label, catalog_number) pair exists in v_collection.
+    """Return True if an exact (label, catalog_number) pair exists in profile_collection.
 
     Case-insensitive label match (lower(label) = lower(%s)); exact catalog_number match.
     Used by the admin validate endpoint to detect phantom boundary values (D-07).
 
-    Source is exclusively v_collection (Pitfall 5).
-    All SQL uses %s placeholders (T-03-16).
+    Source is exclusively profile_collection for the active profile (Pitfall 5).
+    All SQL uses %s placeholders (T-03-16, T-01-sqli-rewire).
 
     Args:
-        pool:    Open psycopg ``AsyncConnectionPool``.
-        label:   Label to check.
-        catalog: Catalog number to check.
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        label:      Label to check.
+        catalog:    Catalog number to check.
+        profile_id: UUID of the profile to scope the check to (P1: default).
 
     Returns:
-        True if a record with this (label, catalog) pair exists in v_collection.
+        True if a record with this (label, catalog) pair exists for the profile.
     """
     sql = """
 SELECT 1
-FROM gruvax.v_collection
-WHERE lower(label) = lower(%s)
+FROM gruvax.profile_collection
+WHERE profile_id = %s::uuid
+  AND lower(label) = lower(%s)
   AND catalog_number = %s
 LIMIT 1
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql, (label, catalog))
+        await cur.execute(sql, (profile_id, label, catalog))
         row = await cur.fetchone()
     return row is not None
 
@@ -915,21 +974,37 @@ LIMIT 1
 
 async def get_sync_staleness_seconds(
     pool: AsyncConnectionPool,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> float | None:
-    """Return seconds since the last discogsography sync, or None if v_collection is empty.
+    """Return seconds since the last sync for the profile, or None when empty.
 
-    Reads gruvax.v_collection exclusively (Pitfall 5 — no direct collection_items access).
-    All SQL uses %s placeholders (T-08-06).
+    Plan 01-06: derives staleness from max(profile_collection.synced_at) for the
+    given profile (the v1 v_collection.synced_at column was a passthrough of
+    discogsography's collection_items.updated_at; under v2, each row's
+    synced_at is set at the moment sync_profile() upserts it, which is the
+    same semantic anchor — time since the profile last received fresh data).
+
+    Note: app.py's lifespan background task supersedes this function for the
+    OBS-06 metric in production; the function is retained for direct DB
+    diagnostics + the unit test suite.
+
+    All SQL uses %s placeholders (T-08-06, T-01-sqli-rewire).
 
     Args:
-        pool: Open psycopg ``AsyncConnectionPool``.
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        profile_id: UUID of the profile to query (P1: default).
 
     Returns:
-        Seconds as a non-negative float, or None when v_collection has no rows (OBS-06).
+        Seconds as a non-negative float, or None when profile_collection has
+        no rows for this profile (OBS-06).
     """
-    sql = "SELECT EXTRACT(EPOCH FROM (now() - max(synced_at))) FROM gruvax.v_collection"
+    sql = """
+SELECT EXTRACT(EPOCH FROM (now() - max(synced_at)))
+FROM gruvax.profile_collection
+WHERE profile_id = %s::uuid
+"""
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql)
+        await cur.execute(sql, (profile_id,))
         row = await cur.fetchone()
     if row is None or row[0] is None:
         return None
@@ -1007,74 +1082,95 @@ ON CONFLICT (release_id) DO UPDATE SET
 async def get_top_searched(
     pool: AsyncConnectionPool,
     limit: int = 10,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> list[dict[str, Any]]:
-    """Return top-N records by all-time search count, joined to v_collection (D-05, D-06).
+    """Return top-N records by all-time search count, joined to profile_collection.
 
-    Reads record_stats and gruvax.v_collection exclusively — no direct discogsography
-    table access (Pitfall 5).
-    All SQL uses %s placeholders (T-08-06).
+    Reads record_stats and gruvax.profile_collection exclusively — no direct
+    discogsography table access (Pitfall 5).  Plan 01-06: rewired from
+    v_collection.  The dict key ``primary_artist`` is preserved (alias over the
+    new ``artist`` column) so frontend / contract tests are unchanged.
+
+    DISTINCT ON (rs.release_id) ensures the JOIN to profile_collection (which
+    can return multiple rows per release_id when the same release lives in
+    multiple folders, since the PK is (profile_id, release_id, folder_id))
+    yields exactly one row per release in the top-N result.
+
+    All SQL uses %s placeholders (T-08-06, T-01-sqli-rewire).
 
     Args:
-        pool:  Open psycopg ``AsyncConnectionPool``.
-        limit: Maximum number of rows to return (default 10).
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        limit:      Maximum number of rows to return (default 10).
+        profile_id: UUID of the profile whose collection to join against (P1:
+                    default).
 
     Returns:
         List of dicts with keys: release_id, title, primary_artist, search_count,
         search_count_7d, selection_count, selection_count_7d.
-        Returns [] when record_stats is empty or no records match v_collection.
+        Returns [] when record_stats is empty or no records match profile_collection.
     """
     sql = """
-SELECT
+SELECT DISTINCT ON (rs.release_id)
     rs.release_id,
     v.title,
-    v.primary_artist,
+    v.artist AS primary_artist,
     rs.search_count,
     rs.search_count_7d,
     rs.selection_count,
     rs.selection_count_7d
 FROM gruvax.record_stats rs
-JOIN gruvax.v_collection v ON v.release_id = rs.release_id
-ORDER BY rs.search_count DESC
+JOIN gruvax.profile_collection v
+  ON v.release_id = rs.release_id AND v.profile_id = %s::uuid
+ORDER BY rs.release_id, rs.search_count DESC
 LIMIT %s
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql, (limit,))
+        await cur.execute(sql, (profile_id, limit))
         rows_raw = await cur.fetchall()
         cols = [desc[0] for desc in (cur.description or [])]
-    return [dict(zip(cols, row, strict=True)) for row in rows_raw]
+    result = [dict(zip(cols, row, strict=True)) for row in rows_raw]
+    # DISTINCT ON breaks the search_count ordering; re-sort in Python.
+    result.sort(key=lambda r: r.get("search_count", 0) or 0, reverse=True)
+    return result
 
 
 async def get_phantom_boundary_count(
     pool: AsyncConnectionPool,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> int:
-    """Count non-empty cube boundaries whose (first_label, first_catalog) is not in v_collection.
+    """Count non-empty cube boundaries whose (first_label, first_catalog) is not in profile_collection.
 
-    A "phantom" boundary references a (label, catalog) pair that no longer exists in the
-    collection (record may have been sold, deleted from Discogs, or the boundary was
-    entered incorrectly).
+    A "phantom" boundary references a (label, catalog) pair that no longer
+    exists in the profile's collection (record may have been sold, deleted from
+    Discogs, or the boundary was entered incorrectly).
 
-    Reads gruvax.cube_boundaries and gruvax.v_collection exclusively (Pitfall 5).
-    All SQL uses %s placeholders (T-08-06).
+    Reads gruvax.cube_boundaries and gruvax.profile_collection exclusively
+    (Pitfall 5).  Plan 01-06: rewired from v_collection.
+    All SQL uses %s placeholders (T-08-06, T-01-sqli-rewire).
 
     Args:
-        pool: Open psycopg ``AsyncConnectionPool``.
+        pool:       Open psycopg ``AsyncConnectionPool``.
+        profile_id: UUID of the profile whose collection to check against
+                    (P1: default).
 
     Returns:
-        Count of phantom boundaries (non-negative int). Returns 0 when cube_boundaries
-        has no non-empty rows or all boundaries resolve in v_collection.
+        Count of phantom boundaries (non-negative int). Returns 0 when
+        cube_boundaries has no non-empty rows or all boundaries resolve in
+        the profile's collection.
     """
     sql = """
 SELECT COUNT(*)
 FROM gruvax.cube_boundaries cb
 WHERE cb.is_empty = FALSE
   AND NOT EXISTS (
-      SELECT 1 FROM gruvax.v_collection v
-      WHERE lower(v.label) = lower(cb.first_label)
+      SELECT 1 FROM gruvax.profile_collection v
+      WHERE v.profile_id = %s::uuid
+        AND lower(v.label) = lower(cb.first_label)
         AND v.catalog_number = cb.first_catalog
   )
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql)
+        await cur.execute(sql, (profile_id,))
         row = await cur.fetchone()
     return int(row[0]) if row else 0
 

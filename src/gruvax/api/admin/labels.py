@@ -4,7 +4,7 @@ Backs the two-step label → catalog# picker in the admin cube editor
 (RecordPickerSheet) and the client-side phantom near-miss / USE-ANYWAY path.
 The query helpers (``get_distinct_labels`` / ``get_catalogs_for_label``) already
 existed in ``gruvax.db.queries``; these are the thin read-only HTTP routes that
-expose them. Source is exclusively ``gruvax.v_collection`` (Pitfall 5).
+expose them. Source is exclusively ``gruvax.profile_collection`` (Pitfall 5).
 
 Endpoints:
   - ``GET /admin/labels``:

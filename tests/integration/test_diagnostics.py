@@ -203,18 +203,22 @@ async def test_unauthenticated_reset(unauth_client) -> None:  # type: ignore[no-
 async def test_reset_stats(diag_client, db_pool) -> None:  # type: ignore[no-untyped-def]
     """Seed search counts → GET (non-empty top_searched) → POST reset → GET (empty).
 
-    Uses a real v_collection release_id to ensure the JOIN in get_top_searched
-    returns a match. Falls back to skipping if v_collection is empty (no seed data).
+    Uses a real profile_collection release_id to ensure the JOIN in
+    get_top_searched returns a match. Falls back to skipping if the
+    profile_collection is empty (no seed data).
     """
     ac, _app = diag_client
 
-    # Find a release_id that exists in v_collection (for the JOIN to work)
+    # Find a release_id that exists in profile_collection (for the JOIN to work)
     async with db_pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute("SELECT release_id FROM gruvax.v_collection LIMIT 1")
+        await cur.execute(
+            "SELECT release_id FROM gruvax.profile_collection "
+            "WHERE profile_id = '00000000-0000-0000-0000-000000000001'::uuid LIMIT 1"
+        )
         row = await cur.fetchone()
 
     if row is None:
-        pytest.skip("v_collection is empty — no seed data available for reset test")
+        pytest.skip("profile_collection is empty — no seed data available for reset test")
 
     seed_release_id: int = int(row[0])
 

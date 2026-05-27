@@ -23,7 +23,7 @@ D-13 also requires:
   - app.state.discogsography_view_ok is NOT assigned anywhere in app.py (legacy
     attribute removed — Test 5 of Task 2).
   - Lifespan startup probe targets `gruvax.profile_collection` rather than
-    `gruvax.v_collection` (verified via lifespan startup log line + Test 1/2 of
+    the dropped v1 view (verified via lifespan startup log line + Test 1/2 of
     Task 2 — but those run against the live DB which doesn't exist in CI
     integration without a Postgres service, so we test via probe-success +
     probe-failure-by-attribute-flip).
