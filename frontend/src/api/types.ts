@@ -4,7 +4,29 @@
  * GET /api/search?q=&limit= → SearchResponse
  * GET /api/locate?release_id= → LocateResult
  * GET /api/units → UnitsResponse
+ * GET /api/health → HealthResponse
  */
+
+/** Response from GET /api/health.
+ *
+ * P1 / D-13: ``discogsography_api_check`` (renamed from the v1 legacy field;
+ * see CONTEXT D-13) widens the union to ``'ok' | 'failed' | 'stale'`` — derived
+ * from cached default-profile sync state on the backend (no live probe).
+ *
+ * State mapping (per CONTEXT.md D-13 + UI-SPEC):
+ *   ok      — last_sync_status='ok' AND app_token_revoked=FALSE (or in_progress)
+ *   failed  — last_sync_status='failed' OR app_token_revoked=TRUE
+ *   stale   — last_sync_at IS NULL OR now() - last_sync_at > 24h
+ */
+export interface HealthResponse {
+  status: 'ok' | 'degraded'
+  db: 'ok' | 'error'
+  discogsography_api_check: 'ok' | 'failed' | 'stale'
+  mqtt: 'ok' | 'degraded'
+  version: string
+  started_at: string             // ISO-8601 UTC
+  sync_age_seconds: number | null
+}
 
 export interface SearchResult {
   release_id: number
