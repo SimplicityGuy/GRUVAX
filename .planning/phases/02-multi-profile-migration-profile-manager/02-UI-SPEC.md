@@ -75,7 +75,14 @@ Source: `design/gruvax-design-language.md` + `design/gruvax-design-tokens.css`. 
 > The 3-font system (Barlow Condensed / Space Grotesk / DM Mono) with its per-font size scale and
 > Space Grotesk's 400/500/700 weights is a locked project convention per `CLAUDE.md` — not a new
 > declaration. This section maps the existing tokens to Phase 2 surfaces; it does not introduce new
-> type primitives.
+> type primitives. Every token reference cites the token's actual px value from the token file.
+>
+> **Note on small labels:** the smallest Barlow Condensed display/label token is
+> `--gruvax-text-display-sm: 16px` ("Labels · tags" in the token file). The design-language doc
+> describes a "Tag / badge" role at 13px, but **no 13px token exists** — so status badges and the
+> compact corner-button label use `--gruvax-text-display-sm` at its real **16px** value (keeping
+> them in the Barlow Condensed family rather than dropping to the 11px Space Grotesk
+> `--gruvax-text-label` micro-label token, which would change the font).
 
 ### Barlow Condensed — Display & Labels
 
@@ -85,11 +92,11 @@ Used exclusively for headings, badge text, ALL CAPS labels. Never for body copy.
 |------|---------|------|--------|----------|-----------|---------------|
 | Profile name on card (heading) | `--gruvax-text-display-md` | 24px | 900 | `--gruvax-tracking-display` (0.02em) | uppercase | Profile card title in picker + admin list |
 | Drawer heading | `--gruvax-text-display-lg` | 36px | 900 | `--gruvax-tracking-display` (0.02em) | uppercase | "CONNECT PAT", "RENAME PROFILE", "SYNC NOW", "DELETE PROFILE" |
-| Badge / status pill | `--gruvax-text-display-sm` (13px) | 13px | 700 | `--gruvax-tracking-label` (0.14em) | uppercase | Status badge text: "CONNECTED", "PENDING", "RE-AUTH REQUIRED" |
+| Badge / status pill | `--gruvax-text-display-sm` | 16px | 700 | `--gruvax-tracking-label` (0.14em) | uppercase | Status badge text: "CONNECTED", "PENDING", "RE-AUTH REQUIRED" |
 | Page section heading | `--gruvax-text-display-lg` | 36px | 900 | `--gruvax-tracking-display` | uppercase | "PROFILES" admin page heading |
 | Picker screen heading | `--gruvax-text-display-xl` | 48px | 900 | `--gruvax-tracking-display` | uppercase | "CHOOSE A COLLECTION" on `/select` |
 | Onboarding heading | `--gruvax-text-display-xl` | 48px | 900 | `--gruvax-tracking-display` | uppercase | "NO COLLECTIONS YET" on 0-profile screen |
-| Corner button label | `--gruvax-text-display-sm` (13px) | 13px | 700 | `--gruvax-tracking-label` | uppercase | "SWITCH" label inside the kiosk corner button |
+| Corner button label | `--gruvax-text-display-sm` | 16px | 700 | `--gruvax-tracking-label` | uppercase | "SWITCH" label inside the kiosk corner button |
 
 ### Space Grotesk — UI Body
 
@@ -465,7 +472,7 @@ Shown when `GET /api/session` returns `profile_count: 0`. Same route as the pick
 |---------|-------|-------|
 | Background | `--gruvax-blue` | #0051A2 |
 | Text | `--gruvax-white` | #FFFFFF |
-| Font | Barlow Condensed 700 13px `--gruvax-tracking-label` | "SWITCH" label |
+| Font | Barlow Condensed 700 16px (`--gruvax-text-display-sm`) `--gruvax-tracking-label` | "SWITCH" label |
 | Icon | Lucide `RefreshCw` 14px, `--gruvax-white` | Left of label |
 | Border-radius | `--gruvax-radius-pill` | 9999px (pill shape) |
 | Padding | `--gruvax-space-2` `--gruvax-space-3` | 8px 12px |
