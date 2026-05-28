@@ -104,7 +104,7 @@ Lift the single-profile walking skeleton (P1) into a true multi-profile deployme
 - `src/gruvax/db/queries.py` — search/locate/staleness queries (single default UUID in P1) parameterize over `profile_id`.
 - `frontend/src/App.tsx` — add `/select` route; `KioskView` assumes a bound profile + gets the Switch-profile corner button.
 - `frontend/src/routes/admin/` — new profile-manager screens; reuse `RecordPickerSheet`/`SegmentStrip` drawer patterns, `NumericKeypad`, `PinOverlay`, `AdminShell` nav.
-- `migrations/versions/` — new migration tightening `profile_id` to NOT NULL across 7 tables + composite uniqueness; round-trip required.
+- `migrations/versions/` — new migration (0010) tightening `profile_id` to NOT NULL across the **5** per-profile data tables (`cube_boundaries`, `settings`, `record_stats`, `segment_overrides`, `boundary_history`) + composite uniqueness; `admin_sessions` + `idempotency_keys` stay nullable; round-trip required.
 
 </canonical_refs>
 

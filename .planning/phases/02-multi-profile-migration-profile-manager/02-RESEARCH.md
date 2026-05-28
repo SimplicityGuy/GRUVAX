@@ -720,27 +720,31 @@ const { data: profile } = useQuery({
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **`admin_sessions.profile_id` + `idempotency_keys.profile_id` — nullable or NOT NULL?**
    - What we know: these tables have their own PKs; `profile_id` is a loose FK reference
    - What's unclear: does any P2 code path REQUIRE `profile_id NOT NULL` on these tables?
    - Recommendation: leave nullable in 0010; plan can tighten in a later phase if needed
+   - **RESOLVED (2026-05-28, Plan 02-01):** stay nullable — owner decision this session (5 per-profile data tables go NOT NULL; `admin_sessions` + `idempotency_keys` are global/infra and keep nullable `profile_id`).
 
 2. **Browse-binding cookie: session (expires on browser close) or persistent (e.g. 7-day)?**
    - What we know: kiosk Chromium reopens and re-hits the server; session cookies may not survive kiosk restart
    - What's unclear: does the kiosk Chromium retain session cookies across a kiosk restart?
    - Recommendation: use persistent 7-day `max_age`; kiosk gets auto-bound without hitting `/select` on each restart. Mobile browser users can still unbind via the switch-profile flow.
+   - **RESOLVED (2026-05-28, Plan 02-04):** persistent 7-day `max_age`, HttpOnly, SameSite=Lax, independent of the admin PIN session (D2-10).
 
 3. **Backward compatibility for `app.state.event_bus` (singular) during the wave where it's replaced**
    - What we know: `test_sse.py` uses the live server and references `GET /api/events` (not `/{profile_id}`)
    - What's unclear: does the P2 wave introducing the registry need a migration shim, or does the test suite update happen in the same plan?
    - Recommendation: update `test_sse.py` in the same plan that introduces the registry; do not maintain a shim.
+   - **RESOLVED (2026-05-28, Plan 02-03):** no shim — `test_sse.py` is updated to `/api/events/{profile_id}` in the same plan that introduces the per-profile bus registry.
 
 4. **`settings` seeded rows and composite PK migration**
    - What we know: migration 0004 seeds 3 rows into `gruvax.settings` (cube.nominal_capacity, session.idle_ttl_seconds, session.hard_cap_seconds) with the default profile_id backfilled by 0009
    - What's unclear: after P2 changes the PK to `(profile_id, key)`, will the seed rows need to be duplicated for each new profile?
    - Recommendation: yes — when a new profile is created via the admin API, seed it with the same default settings values. The profile-creation endpoint must INSERT seed rows into `settings` for the new profile_id.
+   - **RESOLVED (2026-05-28, Plan 02-05):** profile-creation endpoint seeds the 3 default `settings` rows for the new `profile_id`.
 
 ---
 
