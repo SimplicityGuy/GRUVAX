@@ -18,10 +18,10 @@
 
 ### Profiles (PROF)
 
-- [ ] **PROF-01** — `profiles` table with Fernet-encrypted PAT storage, soft-delete via `deleted_at`, partial-unique indexes on `display_name` (case-insensitive) and `discogsography_user_id`
-- [ ] **PROF-02** — Profile manager admin UI (mobile-first, PIN-gated): list profiles with status badges; create / connect-PAT / rotate-PAT / rename / soft-delete; per-profile connection status view (last_sync, PAT health); "Sync now" button per profile
+- [x] **PROF-01** — `profiles` table with Fernet-encrypted PAT storage, soft-delete via `deleted_at`, partial-unique indexes on `display_name` (case-insensitive) and `discogsography_user_id`
+- [x] **PROF-02** — Profile manager admin UI (mobile-first, PIN-gated): list profiles with status badges; create / connect-PAT / rotate-PAT / rename / soft-delete; per-profile connection status view (last_sync, PAT health); "Sync now" button per profile
 - [x] **PROF-03** — v1 data backfill to a deterministic "default" profile during `profile_id` migration (id `00000000-0000-0000-0000-000000000001`, display_name `'Default'`, owner-renameable post-migration)
-- [ ] **PROF-04** — `profile_id NOT NULL` migration tightening the 5 per-profile data tables that received `profile_id` in migration 0009 (`cube_boundaries`, `settings`, `record_stats`, `segment_overrides`, `boundary_history`) with composite-uniqueness updates and clean Alembic upgrade↔downgrade round-trip (v1.0 CI invariant). `admin_sessions` + `idempotency_keys` keep nullable `profile_id` (global/infra, not per-profile data). *(Note: the original spec named `segments`/`change_log`/`change_sets`/`ambient_baseline` — those table names never shipped; migration 0009's fan-out is authoritative.)*
+- [x] **PROF-04** — `profile_id NOT NULL` migration tightening the 5 per-profile data tables that received `profile_id` in migration 0009 (`cube_boundaries`, `settings`, `record_stats`, `segment_overrides`, `boundary_history`) with composite-uniqueness updates and clean Alembic upgrade↔downgrade round-trip (v1.0 CI invariant). `admin_sessions` + `idempotency_keys` keep nullable `profile_id` (global/infra, not per-profile data). *(Note: the original spec named `segments`/`change_log`/`change_sets`/`ambient_baseline` — those table names never shipped; migration 0009's fan-out is authoritative.)*
 
 ### API client + cache (API)
 
