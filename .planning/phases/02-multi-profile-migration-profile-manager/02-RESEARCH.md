@@ -53,7 +53,7 @@
 |----|-------------|------------------|
 | PROF-01 | `profiles` table with Fernet-encrypted PAT storage, soft-delete via `deleted_at`, partial-unique indexes on `display_name` (case-insensitive) and `discogsography_user_id` | Already shipped in migration 0009. P2 adds admin CRUD + connect/rotate/rename/soft-delete endpoints + UI. |
 | PROF-02 | Profile manager admin UI: list + status badges; create / connect-PAT / rotate-PAT / rename / soft-delete; "Sync now" button per profile | 12 new React components per UI-SPEC; reuse `RecordPickerSheet` CSS; 202+poll pattern for sync. |
-| PROF-04 | `profile_id NOT NULL` migration across 7 v1 tables with composite-uniqueness updates and clean Alembic round-trip | Migration 0010: `op.alter_column(nullable=False)` on actual 7 tables (see §Critical Migration Discovery); PK changes required for `settings`, `record_stats`, `cube_boundaries`, `segment_overrides`. |
+| PROF-04 | `profile_id NOT NULL` migration on the 5 per-profile data tables with composite-uniqueness updates and clean Alembic round-trip | Migration 0010: raw `op.execute("... SET NOT NULL")` on the 5 data tables (`cube_boundaries`, `settings`, `record_stats`, `segment_overrides`, `boundary_history`); `admin_sessions` + `idempotency_keys` stay nullable (see §Critical Migration Discovery); PK changes required for `settings`, `record_stats`, `cube_boundaries`, `segment_overrides`. |
 | API-02 | Positioning / search / locate off local cache; p95 `/api/search` ≤ 200 ms and `/api/locate` ≤ 50 ms SLOs preserved with 2+ profiles cached | Per-profile registry (D2-01); benchmark gate parameterized over `profile_id`; `DEFAULT_PROFILE_UUID` fallback removed from `queries.py`. |
 | SYN-02 | Staleness redefinition per-profile: `now() - profiles.last_sync_at`; banner per-kiosk-view per-profile | Generalize `_refresh_default_profile_state` background task to all profiles; `health.py` reports per-profile. |
 </phase_requirements>
@@ -233,7 +233,7 @@ frontend/src/
 │       └── AdminShell.tsx             # add PROFILES nav tab
 
 migrations/versions/
-└── 0010_profile_id_not_null.py       # NEW: NOT NULL + PK changes across 7 tables
+└── 0010_profile_id_not_null.py       # NEW: NOT NULL on 5 data tables + PK changes (2 infra stay nullable)
 ```
 
 ### Pattern 1: Per-profile Registry on app.state
@@ -293,7 +293,7 @@ def get_boundary_cache_for_profile(
 ### Pattern 3: NOT NULL Migration (migration 0010)
 
 **What:** Three-step pattern per table: (1) backfill verification, (2) PK reconstruction where needed, (3) SET NOT NULL.
-**When to use:** All 7 tables from migration 0009.
+**When to use:** The 5 per-profile data tables from migration 0009 (`cube_boundaries`, `settings`, `record_stats`, `segment_overrides`, `boundary_history`). `admin_sessions` + `idempotency_keys` stay nullable — do NOT tighten them.
 
 ```python
 # migration 0010 — per-table pattern (no f-string SQL)
@@ -329,12 +329,11 @@ _SEGMENT_OVERRIDES_PK = (
     "ALTER TABLE gruvax.segment_overrides ADD PRIMARY KEY (profile_id, unit_id, row, col, label)",
 )
 
-# Step 3: SET NOT NULL for ALL 7 tables (safe since backfill completed in 0009)
+# Step 3: SET NOT NULL for the 5 per-profile data tables (safe since backfill completed in 0009).
+# admin_sessions + idempotency_keys are global/infra — they KEEP nullable profile_id.
 _SET_NOT_NULL = (
-    "ALTER TABLE gruvax.admin_sessions ALTER COLUMN profile_id SET NOT NULL",
     "ALTER TABLE gruvax.boundary_history ALTER COLUMN profile_id SET NOT NULL",
     "ALTER TABLE gruvax.cube_boundaries ALTER COLUMN profile_id SET NOT NULL",
-    "ALTER TABLE gruvax.idempotency_keys ALTER COLUMN profile_id SET NOT NULL",
     "ALTER TABLE gruvax.record_stats ALTER COLUMN profile_id SET NOT NULL",
     "ALTER TABLE gruvax.segment_overrides ALTER COLUMN profile_id SET NOT NULL",
     "ALTER TABLE gruvax.settings ALTER COLUMN profile_id SET NOT NULL",
@@ -732,7 +731,7 @@ const { data: profile } = useQuery({
    - What we know: kiosk Chromium reopens and re-hits the server; session cookies may not survive kiosk restart
    - What's unclear: does the kiosk Chromium retain session cookies across a kiosk restart?
    - Recommendation: use persistent 7-day `max_age`; kiosk gets auto-bound without hitting `/select` on each restart. Mobile browser users can still unbind via the switch-profile flow.
-   - **RESOLVED (2026-05-28, Plan 02-04):** persistent 7-day `max_age`, HttpOnly, SameSite=Lax, independent of the admin PIN session (D2-10).
+   - **RESOLVED (2026-05-28, Plan 02-04):** persistent 7-day `max_age`, `HttpOnly=False`, `SameSite=Strict`, independent of the admin PIN session (D2-10).
 
 3. **Backward compatibility for `app.state.event_bus` (singular) during the wave where it's replaced**
    - What we know: `test_sse.py` uses the live server and references `GET /api/events` (not `/{profile_id}`)
