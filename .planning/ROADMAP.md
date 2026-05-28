@@ -119,7 +119,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 02-02-PLAN.md — Per-profile cache/bus/state registries on app.state + per-profile resolution deps + per-profile sync cache refresh (API-02, SYN-02, D2-01..06)
+- [x] 02-02-PLAN.md — Per-profile cache/bus/state registries on app.state + per-profile resolution deps + per-profile sync cache refresh (API-02, SYN-02, D2-01..06)
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
@@ -174,7 +174,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
 | 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
-| 2. Real Position Estimation | v1.0 | 2/8 | In Progress|  |
+| 2. Real Position Estimation | v1.0 | 3/8 | In Progress|  |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
