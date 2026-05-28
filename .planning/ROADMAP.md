@@ -111,7 +111,17 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
   4. Per-profile SSE channel `/api/events/{profile_id}` invalidates only the affected profile's `BoundaryCache` / `SegmentCache` / `CollectionSnapshot` on `boundary_changed` and `collection_changed` events; cross-profile data leakage is impossible by construction.
   5. p95 `/api/search` ≤ 200 ms and `/api/locate` ≤ 50 ms SLOs hold with 2+ profiles cached in memory (verified via the v1.0 Phase 8 CI benchmark gate, parameterized over profile_id).
 
-**Plans**: TBD
+**Plans**: 8 plans (6 waves; W0: 02-00 | W1: 02-01 | W2: 02-02 | W3 parallel: 02-03 + 02-04 + 02-05 | W4: 02-06 | W5: 02-07)
+
+- [ ] 02-00-PLAN.md — Wave 0 test scaffolding: 6 RED test files + `second_profile` fixture (PROF-04/PROF-02/API-02/SYN-02 baselines)
+- [ ] 02-01-PLAN.md — Migration 0010: `profile_id NOT NULL` on 5 data tables + 4 composite PKs (2 infra tables stay nullable) + clean round-trip (PROF-04)
+- [ ] 02-02-PLAN.md — Per-profile cache/bus/state registries on app.state + per-profile resolution deps + per-profile sync cache refresh (API-02, SYN-02, D2-01..06)
+- [ ] 02-03-PLAN.md — Per-profile SSE `/api/events/{profile_id}` + profile-scoped search/locate/illuminate + re-parameterized SLO gate (API-02, SYN-02, D2-04)
+- [ ] 02-04-PLAN.md — Browse-binding session: `GET /api/session` bootstrap + auto-bind + bind/unbind + independent cookie (PROF-02, SYN-02, D2-07/08/10)
+- [ ] 02-05-PLAN.md — Profile CRUD + connect/rotate-PAT + 202+poll sync conversion + soft-delete registry eviction (PROF-01, PROF-02, D2-12/13)
+- [ ] 02-06-PLAN.md — Browser profile UX: `/select` picker + onboarding + Switch-profile button + empty-collection state + KioskView per-profile wiring (PROF-02, SYN-02, D2-03/07/08/09)
+- [ ] 02-07-PLAN.md — Profile-manager admin UI: PROFILES tab + list + status badges + bottom-sheet drawer (connect/rotate/rename/sync/delete) + 202 poll + toast (PROF-02, PROF-01, D2-11)
+
 **UI hint**: yes
 
 ### Phase 3: Devices + pairing
@@ -161,7 +171,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 | 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 0/6 | Planned (4 waves) | — |
-| 2. Multi-profile migration + profile manager | v2.0 | 0/0 | Not started | — |
+| 2. Multi-profile migration + profile manager | v2.0 | 0/8 | Planned (6 waves) | — |
 | 3. Devices + pairing | v2.0 | 0/0 | Not started | — |
 | 4. Sync polish + diagnostics | v2.0 | 0/0 | Not started | — |
 | 999.1. Shelf-overview mini-Kallax fill/occupancy | Backlog | 0/0 | Captured | — |
