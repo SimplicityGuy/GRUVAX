@@ -72,7 +72,11 @@ class BoundaryCache:
         self._rows: list[BoundaryRow] = []
         self._overrides: dict[tuple[int, int, int, str], float] = {}
 
-    async def load(self, pool: AsyncConnectionPool[AsyncConnection[object]]) -> None:
+    async def load(
+        self,
+        pool: AsyncConnectionPool[AsyncConnection[object]],
+        profile_id: str = "00000000-0000-0000-0000-000000000001",
+    ) -> None:
         """Load all rows from ``gruvax.cube_boundaries`` and ``gruvax.segment_overrides``.
 
         Called once during FastAPI lifespan startup. Uses the async psycopg pool
@@ -81,12 +85,17 @@ class BoundaryCache:
 
         Args:
             pool: An open ``psycopg_pool.AsyncConnectionPool`` instance.
+            profile_id: UUID string of the profile to scope the load to
+                (P1: default UUID; P2: per-session profile_id from registry).
         """
         # First SELECT: cut-point columns only (last_* dropped in Phase 5 migration)
         async with pool.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 "SELECT unit_id, row, col, first_label, first_catalog, is_empty"
-                " FROM gruvax.cube_boundaries ORDER BY unit_id, row, col"
+                " FROM gruvax.cube_boundaries"
+                " WHERE profile_id = %s::uuid"
+                " ORDER BY unit_id, row, col",
+                (profile_id,),
             )
             rows_raw = await cur.fetchall()
             self._rows = [BoundaryRow(*row) for row in rows_raw]  # type: ignore[misc]
@@ -94,7 +103,10 @@ class BoundaryCache:
         # Second SELECT: segment overrides (Phase 5 addition — SEG-04)
         async with pool.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT unit_id, row, col, label, fraction FROM gruvax.segment_overrides"
+                "SELECT unit_id, row, col, label, fraction"
+                " FROM gruvax.segment_overrides"
+                " WHERE profile_id = %s::uuid",
+                (profile_id,),
             )
             overrides_raw = await cur.fetchall()
             # Cast each row to a typed tuple so mypy --strict can verify index access.

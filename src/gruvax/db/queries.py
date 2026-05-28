@@ -370,6 +370,7 @@ LIMIT %s
 
 async def load_settings_cache(
     pool: AsyncConnectionPool,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> dict[str, Any]:
     """Load all rows from ``gruvax.settings`` into a key→value dict.
 
@@ -383,20 +384,22 @@ async def load_settings_cache(
 
     All SQL uses ``%s`` placeholders — no f-string interpolation (T-01-07).
 
-    Note: settings are global (not per-profile) in P1; the table has a
-    nullable ``profile_id`` column added in migration 0009 for P2 readiness,
-    but this loader returns every row regardless of profile.
+    Note: settings have a nullable ``profile_id`` column added in migration 0009.
+    In P1 all rows belong to the default profile; in P2 each profile gets its own
+    settings rows.  This loader scopes to the given profile_id.
 
     Args:
         pool: Open psycopg ``AsyncConnectionPool``.
+        profile_id: UUID string of the profile to scope the load to
+            (P1: default UUID; P2: per-session profile_id from registry).
 
     Returns:
         Dict mapping ``key`` (str) → decoded JSONB ``value`` for every row in
-        ``gruvax.settings``.  Returns ``{}`` if the table is empty.
+        ``gruvax.settings`` for the given profile.  Returns ``{}`` if the table is empty.
     """
-    sql = "SELECT key, value FROM gruvax.settings"
+    sql = "SELECT key, value FROM gruvax.settings WHERE profile_id = %s::uuid"
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql)
+        await cur.execute(sql, (profile_id,))
         rows = await cur.fetchall()
     return {str(row[0]): row[1] for row in rows}
 
