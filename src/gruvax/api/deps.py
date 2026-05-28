@@ -118,6 +118,11 @@ def get_event_bus(request: Request) -> Any:
 
     The SSE endpoint depends ONLY on this — never on ``get_pool`` (D-09, Pitfall 10).
 
+    .. deprecated::
+        P2 (Plan 02-02) replaces this with ``get_bus_for_profile``.
+        Plan 02-03 will update ``api/events.py`` to use the per-profile dep.
+        This dep will return 503 once ``app.state.event_bus`` is removed.
+
     Usage::
 
         @router.get("/api/events")
@@ -130,6 +135,176 @@ def get_event_bus(request: Request) -> Any:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Event bus not ready",
+        )
+    return bus
+
+
+# ── Per-profile resolution deps (D2-04) ──────────────────────────────────────
+#
+# Each dep validates the path profile_id against the browse-binding session
+# cookie (gruvax_browse_binding) before resolving the registry entry.
+# Error taxonomy (T-02-02-01 / D2-04):
+#   400 session_unbound  — no browse-binding cookie (profile picker not visited)
+#   403 profile_mismatch — cookie != path profile_id (spoofing attempt)
+#   503 registry missing — registry attr not on app.state (races lifespan)
+#   404 profile_not_found — profile_id not in registry (deleted / unknown)
+#
+# Cookie name reference: gruvax_browse_binding — Plan 02-04 will promote this
+# to a constant in sessions.py (BROWSE_BINDING_COOKIE). For now it lives here
+# as a literal; TODO(02-04): replace with BROWSE_BINDING_COOKIE from sessions.py.
+_BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
+
+
+def get_boundary_cache_for_profile(
+    profile_id: str,
+    request: Request,
+) -> BoundaryCache:
+    """Resolve boundary cache for the session-validated profile_id (D2-04).
+
+    Validates the path profile_id against the browse-binding cookie; never
+    trusts the path param as authoritative (T-02-02-01).
+
+    Raises:
+        HTTP 400 (session_unbound)   — no browse-binding cookie present.
+        HTTP 403 (profile_mismatch)  — cookie != path profile_id.
+        HTTP 503 (registry not ready) — registry attr missing on app.state.
+        HTTP 404 (profile_not_found) — profile_id key absent from registry.
+    """
+    bound = request.cookies.get(_BROWSE_BINDING_COOKIE)
+    if not bound:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"type": "session_unbound"},
+        )
+    if bound != profile_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"type": "profile_mismatch"},
+        )
+    registry: dict[str, BoundaryCache] | None = getattr(
+        request.app.state, "boundary_cache_registry", None
+    )
+    if registry is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Cache registry not ready",
+        )
+    cache: BoundaryCache | None = registry.get(str(profile_id))
+    if cache is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "profile_not_found"},
+        )
+    return cache
+
+
+def get_snapshot_for_profile(
+    profile_id: str,
+    request: Request,
+) -> CollectionSnapshot:
+    """Resolve collection snapshot for the session-validated profile_id (D2-04).
+
+    Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
+    """
+    bound = request.cookies.get(_BROWSE_BINDING_COOKIE)
+    if not bound:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"type": "session_unbound"},
+        )
+    if bound != profile_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"type": "profile_mismatch"},
+        )
+    registry: dict[str, CollectionSnapshot] | None = getattr(
+        request.app.state, "snapshot_registry", None
+    )
+    if registry is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Snapshot registry not ready",
+        )
+    snapshot: CollectionSnapshot | None = registry.get(str(profile_id))
+    if snapshot is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "profile_not_found"},
+        )
+    return snapshot
+
+
+def get_segment_cache_for_profile(
+    profile_id: str,
+    request: Request,
+) -> SegmentCache:
+    """Resolve segment cache for the session-validated profile_id (D2-04).
+
+    Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
+    """
+    bound = request.cookies.get(_BROWSE_BINDING_COOKIE)
+    if not bound:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"type": "session_unbound"},
+        )
+    if bound != profile_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"type": "profile_mismatch"},
+        )
+    registry: dict[str, SegmentCache] | None = getattr(
+        request.app.state, "segment_cache_registry", None
+    )
+    if registry is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Segment cache registry not ready",
+        )
+    seg: SegmentCache | None = registry.get(str(profile_id))
+    if seg is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "profile_not_found"},
+        )
+    return seg
+
+
+def get_bus_for_profile(
+    profile_id: str,
+    request: Request,
+) -> Any:
+    """Resolve EventBus for the session-validated profile_id (D2-04).
+
+    Reads ONLY app.state — never get_pool (Pitfall 10 preserved: the SSE
+    endpoint must not hold a DB connection for the lifetime of the stream).
+
+    Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
+    """
+    bound = request.cookies.get(_BROWSE_BINDING_COOKIE)
+    if not bound:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"type": "session_unbound"},
+        )
+    if bound != profile_id:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"type": "profile_mismatch"},
+        )
+    registry: dict[str, EventBus] | None = getattr(
+        request.app.state, "event_bus_registry", None
+    )
+    if registry is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Event bus registry not ready",
+        )
+    bus: EventBus | None = registry.get(str(profile_id))
+    if bus is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "profile_not_found"},
         )
     return bus
 
