@@ -129,17 +129,27 @@ async def admin_session(client: Any) -> dict[str, Any]:  # type: ignore[no-untyp
     # passlib's Argon2 verify is still fast enough at default params for a few tests.
     test_pin_hash = hash_pin("0000")
 
-    # Upsert the test PIN hash into gruvax.settings
-    pool = client.app.state.db_pool  # type: ignore[attr-defined]
-    async with pool.connection() as conn:
-        await conn.execute(
-            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-            " VALUES ('auth.pin_hash', %s, 'Test PIN hash seeded by conftest', now())"
-            " ON CONFLICT (key) DO UPDATE"
-            "  SET value = EXCLUDED.value, updated_at = now()",
-            (f'"{test_pin_hash}"',),
-        )
-        await conn.commit()
+    # Upsert the test PIN hash into gruvax.settings.
+    # After migration 0011, settings PK is (key) and profile_id defaults to
+    # the DEFAULT_PROFILE_UUID — so the plain ON CONFLICT (key) form is correct.
+    #
+    # Some test modules (e.g. test_profile_manager_api) provide a client fixture
+    # that already seeded the PIN inside their own fixture and wraps the inner
+    # app with LifespanManager without exposing client.app directly. In that case,
+    # skip the re-seed here (the PIN is already in the DB from the client fixture).
+    pool = getattr(getattr(client, "app", None), "state", None)
+    if pool is not None:
+        pool = getattr(pool, "db_pool", None)
+    if pool is not None:
+        async with pool.connection() as conn:
+            await conn.execute(
+                "INSERT INTO gruvax.settings (key, value, description, updated_at)"
+                " VALUES ('auth.pin_hash', %s, 'Test PIN hash seeded by conftest', now())"
+                " ON CONFLICT (key) DO UPDATE"
+                "  SET value = EXCLUDED.value, updated_at = now()",
+                (f'"{test_pin_hash}"',),
+            )
+            await conn.commit()
 
     # Log in with the test PIN
     res = await client.post("/api/admin/login", json={"pin": "0000"})
