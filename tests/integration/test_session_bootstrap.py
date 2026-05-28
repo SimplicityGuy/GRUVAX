@@ -70,18 +70,34 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
         pool = app.state.db_pool
         async with pool.connection() as conn:
             await conn.execute(
-                "INSERT INTO gruvax.settings"
-                "  (profile_id, key, value, description, updated_at)"
-                " VALUES"
-                "  ('00000000-0000-0000-0000-000000000001'::uuid,"
-                "   'auth.pin_hash', %s::jsonb,"
+                "INSERT INTO gruvax.settings (key, value, description, updated_at)"
+                " VALUES ('auth.pin_hash', %s::jsonb,"
                 "   'Test PIN seeded by test_session_bootstrap', now())"
-                " ON CONFLICT (profile_id, key) DO UPDATE"
+                " ON CONFLICT (key) DO UPDATE"
                 "  SET value = EXCLUDED.value, updated_at = now()",
                 (f'"{test_hash}"',),
             )
             await conn.commit()
         yield ac
+
+
+@pytest_asyncio.fixture(scope="module")
+async def admin_session(client, db_pool):  # type: ignore[no-untyped-def]
+    """Module-local override of the conftest admin_session fixture.
+
+    The conftest version accesses ``client.app.state.db_pool``, which
+    requires the client to expose ``.app``.  The session-bootstrap test
+    module uses a standard ``httpx.AsyncClient`` (no ``.app`` attribute),
+    so we override here using ``db_pool`` directly — the PIN hash is
+    already seeded by the ``client`` fixture above.
+    """
+    # PIN hash is already seeded by the client fixture above; just log in.
+    res = await client.post("/api/admin/login", json={"pin": "0000"})
+    assert res.status_code == 200, (
+        f"admin_session: login failed {res.status_code}: {res.text}"
+    )
+    csrf = res.cookies.get("gruvax_csrf") or res.json().get("csrf_token")
+    return {"cookies": res.cookies, "csrf_token": csrf}
 
 
 # ── tests ─────────────────────────────────────────────────────────────────────
