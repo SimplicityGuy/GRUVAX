@@ -8,6 +8,7 @@ import { CubesGrid } from './routes/admin/CubesGrid'
 import { Diagnostics } from './routes/admin/Diagnostics'
 import { HistoryView } from './routes/admin/HistoryView'
 import Import from './routes/admin/Import'
+import { ProfilesManager } from './routes/admin/ProfilesManager'
 import { Settings } from './routes/admin/Settings'
 import { ShelfBinList } from './routes/admin/ShelfBinList'
 import { Wizard } from './routes/admin/Wizard'
@@ -33,6 +34,7 @@ const queryClient = new QueryClient({
  *   /select                     → ProfilePicker (browse-binding — no auth, D2-07)
  *   /admin                      → AdminShell (PIN gate on all /admin/* routes)
  *   /admin/settings             → Settings
+ *   /admin/profiles             → ProfilesManager (profile list + status badges + drawer)
  *   /admin/cubes                → CubesGrid (list of shelves — SHELF A, SHELF B, …)
  *   /admin/cubes/:unit          → ShelfBinList (bin-card list for one shelf, sketch 002)
  *   /admin/cubes/:unit/:row/:col → BinWidthEditor (focused single-bin width editor, sketch 001)
@@ -82,6 +84,7 @@ function AppInner() {
       <Route path="/admin" element={<AdminShell />}>
         <Route index element={<Settings />} />
         <Route path="settings" element={<Settings />} />
+        <Route path="profiles" element={<ProfilesManager />} />
         <Route path="cubes" element={<CubesGrid />} />
         <Route path="cubes/:unit" element={<ShelfBinList />} />
         <Route path="cubes/:unit/:row/:col" element={<BinWidthEditor />} />

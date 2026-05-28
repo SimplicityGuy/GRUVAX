@@ -4861,3 +4861,585 @@
   background: var(--gruvax-blue-faint);
   color: var(--gruvax-blue);
 }
+
+/* ── Phase 2: ProfilesManager ─────────────────────────────────────────────── */
+
+.profiles-manager {
+  max-width: 600px;
+  margin: 0 auto;
+  padding: var(--gruvax-space-5) var(--gruvax-space-4);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-4);
+}
+
+.profiles-manager-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);
+  font-weight: 900;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0 0 var(--gruvax-space-3);
+}
+
+.profiles-manager-loading,
+.profiles-manager-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  padding: var(--gruvax-space-5);
+}
+
+.profiles-manager-error {
+  color: var(--gruvax-error);
+}
+
+.profiles-empty-state {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-5) 0;
+}
+
+.profiles-empty-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md);
+  font-weight: 900;
+  color: var(--gruvax-text-primary);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.profiles-empty-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+}
+
+.profiles-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.profiles-list-item {
+  margin: 0;
+}
+
+/* ── Phase 2: ProfileCard ─────────────────────────────────────────────────── */
+
+.profile-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+  width: 100%;
+  min-height: 64px;
+  padding: var(--gruvax-space-4);
+  background: var(--gruvax-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: 0;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.profile-card:first-child {
+  border-radius: var(--gruvax-radius-md) var(--gruvax-radius-md) 0 0;
+}
+
+.profiles-list-item:last-child .profile-card {
+  border-radius: 0 0 var(--gruvax-radius-md) var(--gruvax-radius-md);
+}
+
+.profiles-list-item:only-child .profile-card {
+  border-radius: var(--gruvax-radius-md);
+}
+
+/* Adjacent cards: collapse shared border */
+.profiles-list-item + .profiles-list-item .profile-card {
+  border-top: none;
+}
+
+.profile-card--even {
+  background: var(--gruvax-off-white);
+}
+
+.profile-card:hover {
+  background: var(--gruvax-blue-faint);
+}
+
+.profile-card:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: -2px;
+  z-index: 1;
+  position: relative;
+}
+
+.profile-card-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gruvax-space-3);
+}
+
+.profile-card-name {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md);
+  font-weight: 900;
+  color: var(--gruvax-text-primary);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  line-height: var(--gruvax-leading-tight);
+}
+
+.profile-card-meta {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+  line-height: var(--gruvax-leading-normal);
+}
+
+.profile-card-meta-count {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+}
+
+/* ── Phase 2: ProfileStatusBadge ─────────────────────────────────────────── */
+
+.profile-status-badge {
+  /* Inherits .badge pill density from admin.css v1.0 conventions */
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--gruvax-space-2);
+  border-radius: var(--gruvax-radius-pill);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
+/* CONNECTED — color-mix(in srgb, var(--gruvax-success) 12%, transparent)
+   Fallback: rgba(26,122,74,0.12) */
+.profile-status-badge--connected {
+  background: color-mix(in srgb, var(--gruvax-success) 12%, transparent);
+  /* fallback: rgba(26,122,74,0.12) */
+  color: var(--gruvax-success);
+}
+
+/* PENDING — color-mix(in srgb, var(--gruvax-warning) 12%, transparent)
+   Fallback: rgba(230,168,0,0.12) */
+.profile-status-badge--pending {
+  background: color-mix(in srgb, var(--gruvax-warning) 12%, transparent);
+  /* fallback: rgba(230,168,0,0.12) */
+  color: var(--gruvax-warning);
+}
+
+/* SYNCING — --gruvax-blue-faint (token), animated pulse on background */
+.profile-status-badge--syncing {
+  background: var(--gruvax-blue-faint);
+  color: var(--gruvax-blue);
+  animation: profile-badge-pulse 1.5s ease-in-out infinite alternate;
+}
+
+@keyframes profile-badge-pulse {
+  from { opacity: 0.5; }
+  to   { opacity: 1; }
+}
+
+/* RE-AUTH REQUIRED — color-mix(in srgb, var(--gruvax-error) 10%, transparent)
+   Fallback: rgba(192,57,43,0.10) */
+.profile-status-badge--re-auth-required {
+  background: color-mix(in srgb, var(--gruvax-error) 10%, transparent);
+  /* fallback: rgba(192,57,43,0.10) */
+  color: var(--gruvax-error);
+}
+
+/* ── Phase 2: ADD PROFILE row ─────────────────────────────────────────────── */
+
+.profiles-add-row {
+  display: flex;
+  align-items: center;
+  width: 100%;
+  padding: var(--gruvax-space-4);
+  background: transparent;
+  border: 1.5px dashed var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.profiles-add-row:hover {
+  background: var(--gruvax-blue-faint);
+}
+
+.profiles-add-row:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+/* ── Phase 2: ProfileDrawer form fields ────────────────────────────────────── */
+
+.profile-drawer-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+}
+
+.profile-field-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  color: var(--gruvax-text-primary);
+}
+
+.profile-field-input {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  color: var(--gruvax-text-secondary);
+  background: var(--gruvax-white);
+  border: 1.5px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-3);
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.profile-field-input:focus {
+  border-color: var(--gruvax-blue);
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+.profile-field-input::placeholder {
+  color: var(--gruvax-text-faint);
+}
+
+.profile-field-input:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* PAT input row: input + show/hide toggle */
+.profile-pat-input-row {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.profile-pat-input-row .profile-field-input--pat {
+  padding-right: calc(var(--gruvax-space-7) + 2px);
+}
+
+.profile-pat-toggle {
+  position: absolute;
+  right: var(--gruvax-space-3);
+  top: 50%;
+  transform: translateY(-50%);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--gruvax-text-muted);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  touch-action: manipulation;
+}
+
+.profile-pat-toggle:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+  border-radius: var(--gruvax-radius-sm);
+}
+
+.profile-pat-instruction {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+  margin: 0;
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* ── Phase 2: ProfileDrawer buttons ─────────────────────────────────────────── */
+
+/* Primary CTA — yellow background (UI-SPEC: large text exception for contrast) */
+.profile-btn-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gruvax-space-2);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  color: var(--gruvax-blue-darker);
+  background: var(--gruvax-yellow);
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-5);
+  min-height: 48px;
+  width: 100%;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.profile-btn-cta:hover:not(:disabled) {
+  background: var(--gruvax-yellow-dark);
+}
+
+.profile-btn-cta:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.profile-btn-cta:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Primary CTA — blue background (for CREATE PROFILE — standard admin button) */
+.profile-btn-primary {
+  /* Extends editor-btn-primary (blue bg, white text) — already styled in admin.css */
+}
+
+/* Secondary CTA — blue outline */
+.profile-btn-secondary {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: 1.5px solid var(--gruvax-blue);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-5);
+  min-height: 48px;
+  width: 100%;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.profile-btn-secondary:hover:not(:disabled) {
+  background: var(--gruvax-blue-faint);
+}
+
+.profile-btn-secondary:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+/* Tertiary — text only */
+.profile-btn-tertiary {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  color: var(--gruvax-text-secondary);
+  background: transparent;
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-5);
+  min-height: 48px;
+  width: 100%;
+  cursor: pointer;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.profile-btn-tertiary:hover {
+  color: var(--gruvax-text-primary);
+}
+
+.profile-btn-tertiary:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+/* Destructive — error-colored border + text */
+.profile-btn-destructive {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  color: var(--gruvax-error);
+  background: transparent;
+  border: 1.5px solid var(--gruvax-error);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-5);
+  min-height: 48px;
+  width: 100%;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.profile-btn-destructive:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--gruvax-error) 8%, transparent);
+  /* fallback: rgba(192,57,43,0.08) */
+}
+
+.profile-btn-destructive:focus-visible {
+  outline: 2px solid var(--gruvax-error);
+  outline-offset: 2px;
+}
+
+.profile-btn-destructive:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Connecting spinner inside button */
+.profile-btn-spinner {
+  animation: spin 1s linear infinite;
+}
+
+/* ── Phase 2: SyncProgressSection ──────────────────────────────────────────── */
+
+.sync-progress-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-3) 0;
+}
+
+.sync-progress-row {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+}
+
+.sync-progress-spinner {
+  width: 20px;
+  height: 20px;
+  border-radius: var(--gruvax-radius-pill);
+  border: 3px solid var(--gruvax-blue-faint);
+  border-top-color: var(--gruvax-yellow);
+  flex-shrink: 0;
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+.sync-progress-label {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-secondary);
+}
+
+.sync-progress-count {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  color: var(--gruvax-text-secondary);
+  margin: 0;
+}
+
+/* Inline sync success message */
+.profile-sync-success {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-success);
+  margin: 0;
+}
+
+/* Delete confirm inline section */
+.profile-delete-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-3) 0;
+}
+
+.profile-delete-confirm-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md);
+  font-weight: 900;
+  color: var(--gruvax-error);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.profile-delete-confirm-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-secondary);
+  margin: 0;
+  line-height: var(--gruvax-leading-normal);
+}
+
+.profile-delete-item-count {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+}
+
+/* ── Phase 2: SyncToast (in components/SyncToast.tsx) ────────────────────── */
+/* Note: SyncToast is rendered from ProfilesManager, outside admin.css scope,
+   but we add the styles here per UI-SPEC CSS strategy (no per-component files). */
+
+.sync-toast {
+  position: fixed;
+  top: var(--gruvax-space-4);
+  right: var(--gruvax-space-4);
+  z-index: var(--gruvax-z-admin);
+  background: var(--gruvax-success);
+  color: var(--gruvax-white);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 500;
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  border-radius: var(--gruvax-radius-md);
+  box-shadow: var(--gruvax-shadow-md);
+  animation: toast-slide-in var(--gruvax-duration-base) var(--gruvax-ease-decelerate) both;
+  pointer-events: none;
+}
+
+@keyframes toast-slide-in {
+  from {
+    transform: translateX(calc(100% + var(--gruvax-space-4)));
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+.sync-toast--exiting {
+  animation: toast-fade-out var(--gruvax-duration-fast) var(--gruvax-ease-standard) both;
+}
+
+@keyframes toast-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}

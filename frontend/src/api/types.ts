@@ -367,3 +367,42 @@ export interface RevertResponse {
   reverted: RevertedCube[]
   skipped: RevertedCube[]
 }
+
+// ── Phase 2: Profile Manager types (plan 02-07) ──────────────────────────────
+
+/** Status enum for a profile (derived server-side from DB columns). */
+export type ProfileStatus =
+  | 'pending'
+  | 'syncing'
+  | 'connected'
+  | 're-auth-required'
+
+/** A profile from GET /api/admin/profiles or GET /api/admin/profiles/{id}. */
+export interface AdminProfile {
+  id: string                                  // UUID
+  display_name: string
+  last_sync_at: string | null                 // ISO-8601 or null
+  last_sync_status: 'ok' | 'failed' | 'in_progress' | null
+  last_sync_error: string | null
+  last_sync_item_count: number | null
+  app_token_revoked: boolean
+  status: ProfileStatus
+}
+
+/** Response from GET /api/admin/profiles. */
+export type AdminProfilesResponse = AdminProfile[]
+
+/** Payload for POST /api/admin/profiles. */
+export interface CreateProfilePayload {
+  display_name: string
+}
+
+/** Payload for PATCH /api/admin/profiles/{id}. */
+export interface RenameProfilePayload {
+  display_name: string
+}
+
+/** Payload for POST /api/admin/profiles/{id}/connect or /rotate. */
+export interface ConnectPatPayload {
+  pat: string
+}
