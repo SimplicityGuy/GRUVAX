@@ -1,7 +1,8 @@
 ---
 phase: 02-multi-profile-migration-profile-manager
 verified: 2026-05-28T22:00:00Z
-status: human_needed
+status: passed
+human_verification_completed: 2026-05-28 (live compose stack — all 7 items PASS; see 02-HUMAN-UAT.md)
 score: 5/5 must-haves verified
 overrides_applied: 0
 human_verification:

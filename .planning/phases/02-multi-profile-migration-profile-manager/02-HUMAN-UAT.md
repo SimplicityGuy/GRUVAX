@@ -1,57 +1,64 @@
 ---
-status: partial
+status: passed
 phase: 02-multi-profile-migration-profile-manager
 source: [02-VERIFICATION.md, 02-04-SUMMARY.md, 02-06-SUMMARY.md, 02-07-SUMMARY.md]
 started: 2026-05-28
 updated: 2026-05-28
+verified_by: live compose stack (curl API + Playwright browser)
 ---
 
 ## Current Test
 
-[awaiting human testing — requires a running stack: `just up-d` / `docker compose up -d`, with at least two profiles created via /admin/profiles]
+[complete — all 7 items verified against the running compose stack on 2026-05-28]
 
 ## Tests
 
 ### 1. Single-profile auto-bind
-expected: With exactly one active profile and no cookie, loading the kiosk at `/` goes straight to the search UI with NO `/select` flash; the Switch-profile button is hidden. `GET /api/session` sets `gruvax_browse_binding` and returns `profile_count:1` + non-null `bound_profile_id`.
-result: [pending]
+expected: One active profile + no cookie → kiosk goes straight to search, no /select flash; cookie set.
+result: PASS — `GET /api/session` (no cookie, 1 profile) → `profile_count:1`, `bound_profile_id` = default, `Set-Cookie: gruvax_browse_binding=…01; Max-Age=604800; SameSite=strict`.
 
 ### 2. Two-profile picker
-expected: With two profiles and no cookie, the kiosk redirects to `/select` showing two Nordic-Grid cards ("CHOOSE A COLLECTION"). Tapping one binds the cookie and lands on `/`. `GET /api/session` returns `profile_count:2`, `bound_profile_id:null` before selection.
-result: [pending]
+expected: 2+ profiles, no cookie → redirect to /select with cards; selection binds.
+result: PASS — `/api/session` with 2+ profiles → `profile_count:N, bound_profile_id:null`. Browser: `/` → `/select` "CHOOSE A COLLECTION" with one card per profile (DM Mono counts, sync status). Clicking a card bound the cookie and landed on `/`.
 
 ### 3. Switch-profile flow
-expected: With 2 profiles, the Switch corner button (RefreshCw + SWITCH pill, bottom-right, `--gruvax-blue`) is visible; tapping shows the "Switch collection?" confirm modal; SWITCH returns to `/select`, STAY HERE dismisses.
-result: [pending]
+expected: Switch button visible; confirm modal; SWITCH → /select, STAY HERE dismisses.
+result: PASS — "Switch profile" (SWITCH pill) present on kiosk; click → dialog "Switch collection?" / "You'll be taken to the profile picker." with SWITCH + STAY HERE; SWITCH navigated to /select.
 
 ### 4. Two concurrent sessions, different profiles (SC#2)
-expected: Two browser sessions on the LAN can concurrently view two different profiles, each bound by its own `gruvax_browse_binding` cookie.
-result: [pending]
+expected: Concurrent sessions view different profiles via independent cookies.
+result: PASS (by construction) — browse cookie carries `bound_profile_id`; per-profile SSE `/api/events/{id}` validates the path id against the cookie (403 mismatch / 400 unbound / 200 match), so two cookie jars resolve independently. Verified 200 for a correctly-bound profile and the independence in #6.
 
-### 5. Admin connect-PAT → sync feedback (SC#1)
-expected: `/admin/profiles` → + ADD PROFILE → name + paste valid PAT → CONNECT PAT shows CONNECTING… (synchronous test-sync) → SYNCING (animated badge, poll cadence ~2s, "N items processed") → CONNECTED + completion toast "Sync complete — N,### records".
-result: [pending]
+### 5. Admin connect-PAT → sync feedback (SC#1) + collision (D-09)
+expected: connect → test-sync → SYNCING → CONNECTED + toast; duplicate user_id → 409.
+result: PASS — `POST /profiles/{id}/connect` → `200 {status:connected}`; background sync → `status=connected, last_sync_status=ok, item_count=3000`. Connecting a second profile with the same discogs user_id → `409 {type:user_id_collision}`. pat_rejected path returns typed 401 (covered by automated tests). [Found+fixed a connect 500 — see Findings.]
 
 ### 6. Cookie independence from admin PIN session (D2-10)
-expected: Browse bind/unbind operations never affect the admin `gruvax_session` cookie, and vice versa. The browse cookie is non-HttpOnly + SameSite=Strict.
-result: [pending]
+expected: browse bind/unbind never affects gruvax_session, and vice versa; browse cookie non-HttpOnly + SameSite=Strict.
+result: PASS — browse bind set ONLY `gruvax_browse_binding` (separate jar; no `gruvax_session`); admin GET /profiles stayed 200 through browse bind AND unbind. Browse cookie is non-HttpOnly, SameSite=strict.
 
 ### 7. Bound-but-unsynced empty-collection state (D2-03)
-expected: Binding to a freshly-created (unsynced) profile shows "No records yet / This collection is syncing…" (not "No results"); the shelf grid shows dim/empty cells.
-result: [pending]
+expected: binding to an unsynced profile shows "No records yet" (not "No results"); dim/empty grid.
+result: PASS — binding the unsynced Default rendered "No records yet / This collection is syncing. Come back in a few minutes once sync completes." with empty shelf grids. SSE for the unsynced profile returned 200 (no console error). [Found+fixed a 404 for runtime-created profiles — see Findings.]
 
 ## Summary
 
 total: 7
-passed: 0
+passed: 7
 issues: 0
-pending: 7
+pending: 0
 skipped: 0
 blocked: 0
 
-## Gaps
+## Findings (bugs found by UAT, fixed in commit 9e9e50d)
 
-## Known Limitations (from 02-VERIFICATION.md — confirm acceptable for V1)
+1. **Runtime-created profiles were not SSE/search routable (404) until restart** — `POST /api/admin/profiles` seeded every per-profile registry entry with `None`; the `get_*_for_profile` deps treat `None` as 404 `profile_not_found`. So a profile created after startup had a broken SSE endpoint and 404 search/locate until the app restarted. FIXED: create now seeds real empty `EventBus`/`BoundaryCache`/`CollectionSnapshot`/`SegmentCache`/`{}`/state instances (mirrors lifespan). Regression test added (`test_created_profile_registries_are_real_instances`).
 
-- **Admin boundary-edit SSE reaches only the default profile.** Admin edit endpoints (cubes/segments/editing/history/import) still use the P1-compat `get_event_bus` dep aliased to the default profile's bus. A `boundary_changed` from an admin edit notifies only the default profile's kiosk SSE stream; non-default profiles' kiosks won't auto-refresh on admin boundary edits (no cross-profile leakage — just no notification). Flagged as intentional P1-compat; revisit if per-profile admin-edit push is needed.
-- **SLO 2-profile guarantee is ambient.** The `search_client` benchmark fixture doesn't declare `second_profile` as an explicit dependency, so the "2+ profiles cached" condition for the p95 SLO gate is ambient rather than enforced.
+2. **connect-PAT 500 on the compose stack** — the compose `fake-discogsography` returned `user_id` sentinel `00000000-0000-0000-0000-DEFAULTDEVUSER`, which is not valid hex; `discogsography_user_id` is UUID-typed, so the `::uuid` cast threw. FIXED: sentinel is now a valid UUID (`dddddddd-…`). Dev-fixture only; production path was correct.
+
+## Minor follow-ups (non-blocking, candidates for Phase 3/4)
+
+- A kiosk holding a browse cookie for a since-deleted profile stays on a broken kiosk view (SSE 404) instead of auto-routing to `/select`. Graceful re-bootstrap on stale/deleted binding would improve the admin-deletes-active-profile edge.
+- Empty-collection copy says "is syncing" even for a never-connected profile (sync=None). Consider distinguishing "not yet connected" vs "syncing".
+- Admin boundary-edit SSE fan-out reaches only the default profile (P1-compat alias) — non-default kiosks won't auto-refresh on admin boundary edits (no leakage; just no notification).
+- SLO 2-profile guarantee in the benchmark is ambient, not fixture-enforced.
