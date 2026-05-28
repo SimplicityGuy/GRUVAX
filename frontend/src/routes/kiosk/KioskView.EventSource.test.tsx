@@ -38,6 +38,9 @@ vi.mock('../../api/client', async (importOriginal) => {
 
 // Import after vi.mock so we get the mocked version
 import { locateRelease } from '../../api/client'
+import { useSessionStore } from '../../state/sessionStore'
+
+const TEST_PROFILE_ID = '00000000-0000-0000-0000-000000000001'
 
 // ── MockEventSource ──────────────────────────────────────────────────────────
 //
@@ -109,6 +112,22 @@ beforeEach(() => {
     selectedReleaseId: null,
     connectivity: { sseConnected: false, lastSeenAt: 0, bannerVisible: false },
   })
+  // D2-04: seed sessionStore with a bound profile so the SSE effect creates
+  // an EventSource (per-profile guard: no profile → no EventSource created).
+  useSessionStore.setState({
+    profileCount: 1,
+    boundProfileId: TEST_PROFILE_ID,
+    profiles: [
+      {
+        id: TEST_PROFILE_ID,
+        display_name: 'Test Profile',
+        last_sync_at: null,
+        last_sync_status: 'completed',
+        last_sync_item_count: 100,
+        app_token_revoked: false,
+      },
+    ],
+  })
   // Reset locateRelease mock call count
   vi.mocked(locateRelease).mockClear()
 })
@@ -175,7 +194,8 @@ describe('KioskView EventSource consumer', () => {
       })
     })
 
-    expect(locateRelease).toHaveBeenCalledWith(42)
+    // D2-04: locateRelease now receives (releaseId, profileId) — assert both
+    expect(locateRelease).toHaveBeenCalledWith(42, TEST_PROFILE_ID)
   })
 
   it('Test 4: boundary_changed with NO selection does NOT call locateRelease (D-05 guard)', async () => {
