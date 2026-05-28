@@ -70,9 +70,13 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
         pool = app.state.db_pool
         async with pool.connection() as conn:
             await conn.execute(
-                "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-                " VALUES ('auth.pin_hash', %s::jsonb, 'Test PIN seeded by test_session_bootstrap', now())"
-                " ON CONFLICT (key) DO UPDATE"
+                "INSERT INTO gruvax.settings"
+                "  (profile_id, key, value, description, updated_at)"
+                " VALUES"
+                "  ('00000000-0000-0000-0000-000000000001'::uuid,"
+                "   'auth.pin_hash', %s::jsonb,"
+                "   'Test PIN seeded by test_session_bootstrap', now())"
+                " ON CONFLICT (profile_id, key) DO UPDATE"
                 "  SET value = EXCLUDED.value, updated_at = now()",
                 (f'"{test_hash}"',),
             )
@@ -149,6 +153,10 @@ async def test_two_profiles_unbound(
     must NOT auto-bind — it returns bound_profile_id = null so the SPA routes to /select.
     """
     # second_profile fixture has seeded a second profile in the DB.
+    # Clear any browse-binding cookie left by a prior test so this test starts with
+    # no browse-binding cookie as designed (the module-scoped client accumulates cookies
+    # across tests; we explicitly clear before this isolated assertion).
+    client.cookies.delete(BROWSE_BINDING_COOKIE)
     res = await client.get("/api/session")  # No cookies — no browse binding
     assert res.status_code == 200, (
         f"GET /api/session expected 200, got {res.status_code}: {res.text}. "

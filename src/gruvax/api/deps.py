@@ -12,7 +12,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, HTTPException, Request, status
 
-from gruvax.auth.sessions import CSRF_COOKIE, get_session_id
+from gruvax.auth.sessions import BROWSE_BINDING_COOKIE, CSRF_COOKIE, get_session_id
 from gruvax.settings import settings
 
 
@@ -149,10 +149,8 @@ def get_event_bus(request: Request) -> Any:
 #   503 registry missing — registry attr not on app.state (races lifespan)
 #   404 profile_not_found — profile_id not in registry (deleted / unknown)
 #
-# Cookie name reference: gruvax_browse_binding — Plan 02-04 will promote this
-# to a constant in sessions.py (BROWSE_BINDING_COOKIE). For now it lives here
-# as a literal; TODO(02-04): replace with BROWSE_BINDING_COOKIE from sessions.py.
-_BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
+# BROWSE_BINDING_COOKIE is imported from gruvax.auth.sessions (Plan 02-04
+# promoted the constant from a local literal to the canonical sessions.py location).
 
 
 def get_boundary_cache_for_profile(
@@ -170,7 +168,7 @@ def get_boundary_cache_for_profile(
         HTTP 503 (registry not ready) — registry attr missing on app.state.
         HTTP 404 (profile_not_found) — profile_id key absent from registry.
     """
-    bound = request.cookies.get(_BROWSE_BINDING_COOKIE)
+    bound = request.cookies.get(BROWSE_BINDING_COOKIE)
     if not bound:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -206,7 +204,7 @@ def get_snapshot_for_profile(
 
     Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
     """
-    bound = request.cookies.get(_BROWSE_BINDING_COOKIE)
+    bound = request.cookies.get(BROWSE_BINDING_COOKIE)
     if not bound:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -242,7 +240,7 @@ def get_segment_cache_for_profile(
 
     Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
     """
-    bound = request.cookies.get(_BROWSE_BINDING_COOKIE)
+    bound = request.cookies.get(BROWSE_BINDING_COOKIE)
     if not bound:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -281,7 +279,7 @@ def get_bus_for_profile(
 
     Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
     """
-    bound = request.cookies.get(_BROWSE_BINDING_COOKIE)
+    bound = request.cookies.get(BROWSE_BINDING_COOKIE)
     if not bound:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,

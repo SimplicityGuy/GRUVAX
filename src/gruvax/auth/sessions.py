@@ -33,6 +33,14 @@ if TYPE_CHECKING:
 SESSION_COOKIE = "gruvax_session"
 CSRF_COOKIE = "gruvax_csrf"
 
+# Browse-binding cookie (D2-10 — INDEPENDENT of admin session cookie).
+# httponly=False: SPA reads it to derive per-profile SSE URL.
+# samesite=strict: home LAN same-site; secure=False for LAN HTTP.
+# max_age=7 days: kiosk Chromium survives restarts without forcing /select.
+# Value = plain UUID string — server validates against active-profiles set
+# on every per-profile endpoint (D2-04, T-02-04-01); no signing needed on LAN.
+BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
+
 # Hard session cap (30 min) — override via function arg if needed (Pitfall 23)
 HARD_CAP_SECONDS = 1800
 
@@ -192,6 +200,62 @@ async def revoke_all_sessions_except(
         (now, current_session_id),
     )
     await conn.commit()
+
+
+def set_browse_binding_cookie(
+    response: Response,
+    profile_id: str,
+    secure: bool = False,
+    max_age: int = 7 * 24 * 3600,
+) -> None:
+    """Set the browse-binding cookie (D2-10 — independent of admin session).
+
+    httponly=False: the SPA must read the cookie to build the per-profile
+    SSE URL (e.g., ``/api/events/{profile_id}``).
+    samesite=strict: all GRUVAX requests are same-site on the home LAN;
+    this blocks cross-site POST forging a bind (T-02-04-04).
+    secure=False: home-LAN HTTP; set True in a future TLS deployment.
+    max_age=7 days: kiosk Chromium survives a Pi reboot without returning
+    to the profile-picker screen every morning.
+
+    Value is the plain profile UUID string — the server validates it against
+    the active-profiles registry on every per-profile endpoint (D2-04,
+    T-02-04-01), so a forged / stale UUID resolves to 404/403.
+
+    Args:
+        response:   FastAPI ``Response`` to attach the cookie to.
+        profile_id: UUID string of the profile to bind.
+        secure:     Whether to set the ``Secure`` flag (default False).
+        max_age:    Cookie max-age in seconds (default 7 days).
+    """
+    response.set_cookie(
+        BROWSE_BINDING_COOKIE,
+        profile_id,
+        httponly=False,
+        samesite="strict",
+        secure=secure,
+        max_age=max_age,
+    )
+
+
+def clear_browse_binding_cookie(response: Response, secure: bool = False) -> None:
+    """Clear the browse-binding cookie (Switch-profile unbind, D2-07).
+
+    The ``delete_cookie`` attributes MUST match the ``set_cookie`` attributes
+    exactly (path, httponly, secure, samesite) so browsers actually remove the
+    cookie (same constraint as ``clear_session_cookies``, CR-04).
+
+    Args:
+        response: FastAPI ``Response`` to modify.
+        secure:   Whether the cookie was set with ``Secure=True`` (default False).
+    """
+    response.delete_cookie(
+        BROWSE_BINDING_COOKIE,
+        path="/",
+        httponly=False,
+        samesite="strict",
+        secure=secure,
+    )
 
 
 def clear_session_cookies(response: Response, secure: bool = False) -> None:

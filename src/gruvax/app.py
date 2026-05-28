@@ -44,6 +44,7 @@ from gruvax.api.health import router as health_router
 from gruvax.api.illuminate import router as illuminate_router
 from gruvax.api.locate import router as locate_router
 from gruvax.api.search import router as search_router
+from gruvax.api.session import router as session_router
 from gruvax.api.units import router as units_router
 from gruvax.api.version import router as version_router
 from gruvax.db.pool import create_pool
@@ -428,6 +429,10 @@ def create_app() -> FastAPI:
 
     # ── Events router (Phase 4 / RTM-01) — BEFORE StaticFiles mount (Pitfall 3) ─
     app.include_router(events_router, prefix="/api")
+
+    # ── Session bootstrap router (Plan 02-04) — BEFORE StaticFiles mount (Pitfall 3) ─
+    # GET /api/session, POST/DELETE /api/session/bind — no PIN required (R7, D2-10).
+    app.include_router(session_router, prefix="/api")
 
     # ── StaticFiles SPA mount LAST ───────────────────────────────────────────
     # Plan 04 (React SPA) builds the frontend and copies the dist/ into static/.
