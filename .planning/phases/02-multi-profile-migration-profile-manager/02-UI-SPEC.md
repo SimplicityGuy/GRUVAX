@@ -35,27 +35,47 @@ created: 2026-05-28
 Source: `design/gruvax-design-tokens.css` — `--gruvax-space-*` tokens. Use these exclusively;
 never write raw pixel values.
 
+> **Token basis:** Every value below is a `--gruvax-space-*` token defined in
+> `design/gruvax-design-tokens.css`, and every one is a multiple of 4. `--gruvax-space-3` (12px)
+> and `--gruvax-space-9` (96px) are project token values (both multiples of 4) defined in the
+> token file, extending the abstract 8-point base set — they are not new declarations.
+
 | Token | CSS Var | Value | Phase 2 Usage |
 |-------|---------|-------|---------------|
-| xs | `--gruvax-space-1` | 4px | Icon-to-text gaps, badge internal padding |
-| sm | `--gruvax-space-2` | 8px | Compact element spacing, badge margins |
+| xs | `--gruvax-space-1` | 4px | Icon-to-text gaps, badge margins |
+| sm | `--gruvax-space-2` | 8px | Compact element spacing |
 | md-sm | `--gruvax-space-3` | 12px | Picker card internal padding, drawer section gaps |
 | md | `--gruvax-space-4` | 16px | Default element spacing, sheet body horizontal padding |
 | lg | `--gruvax-space-5` | 24px | Card vertical rhythm, form field gaps in drawer |
 | xl | `--gruvax-space-6` | 32px | Profile list section gaps |
 | 2xl | `--gruvax-space-7` | 48px | Bottom safe-area clearance in drawer actions |
 | 3xl | `--gruvax-space-8` | 64px | Page-level vertical spacing |
+| 4xl | `--gruvax-space-9` | 96px | Onboarding screen top offset |
 
-**Spacing exceptions:**
-- Status badge pill: 2px vertical pad (below `--gruvax-space-1`) — matches existing history/cube badge pattern established in v1.0 (admin.css line 1396). Document as `spacing-exception: 2px vertical pad — pill density`.
+All spacing-scale values above are multiples of 4.
+
+**Touch-target minimums (accessibility floors, not spacing-scale entries):**
 - Touch targets on profile picker cards: minimum 44px height enforced via `min-height: 44px` — matches `record-picker-row` pattern.
 - Switch-profile corner button: 44×44px touch target minimum.
+
+**Component density override (NOT part of the token spacing scale):**
+- **Status badge pill** inherits the established v1.0 `.badge` pill internal padding from `admin.css`
+  (the history/cube badge pattern). This is a component-level density inheritance for visual
+  consistency with the existing v1.0 history and cube badges — it is **not** a spacing-scale value
+  and introduces **no** new token. Phase 2 reuses the existing badge pill CSS rather than
+  re-specifying its internal padding, so the multiple-of-4 spacing contract is unaffected.
 
 ---
 
 ## Typography
 
 Source: `design/gruvax-design-language.md` + `design/gruvax-design-tokens.css`. Three fonts, locked.
+
+> **Locked-token basis:** All sizes and weights below derive from `design/gruvax-design-tokens.css`.
+> The 3-font system (Barlow Condensed / Space Grotesk / DM Mono) with its per-font size scale and
+> Space Grotesk's 400/500/700 weights is a locked project convention per `CLAUDE.md` — not a new
+> declaration. This section maps the existing tokens to Phase 2 surfaces; it does not introduce new
+> type primitives.
 
 ### Barlow Condensed — Display & Labels
 
@@ -114,7 +134,7 @@ Source: `design/gruvax-design-tokens.css`. Consume tokens only — no hardcoded 
 
 ### Accent Reserved For (explicit list — yellow only where listed)
 
-1. Primary CTA button background in drawer: "CONNECT PAT", "SYNC NOW", "SAVE", "CONFIRM DELETE"
+1. Primary CTA button background in drawer: "CONNECT PAT", "SYNC NOW", "SAVE NAME", "CONFIRM DELETE"
 2. Focus rings on profile cards and form inputs (`outline: 2px solid var(--gruvax-yellow)` on `:focus-visible`)
 3. Active status on the Switch-profile corner button when pressed/active state
 4. Syncing spinner accent ring (the animated ring around the sync progress indicator)
@@ -228,9 +248,9 @@ Tapping a card or the add-profile row opens the profile drawer (Surface 3).
 | CONNECT PAT | No PAT yet (PENDING) | Primary CTA (yellow bg) | "CONNECT PAT" |
 | SYNC NOW | Has PAT + connected | Secondary (blue outline) | "SYNC NOW" |
 | ROTATE PAT | Has PAT + connected | Secondary (blue outline) | "ROTATE PAT" |
-| RENAME | Existing profile | Tertiary (text only) | "RENAME" |
+| RENAME | Existing profile | Tertiary (text only) | "RENAME" → reveals name field; commit button "SAVE NAME" |
 | DELETE PROFILE | Existing profile (not the Default profile) | Destructive (error-colored text) | "DELETE PROFILE" |
-| CANCEL | Always | Tertiary / dismiss | "CANCEL" |
+| Drawer dismiss | Always | Tertiary / dismiss | "CLOSE" (relabels to "CLOSE" during background sync; never "Cancel") |
 
 **Primary CTA button:**
 - Background: `--gruvax-yellow`
@@ -255,6 +275,7 @@ Tapping a card or the add-profile row opens the profile drawer (Surface 3).
 
 **PAT input field:**
 - `type="password"` — masked by default; show/hide toggle (Lucide `Eye`/`EyeOff`, 16px)
+- Toggle aria-labels: `aria-label="Show token"` when the field is masked (Eye icon shown); `aria-label="Hide token"` when the field is revealed (EyeOff icon shown). The aria-label updates in lockstep with the icon state.
 - Label: "PERSONAL ACCESS TOKEN" (Barlow Condensed 700 16px ALL CAPS)
 - Placeholder: "Paste your discogsography PAT"
 - Border: 1.5px solid `--gruvax-border-light`
@@ -268,6 +289,7 @@ Tapping a card or the add-profile row opens the profile drawer (Surface 3).
 - Label: "PROFILE NAME"
 - Placeholder: current profile name (pre-filled)
 - Max-length: 64 characters (matches backend constraint)
+- Commit button: "SAVE NAME" (primary CTA styling)
 
 ---
 
@@ -287,7 +309,7 @@ Tapping a card or the add-profile row opens the profile drawer (Surface 3).
 - Drawer stays open; button state transitions to "SYNCING…"
 - Status badge on the card changes to SYNCING (animated pulse)
 - Drawer shows sync progress section (see below)
-- Drawer "CANCEL" button relabeled to "CLOSE" (sync continues in background)
+- Drawer dismiss button relabeled to "CLOSE" (sync continues in background)
 
 **Step 3b — Test sync error (synchronous):**
 - Error banner appears inline above the button (same `.sheet-error` class — red text, `role="alert"`)
@@ -463,7 +485,7 @@ Tap → small confirm modal (not a full bottom-sheet — compact inline dialog):
 │  You'll be taken to the        │
 │  profile picker.               │
 │                                │
-│  [ SWITCH ]  [ CANCEL ]        │
+│  [ SWITCH ]  [ STAY HERE ]     │
 └────────────────────────────────┘
 ```
 
@@ -479,7 +501,7 @@ Tap → small confirm modal (not a full bottom-sheet — compact inline dialog):
 | Heading | Space Grotesk 16px 700 `--gruvax-text-primary` | "Switch collection?" |
 | Body | Space Grotesk 14px 400 `--gruvax-text-secondary` | "You'll be taken to the profile picker." |
 | Confirm btn | `--gruvax-blue` background, white text | "SWITCH" Barlow Condensed 700 |
-| Cancel btn | Transparent, `--gruvax-text-muted` text | "CANCEL" Barlow Condensed 700 |
+| Dismiss btn | Transparent, `--gruvax-text-muted` text | "STAY HERE" Barlow Condensed 700 |
 | Confirm action | unbind session → navigate to `/select` | Server POST to unbind, then redirect |
 | `role` / `aria` | `role="dialog"`, `aria-modal="true"`, `aria-labelledby` heading | Focus trapped while open |
 
@@ -527,9 +549,9 @@ All copy follows voice & tone: labels ALL CAPS (Barlow Condensed 700, tracked wi
 | Drawer — new profile connect | "CONNECT PAT" | Primary yellow CTA |
 | Drawer — sync now | "SYNC NOW" | Secondary blue outline |
 | Drawer — rotate PAT | "ROTATE PAT" | Secondary blue outline |
-| Drawer — rename | "SAVE" | After editing name field |
+| Drawer — rename commit | "SAVE NAME" | After editing name field |
 | Drawer — delete | "DELETE PROFILE" | Destructive red text |
-| Drawer — in-progress cancel | "CLOSE" | Not "CANCEL" — sync continues |
+| Drawer — dismiss / in-progress | "CLOSE" | Never "Cancel"; during background sync the dismiss stays "CLOSE" |
 | Picker — onboarding | "OPEN ADMIN PANEL" | Links to `/admin` |
 | Kiosk corner | "SWITCH" | Ultra-compact pill label |
 | Switch confirm | "SWITCH" | Confirm action |
@@ -565,7 +587,7 @@ All errors: Space Grotesk 14px, `--gruvax-error` (#C0392B), `role="alert"`, sent
 | Modal heading | "Delete this profile?" |
 | Modal body | "This will permanently remove {PROFILE NAME} and its {N,###} records. This cannot be undone." |
 | Confirm button | "DELETE PROFILE" |
-| Cancel button | "CANCEL" |
+| Dismiss button | "KEEP PROFILE" |
 | Note | Item count shown, NO device count (devices are P3 scope). |
 | Profile name | rendered in body text, `--gruvax-text-primary`, sentence case within the surrounding text |
 | Record count | DM Mono 14px inline within body copy |
@@ -577,7 +599,7 @@ All errors: Space Grotesk 14px, `--gruvax-error` (#C0392B), `role="alert"`, sent
 | Modal heading | "Switch collection?" |
 | Modal body | "You'll be taken to the profile picker." |
 | Confirm button | "SWITCH" |
-| Cancel button | "CANCEL" |
+| Dismiss button | "STAY HERE" |
 
 **Rotate PAT confirm (drawer):**
 
@@ -617,7 +639,7 @@ All new surfaces inherit the project animation system. No new easings; use exist
 ### Accessibility
 
 - All interactive elements: minimum 44×44px touch target
-- All icon-only controls: `aria-label` required
+- All icon-only controls: `aria-label` required (e.g. PAT show/hide toggle: `aria-label="Show token"` / `aria-label="Hide token"`)
 - All error states: `role="alert"`
 - All modals/drawers: `role="dialog"`, `aria-modal="true"`, `aria-labelledby` pointing to heading, focus trapped on open, focus restored on close
 - Status badges: descriptive `aria-label` on the badge element (e.g., `aria-label="Status: Connected"`)
@@ -679,7 +701,7 @@ New components for Phase 2 (all in React with TypeScript, all consuming `design/
 | `ProfilesManager` | `frontend/src/routes/admin/ProfilesManager.tsx` | `AdminShell` (parent), badge CSS | Profile list + Add row |
 | `ProfileCard` | `frontend/src/routes/admin/ProfileCard.tsx` | `admin.css` card patterns | Card in admin list |
 | `ProfileDrawer` | `frontend/src/routes/admin/ProfileDrawer.tsx` | `RecordPickerSheet` CSS classes (`record-picker-sheet`, `sheet-scrim`, `sheet-drag-pill`, `sheet-body`, `sheet-heading`, `sheet-error`, `sheet-actions`) | Bottom-sheet with all profile actions |
-| `ProfileStatusBadge` | `frontend/src/routes/admin/ProfileStatusBadge.tsx` | Pill badge CSS from `admin.css` | Connected/Pending/Syncing/Re-auth badge |
+| `ProfileStatusBadge` | `frontend/src/routes/admin/ProfileStatusBadge.tsx` | Pill badge CSS from `admin.css` (inherits v1.0 `.badge` density) | Connected/Pending/Syncing/Re-auth badge |
 | `SyncProgressSection` | `frontend/src/routes/admin/SyncProgressSection.tsx` | — | Spinner + item-count inside drawer |
 | `ProfilePicker` | `frontend/src/routes/ProfilePicker.tsx` | Design tokens only | `/select` route — 2+ profiles grid |
 | `ProfilePickerCard` | `frontend/src/routes/ProfilePickerCard.tsx` | Design tokens only | Individual card in picker grid |
@@ -710,11 +732,11 @@ No third-party component registries. All components are custom React with design
 |----------|--------|
 | Design system (no shadcn, Nordic Grid) | `CLAUDE.md` + `design/gruvax-design-language.md` |
 | Color palette and token names | `design/gruvax-design-tokens.css` |
-| Typography scale (3 fonts, sizes, weights) | `design/gruvax-design-language.md` + tokens |
-| Spacing scale (`--gruvax-space-*`) | `design/gruvax-design-tokens.css` |
+| Typography scale (3 fonts, sizes, weights — locked project convention) | `design/gruvax-design-language.md` + tokens + `CLAUDE.md` |
+| Spacing scale (`--gruvax-space-*`, all multiples of 4) | `design/gruvax-design-tokens.css` |
 | Bottom-sheet drawer pattern | `frontend/src/routes/admin/RecordPickerSheet.tsx` + `admin.css` |
 | AdminShell chrome pattern | `frontend/src/routes/admin/AdminShell.tsx` |
-| Status badge pill spacing exception | `admin.css` line 1396 (existing pattern) |
+| Status badge pill density (component-level inheritance, not a spacing token) | `admin.css` existing `.badge` pill pattern |
 | Touch target 44px minimum | `admin.css` `.record-picker-row` pattern |
 | Bottom-sheet animation (sheet-slide-up 250ms) | `admin.css` line 2155 |
 | LED glow shadow token | `design/gruvax-design-tokens.css` |
