@@ -453,3 +453,56 @@ async def test_pat_rejected(
             cookies=admin_session["cookies"],
             headers={"X-CSRF-Token": admin_session["csrf_token"]},
         )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_created_profile_registries_are_real_instances(
+    client,  # type: ignore[no-untyped-def]
+    admin_session,
+) -> None:
+    """A profile created at runtime must be SSE/search routable immediately.
+
+    Regression for the live-UAT bug where POST /api/admin/profiles seeded every
+    per-profile registry entry with ``None``. The per-profile resolution deps in
+    deps.py treat a ``None`` registry value as 404 profile_not_found, so a profile
+    created after startup had a broken SSE endpoint (GET /api/events/{id} → 404)
+    and 404 on search/locate until the app restarted and lifespan re-eager-loaded
+    real instances. Create must mirror startup: seed REAL empty instances.
+    """
+    res = await client.post(
+        "/api/admin/profiles",
+        json={"display_name": "RegistryRoutable"},
+        cookies=admin_session["cookies"],
+        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+    )
+    assert res.status_code in (200, 201), f"create failed: {res.status_code} {res.text}"
+    new_id = res.json()["id"]
+
+    try:
+        # Bind the browse cookie to the freshly-created profile, then hit a
+        # per-profile read endpoint. With the old None-seeding the cache dep
+        # raised 404 {"type":"profile_not_found"}; with real empty instances the
+        # profile resolves (200, empty results — it is unsynced).
+        bind = await client.post("/api/session/bind", json={"profile_id": new_id})
+        assert bind.status_code == 200, f"bind failed: {bind.status_code} {bind.text}"
+        browse_cookie = {"gruvax_browse_binding": new_id}
+
+        search = await client.get(
+            "/api/search",
+            params={"profile_id": new_id, "q": "anything"},
+            cookies=browse_cookie,
+        )
+        assert search.status_code != 404, (
+            "freshly-created profile must be routable, not 404 profile_not_found "
+            f"(registry seeded None?): {search.status_code} {search.text}"
+        )
+        assert search.status_code == 200, (
+            f"search on new (unsynced) profile expected 200 empty, got "
+            f"{search.status_code}: {search.text}"
+        )
+    finally:
+        await client.delete(
+            f"/api/admin/profiles/{new_id}",
+            cookies=admin_session["cookies"],
+            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        )

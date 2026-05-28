@@ -45,6 +45,10 @@ from gruvax.discogsography.errors import (
     RateLimitExhausted,
     ServerError,
 )
+from gruvax.estimator.boundary_cache import BoundaryCache
+from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.estimator.segment_cache import SegmentCache
+from gruvax.events.bus import EventBus
 from gruvax.settings import settings
 from gruvax.sync import profile_sync
 from gruvax.sync.pat_crypto import encrypt_pat
@@ -314,20 +318,36 @@ async def create_profile(
 
         await conn.commit()
 
-    # Add empty per-profile registry entries so the new profile is routable
-    # immediately (D2-03 — empty caches are valid; first sync populates them).
+    # Add per-profile registry entries so the new profile is routable IMMEDIATELY
+    # (D2-03). Mirror lifespan startup: seed REAL empty instances, never None.
+    # The per-profile resolution deps (get_*_for_profile in deps.py) treat a None
+    # registry value as 404 profile_not_found — seeding None broke SSE/search/locate
+    # for any profile created after startup until the next app restart. Empty caches
+    # are valid; the first sync populates them with real data.
     app_state = request.app.state
-    for attr in (
-        "boundary_cache_registry",
-        "snapshot_registry",
-        "segment_cache_registry",
-        "settings_cache_registry",
-        "event_bus_registry",
-        "profile_state_registry",
-    ):
+    _empty_factories: dict[str, Any] = {
+        "boundary_cache_registry": BoundaryCache,
+        "snapshot_registry": CollectionSnapshot,
+        "segment_cache_registry": SegmentCache,
+        "event_bus_registry": EventBus,
+    }
+    for attr, factory in _empty_factories.items():
         registry: dict[str, Any] | None = getattr(app_state, attr, None)
         if registry is not None and new_profile_id not in registry:
-            registry[new_profile_id] = None  # type: ignore[assignment]
+            registry[new_profile_id] = factory()
+    # settings cache: an empty dict is a valid value (deps reject only None).
+    _settings_reg: dict[str, Any] | None = getattr(app_state, "settings_cache_registry", None)
+    if _settings_reg is not None and new_profile_id not in _settings_reg:
+        _settings_reg[new_profile_id] = {}
+    # profile-state: seed an initial unsynced entry (the 60s refresh task keeps it
+    # current). Never None — health/staleness reads index into this registry.
+    _state_reg: dict[str, Any] | None = getattr(app_state, "profile_state_registry", None)
+    if _state_reg is not None and new_profile_id not in _state_reg:
+        _state_reg[new_profile_id] = {
+            "last_sync_at": None,
+            "last_sync_status": None,
+            "app_token_revoked": True,
+        }
 
     logger.info("profile created: id=%s display_name=%r", new_profile_id, body.display_name)
     return JSONResponse(
