@@ -1,7 +1,8 @@
 """GET /api/locate — position estimate for a collection release (POS-02).
 
-Query parameter:
-  - ``release_id``: Integer Discogs release ID (T-01-09: typed param, 422 on non-int).
+Query parameters:
+  - ``release_id``:  Integer Discogs release ID (T-01-09: typed param, 422 on non-int).
+  - ``profile_id``:  Profile UUID validated against gruvax_browse_binding cookie (D2-04).
 
 Response (HTTP 200): Locked LocateResult JSON contract (D-10/D-11/D-12):
   ``{release_id, primary_cube, label_span, sub_cube_interval, confidence,
@@ -26,10 +27,14 @@ import logging
 import time
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
 
-from gruvax.api.deps import get_collection_snapshot, get_pool, get_segment_cache
+from gruvax.api.deps import (
+    get_pool,
+    get_segment_cache_for_profile,
+    get_snapshot_for_profile,
+)
 from gruvax.db.queries import get_release_for_locate, increment_selection_count
 from gruvax.estimator.algorithm import locate
 from gruvax.middleware.timing import record_slow_query
@@ -70,18 +75,20 @@ def _sub_interval_to_dict(si: SubInterval) -> dict[str, Any]:
 async def locate_endpoint(
     request: Request,
     release_id: int,
+    profile_id: str = Query(),
     pool: Any = Depends(get_pool),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
+    segment_cache: SegmentCache = Depends(get_segment_cache_for_profile),  # 400/403 (D2-04)
+    snapshot: CollectionSnapshot = Depends(get_snapshot_for_profile),  # 400/403 (D2-04)
 ) -> JSONResponse:
-    """Return the locked LocateResult for a release.
+    """Return the locked LocateResult for a release scoped to a profile.
 
-    Looks up the release in ``gruvax.profile_collection``, runs the position estimator
-    dispatcher (segment-aware two-level interpolation primary, §4.8 cube-only fallback),
-    and returns the JSON result.
+    The profile_id query parameter is validated against the gruvax_browse_binding
+    session cookie (D2-04): 400 if unbound, 403 if mismatch.  Uses the profile's
+    per-profile segment_cache and snapshot for position estimation (CPU-only, POS-03).
 
     Args:
         release_id: Discogs release ID (integer; 422 on non-integer T-01-09).
+        profile_id: Profile UUID (required; validated against browse cookie, D2-04).
 
     Returns:
         HTTP 200 with the LocateResult JSON on success (including no-boundary case).
@@ -96,7 +103,7 @@ async def locate_endpoint(
     # OBS-05: measure request-total from handler entry (locate is CPU-only, POS-03).
     t0 = time.perf_counter()
 
-    record = await get_release_for_locate(pool, release_id)
+    record = await get_release_for_locate(pool, release_id, profile_id)
 
     if record is None:
         # 404 path — do NOT increment selection_count (D-04: only successful locates count).

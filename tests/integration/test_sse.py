@@ -238,8 +238,13 @@ async def test_concurrent_searches(live_server) -> None:  # type: ignore[no-unty
 
     async def do_search(q: str) -> float:
         t0 = time.perf_counter()
+        cookies = {BROWSE_BINDING_COOKIE: DEFAULT_PROFILE_UUID}
         async with httpx.AsyncClient(base_url=live_server) as ac:
-            await ac.get("/api/search", params={"q": q})
+            await ac.get(
+                "/api/search",
+                params={"q": q, "profile_id": DEFAULT_PROFILE_UUID},
+                cookies=cookies,
+            )
         return time.perf_counter() - t0
 
     t_start = time.perf_counter()

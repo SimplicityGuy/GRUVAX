@@ -95,7 +95,7 @@ def is_catalog_query(q: str) -> bool:
 async def did_you_mean_query(
     pool: AsyncConnectionPool,
     q: str,
-    profile_id: str = DEFAULT_PROFILE_UUID,
+    profile_id: str,
 ) -> str | None:
     """Return the top trigram-similarity match for *q* over label/artist terms.
 
@@ -113,7 +113,7 @@ async def did_you_mean_query(
     Args:
         pool:       Open psycopg ``AsyncConnectionPool``.
         q:          Raw user query string (already length-validated at router).
-        profile_id: UUID of the profile to scope the suggestion to (P1: default).
+        profile_id: UUID of the profile to scope the suggestion to (required; D2-04).
 
     Returns:
         The best-matching term string if similarity > threshold, else ``None``.
@@ -149,7 +149,7 @@ async def search_collection(
     pool: AsyncConnectionPool,
     q: str,
     limit: int,
-    profile_id: str = DEFAULT_PROFILE_UUID,
+    profile_id: str,
 ) -> tuple[list[SearchRow], float, str | None]:
     """Execute FTS + catalog-number union search over gruvax.profile_collection.
 
@@ -192,7 +192,7 @@ async def search_collection(
         pool:       Open psycopg ``AsyncConnectionPool``.
         q:          Raw user query string (already length-validated at router).
         limit:      Max rows to return (already range-validated at router).
-        profile_id: UUID of the profile to search (P1: default).
+        profile_id: UUID of the profile to search (required; D2-04).
 
     Returns:
         A ``(rows, took_ms, did_you_mean)`` tuple where ``rows`` is a list of
@@ -412,7 +412,7 @@ LocateRecord = dict[str, Any]
 async def get_release_for_locate(
     pool: AsyncConnectionPool,
     release_id: int,
-    profile_id: str = DEFAULT_PROFILE_UUID,
+    profile_id: str,
 ) -> LocateRecord | None:
     """Fetch label and catalog_number for a release_id from profile_collection.
 
@@ -423,7 +423,7 @@ async def get_release_for_locate(
         pool:       Open psycopg pool.
         release_id: The Discogs release ID to look up (integer, already
                     validated at the router).
-        profile_id: UUID of the profile to scope the lookup to (P1: default).
+        profile_id: UUID of the profile to scope the lookup to (required; D2-04).
 
     Returns:
         A dict with keys ``release_id``, ``label``, ``catalog_number``,
