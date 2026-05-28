@@ -114,7 +114,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 **Plans**: 8 plans (6 waves; W0: 02-00 | W1: 02-01 | W2: 02-02 | W3 parallel: 02-03 + 02-04 + 02-05 | W4: 02-06 | W5: 02-07)
 **Wave 1**
 
-- [ ] 02-00-PLAN.md — Wave 0 test scaffolding: 6 RED test files + `second_profile` fixture (PROF-04/PROF-02/API-02/SYN-02 baselines)
+- [x] 02-00-PLAN.md — Wave 0 test scaffolding: 6 RED test files + `second_profile` fixture (PROF-04/PROF-02/API-02/SYN-02 baselines)
 - [ ] 02-01-PLAN.md — Migration 0010: `profile_id NOT NULL` on 5 data tables + 4 composite PKs (2 infra tables stay nullable) + clean round-trip (PROF-04)
 
 **Wave 2** *(blocked on Wave 1 completion)*
@@ -174,7 +174,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
 | 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
-| 2. Real Position Estimation | v1.0 | 4/4 | Complete | 2026-05-20 |
+| 2. Real Position Estimation | v1.0 | 1/8 | In Progress|  |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
