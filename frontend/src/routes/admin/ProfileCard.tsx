@@ -44,10 +44,6 @@ export function ProfileCard({ profile, onClick, index }: ProfileCardProps) {
   const syncText = formatLastSync(profile.last_sync_at)
   const countText = formatItemCount(profile.last_sync_item_count)
 
-  const metaText = countText
-    ? `${syncText} · ${countText}`
-    : syncText
-
   // Even cards use off-white, odd use white
   const isEven = index % 2 === 0
 
