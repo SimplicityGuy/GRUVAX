@@ -1,8 +1,10 @@
-"""Integration tests for GET /api/events SSE endpoint — Phase 4 ADMN-11, RTM-01, RTM-02.
+"""Integration tests for GET /api/events/{profile_id} SSE endpoint — Phase 4 ADMN-11, RTM-01, RTM-02.
+
+Plan 02-03: updated from /api/events to /api/events/{profile_id} with browse-binding cookie.
 
 Tests:
-  - test_sse_headers: GET /api/events returns X-Accel-Buffering: no + Cache-Control: no-store
-    (Pitfall 8).
+  - test_sse_headers: GET /api/events/{profile_id} (with bound cookie) returns
+    X-Accel-Buffering: no + Cache-Control: no-store (Pitfall 8).
   - test_boundary_changed_latency: admin PUT → kiosk receives boundary_changed via SSE in
     <500ms (primary ADMN-11 gate).
   - test_concurrent_searches: two simultaneous searches complete without serialization
@@ -26,6 +28,12 @@ import pytest
 import uvicorn
 
 from gruvax.app import create_app
+
+
+# Default profile UUID (D-02) — the single profile seeded by migrations.
+DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+# Browse-binding cookie name (D2-10) — separate from gruvax_session.
+BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
 
 
 def _find_free_port() -> int:
@@ -99,16 +107,22 @@ async def _login(base_url: str) -> dict[str, str]:
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_sse_headers(live_server) -> None:  # type: ignore[no-untyped-def]
-    """GET /api/events must set X-Accel-Buffering: no and Cache-Control: no-store.
+    """GET /api/events/{profile_id} must set X-Accel-Buffering: no + Cache-Control: no-store.
 
+    Plan 02-03: the endpoint is now per-profile — the browse-binding cookie must be
+    set to the default profile UUID to obtain a 200.
     Binds Pitfall 8: without these headers, nginx/proxy buffers SSE data into
     30-second clumps, making live re-render appear broken.
     """
+    cookies = {BROWSE_BINDING_COOKIE: DEFAULT_PROFILE_UUID}
+    sse_url = f"/api/events/{DEFAULT_PROFILE_UUID}"
     async with (
         httpx.AsyncClient(base_url=live_server) as ac,
-        ac.stream("GET", "/api/events") as resp,
+        ac.stream("GET", sse_url, cookies=cookies) as resp,
     ):
-        assert resp.status_code == 200, f"Expected 200 from /api/events, got {resp.status_code}"
+        assert resp.status_code == 200, (
+            f"Expected 200 from {sse_url} with bound cookie, got {resp.status_code}"
+        )
         assert resp.headers.get("x-accel-buffering") == "no", (
             f"X-Accel-Buffering header missing or wrong: {dict(resp.headers)}"
         )
@@ -157,11 +171,13 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
     }
 
     received = asyncio.Event()
+    sse_url = f"/api/events/{DEFAULT_PROFILE_UUID}"
+    sse_cookies = {BROWSE_BINDING_COOKIE: DEFAULT_PROFILE_UUID}
 
     async def read_sse() -> None:
         async with (
             httpx.AsyncClient(base_url=live_server) as ac,
-            ac.stream("GET", "/api/events") as response,
+            ac.stream("GET", sse_url, cookies=sse_cookies) as response,
         ):
             async for line in response.aiter_lines():
                 if "boundary_changed" in line:
