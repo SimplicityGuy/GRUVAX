@@ -123,9 +123,9 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 02-03-PLAN.md — Per-profile SSE `/api/events/{profile_id}` + profile-scoped search/locate/illuminate + re-parameterized SLO gate (API-02, SYN-02, D2-04)
-- [ ] 02-04-PLAN.md — Browse-binding session: `GET /api/session` bootstrap + auto-bind + bind/unbind + independent cookie (PROF-02, SYN-02, D2-07/08/10)
-- [ ] 02-05-PLAN.md — Profile CRUD + connect/rotate-PAT + 202+poll sync conversion + soft-delete registry eviction (PROF-01, PROF-02, D2-12/13)
+- [x] 02-03-PLAN.md — Per-profile SSE `/api/events/{profile_id}` + profile-scoped search/locate/illuminate + re-parameterized SLO gate (API-02, SYN-02, D2-04)
+- [x] 02-04-PLAN.md — Browse-binding session: `GET /api/session` bootstrap + auto-bind + bind/unbind + independent cookie (PROF-02, SYN-02, D2-07/08/10)
+- [x] 02-05-PLAN.md — Profile CRUD + connect/rotate-PAT + 202+poll sync conversion + soft-delete registry eviction (PROF-01, PROF-02, D2-12/13)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -174,7 +174,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
 | 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
-| 2. Real Position Estimation | v1.0 | 3/8 | In Progress|  |
+| 2. Real Position Estimation | v1.0 | 7/8 | In Progress|  |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
