@@ -1,5 +1,6 @@
+import { useEffect } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
-import { BrowserRouter, Route, Routes } from 'react-router'
+import { BrowserRouter, Route, Routes, useNavigate } from 'react-router'
 import { AdminShell } from './routes/admin/AdminShell'
 import { BinWidthEditor } from './routes/admin/BinWidthEditor'
 import { ConfirmationRoute } from './routes/admin/ConfirmationScreen'
@@ -11,6 +12,9 @@ import { Settings } from './routes/admin/Settings'
 import { ShelfBinList } from './routes/admin/ShelfBinList'
 import { Wizard } from './routes/admin/Wizard'
 import { KioskView } from './routes/kiosk/KioskView'
+import { ProfilePicker } from './routes/ProfilePicker'
+import { getSession } from './api/session'
+import { useSessionStore } from './state/sessionStore'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -26,6 +30,7 @@ const queryClient = new QueryClient({
  *
  * Routes:
  *   /                           → KioskView (public, no auth)
+ *   /select                     → ProfilePicker (browse-binding — no auth, D2-07)
  *   /admin                      → AdminShell (PIN gate on all /admin/* routes)
  *   /admin/settings             → Settings
  *   /admin/cubes                → CubesGrid (list of shelves — SHELF A, SHELF B, …)
@@ -39,25 +44,62 @@ const queryClient = new QueryClient({
  *
  * Design tokens are imported in main.tsx (single entry point).
  */
+
+/**
+ * AppInner — rendered inside BrowserRouter so useNavigate is available.
+ *
+ * Bootstrap (D2-08, Pattern 6): on mount, fetch GET /api/session and update
+ * the session store. If the response has no bound_profile_id (unbound), redirect
+ * to /select. Single-profile auto-bind is handled server-side — the SPA only
+ * redirects when truly unbound after the server has had its chance to auto-bind.
+ */
+function AppInner() {
+  const navigate = useNavigate()
+  const setSession = useSessionStore((s) => s.setSession)
+
+  useEffect(() => {
+    getSession()
+      .then((data) => {
+        setSession(data)
+        // D2-08: if no bound_profile_id, the SPA must go to /select.
+        // Single-profile auto-bind is server-side — server sets the cookie and
+        // returns bound_profile_id in the same response, so we only redirect here
+        // when the response genuinely has no binding.
+        if (!data.bound_profile_id) {
+          void navigate('/select', { replace: true })
+        }
+      })
+      .catch(() => {
+        // Degrade gracefully — stay on current route (offline / server down).
+      })
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <Routes>
+      <Route path="/" element={<KioskView />} />
+      <Route path="/select" element={<ProfilePicker />} />
+      <Route path="/admin" element={<AdminShell />}>
+        <Route index element={<Settings />} />
+        <Route path="settings" element={<Settings />} />
+        <Route path="cubes" element={<CubesGrid />} />
+        <Route path="cubes/:unit" element={<ShelfBinList />} />
+        <Route path="cubes/:unit/:row/:col" element={<BinWidthEditor />} />
+        <Route path="history" element={<HistoryView />} />
+        <Route path="wizard" element={<Wizard />} />
+        <Route path="wizard/done" element={<ConfirmationRoute />} />
+        <Route path="import" element={<Import />} />
+        <Route path="diagnostics" element={<Diagnostics />} />
+      </Route>
+    </Routes>
+  )
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        <Routes>
-          <Route path="/" element={<KioskView />} />
-          <Route path="/admin" element={<AdminShell />}>
-            <Route index element={<Settings />} />
-            <Route path="settings" element={<Settings />} />
-            <Route path="cubes" element={<CubesGrid />} />
-            <Route path="cubes/:unit" element={<ShelfBinList />} />
-            <Route path="cubes/:unit/:row/:col" element={<BinWidthEditor />} />
-            <Route path="history" element={<HistoryView />} />
-            <Route path="wizard" element={<Wizard />} />
-            <Route path="wizard/done" element={<ConfirmationRoute />} />
-            <Route path="import" element={<Import />} />
-            <Route path="diagnostics" element={<Diagnostics />} />
-          </Route>
-        </Routes>
+        <AppInner />
       </BrowserRouter>
     </QueryClientProvider>
   )
