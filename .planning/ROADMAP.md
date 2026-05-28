@@ -48,7 +48,7 @@ Full v1.0 phase details: [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMA
 Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a continuation of v1.0's numbering. The refined design spec at [`docs/superpowers/specs/2026-05-26-v2-multi-user-collections-refined.md`](../docs/superpowers/specs/2026-05-26-v2-multi-user-collections-refined.md) §"Phase Decomposition" is the authoritative source for phase exit criteria.
 
 - [x] **Phase 1: Walking skeleton — API client + single-profile sync** — Core Value end-to-end against one API-sourced collection; `v_collection` retired; positioning runs off the local `profile_collection` cache. (completed 2026-05-27)
-- [ ] **Phase 2: Multi-profile migration + profile manager** — Full `profiles` table with Fernet PAT storage; `profile_id` NOT NULL migration tightening the 5 per-profile data tables (the 2 global/infra tables keep nullable `profile_id`); per-profile caches + SSE channel; profile manager admin UI; browser session profile picker.
+- [x] **Phase 2: Multi-profile migration + profile manager** — Full `profiles` table with Fernet PAT storage; `profile_id` NOT NULL migration tightening the 5 per-profile data tables (the 2 global/infra tables keep nullable `profile_id`); per-profile caches + SSE channel; profile manager admin UI; browser session profile picker. (completed 2026-05-28)
 - [ ] **Phase 3: Devices + pairing** — `devices` + `pairing_codes` schemas; HttpOnly fingerprint cookie; 4-digit code pairing flow A (5-min TTL, auto-reroll); devices admin UI with PENDING / PAIRED / REVOKED groupings.
 - [ ] **Phase 4: Sync polish + diagnostics** — Nightly background sync (24h @ 03:00 local default, configurable 24h/12h/6h/off); 401 reauth UI; per-profile diagnostics cards; soft-delete cache-purge background task; "Sync now" progress + completion toast.
 
@@ -129,7 +129,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 02-06-PLAN.md — Browser profile UX: `/select` picker + onboarding + Switch-profile button + empty-collection state + KioskView per-profile wiring (PROF-02, SYN-02, D2-03/07/08/09)
+- [x] 02-06-PLAN.md — Browser profile UX: `/select` picker + onboarding + Switch-profile button + empty-collection state + KioskView per-profile wiring (PROF-02, SYN-02, D2-03/07/08/09)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -174,7 +174,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
 | 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
-| 2. Real Position Estimation | v1.0 | 7/8 | In Progress|  |
+| 2. Real Position Estimation | v1.0 | 8/8 | Complete   | 2026-05-28 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
