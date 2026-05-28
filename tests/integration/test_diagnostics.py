@@ -79,20 +79,24 @@ async def unauth_client(db_pool):  # type: ignore[no-untyped-def]
 # ── Helper ─────────────────────────────────────────────────────────────────────
 
 
+_DIAG_DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+
+
 async def _seed_search_count(db_pool: Any, release_id: int) -> None:
     """Upsert a search count for release_id so top_searched is non-empty."""
+    # record_stats PK is (profile_id, release_id) after migration 0010.
     sql = """
 INSERT INTO gruvax.record_stats
-    (release_id, search_count, search_count_7d, last_searched_at, updated_at)
-VALUES (%s, 1, 1, now(), now())
-ON CONFLICT (release_id) DO UPDATE SET
+    (profile_id, release_id, search_count, search_count_7d, last_searched_at, updated_at)
+VALUES (%s::uuid, %s, 1, 1, now(), now())
+ON CONFLICT (profile_id, release_id) DO UPDATE SET
     search_count     = gruvax.record_stats.search_count + 1,
     search_count_7d  = gruvax.record_stats.search_count_7d + 1,
     last_searched_at = now(),
     updated_at       = now()
 """
     async with db_pool.connection() as conn:
-        await conn.execute(sql, (release_id,))
+        await conn.execute(sql, (_DIAG_DEFAULT_PROFILE_UUID, release_id))
 
 
 # ── Tests ──────────────────────────────────────────────────────────────────────

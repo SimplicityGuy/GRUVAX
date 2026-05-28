@@ -121,6 +121,9 @@ def _patch_make_client_with_in_process_fake() -> None:
 # Resolve from tests/integration/conftest.py → tests/ → tests/fixtures/synth_profile_collection.sql
 _SYNTH_SQL_PATH = Path(__file__).resolve().parents[1] / "fixtures" / "synth_profile_collection.sql"
 _REPO_ROOT = Path(__file__).resolve().parents[2]
+_BOUNDARIES_YAML_PATH = _REPO_ROOT / "fixtures" / "boundaries.yaml"
+
+_DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
 
 
 def _schema_at_head(cur: psycopg.Cursor) -> bool:
@@ -139,6 +142,63 @@ def _alembic_upgrade_head() -> None:
     )
 
 
+def _seed_cube_boundaries(conn: psycopg.Connection) -> None:
+    """Seed gruvax.cube_boundaries from fixtures/boundaries.yaml.
+
+    Only runs when cube_boundaries is empty — idempotent seed to restore data
+    after a migration roundtrip test empties the DB.
+
+    Uses the composite PK (profile_id, unit_id, row, col) from migration 0010.
+    Boundaries belong to the default profile.
+    """
+    import yaml  # noqa: PLC0415
+
+    if not _BOUNDARIES_YAML_PATH.is_file():
+        return  # no fixture to seed — skip gracefully
+
+    with conn.cursor() as cur:
+        cur.execute("SELECT COUNT(*) FROM gruvax.cube_boundaries")
+        count = cur.fetchone()[0]
+        if count and count > 0:
+            return  # already seeded — skip
+
+    data = yaml.safe_load(_BOUNDARIES_YAML_PATH.read_text())
+    with conn.cursor() as cur:
+        for unit in data.get("units", []):
+            unit_id = unit["unit_id"]
+            # Ensure unit row exists (FK constraint)
+            cur.execute(
+                "INSERT INTO gruvax.units (id, display_name, rows, cols, ordering)"
+                " VALUES (%s, %s, %s, %s, %s)"
+                " ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name,"
+                "   rows = EXCLUDED.rows, cols = EXCLUDED.cols, ordering = EXCLUDED.ordering,"
+                "   updated_at = now()",
+                (unit_id, unit.get("display_name", f"Unit {unit_id}"),
+                 unit.get("rows", 4), unit.get("cols", 4), unit.get("ordering", unit_id)),
+            )
+            for cube in unit.get("cubes", []):
+                cur.execute(
+                    "INSERT INTO gruvax.cube_boundaries"
+                    " (profile_id, unit_id, row, col, first_label, first_catalog, is_empty)"
+                    " VALUES (%s::uuid, %s, %s, %s, %s, %s, %s)"
+                    " ON CONFLICT (profile_id, unit_id, row, col) DO UPDATE"
+                    "   SET first_label = EXCLUDED.first_label,"
+                    "       first_catalog = EXCLUDED.first_catalog,"
+                    "       is_empty = EXCLUDED.is_empty,"
+                    "       updated_at = now()",
+                    (
+                        _DEFAULT_PROFILE_UUID,
+                        unit_id,
+                        cube["row"],
+                        cube["col"],
+                        cube.get("first_label"),
+                        cube.get("first_catalog"),
+                        cube.get("is_empty", False),
+                    ),
+                )
+    conn.commit()
+
+
 @pytest.fixture(scope="module", autouse=True)
 def _seeded_profile_collection() -> None:
     """Idempotently seed gruvax.profile_collection for every integration test module.
@@ -150,6 +210,8 @@ def _seeded_profile_collection() -> None:
     ``alembic upgrade head`` before seeding. Required because the integration suite
     shares a single dev Postgres (no isolated test DB; see integration_test_harness
     project memory) and migration tests are destructive by design.
+
+    Also re-seeds cube_boundaries if empty (migration roundtrip tests clear all data).
 
     Reads DATABASE_URL via pydantic-settings (NOT os.environ) — pydantic-settings
     loads .env directly without populating the OS environment.
@@ -171,5 +233,8 @@ def _seeded_profile_collection() -> None:
         sql = _SYNTH_SQL_PATH.read_text()
         cur.execute(sql)
         conn.commit()
+    # Reseed cube_boundaries if empty (migration roundtrip tests destroy all data).
+    with psycopg.connect(dsn) as conn:
+        _seed_cube_boundaries(conn)
     yield
     # No teardown — the table stays seeded for subsequent modules.
