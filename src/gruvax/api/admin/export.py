@@ -113,10 +113,13 @@ async def export_settings(
     """
     # D-14 hard exclusion: the WHERE clause IS the guard — auth.pin_hash is never
     # in _ALLOWED_SETTINGS_KEYS, so it is never SELECTed and never serialized.
+    # Global settings live under the default profile UUID (composite PK = (profile_id, key)).
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT key, value FROM gruvax.settings WHERE key = ANY(%s)",
-            (list(_ALLOWED_SETTINGS_KEYS),),
+            "SELECT key, value FROM gruvax.settings"
+            " WHERE profile_id = %s::uuid AND key = ANY(%s)",
+            (_DEFAULT_PROFILE_UUID, list(_ALLOWED_SETTINGS_KEYS)),
         )
         rows = await cur.fetchall()
 

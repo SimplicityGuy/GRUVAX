@@ -525,17 +525,19 @@ async def import_boundaries(
                 source=source,  # 'csv' or 'yaml' (D-04, T-07-01)
             )
 
-        # Upsert segment_overrides for entries with overrides (Pitfall 4 — inside txn)
+        # Upsert segment_overrides for entries with overrides (Pitfall 4 — inside txn).
+        # Admin import operates on the default profile (P1-compat path; composite PK).
+        _IMPORT_DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
         for entry in entries:
             if entry.overrides and not entry.is_empty:
                 for label, fraction in entry.overrides.items():
                     await conn.execute(
                         "INSERT INTO gruvax.segment_overrides"
-                        " (unit_id, row, col, label, fraction, updated_at)"
-                        " VALUES (%s, %s, %s, %s, %s, now())"
-                        " ON CONFLICT (unit_id, row, col, label)"
+                        " (profile_id, unit_id, row, col, label, fraction, updated_at)"
+                        " VALUES (%s::uuid, %s, %s, %s, %s, %s, now())"
+                        " ON CONFLICT (profile_id, unit_id, row, col, label)"
                         " DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()",
-                        (entry.unit_id, entry.row, entry.col, label, fraction),
+                        (_IMPORT_DEFAULT_PROFILE_UUID, entry.unit_id, entry.row, entry.col, label, fraction),
                     )
 
         # Idempotency: store response + prune old keys inside the same transaction
@@ -685,7 +687,7 @@ async def import_settings(
         elif dotted_key in _BRIGHTNESS_KEYS:
             try:
                 int_value = int(value)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={
@@ -705,6 +707,8 @@ async def import_settings(
                 )
 
     # ── 6. Write settings via validated path (same as update_settings) ────────
+    # Global settings live under the default profile UUID (composite PK = (profile_id, key)).
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     updated: list[str] = []
     # Explicit transaction so the whole-file-reject guarantee is structural, not
     # reliant on implicit rollback-on-release (matches the boundaries import path).
@@ -718,7 +722,7 @@ async def import_settings(
             elif dotted_key in _INT_KEYS:
                 try:
                     int_val = int(value)
-                except TypeError, ValueError:
+                except (TypeError, ValueError):
                     logger.warning("Skipping invalid integer for %s", dotted_key)
                     continue
                 json_value = str(int_val)
@@ -729,8 +733,9 @@ async def import_settings(
                 json_value = json.dumps(value)
 
             await conn.execute(
-                "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now() WHERE key = %s",
-                (json_value, dotted_key),
+                "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now()"
+                " WHERE profile_id = %s::uuid AND key = %s",
+                (json_value, _DEFAULT_PROFILE_UUID, dotted_key),
             )
             updated.append(dotted_key)
 
@@ -738,7 +743,7 @@ async def import_settings(
 
     # D-15 / WR-01: refresh in-process settings cache (same as update_settings)
     try:
-        fresh = await load_settings_cache(pool)
+        fresh = await load_settings_cache(pool, profile_id=_DEFAULT_PROFILE_UUID)
         existing = getattr(request.app.state, "settings_cache", None)
         if isinstance(existing, dict):
             existing.clear()

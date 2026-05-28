@@ -394,6 +394,14 @@ BEGIN
     END IF;
 END $$
 """
+_DEDUP_SETTINGS_BEFORE_PK_RESTORE = (
+    "DELETE FROM gruvax.settings "
+    "WHERE profile_id != '00000000-0000-0000-0000-000000000001'::uuid "
+    "  AND key IN ("
+    "    SELECT key FROM gruvax.settings "
+    "    WHERE profile_id = '00000000-0000-0000-0000-000000000001'::uuid"
+    "  )"
+)
 _RESTORE_PK_SETTINGS = """
 DO $$
 DECLARE
@@ -511,6 +519,12 @@ def downgrade() -> None:
     #    This removes profile_id from every PK so the DROP NOT NULL below is
     #    legal. 0009's backfill seeded every row to the default profile, so
     #    dropping the profile_id-leading PK leaves a valid state, no orphan rows.
+    #
+    #    For settings: dedup duplicate keys across profiles before restoring the
+    #    simpler (key)-only PK, keeping only the default-profile rows for any key
+    #    that appears under multiple profiles. This prevents UniqueViolation when
+    #    per-profile default settings were seeded during normal operation.
+    op.execute(_DEDUP_SETTINGS_BEFORE_PK_RESTORE)
     op.execute(_RESTORE_PK_SEGMENT_OVERRIDES)
     op.execute(_RESTORE_PK_RECORD_STATS)
     op.execute(_RESTORE_PK_SETTINGS)

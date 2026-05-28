@@ -130,24 +130,25 @@ async def admin_session(client: Any) -> dict[str, Any]:  # type: ignore[no-untyp
     test_pin_hash = hash_pin("0000")
 
     # Upsert the test PIN hash into gruvax.settings.
-    # After migration 0011, settings PK is (key) and profile_id defaults to
-    # the DEFAULT_PROFILE_UUID — so the plain ON CONFLICT (key) form is correct.
+    # Settings PK is (profile_id, key) — global keys live under the default profile UUID.
+    # Use ON CONFLICT (profile_id, key) with an explicit profile_id column.
     #
     # Some test modules (e.g. test_profile_manager_api) provide a client fixture
     # that already seeded the PIN inside their own fixture and wraps the inner
     # app with LifespanManager without exposing client.app directly. In that case,
     # skip the re-seed here (the PIN is already in the DB from the client fixture).
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     pool = getattr(getattr(client, "app", None), "state", None)
     if pool is not None:
         pool = getattr(pool, "db_pool", None)
     if pool is not None:
         async with pool.connection() as conn:
             await conn.execute(
-                "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-                " VALUES ('auth.pin_hash', %s, 'Test PIN hash seeded by conftest', now())"
-                " ON CONFLICT (key) DO UPDATE"
+                "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+                " VALUES (%s::uuid, 'auth.pin_hash', %s, 'Test PIN hash seeded by conftest', now())"
+                " ON CONFLICT (profile_id, key) DO UPDATE"
                 "  SET value = EXCLUDED.value, updated_at = now()",
-                (f'"{test_pin_hash}"',),
+                (_DEFAULT_PROFILE_UUID, f'"{test_pin_hash}"'),
             )
             await conn.commit()
 

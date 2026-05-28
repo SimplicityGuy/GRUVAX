@@ -68,14 +68,15 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
         ) as ac,
     ):
         pool = app.state.db_pool
+        _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
         async with pool.connection() as conn:
             await conn.execute(
-                "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-                " VALUES ('auth.pin_hash', %s::jsonb,"
+                "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+                " VALUES (%s::uuid, 'auth.pin_hash', %s::jsonb,"
                 "   'Test PIN seeded by test_session_bootstrap', now())"
-                " ON CONFLICT (key) DO UPDATE"
+                " ON CONFLICT (profile_id, key) DO UPDATE"
                 "  SET value = EXCLUDED.value, updated_at = now()",
-                (f'"{test_hash}"',),
+                (_DEFAULT_PROFILE_UUID, f'"{test_hash}"'),
             )
             await conn.commit()
         yield ac

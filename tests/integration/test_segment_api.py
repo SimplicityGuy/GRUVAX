@@ -387,13 +387,14 @@ async def _seed_test_pin(db_pool) -> None:  # type: ignore[no-untyped-def]
     from gruvax.auth.pin import hash_pin
 
     pin_hash = hash_pin("0000")
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with db_pool.connection() as conn:
         await conn.execute(
-            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-            " VALUES ('auth.pin_hash', %s, 'Test PIN (cascade regression)', now())"
-            " ON CONFLICT (key) DO UPDATE"
+            "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+            " VALUES (%s::uuid, 'auth.pin_hash', %s, 'Test PIN (cascade regression)', now())"
+            " ON CONFLICT (profile_id, key) DO UPDATE"
             "  SET value = EXCLUDED.value, updated_at = now()",
-            (f'"{pin_hash}"',),
+            (_DEFAULT_PROFILE_UUID, f'"{pin_hash}"'),
         )
         await conn.commit()
 

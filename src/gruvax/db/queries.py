@@ -1030,11 +1030,13 @@ async def increment_search_count(
         pool:       Open psycopg ``AsyncConnectionPool``.
         release_id: Discogs release ID (integer, server-side — no user text stored).
     """
+    # record_stats PK is (profile_id, release_id) after migration 0010.
+    # Counters are tracked under the default profile (global stats for v1).
     sql = """
 INSERT INTO gruvax.record_stats
-    (release_id, search_count, search_count_7d, last_searched_at, updated_at)
-VALUES (%s, 1, 1, now(), now())
-ON CONFLICT (release_id) DO UPDATE SET
+    (profile_id, release_id, search_count, search_count_7d, last_searched_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000001'::uuid, %s, 1, 1, now(), now())
+ON CONFLICT (profile_id, release_id) DO UPDATE SET
     search_count     = gruvax.record_stats.search_count + 1,
     search_count_7d  = CASE
         WHEN gruvax.record_stats.last_searched_at > now() - INTERVAL '7 days'
@@ -1064,11 +1066,13 @@ async def increment_selection_count(
         pool:       Open psycopg ``AsyncConnectionPool``.
         release_id: Discogs release ID (integer, server-side — no user text stored).
     """
+    # record_stats PK is (profile_id, release_id) after migration 0010.
+    # Counters are tracked under the default profile (global stats for v1).
     sql = """
 INSERT INTO gruvax.record_stats
-    (release_id, selection_count, selection_count_7d, last_selected_at, updated_at)
-VALUES (%s, 1, 1, now(), now())
-ON CONFLICT (release_id) DO UPDATE SET
+    (profile_id, release_id, selection_count, selection_count_7d, last_selected_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000001'::uuid, %s, 1, 1, now(), now())
+ON CONFLICT (profile_id, release_id) DO UPDATE SET
     selection_count     = gruvax.record_stats.selection_count + 1,
     selection_count_7d  = CASE
         WHEN gruvax.record_stats.last_selected_at > now() - INTERVAL '7 days'

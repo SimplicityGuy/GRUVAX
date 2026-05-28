@@ -3,8 +3,8 @@
 Usage (via justfile ``seed-dev`` recipe):
     python -m gruvax.db.seed_boundaries fixtures/boundaries.yaml
 
-The script is idempotent: it upserts based on the (unit_id, row, col) primary
-key.  Running it twice is safe.
+The script is idempotent: it upserts based on the (profile_id, unit_id, row, col)
+primary key.  Running it twice is safe.
 
 It also upserts the unit rows (units must exist before cube_boundaries can
 reference them, per the FK constraint).
@@ -14,6 +14,9 @@ Phase 5 changes:
     SEG-01 migration 0005). The YAML fixture already omits these keys (05-01).
   - ON CONFLICT SET no longer updates last_label / last_catalog.
   - VALUES placeholder count reduced to match the cut-point-only column set.
+
+Phase 2 (migration 0010): cube_boundaries PK is now (profile_id, unit_id, row, col).
+Seed always uses the default profile UUID — dev boundaries belong to the default profile.
 """
 
 from __future__ import annotations
@@ -26,6 +29,10 @@ from typing import Any
 import yaml
 
 from gruvax.db.pool import get_pool_context
+
+
+# Dev boundaries always belong to the default profile (migration 0009 default UUID).
+_DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
 
 
 async def _upsert_units(
@@ -72,17 +79,18 @@ async def _upsert_cubes(
         await conn.execute(
             """
             INSERT INTO gruvax.cube_boundaries
-                (unit_id, row, col,
+                (profile_id, unit_id, row, col,
                  first_label, first_catalog,
                  is_empty)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (unit_id, row, col) DO UPDATE
+            VALUES (%s::uuid, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (profile_id, unit_id, row, col) DO UPDATE
                 SET first_label   = EXCLUDED.first_label,
                     first_catalog = EXCLUDED.first_catalog,
                     is_empty      = EXCLUDED.is_empty,
                     updated_at    = now()
             """,
             (
+                _DEFAULT_PROFILE_UUID,
                 unit_id,
                 cube["row"],
                 cube["col"],

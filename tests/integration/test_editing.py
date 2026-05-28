@@ -96,13 +96,14 @@ async def _login(base_url: str) -> dict[str, str]:
         pool = create_pool(min_size=1, max_size=2, open=False)
         await pool.open()
         test_hash = hash_pin("0000")
+        _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
         async with pool.connection() as conn:
             await conn.execute(
-                "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-                " VALUES ('auth.pin_hash', %s::jsonb, 'Test PIN seeded by test_editing', now())"
-                " ON CONFLICT (key) DO UPDATE"
+                "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+                " VALUES (%s::uuid, 'auth.pin_hash', %s::jsonb, 'Test PIN seeded by test_editing', now())"
+                " ON CONFLICT (profile_id, key) DO UPDATE"
                 "  SET value = EXCLUDED.value, updated_at = now()",
-                (f'"{test_hash}"',),
+                (_DEFAULT_PROFILE_UUID, f'"{test_hash}"'),
             )
             await conn.commit()
         await pool.close()

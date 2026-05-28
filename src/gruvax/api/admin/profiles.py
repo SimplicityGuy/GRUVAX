@@ -296,8 +296,9 @@ async def create_profile(
             ) from None
 
         # Seed default settings rows for the new profile (RESEARCH Open Question 4).
-        # After migration 0011, settings PK is (key) alone — settings are global.
-        # Insert the standard defaults if they don't exist (ON CONFLICT DO NOTHING).
+        # Settings PK is (profile_id, key) — each profile gets its own rows.
+        # Insert per-profile defaults; ON CONFLICT (profile_id, key) DO NOTHING is
+        # idempotent so re-creating a profile with the same ID is safe.
         _DEFAULT_SETTINGS = [
             ("cube.nominal_capacity", "95"),
             ("session.idle_ttl_seconds", "600"),
@@ -305,10 +306,10 @@ async def create_profile(
         ]
         for key, value in _DEFAULT_SETTINGS:
             await cur.execute(
-                "INSERT INTO gruvax.settings (key, value, description, updated_at) "
-                "VALUES (%s, %s::jsonb, %s, now()) "
-                "ON CONFLICT (key) DO NOTHING",
-                (key, value, f"Default value — seeded for profile {new_profile_id}"),
+                "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at) "
+                "VALUES (%s::uuid, %s, %s::jsonb, %s, now()) "
+                "ON CONFLICT (profile_id, key) DO NOTHING",
+                (new_profile_id, key, value, f"Default value — seeded for profile {new_profile_id}"),
             )
 
         await conn.commit()

@@ -250,11 +250,12 @@ async def reset_profile_and_pin(db_pool) -> AsyncIterator[None]:  # type: ignore
     cipher = encrypt_pat(TEST_PAT)
     pin_hash = hash_pin(TEST_PIN)
     async with db_pool.connection() as conn:
+        _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
         await conn.execute(
-            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-            " VALUES ('auth.pin_hash', %s::jsonb, 'Test PIN for sync_cli', now())"
-            " ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
-            (f'"{pin_hash}"',),
+            "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+            " VALUES (%s::uuid, 'auth.pin_hash', %s::jsonb, 'Test PIN for sync_cli', now())"
+            " ON CONFLICT (profile_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+            (_DEFAULT_PROFILE_UUID, f'"{pin_hash}"'),
         )
         await conn.execute(
             "UPDATE gruvax.profiles SET "
