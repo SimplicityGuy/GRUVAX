@@ -111,22 +111,43 @@ def test_collection_snapshot_has_no_v_collection_query() -> None:
 # ── Test 3: every rewired function accepts profile_id + binds %s::uuid ───────
 
 
+# Anti-leakage functions (D2-03/D2-04): profile_id is REQUIRED (no default).
+# These must never leak to the default profile if the caller forgets to pass one.
+_ANTI_LEAKAGE_FUNCTIONS = {search_collection, did_you_mean_query, get_release_for_locate}
+
+
 @pytest.mark.parametrize(
     "fn",
     REWIRED_FUNCTIONS,
     ids=[f.__name__ for f in REWIRED_FUNCTIONS],
 )
 def test_rewired_function_has_profile_id_parameter(fn) -> None:  # type: ignore[no-untyped-def]
-    """Each rewired query function exposes a ``profile_id`` parameter."""
+    """Each rewired query function exposes a ``profile_id`` parameter.
+
+    For the three anti-leakage functions (D2-03/D2-04 — search_collection,
+    did_you_mean_query, get_release_for_locate): profile_id is REQUIRED
+    (no default) to prevent accidental single-profile leakage when the caller
+    forgets to pass a profile_id.
+
+    For all other rewired functions: profile_id must be present; a default is
+    acceptable because those paths don't carry the same leakage risk.
+    """
     sig = inspect.signature(fn)
     assert "profile_id" in sig.parameters, (
         f"{fn.__name__} does not accept a profile_id parameter — P2 readiness lost"
     )
     param = sig.parameters["profile_id"]
-    assert param.default == DEFAULT_PROFILE_UUID, (
-        f"{fn.__name__}.profile_id default ({param.default!r}) "
-        f"must be DEFAULT_PROFILE_UUID for P1 compatibility"
-    )
+    if fn in _ANTI_LEAKAGE_FUNCTIONS:
+        assert param.default is inspect.Parameter.empty, (
+            f"{fn.__name__}.profile_id must be a REQUIRED parameter (no default) "
+            f"per D2-03/D2-04 anti-leakage contract; got default={param.default!r}"
+        )
+    else:
+        # Non-anti-leakage functions may retain a default for backward compat.
+        assert param.default is inspect.Parameter.empty or param.default == DEFAULT_PROFILE_UUID, (
+            f"{fn.__name__}.profile_id default ({param.default!r}) must be "
+            f"inspect.Parameter.empty or DEFAULT_PROFILE_UUID"
+        )
 
 
 def test_queries_source_binds_profile_id_uuid_in_sql_bodies() -> None:
@@ -158,7 +179,7 @@ async def test_search_returns_canonical_catalog_row(db_pool) -> None:  # type: i
     in the Blue Note label. The catalog-boost path is the dominant scorer for
     is_catalog_query("BLP 1000") → True.
     """
-    rows, took_ms, _did_you_mean = await search_collection(db_pool, "BLP 1000", limit=10)
+    rows, took_ms, _did_you_mean = await search_collection(db_pool, "BLP 1000", limit=10, profile_id=DEFAULT_PROFILE_UUID)
     assert rows, f"Expected a hit for 'BLP 1000', got empty (took_ms={took_ms})"
     # Response-shape compatibility: primary_artist + collection_item_id + format
     # keys must be present (Plan 01-06 SQL alias compatibility decision).

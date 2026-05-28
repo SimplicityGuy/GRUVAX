@@ -688,6 +688,7 @@ async def write_history_row(
     new_first_catalog: str | None,
     new_is_empty: bool,
     source: str,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> None:
     """Append one row to boundary_history for a single cube change.
 
@@ -701,6 +702,9 @@ async def write_history_row(
     new_last_* because cube_boundaries no longer stores last_* values.
     prev_last_* are also NULL for rows written after the 0005 migration.
 
+    Phase 2 (D2 migration 0010): profile_id column is NOT NULL. Defaults to
+    DEFAULT_PROFILE_UUID for P1 single-profile call sites.
+
     Args:
         conn:          Open psycopg async connection (inside a transaction).
         change_set_id: UUID shared across all cubes in one atomic commit.
@@ -712,14 +716,15 @@ async def write_history_row(
         new_first_catalog: New cut-point catalog number (None only when is_empty=True).
         new_is_empty:  Whether the cube is now empty.
         source:        'manual', 'bulk', 'revert', or 'cut_insert'.
+        profile_id:    UUID of the profile these boundaries belong to (P1: default).
     """
     sql = """
 INSERT INTO gruvax.boundary_history (
-    change_set_id, unit_id, row, col,
+    profile_id, change_set_id, unit_id, row, col,
     prev_first_label, prev_first_catalog, prev_last_label, prev_last_catalog, prev_is_empty,
     new_first_label, new_first_catalog, new_last_label, new_last_catalog, new_is_empty,
     source
-) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+) VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
     prev_first_label = prev.get("first_label") if prev else None
     prev_first_catalog = prev.get("first_catalog") if prev else None
@@ -731,6 +736,7 @@ INSERT INTO gruvax.boundary_history (
     await conn.execute(
         sql,
         (
+            profile_id,
             change_set_id,
             unit_id,
             row,

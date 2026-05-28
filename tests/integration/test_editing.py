@@ -141,21 +141,26 @@ async def test_editing_fans_out(live_server) -> None:  # type: ignore[no-untyped
     """Authenticated POST /api/admin/editing fans out admin_editing via SSE.
 
     Binds RTM-04 + D-01:
-      1. Open an SSE reader on GET /api/events.
+      1. Open an SSE reader on GET /api/events/{profile_id} (Plan 02-03 per-profile endpoint).
       2. Wait ~50ms for the SSE connection to establish.
       3. POST /api/admin/editing with a valid admin session + X-CSRF-Token.
       4. Assert the SSE stream delivers an admin_editing event within 1s.
     """
+    DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+    BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
+
     auth = await _login(live_server)
     if not auth:
         pytest.skip("Admin login not available — skipping fan-out test")
 
     received = asyncio.Event()
+    sse_url = f"/api/events/{DEFAULT_PROFILE_UUID}"
+    sse_cookies = {BROWSE_BINDING_COOKIE: DEFAULT_PROFILE_UUID}
 
     async def read_sse() -> None:
         async with (
             httpx.AsyncClient(base_url=live_server) as ac,
-            ac.stream("GET", "/api/events") as response,
+            ac.stream("GET", sse_url, cookies=sse_cookies) as response,
         ):
             async for line in response.aiter_lines():
                 if "admin_editing" in line:

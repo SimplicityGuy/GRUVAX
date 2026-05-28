@@ -256,10 +256,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # ── P1-compat singular aliases (consumed by deps.py, health.py, sync, etc.) ─
     # Point to the default profile's instances; fall back to empty objects if
     # the default profile hasn't been created yet (fresh install).
-    # NOTE: app.state.event_bus is intentionally NOT aliased here — the registry
-    # replaces it. Plan 02-03 will update api/events.py to use get_bus_for_profile.
-    # The legacy get_event_bus dep returns 503 until that migration lands, which
-    # is the correct behaviour (SSE is per-profile from this plan forward).
     app.state.boundary_cache = app.state.boundary_cache_registry.get(
         _default_pid_str, BoundaryCache()
     )
@@ -271,6 +267,16 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     )
     app.state.settings_cache = app.state.settings_cache_registry.get(
         _default_pid_str, {}
+    )
+    # P1-compat event_bus alias: admin editing endpoints (editing.py, cubes.py,
+    # segments.py, import_.py, history.py) still use get_event_bus(request) which
+    # reads app.state.event_bus. Wire it to the default profile's bus so those
+    # endpoints work until each is migrated to get_bus_for_profile (D2-04).
+    # Genuine wiring fix: without this alias the boundary_changed fan-out in admin
+    # edit endpoints is silently missing the per-profile EventBus and the SSE
+    # boundary_changed_latency test fails (ADMN-11 gate).
+    app.state.event_bus = app.state.event_bus_registry.get(
+        _default_pid_str, EventBus()
     )
 
     # ── 4. MQTT (non-blocking best-effort; DEP-01) ───────────────────────────

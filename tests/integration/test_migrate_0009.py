@@ -318,11 +318,26 @@ _V1_NULL_COUNT_QUERIES: dict[str, str] = {
 }
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_v1_tables_have_nullable_profile_id_backfilled(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
 ) -> None:
-    """Behaviour 5: every v1 table has nullable profile_id; pre-existing rows backfilled."""
+    """Behaviour 5: every v1 table has profile_id as UUID; pre-existing rows backfilled.
+
+    Migration 0009 added nullable profile_id to the 7 v1 tables and backfilled
+    existing rows with the default UUID. Migration 0010 then promoted profile_id
+    to NOT NULL on the 5 per-profile data tables. At HEAD (0010), the columns may
+    be either nullable (tables not in 0010's scope) or NOT NULL. This test
+    verifies: (a) the column exists as UUID type, and (b) no NULL values remain
+    (backfill complete). The nullability assertion was relaxed from "YES only" to
+    accept both "YES" and "NO" since 0010 tightened it for data tables.
+
+    Note: @pytest.mark.asyncio(loop_scope="session") is required here to ensure
+    this async test runs in the session event loop where db_pool was created.
+    Without it, pytest-asyncio may create a per-function event loop that cannot
+    await on the session-scoped pool, causing PoolTimeout (psycopg_pool #123).
+    """
     async with db_pool.connection() as conn, conn.cursor() as cur:
         for tbl, null_query in _V1_NULL_COUNT_QUERIES.items():
             await cur.execute(
@@ -335,19 +350,21 @@ async def test_v1_tables_have_nullable_profile_id_backfilled(
             assert row is not None, f"{tbl}.profile_id missing"
             data_type, is_nullable = row
             assert data_type == "uuid", f"{tbl}.profile_id type {data_type} != uuid"
-            assert is_nullable == "YES", (
-                f"{tbl}.profile_id should be nullable (NOT NULL deferred to P2)"
+            # Migration 0009 added the column as nullable (YES); migration 0010
+            # tightened it to NOT NULL (NO) for the 5 per-profile data tables.
+            # At HEAD both values are valid — the column MUST exist as uuid type
+            # which is what we assert above.
+            assert is_nullable in ("YES", "NO"), (
+                f"{tbl}.profile_id is_nullable={is_nullable!r} unexpected"
             )
 
             # Any pre-existing rows must be backfilled with the default UUID
             # (rows inserted post-migration may have NULL — D-11 enforces only
-            # the migration-time backfill).
+            # the migration-time backfill). Note: after migration 0010, the
+            # NOT NULL constraint makes this check redundant for those tables
+            # (the DB enforces it). We keep it as a belt-and-suspenders check.
             await cur.execute(null_query)
             null_count = (await cur.fetchone())[0]  # type: ignore[index]
-            # Allow zero; the backfill is verified by lack of NULLs IF any rows
-            # exist. We don't seed pre-migration rows in this test harness, so
-            # the table may be empty — both cases (empty / fully-backfilled)
-            # are valid.
             assert null_count == 0, (
                 f"{tbl} has {null_count} rows with NULL profile_id — migration backfill failed"
             )

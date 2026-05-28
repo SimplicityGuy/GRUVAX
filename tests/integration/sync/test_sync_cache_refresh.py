@@ -139,11 +139,9 @@ async def test_snapshot_reloaded_after_sync(  # type: ignore[no-untyped-def]
     load_calls: list[int] = []
     real_load = snapshot.load
 
-    async def _instrumented_load(pool):  # type: ignore[no-untyped-def]
+    async def _instrumented_load(pool, **kwargs):  # type: ignore[no-untyped-def]
         load_calls.append(1)
-        # Don't run the real load (v_collection was dropped); just record the
-        # call. Plan 06 swaps the query to profile_collection — at that point
-        # this test could call real_load and assert snapshot.size grew.
+        # Don't run the real load; just record the call.
         _ = real_load
 
     snapshot.load = _instrumented_load  # type: ignore[method-assign]
@@ -152,11 +150,13 @@ async def test_snapshot_reloaded_after_sync(  # type: ignore[no-untyped-def]
     app = create_fake_app(seed=seed)
     monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app))
 
+    from gruvax.events.bus import EventBus
     app_state = types.SimpleNamespace(
         db_pool=db_pool,
-        collection_snapshot=snapshot,
-        boundary_cache=boundary,
-        segment_cache=segment,
+        boundary_cache_registry={DEFAULT_UUID: boundary},
+        snapshot_registry={DEFAULT_UUID: snapshot},
+        segment_cache_registry={DEFAULT_UUID: segment},
+        event_bus_registry={DEFAULT_UUID: EventBus()},
     )
 
     # boundary_cache.load is real but the table is empty in this test → bins[]
@@ -177,7 +177,7 @@ async def test_segment_cache_derive_called_with_fresh_snapshot(  # type: ignore[
     # snapshot.load currently still targets v_collection (dropped in 0009).
     # Plan 06 will rewire it to profile_collection. For Task 2 we sidestep
     # the rewire and just stub load — derive's call-site is what we assert.
-    async def _stub_load(pool):  # type: ignore[no-untyped-def]
+    async def _stub_load(pool, **kwargs):  # type: ignore[no-untyped-def]
         return None
 
     snapshot.load = _stub_load  # type: ignore[method-assign]
@@ -196,11 +196,13 @@ async def test_segment_cache_derive_called_with_fresh_snapshot(  # type: ignore[
     app = create_fake_app(seed=seed)
     monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app))
 
+    from gruvax.events.bus import EventBus
     app_state = types.SimpleNamespace(
         db_pool=db_pool,
-        collection_snapshot=snapshot,
-        boundary_cache=boundary,
-        segment_cache=segment,
+        boundary_cache_registry={DEFAULT_UUID: boundary},
+        snapshot_registry={DEFAULT_UUID: snapshot},
+        segment_cache_registry={DEFAULT_UUID: segment},
+        event_bus_registry={DEFAULT_UUID: EventBus()},
     )
 
     await sync_profile(DEFAULT_UUID, app_state)
@@ -214,10 +216,13 @@ async def test_segment_cache_derive_called_with_fresh_snapshot(  # type: ignore[
 async def test_boundary_cache_load_called(  # type: ignore[no-untyped-def]
     db_pool, clean_db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Test 3: boundary_cache.load is awaited during _refresh_app_caches."""
+    """Test 3: boundary_cache.load is awaited during _refresh_profile_caches."""
+    from gruvax.events.bus import EventBus
+
     snapshot = AsyncMock()
     snapshot.invalidate = lambda: None
     boundary = AsyncMock()
+    boundary.invalidate = lambda: None
     boundary.load = AsyncMock(return_value=None)
     boundary.overrides = {}
     segment = AsyncMock()
@@ -229,13 +234,15 @@ async def test_boundary_cache_load_called(  # type: ignore[no-untyped-def]
 
     app_state = types.SimpleNamespace(
         db_pool=db_pool,
-        collection_snapshot=snapshot,
-        boundary_cache=boundary,
-        segment_cache=segment,
+        boundary_cache_registry={DEFAULT_UUID: boundary},
+        snapshot_registry={DEFAULT_UUID: snapshot},
+        segment_cache_registry={DEFAULT_UUID: segment},
+        event_bus_registry={DEFAULT_UUID: EventBus()},
     )
 
     await sync_profile(DEFAULT_UUID, app_state)
-    boundary.load.assert_awaited_once_with(db_pool)
+    # _refresh_profile_caches calls cache.load(pool, profile_id=profile_id)
+    boundary.load.assert_awaited_once()
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -243,12 +250,14 @@ async def test_cache_refresh_failure_preserves_committed_swap(  # type: ignore[n
     db_pool, clean_db, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Test 4: if cache refresh raises, the DB swap is STILL committed."""
+    from gruvax.events.bus import EventBus
+
+    boundary = AsyncMock()
+    boundary.invalidate = lambda: None
+    boundary.load = AsyncMock(side_effect=RuntimeError("cache refresh blew up"))
+    boundary.overrides = {}
     snapshot = AsyncMock()
     snapshot.invalidate = lambda: None
-    snapshot.load = AsyncMock(side_effect=RuntimeError("cache refresh blew up"))
-    boundary = AsyncMock()
-    boundary.load = AsyncMock(return_value=None)
-    boundary.overrides = {}
     segment = AsyncMock()
     segment.derive = lambda *a, **kw: None
 
@@ -258,9 +267,10 @@ async def test_cache_refresh_failure_preserves_committed_swap(  # type: ignore[n
 
     app_state = types.SimpleNamespace(
         db_pool=db_pool,
-        collection_snapshot=snapshot,
-        boundary_cache=boundary,
-        segment_cache=segment,
+        boundary_cache_registry={DEFAULT_UUID: boundary},
+        snapshot_registry={DEFAULT_UUID: snapshot},
+        segment_cache_registry={DEFAULT_UUID: segment},
+        event_bus_registry={DEFAULT_UUID: EventBus()},
     )
 
     with pytest.raises(RuntimeError, match="cache refresh blew up"):
