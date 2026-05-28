@@ -112,14 +112,27 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
   5. p95 `/api/search` ≤ 200 ms and `/api/locate` ≤ 50 ms SLOs hold with 2+ profiles cached in memory (verified via the v1.0 Phase 8 CI benchmark gate, parameterized over profile_id).
 
 **Plans**: 8 plans (6 waves; W0: 02-00 | W1: 02-01 | W2: 02-02 | W3 parallel: 02-03 + 02-04 + 02-05 | W4: 02-06 | W5: 02-07)
+**Wave 1**
 
 - [ ] 02-00-PLAN.md — Wave 0 test scaffolding: 6 RED test files + `second_profile` fixture (PROF-04/PROF-02/API-02/SYN-02 baselines)
 - [ ] 02-01-PLAN.md — Migration 0010: `profile_id NOT NULL` on 5 data tables + 4 composite PKs (2 infra tables stay nullable) + clean round-trip (PROF-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 02-02-PLAN.md — Per-profile cache/bus/state registries on app.state + per-profile resolution deps + per-profile sync cache refresh (API-02, SYN-02, D2-01..06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 02-03-PLAN.md — Per-profile SSE `/api/events/{profile_id}` + profile-scoped search/locate/illuminate + re-parameterized SLO gate (API-02, SYN-02, D2-04)
 - [ ] 02-04-PLAN.md — Browse-binding session: `GET /api/session` bootstrap + auto-bind + bind/unbind + independent cookie (PROF-02, SYN-02, D2-07/08/10)
 - [ ] 02-05-PLAN.md — Profile CRUD + connect/rotate-PAT + 202+poll sync conversion + soft-delete registry eviction (PROF-01, PROF-02, D2-12/13)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 02-06-PLAN.md — Browser profile UX: `/select` picker + onboarding + Switch-profile button + empty-collection state + KioskView per-profile wiring (PROF-02, SYN-02, D2-03/07/08/09)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 02-07-PLAN.md — Profile-manager admin UI: PROFILES tab + list + status badges + bottom-sheet drawer (connect/rotate/rename/sync/delete) + 202 poll + toast (PROF-02, PROF-01, D2-11)
 
 **UI hint**: yes
