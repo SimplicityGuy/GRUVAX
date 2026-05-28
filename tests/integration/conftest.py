@@ -151,7 +151,7 @@ def _seed_cube_boundaries(conn: psycopg.Connection) -> None:
     Uses the composite PK (profile_id, unit_id, row, col) from migration 0010.
     Boundaries belong to the default profile.
     """
-    import yaml  # noqa: PLC0415
+    import yaml
 
     if not _BOUNDARIES_YAML_PATH.is_file():
         return  # no fixture to seed — skip gracefully
