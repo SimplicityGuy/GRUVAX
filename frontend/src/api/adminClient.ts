@@ -59,8 +59,11 @@ function getCsrfToken(): string {
  * When ``body`` is a ``FormData`` instance, the ``Content-Type`` default is
  * intentionally omitted so the browser can set the multipart boundary
  * automatically (file upload pattern — PATTERNS.md §adminClient.ts).
+ *
+ * Exported so sibling admin clients (e.g. ``api/devices.ts``) reuse the single
+ * CSRF/credentials path instead of re-implementing it (CR-01).
  */
-async function adminFetch(
+export async function adminFetch(
   path: string,
   options: RequestInit = {},
 ): Promise<Response> {

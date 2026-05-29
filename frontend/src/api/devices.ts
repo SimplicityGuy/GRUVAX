@@ -16,6 +16,8 @@
  * Design tokens: n/a (API client only — no UI concerns)
  */
 
+import { adminFetch } from './adminClient'
+
 export type DeviceState = 'unpaired' | 'pending' | 'paired' | 'revoked'
 
 export interface PairingCodeResponse {
@@ -76,9 +78,14 @@ export async function getDeviceMe(): Promise<DeviceMeResponse> {
 
 // ── Admin helpers ───────────────────────────────────────────────────────────
 
+// All admin device calls route through `adminFetch` so the X-CSRF-Token header
+// (double-submit pattern) and `credentials: 'same-origin'` are attached — the
+// backend `require_admin` dependency 403s any mutating request without a matching
+// CSRF header (CR-01). adminFetch also sets the JSON Content-Type by default.
+
 /** GET /api/admin/devices — list all devices grouped by state. */
 export async function getAdminDevices(): Promise<AdminDevicesResponse> {
-  const res = await fetch('/api/admin/devices')
+  const res = await adminFetch('/api/admin/devices')
   if (!res.ok) {
     throw new Error(`Failed to fetch devices: ${res.status}`)
   }
@@ -87,9 +94,8 @@ export async function getAdminDevices(): Promise<AdminDevicesResponse> {
 
 /** POST /api/admin/devices/bind — bind a pairing code to a device. */
 export async function bindDevice(body: BindDeviceRequest): Promise<DeviceRow> {
-  const res = await fetch('/api/admin/devices/bind', {
+  const res = await adminFetch('/api/admin/devices/bind', {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   })
   if (!res.ok) {
@@ -101,9 +107,8 @@ export async function bindDevice(body: BindDeviceRequest): Promise<DeviceRow> {
 
 /** PATCH /api/admin/devices/{id} — rename device. */
 export async function renameDevice(id: string, displayName: string): Promise<void> {
-  const res = await fetch(`/api/admin/devices/${id}`, {
+  const res = await adminFetch(`/api/admin/devices/${id}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ display_name: displayName }),
   })
   if (!res.ok) {
@@ -113,9 +118,8 @@ export async function renameDevice(id: string, displayName: string): Promise<voi
 
 /** PATCH /api/admin/devices/{id} — change or clear a device's profile binding. */
 export async function changeDeviceProfile(id: string, profileId: string | null): Promise<void> {
-  const res = await fetch(`/api/admin/devices/${id}`, {
+  const res = await adminFetch(`/api/admin/devices/${id}`, {
     method: 'PATCH',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ profile_id: profileId }),
   })
   if (!res.ok) {
@@ -130,7 +134,7 @@ export async function unbindDevice(id: string): Promise<void> {
 
 /** POST /api/admin/devices/{id}/revoke — revoke a device. */
 export async function revokeDevice(id: string): Promise<void> {
-  const res = await fetch(`/api/admin/devices/${id}/revoke`, { method: 'POST' })
+  const res = await adminFetch(`/api/admin/devices/${id}/revoke`, { method: 'POST' })
   if (!res.ok) {
     throw new Error(`Revoke failed: ${res.status}`)
   }
@@ -138,7 +142,7 @@ export async function revokeDevice(id: string): Promise<void> {
 
 /** POST /api/admin/devices/{id}/reinstate — reinstate a revoked device. */
 export async function reinstateDevice(id: string): Promise<void> {
-  const res = await fetch(`/api/admin/devices/${id}/reinstate`, { method: 'POST' })
+  const res = await adminFetch(`/api/admin/devices/${id}/reinstate`, { method: 'POST' })
   if (!res.ok) {
     throw new Error(`Reinstate failed: ${res.status}`)
   }
@@ -146,7 +150,7 @@ export async function reinstateDevice(id: string): Promise<void> {
 
 /** DELETE /api/admin/devices/{id} — permanently delete a device record. */
 export async function deleteDevice(id: string): Promise<void> {
-  const res = await fetch(`/api/admin/devices/${id}`, { method: 'DELETE' })
+  const res = await adminFetch(`/api/admin/devices/${id}`, { method: 'DELETE' })
   if (!res.ok) {
     throw new Error(`Delete failed: ${res.status}`)
   }
