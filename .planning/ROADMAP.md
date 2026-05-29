@@ -167,8 +167,8 @@ Plans:
 
 **Wave 3** *(blocked on Wave 2 completion)*
 
-- [ ] 03-02-PLAN.md — Kiosk pairing endpoints + admin device CRUD + atomic PIN-gated rate-limited bind + revoke/reassign SSE (DEV-02, DEV-03)
-- [ ] 03-03-PLAN.md — Device-aware resolution + per-request revoke guard + GET /api/session device binding + profile soft-delete detach (DEV-02, DEV-03)
+- [x] 03-02-PLAN.md — Kiosk pairing endpoints + admin device CRUD + atomic PIN-gated rate-limited bind + revoke/reassign SSE (DEV-02, DEV-03)
+- [x] 03-03-PLAN.md — Device-aware resolution + per-request revoke guard + GET /api/session device binding + profile soft-delete detach (DEV-02, DEV-03)
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
@@ -202,7 +202,7 @@ Plans:
 |-------|-----------|-------|--------|-----------|
 | 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
 | 2. Real Position Estimation | v1.0 | 11/10 | Complete    | 2026-05-29 |
-| 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 2/6 | In Progress|  |
+| 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 4/6 | In Progress|  |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
 | 6. LED Contract over MQTT | v1.0 | 4/4 | Complete | 2026-05-24 |
