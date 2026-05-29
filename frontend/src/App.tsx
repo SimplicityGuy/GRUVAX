@@ -13,6 +13,7 @@ import { Settings } from './routes/admin/Settings'
 import { ShelfBinList } from './routes/admin/ShelfBinList'
 import { Wizard } from './routes/admin/Wizard'
 import { KioskView } from './routes/kiosk/KioskView'
+import { PairView } from './routes/kiosk/PairView'
 import { ProfilePicker } from './routes/ProfilePicker'
 import { getSession } from './api/session'
 import { useSessionStore } from './state/sessionStore'
@@ -63,11 +64,24 @@ function AppInner() {
     getSession()
       .then((data) => {
         setSession(data)
+        const currentPath = window.location.pathname
+
+        // D3-03: if the device fingerprint is already paired (03-03 session extension),
+        // stay on '/' — the paired device should go straight to the bound-profile search UI.
+        // Never redirect /pair or /admin to '/' — those are intentional destinations.
+        if (data.is_device_paired && data.bound_profile_id) {
+          if (currentPath !== '/' && !currentPath.startsWith('/admin')) {
+            void navigate('/', { replace: true })
+          }
+          return
+        }
+
         // D2-08: if no bound_profile_id, the SPA must go to /select.
         // Single-profile auto-bind is server-side — server sets the cookie and
         // returns bound_profile_id in the same response, so we only redirect here
         // when the response genuinely has no binding.
-        if (!data.bound_profile_id) {
+        // Exemption: /pair is always allowed (device pairing flow).
+        if (!data.bound_profile_id && currentPath !== '/pair' && !currentPath.startsWith('/admin')) {
           void navigate('/select', { replace: true })
         }
       })
@@ -80,6 +94,7 @@ function AppInner() {
   return (
     <Routes>
       <Route path="/" element={<KioskView />} />
+      <Route path="/pair" element={<PairView />} />
       <Route path="/select" element={<ProfilePicker />} />
       <Route path="/admin" element={<AdminShell />}>
         <Route index element={<Settings />} />

@@ -19,6 +19,10 @@ export interface SessionData {
   profile_count: number
   bound_profile_id: string | null
   profiles: ProfileSummary[]
+  /** Device ID for the current fingerprint cookie (D3-04 — 03-03 extension). */
+  device_id?: string | null
+  /** True when the device fingerprint is bound to a profile (D3-03 routing rule). */
+  is_device_paired?: boolean
 }
 
 /**
