@@ -36,9 +36,9 @@
 
 ### Devices + pairing (DEV)
 
-- [ ] **DEV-01** — `devices` + `pairing_codes` tables: fingerprint cookie (HttpOnly + SameSite=Strict, persistent across reboot), partial-unique indexes on active rows, 5-min TTL on pairing codes with `consumed_at` one-shot guard
-- [ ] **DEV-02** — RPi device-to-profile binding: admin can assign / reassign / unbind / revoke via mobile UI (PENDING / PAIRED / REVOKED groupings, drawer per device); kiosk reflects bound profile across search, locate, SSE, LED, staleness; profile soft-delete detaches bound devices (kiosks revert to profile-picker)
-- [ ] **DEV-03** — Headless RPi pairing/binding flow A: kiosk displays a 4-digit server-generated code (Nordic Grid styling, large DM Mono digits, 5-min countdown, auto-reroll on expiry); admin types code in mobile admin (reuses v1 in-app numeric keypad from Phase 3); successful bind → kiosk auto-navigates to bound-profile search UI in <30s end-to-end
+- [x] **DEV-01** — `devices` + `pairing_codes` tables: fingerprint cookie (HttpOnly + SameSite=Strict, persistent across reboot), partial-unique indexes on active rows, 5-min TTL on pairing codes with `consumed_at` one-shot guard
+- [x] **DEV-02** — RPi device-to-profile binding: admin can assign / reassign / unbind / revoke via mobile UI (PENDING / PAIRED / REVOKED groupings, drawer per device); kiosk reflects bound profile across search, locate, SSE, LED, staleness; profile soft-delete detaches bound devices (kiosks revert to profile-picker)
+- [x] **DEV-03** — Headless RPi pairing/binding flow A: kiosk displays a 4-digit server-generated code (Nordic Grid styling, large DM Mono digits, 5-min countdown, auto-reroll on expiry); admin types code in mobile admin (reuses v1 in-app numeric keypad from Phase 3); successful bind → kiosk auto-navigates to bound-profile search UI in <30s end-to-end
 
 ---
 
