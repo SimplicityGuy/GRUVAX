@@ -9,10 +9,12 @@
  * Design tokens only — no hardcoded hex.
  */
 
-import { Link } from 'react-router'
+import { Link, useNavigate } from 'react-router'
 import './picker.css'
+import './admin/admin.css'
 
 export function OnboardingScreen() {
+  const navigate = useNavigate()
   return (
     <div className="picker-page picker-page--onboarding">
       <h1 className="picker-heading">NO COLLECTIONS YET</h1>
@@ -23,6 +25,18 @@ export function OnboardingScreen() {
       <Link to="/admin" className="onboarding-cta">
         OPEN ADMIN PANEL
       </Link>
+      {/* D3-02: PAIR THIS SCREEN affordance — below the primary CTA */}
+      <button
+        type="button"
+        className="pair-screen-btn"
+        onClick={() => void navigate('/pair')}
+        style={{ marginTop: 'var(--gruvax-space-5)', maxWidth: '320px' }}
+      >
+        PAIR THIS SCREEN AS A DEVICE
+      </button>
+      <p className="pair-screen-sub" style={{ marginTop: 'var(--gruvax-space-2)' }}>
+        Already have profiles set up? Link this screen to one.
+      </p>
     </div>
   )
 }
