@@ -39,6 +39,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from gruvax.api.admin.router import create_admin_router
+from gruvax.api.devices import router as devices_router
 from gruvax.api.events import router as events_router
 from gruvax.api.health import router as health_router
 from gruvax.api.illuminate import router as illuminate_router
@@ -439,6 +440,10 @@ def create_app() -> FastAPI:
     # ── Session bootstrap router (Plan 02-04) — BEFORE StaticFiles mount (Pitfall 3) ─
     # GET /api/session, POST/DELETE /api/session/bind — no PIN required (R7, D2-10).
     app.include_router(session_router, prefix="/api")
+
+    # ── Kiosk device router (Plan 03-02) — BEFORE StaticFiles mount (Pitfall 3) ─
+    # POST /api/devices/pairing-codes, GET /api/devices/me — no PIN required (kiosk-facing).
+    app.include_router(devices_router, prefix="/api")
 
     # ── StaticFiles SPA mount LAST ───────────────────────────────────────────
     # Plan 04 (React SPA) builds the frontend and copies the dist/ into static/.

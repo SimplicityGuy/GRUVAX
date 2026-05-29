@@ -16,6 +16,7 @@ from __future__ import annotations
 from fastapi import APIRouter
 
 from gruvax.api.admin.cubes import router as cubes_router
+from gruvax.api.admin.devices import router as admin_devices_router
 from gruvax.api.admin.diagnostics import router as diagnostics_router
 from gruvax.api.admin.editing import router as editing_router
 from gruvax.api.admin.export import router as export_router
@@ -51,4 +52,5 @@ def create_admin_router() -> APIRouter:
     router.include_router(diagnostics_router)
     router.include_router(profile_sync_router)
     router.include_router(profiles_router)
+    router.include_router(admin_devices_router)
     return router
