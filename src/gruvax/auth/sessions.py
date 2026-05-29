@@ -41,6 +41,18 @@ CSRF_COOKIE = "gruvax_csrf"
 # on every per-profile endpoint (D2-04, T-02-04-01); no signing needed on LAN.
 BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
 
+# Device fingerprint cookie (DEV-01 — INDEPENDENT of admin session + browse-binding).
+# HttpOnly=True: JS must NEVER read the fingerprint — it is a session-equivalent
+# secret (T-03-01). The SPA identifies the device by device_id (non-secret UUID)
+# returned by GET /api/session; the fingerprint itself never reaches the DOM.
+# max_age=30 days: Chromium only writes cookies to disk (user-data-dir) when
+# max_age is explicitly set — session cookies are NOT persisted on browser exit
+# (RESEARCH.md Pitfall 1, verified: Playwright issue #36139 upstream Chromium).
+# Secure=False for home-LAN HTTP; set True when TLS lands (mirrors BROWSE_BINDING).
+# The 30-day horizon outlives any reboot cycle; revocation is authoritative (D3-07).
+FINGERPRINT_COOKIE = "gruvax_device_fp"
+FINGERPRINT_MAX_AGE = 30 * 24 * 3600
+
 # Hard session cap (30 min) — override via function arg if needed (Pitfall 23)
 HARD_CAP_SECONDS = 1800
 
@@ -253,6 +265,84 @@ def clear_browse_binding_cookie(response: Response, secure: bool = False) -> Non
         BROWSE_BINDING_COOKIE,
         path="/",
         httponly=False,
+        samesite="strict",
+        secure=secure,
+    )
+
+
+def issue_fingerprint_cookie(response: Response, secure: bool = False) -> str:
+    """Issue a new opaque HttpOnly fingerprint cookie and return the raw token.
+
+    Generates a 32-byte CSPRNG token via ``secrets.token_urlsafe(32)`` (256 bits
+    of entropy — RESEARCH.md Pattern 1; ASVS V6). Sets the cookie HttpOnly so JS
+    can NEVER read it (fingerprint is a session-equivalent secret, T-03-01).
+
+    max_age is required: Chromium does NOT persist session cookies (no max_age) to
+    the user-data-dir SQLite store — they vanish on browser exit / Pi reboot.
+    Setting max_age=FINGERPRINT_MAX_AGE (30 days) ensures disk persistence
+    (RESEARCH.md Pitfall 1, D3-09).
+
+    The raw token value is returned so the caller can persist it to gruvax.devices.
+    NEVER log this value — treat with the same redaction discipline as the admin PIN
+    (RESEARCH.md Pitfall 7, T-03-02).
+
+    This cookie is INDEPENDENT of the admin session cookie (D3-04). Do not couple
+    it to set_browse_binding_cookie — they serve different security domains.
+
+    Args:
+        response: FastAPI ``Response`` to attach the cookie to.
+        secure:   Whether to set the ``Secure`` flag (default False for LAN HTTP;
+                  set True when TLS lands in a future deployment).
+
+    Returns:
+        The raw fingerprint token string (do not log; store to DB as-is).
+    """
+    fp = secrets.token_urlsafe(32)  # 32 bytes → ~43 URL-safe chars, 256-bit CSPRNG
+    response.set_cookie(
+        FINGERPRINT_COOKIE,
+        fp,
+        httponly=True,
+        samesite="strict",
+        secure=secure,
+        max_age=FINGERPRINT_MAX_AGE,
+    )
+    return fp
+
+
+def get_fingerprint(request: Any) -> str | None:
+    """Extract the fingerprint from the HttpOnly cookie (None if absent).
+
+    Returns the raw opaque token string, or None if the fingerprint cookie is not
+    present in the request. Callers use this to identify devices on each request.
+
+    NEVER log the returned value — it is a session-equivalent secret (T-03-02).
+
+    Args:
+        request: FastAPI ``Request`` with cookies.
+
+    Returns:
+        The fingerprint token string, or ``None`` if the cookie is absent.
+    """
+    return request.cookies.get(FINGERPRINT_COOKIE)
+
+
+def clear_fingerprint_cookie(response: Response, secure: bool = False) -> None:
+    """Clear the fingerprint cookie (device unbind / revoke, D3-07).
+
+    The ``delete_cookie`` attributes MUST match the ``set_cookie`` attributes
+    exactly (path, httponly, samesite, secure) so browsers actually remove the
+    cookie. Mismatched attributes would be treated as a different cookie by the
+    browser, leaving the old fingerprint alive — the CR-04 invariant enforced here
+    mirrors ``clear_browse_binding_cookie`` (lines 248-268).
+
+    Args:
+        response: FastAPI ``Response`` to modify.
+        secure:   Whether the cookie was set with ``Secure=True`` (default False).
+    """
+    response.delete_cookie(
+        FINGERPRINT_COOKIE,
+        path="/",
+        httponly=True,
         samesite="strict",
         secure=secure,
     )
