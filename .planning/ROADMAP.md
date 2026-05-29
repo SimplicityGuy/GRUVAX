@@ -156,14 +156,28 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
   5. Pairing-code brute-force resistance holds: 5-min TTL × 10k keyspace × `consumed_at` one-shot guard × admin PIN-gating on `/api/admin/devices/bind`; concurrent bind attempts on the same code → first wins, second sees "Code not found".
 
 **Plans**: 6 plans (5 waves; W1: 03-00 | W2: 03-01 | W3 parallel: 03-02 + 03-03 | W4: 03-04 | W5: 03-05)
-
 Plans:
+**Wave 1**
+
 - [ ] 03-00-PLAN.md — Wave 0 test scaffolding: RED test files for DEV-01/02/03 + Playwright dev dep (package-legitimacy checkpoint)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
 - [ ] 03-01-PLAN.md — Migration 0011 (devices + pairing_codes + indexes, round-trip) + HttpOnly fingerprint cookie helpers (DEV-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
 - [ ] 03-02-PLAN.md — Kiosk pairing endpoints + admin device CRUD + atomic PIN-gated rate-limited bind + revoke/reassign SSE (DEV-02, DEV-03)
 - [ ] 03-03-PLAN.md — Device-aware resolution + per-request revoke guard + GET /api/session device binding + profile soft-delete detach (DEV-02, DEV-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
 - [ ] 03-04-PLAN.md — Frontend: /pair countdown route + admin Devices UI (groups + drawer + NumericKeypad bind) + routing precedence + affordances (DEV-02, DEV-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
 - [ ] 03-05-PLAN.md — Pi provisioning artifacts (start-kiosk.sh + systemd unit + README) + Playwright reboot-persistence test (DEV-01)
+
 **UI hint**: yes
 
 ### Phase 4: Sync polish + diagnostics
