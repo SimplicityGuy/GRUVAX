@@ -999,6 +999,48 @@
   outline-offset: 2px;
 }
 
+/* ── Shelf layout unconfigured state (Plan 09 / D-12) ───────────────────── */
+
+/*
+ * Shown near the shelf area when a locate result returns HTTP 200 with
+ * primary_cube=null and confidence=0 — the release IS in the collection but
+ * no cube boundary covers its label (zero-boundary profile).
+ *
+ * Distinct from EmptyCollectionState (unsynced/no records).
+ * Mirrors EmptyCollectionState spacing and typography; tokens only.
+ */
+
+.shelf-layout-unconfigured {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gruvax-space-3); /* 12px */
+  padding: var(--gruvax-space-6) var(--gruvax-space-5); /* 32px 24px */
+  text-align: center;
+}
+
+/* Heading: Space Grotesk 18px 400, --gruvax-text-muted, sentence case */
+.shelf-layout-unconfigured__heading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-lg); /* 18px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0;
+}
+
+/* Body: Space Grotesk 14px 400, --gruvax-text-muted */
+.shelf-layout-unconfigured__body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  max-width: 420px;
+  margin: 0;
+}
+
 /* ── Empty collection state (Surface 7 / D2-03) ─────────────────────────── */
 
 /*

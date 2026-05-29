@@ -59,6 +59,17 @@ interface GruvaxStore {
   /** Animation token — incremented on each highlight change to trigger animations */
   animationToken: number
 
+  /**
+   * True when the last locate result returned HTTP 200 with primary_cube=null and
+   * confidence=0 — meaning the release IS in the collection but no cube boundary
+   * covers its label (Plan 09 / D-12: zero-boundary profile affordance).
+   *
+   * Set only inside setLocateResult — never derived from bare null primaryCube
+   * so a cleared/empty search box never triggers the affordance.
+   * Reset to false on clearSearch and when a real cube is present.
+   */
+  shelfLayoutUnavailable: boolean
+
   /** Clear the search field and all highlight state */
   clearSearch: () => void
 
@@ -127,9 +138,15 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
       confidence: result.confidence,
       // Token increments unconditionally — even same-cube re-selection fires GSAP (Pitfall D)
       animationToken: s.animationToken + 1,
+      // Plan 09 / D-12: signal that the release IS in the collection but no cube boundary
+      // covers its label. Derived ONLY from a locate result — never from bare null primaryCube —
+      // so a cleared/empty search box does not trigger the affordance.
+      shelfLayoutUnavailable: result.primary_cube == null && result.confidence === 0,
     })),
 
   animationToken: 0,
+
+  shelfLayoutUnavailable: false,
 
   clearSearch: () =>
     set({
@@ -141,6 +158,7 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
       subCubeInterval: null,
       confidence: 0,
       animationToken: 0,
+      shelfLayoutUnavailable: false,
     }),
 
   // ── Phase 4: SSE connectivity + shimmer ─────────────────────────────────
