@@ -37,3 +37,9 @@ _rate_limiter: FixedWindowRateLimiter = FixedWindowRateLimiter(limiter)
 
 # Parsed once at module load so the limit item is not re-parsed on every request.
 _LOGIN_RATE = parse_limit("5/5minutes")
+
+# Device bind rate limit — 10 attempts per 5-minute window per IP.
+# Shared storage singleton; namespace key is "device_bind" (vs "login" for login).
+# At 10k code keyspace, exhausting this limit eliminates only 10 codes per window
+# — brute-force is infeasible even against repeated window resets (RESEARCH.md Pattern 3).
+_BIND_RATE = parse_limit("10/5minutes")
