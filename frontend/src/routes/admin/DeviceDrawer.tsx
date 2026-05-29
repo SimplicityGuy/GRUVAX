@@ -9,6 +9,7 @@
  *   'bind-code'      — ADD DEVICE flow: NumericKeypad, auto-submit on 4th digit
  *   'view'           — Context-sensitive action buttons by device state
  *   'rename'         — Inline text input for display name
+ *   'pick-profile'   — Profile-picker list (used by BIND TO PROFILE + CHANGE PROFILE)
  *   'revoke-confirm' — Destructive inline confirmation for REVOKE
  *   'delete-confirm' — Destructive inline confirmation for DELETE PERMANENTLY
  *   'unbind-confirm' — Single inline confirmation for UNBIND
@@ -18,6 +19,12 @@
  *   PAIRED:  RENAME DEVICE, CHANGE PROFILE, UNBIND, REVOKE DEVICE
  *   REVOKED: REINSTATE DEVICE, DELETE PERMANENTLY
  *
+ * Profile picker (pick-profile mode):
+ *   - Lists active profiles via getAdminProfiles() + TanStack Query
+ *   - PENDING device: binds last pending code to chosen profile; falls back to
+ *     code-entry (bind-code) when no pending code is available on the DeviceRow.
+ *   - PAIRED device: PATCHes profile_id via changeDeviceProfile().
+ *
  * NumericKeypad auto-submit: mirrors PinOverlay.tsx auto-submit-on-4th-digit pattern.
  *
  * Copywriting: all labels and error messages from 03-UI-SPEC.md Copywriting Contract.
@@ -26,17 +33,19 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { RefreshCcw, Unplug } from 'lucide-react'
 import type { DeviceRow } from '../../api/devices'
 import {
   bindDevice,
+  changeDeviceProfile,
   deleteDevice,
   reinstateDevice,
   renameDevice,
   revokeDevice,
   unbindDevice,
 } from '../../api/devices'
+import { getAdminProfiles } from '../../api/adminClient'
 import { NumericKeypad } from './NumericKeypad'
 
 export interface DeviceDrawerProps {
@@ -50,6 +59,7 @@ type DrawerMode =
   | 'bind-code'
   | 'view'
   | 'rename'
+  | 'pick-profile'
   | 'revoke-confirm'
   | 'delete-confirm'
   | 'unbind-confirm'
@@ -84,6 +94,17 @@ export function DeviceDrawer({ device, mode: initialMode, onClose, onActionCompl
   // Rename mode state
   const [nameValue, setNameValue] = useState(device?.display_name ?? '')
 
+  // Profile-picker: track which context triggered the pick ('bind-to-profile' | 'change-profile')
+  const [profilePickContext, setProfilePickContext] = useState<'bind-to-profile' | 'change-profile'>('change-profile')
+
+  // Profiles query — fetched lazily when profile-picker is opened (staleTime: 30s)
+  const { data: profiles, isLoading: profilesLoading } = useQuery({
+    queryKey: ['admin', 'profiles'],
+    queryFn: getAdminProfiles,
+    enabled: drawerMode === 'pick-profile',
+    staleTime: 30_000,
+  })
+
   // Focus trap: focus first focusable element on mount
   useEffect(() => {
     const el = sheetRef.current
@@ -111,6 +132,40 @@ export function DeviceDrawer({ device, mode: initialMode, onClose, onActionCompl
       setIsSaving(false)
     }
   }, [queryClient, onActionComplete, onClose])
+
+  // ── Pick profile ───────────────────────────────────────────────────────────
+  const handlePickProfile = useCallback(async (profileId: string) => {
+    if (!device) return
+    setSaveError(null)
+    setIsSaving(true)
+    try {
+      if (profilePickContext === 'change-profile') {
+        // PAIRED: PATCH profile_id
+        await changeDeviceProfile(device.id, profileId)
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'devices'] })
+        onActionComplete?.(`Profile updated for ${device.display_name}.`)
+        onClose()
+      } else {
+        // PENDING: bind with last pending code if present, else fall back to code entry
+        const pendingCode = (device as DeviceRow & { last_pairing_code?: string }).last_pairing_code
+        if (pendingCode) {
+          const bound = await bindDevice({ code: pendingCode, profile_id: profileId })
+          void queryClient.invalidateQueries({ queryKey: ['admin', 'devices'] })
+          onActionComplete?.(`Device "${bound.display_name}" paired successfully.`)
+          onClose()
+        } else {
+          // No pending code available — fall back to manual code entry
+          setDrawerMode('bind-code')
+          setSaveError(null)
+        }
+      }
+    } catch (err: unknown) {
+      const anyErr = err as { detail?: { type?: string } }
+      setSaveError(mapBindError(anyErr?.detail?.type))
+    } finally {
+      setIsSaving(false)
+    }
+  }, [device, profilePickContext, queryClient, onActionComplete, onClose])
 
   // NumericKeypad digit handler — auto-submit on 4th digit (mirrors PinOverlay.tsx)
   const handleCodeDigit = useCallback((d: string) => {
@@ -339,6 +394,35 @@ export function DeviceDrawer({ device, mode: initialMode, onClose, onActionCompl
             </div>
           )}
 
+          {/* ── PROFILE PICKER ───────────────────────────────────────────── */}
+          {drawerMode === 'pick-profile' && (
+            <div className="device-profile-picker" aria-label="Select a profile">
+              {profilesLoading && (
+                <p className="device-profile-picker-loading">Loading profiles…</p>
+              )}
+              {!profilesLoading && profiles && profiles.length === 0 && (
+                <p className="device-profile-picker-empty">No profiles available.</p>
+              )}
+              {!profilesLoading && profiles && profiles.map((p) => (
+                <button
+                  key={p.id}
+                  type="button"
+                  className="device-profile-picker-row"
+                  onClick={() => void handlePickProfile(p.id)}
+                  disabled={isSaving}
+                  aria-pressed={device?.profile_id === p.id}
+                >
+                  <span className="device-profile-picker-name">{p.display_name.toUpperCase()}</span>
+                  {device?.profile_id === p.id && (
+                    <span className="device-profile-picker-current" aria-hidden="true">
+                      CURRENT
+                    </span>
+                  )}
+                </button>
+              ))}
+            </div>
+          )}
+
           {/* ── Error ────────────────────────────────────────────────────── */}
           {saveError && (
             <p className="sheet-error" role="alert">
@@ -365,6 +449,17 @@ export function DeviceDrawer({ device, mode: initialMode, onClose, onActionCompl
             {/* ── PENDING actions ── */}
             {device?.state === 'pending' && drawerMode === 'view' && (
               <>
+                <button
+                  type="button"
+                  className="profile-btn-secondary"
+                  onClick={() => {
+                    setProfilePickContext('bind-to-profile')
+                    setDrawerMode('pick-profile')
+                    setSaveError(null)
+                  }}
+                >
+                  BIND TO PROFILE
+                </button>
                 <button
                   type="button"
                   className="profile-btn-secondary"
@@ -400,6 +495,17 @@ export function DeviceDrawer({ device, mode: initialMode, onClose, onActionCompl
                   }}
                 >
                   RENAME DEVICE
+                </button>
+                <button
+                  type="button"
+                  className="profile-btn-secondary"
+                  onClick={() => {
+                    setProfilePickContext('change-profile')
+                    setDrawerMode('pick-profile')
+                    setSaveError(null)
+                  }}
+                >
+                  CHANGE PROFILE
                 </button>
                 <button
                   type="button"
@@ -534,6 +640,18 @@ export function DeviceDrawer({ device, mode: initialMode, onClose, onActionCompl
                   CANCEL
                 </button>
               </>
+            )}
+
+            {/* ── PICK-PROFILE: BACK ── */}
+            {drawerMode === 'pick-profile' && (
+              <button
+                type="button"
+                className="sheet-cancel-btn"
+                onClick={() => { setDrawerMode('view'); setSaveError(null) }}
+                disabled={isSaving}
+              >
+                CANCEL
+              </button>
             )}
 
             {/* ── CLOSE — shown in view mode and bind mode when no confirm active ── */}
