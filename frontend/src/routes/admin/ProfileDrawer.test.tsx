@@ -106,7 +106,7 @@ function makeQueryClient() {
  */
 async function renderAndStartSync(
   queryClient: QueryClient,
-  onSyncComplete: ReturnType<typeof vi.fn>,
+  onSyncComplete: (message: string) => void,
 ) {
   render(
     <QueryClientProvider client={queryClient}>
