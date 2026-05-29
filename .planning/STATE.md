@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-User Collections
-status: ready_to_plan
-last_updated: 2026-05-29T20:32:32.845Z
+status: "Phase 3 shipped — PR #16"
+last_updated: "2026-05-29T20:44:06.012Z"
 last_activity: 2026-05-29
 progress:
   total_phases: 6
@@ -11,7 +11,6 @@ progress:
   total_plans: 27
   completed_plans: 29
   percent: 33
-stopped_at: Phase 03 complete (7/6) — ready to discuss Phase 4
 ---
 
 # State: GRUVAX
@@ -32,7 +31,7 @@ stopped_at: Phase 03 complete (7/6) — ready to discuss Phase 4
 
 Phase: 4
 Plan: Not started
-Status: Ready to plan
+Status: Phase 3 shipped — PR #16
 Last activity: 2026-05-29 -- Phase 03 execution started
 Resume file: .planning/phases/03-devices-pairing/03-UI-SPEC.md
 
