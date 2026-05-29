@@ -298,25 +298,6 @@ def issue_fingerprint_cookie(response: Response, secure: bool = False) -> str:
         The raw fingerprint token string (do not log; store to DB as-is).
     """
     fp = secrets.token_urlsafe(32)  # 32 bytes → ~43 URL-safe chars, 256-bit CSPRNG
-    set_fingerprint_cookie(response, fp, secure=secure)
-    return fp
-
-
-def set_fingerprint_cookie(response: Response, fp: str, secure: bool = False) -> None:
-    """Attach the fingerprint cookie with a CALLER-SUPPLIED token value.
-
-    Use when the token was already generated (or read) and must be set on a
-    different ``Response`` object than the one it was first issued on — e.g. when
-    an endpoint persists the fingerprint to the DB and then returns a fresh
-    ``JSONResponse``. Calling ``issue_fingerprint_cookie`` twice would mint a
-    SECOND, divergent token, desyncing the DB-stored fingerprint from the client
-    cookie (the device would never resolve on subsequent requests). Always issue
-    the token once, then propagate the same value with this helper.
-
-    Attributes mirror ``issue_fingerprint_cookie`` exactly (HttpOnly, SameSite=Strict,
-    max_age=30d) so the cookie persists across Pi reboots (RESEARCH.md Pitfall 1, D3-09).
-    NEVER log ``fp`` — it is a session-equivalent secret (T-03-02).
-    """
     response.set_cookie(
         FINGERPRINT_COOKIE,
         fp,
@@ -325,9 +306,10 @@ def set_fingerprint_cookie(response: Response, fp: str, secure: bool = False) ->
         secure=secure,
         max_age=FINGERPRINT_MAX_AGE,
     )
+    return fp
 
 
-def get_fingerprint(request: Request) -> str | None:
+def get_fingerprint(request: Any) -> str | None:
     """Extract the fingerprint from the HttpOnly cookie (None if absent).
 
     Returns the raw opaque token string, or None if the fingerprint cookie is not
