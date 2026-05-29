@@ -1,10 +1,11 @@
 ---
 phase: 4
 slug: sync-polish-diagnostics
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-05-29
+reviewed_at: 2026-05-29
 ---
 
 # Phase 4 — UI Design Contract
