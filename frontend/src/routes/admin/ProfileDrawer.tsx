@@ -117,14 +117,22 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
     [onSyncComplete, queryClient],
   )
 
-  // 202+poll: poll GET /api/admin/profiles/{id} while in_progress (D2-13)
+  // 202+poll: poll GET /api/admin/profiles/{id} until a TERMINAL status is observed (D2-13)
   // refetchInterval pattern per RESEARCH §Pattern 4
+  //
+  // Fix (02-08): the old condition (`=== 'in_progress' ? 2000 : false`) halted polling on
+  // ANY non-'in_progress' value, including transient null ticks that can appear between the
+  // early 'in_progress' write (trigger_sync) and the atomic terminal write (_swap_inside_tx).
+  // The corrected condition keeps polling until a TERMINAL status ('ok' | 'failed') is
+  // observed, passing through 'in_progress', null, and any other non-terminal value.
   const { data: polledProfile } = useQuery({
     queryKey: ['admin', 'profiles', profileId],
     queryFn: () => getAdminProfile(profileId!),
     enabled: profileId !== null && connectState === 'syncing',
-    refetchInterval: (query) =>
-      query.state.data?.last_sync_status === 'in_progress' ? 2000 : false,
+    refetchInterval: (query) => {
+      const status = query.state.data?.last_sync_status
+      return status === 'ok' || status === 'failed' ? false : 2000
+    },
   })
 
   // React to terminal sync states from the poll.
