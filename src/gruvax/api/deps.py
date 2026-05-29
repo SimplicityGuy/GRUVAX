@@ -12,7 +12,12 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import Depends, HTTPException, Request, status
 
-from gruvax.auth.sessions import BROWSE_BINDING_COOKIE, CSRF_COOKIE, get_session_id
+from gruvax.auth.sessions import (
+    BROWSE_BINDING_COOKIE,
+    CSRF_COOKIE,
+    FINGERPRINT_COOKIE,
+    get_session_id,
+)
 from gruvax.settings import settings
 
 
@@ -139,42 +144,132 @@ def get_event_bus(request: Request) -> Any:
     return bus
 
 
-# ── Per-profile resolution deps (D2-04) ──────────────────────────────────────
+# ── Device-aware profile resolution helper (D3-04 / D3-05 / D3-07) ──────────
 #
-# Each dep validates the path profile_id against the browse-binding session
-# cookie (gruvax_browse_binding) before resolving the registry entry.
-# Error taxonomy (T-02-02-01 / D2-04):
-#   400 session_unbound  — no browse-binding cookie (profile picker not visited)
-#   403 profile_mismatch — cookie != path profile_id (spoofing attempt)
-#   503 registry missing — registry attr not on app.state (races lifespan)
-#   404 profile_not_found — profile_id not in registry (deleted / unknown)
+# resolve_profile_from_request is the single authoritative path for deriving a
+# profile_id from an incoming request.  It checks the device fingerprint cookie
+# first (D3-05 — device binding wins over browse-binding).
 #
-# BROWSE_BINDING_COOKIE is imported from gruvax.auth.sessions (Plan 02-04
-# promoted the constant from a local literal to the canonical sessions.py location).
+# Resolution precedence (D3-05):
+#   1. Fingerprint present + device row exists + not revoked + profile_id IS NOT NULL
+#      → return (device.profile_id, device.id)  — paired device, device binding wins
+#   2. Fingerprint present + device row exists + not revoked + profile_id IS NULL
+#      → orphaned device, fall through to browse-binding (picker reverts, D3-03)
+#   3. Fingerprint present + device row is REVOKED  → 403 device_revoked  (D3-07)
+#   4. Fingerprint present + no device row          → 403 device_unknown   (D3-07)
+#   5. No fingerprint → fall through to browse-binding cookie
+#   6. No browse-binding cookie                     → 400 session_unbound
+#
+# Pitfall 10 / D3-13 preserved: for SSE the pool is acquired + released INSIDE
+# this dep; the generator body reads only the asyncio.Queue — zero pool holding.
+
+# SQL used by resolve_profile_from_request (module-level constant, parameterised %s)
+_SELECT_DEVICE_FOR_RESOLUTION = (
+    "SELECT id, profile_id, revoked_at"
+    " FROM gruvax.devices WHERE fingerprint = %s"
+)
+
+# Throttled last_seen_at update — at most once per 60 s per device (Open Question 3)
+_UPDATE_LAST_SEEN = (
+    "UPDATE gruvax.devices SET last_seen_at = NOW()"
+    " WHERE id = %s"
+    "   AND (last_seen_at IS NULL OR last_seen_at < NOW() - INTERVAL '60 seconds')"
+)
 
 
-def get_boundary_cache_for_profile(
-    profile_id: str,
+async def resolve_profile_from_request(
     request: Request,
-) -> BoundaryCache:
-    """Resolve boundary cache for the session-validated profile_id (D2-04).
+    pool: Any,
+) -> tuple[str, str | None]:
+    """D3-07: derive (profile_id, device_id|None) from the incoming request.
 
-    Validates the path profile_id against the browse-binding cookie; never
-    trusts the path param as authoritative (T-02-02-01).
+    Checks the fingerprint cookie first (device binding wins, D3-05); falls
+    back to the browse-binding cookie.  Raises 403 for revoked/unknown
+    fingerprints; raises 400 if neither binding source is present.
+
+    The pool is acquired and released atomically inside this function — callers
+    must NOT hold the pool across a generator boundary (Pitfall 10 / D3-13).
+
+    Returns:
+        (profile_id_str, device_id_str) when a paired device is recognised.
+        (browse_cookie_str, None)        when browse-binding is used.
 
     Raises:
-        HTTP 400 (session_unbound)   — no browse-binding cookie present.
-        HTTP 403 (profile_mismatch)  — cookie != path profile_id.
-        HTTP 503 (registry not ready) — registry attr missing on app.state.
-        HTTP 404 (profile_not_found) — profile_id key absent from registry.
+        HTTP 403 device_unknown  — fingerprint present but no matching device row.
+        HTTP 403 device_revoked  — fingerprint maps to a revoked device.
+        HTTP 400 session_unbound — no fingerprint and no browse-binding cookie.
     """
+    fp = request.cookies.get(FINGERPRINT_COOKIE)
+    if fp:
+        async with pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(_SELECT_DEVICE_FOR_RESOLUTION, (fp,))
+            row = await cur.fetchone()
+        if row is None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"type": "device_unknown"},
+            )
+        device_id, profile_id, revoked_at = row
+        if revoked_at is not None:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"type": "device_revoked"},
+            )
+        if profile_id is not None:
+            # Throttled last_seen_at touch (at most once per 60s — Open Question 3)
+            async with pool.connection() as conn:
+                await conn.execute(_UPDATE_LAST_SEEN, (str(device_id),))
+                await conn.commit()
+            return str(profile_id), str(device_id)
+        # Orphaned device (profile soft-deleted) — fall through to browse-binding
+        # so kiosk reverts to picker (D3-03 / D3-05).
+
+    # Fall back to browse-binding cookie
     bound = request.cookies.get(BROWSE_BINDING_COOKIE)
     if not bound:
         raise HTTPException(
             status_code=status.HTTP_400_BAD_REQUEST,
             detail={"type": "session_unbound"},
         )
-    if bound != profile_id:
+    return bound, None
+
+
+# ── Per-profile resolution deps (D2-04 / D3-04) ──────────────────────────────
+#
+# Each dep derives the authoritative profile_id via resolve_profile_from_request
+# (device binding overrides browse cookie — D3-05), then validates the result
+# against the path profile_id before resolving the registry entry.
+#
+# Error taxonomy (T-02-02-01 / D2-04 / D3-07):
+#   400 session_unbound  — no fingerprint and no browse-binding cookie
+#   403 device_unknown   — fingerprint present but no matching device row (D3-07)
+#   403 device_revoked   — fingerprint maps to a revoked device (D3-07)
+#   403 profile_mismatch — resolved profile_id != path profile_id (spoofing)
+#   503 registry missing — registry attr not on app.state (races lifespan)
+#   404 profile_not_found — profile_id not in registry (deleted / unknown)
+
+
+async def get_boundary_cache_for_profile(
+    profile_id: str,
+    request: Request,
+    pool: Any = Depends(get_pool),
+) -> BoundaryCache:
+    """Resolve boundary cache for the device/session-validated profile_id (D2-04, D3-04).
+
+    Derives the authoritative profile_id via resolve_profile_from_request
+    (device binding overrides browse cookie — D3-05); never trusts the path
+    param as authoritative (T-02-02-01, touchpoint #5).
+
+    Raises:
+        HTTP 400 (session_unbound)    — no fingerprint and no browse-binding cookie.
+        HTTP 403 (device_unknown)     — unknown fingerprint (D3-07).
+        HTTP 403 (device_revoked)     — revoked device fingerprint (D3-07).
+        HTTP 403 (profile_mismatch)   — resolved profile_id != path profile_id.
+        HTTP 503 (registry not ready) — registry attr missing on app.state.
+        HTTP 404 (profile_not_found)  — profile_id key absent from registry.
+    """
+    resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
+    if resolved_profile_id != profile_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"type": "profile_mismatch"},
@@ -196,21 +291,18 @@ def get_boundary_cache_for_profile(
     return cache
 
 
-def get_snapshot_for_profile(
+async def get_snapshot_for_profile(
     profile_id: str,
     request: Request,
+    pool: Any = Depends(get_pool),
 ) -> CollectionSnapshot:
-    """Resolve collection snapshot for the session-validated profile_id (D2-04).
+    """Resolve collection snapshot for the device/session-validated profile_id (D2-04, D3-04).
 
     Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
+    Device binding overrides browse cookie (D3-05).
     """
-    bound = request.cookies.get(BROWSE_BINDING_COOKIE)
-    if not bound:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"type": "session_unbound"},
-        )
-    if bound != profile_id:
+    resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
+    if resolved_profile_id != profile_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"type": "profile_mismatch"},
@@ -232,21 +324,18 @@ def get_snapshot_for_profile(
     return snapshot
 
 
-def get_segment_cache_for_profile(
+async def get_segment_cache_for_profile(
     profile_id: str,
     request: Request,
+    pool: Any = Depends(get_pool),
 ) -> SegmentCache:
-    """Resolve segment cache for the session-validated profile_id (D2-04).
+    """Resolve segment cache for the device/session-validated profile_id (D2-04, D3-04).
 
     Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
+    Device binding overrides browse cookie (D3-05).
     """
-    bound = request.cookies.get(BROWSE_BINDING_COOKIE)
-    if not bound:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"type": "session_unbound"},
-        )
-    if bound != profile_id:
+    resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
+    if resolved_profile_id != profile_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"type": "profile_mismatch"},
@@ -268,24 +357,26 @@ def get_segment_cache_for_profile(
     return seg
 
 
-def get_bus_for_profile(
+async def get_bus_for_profile(
     profile_id: str,
     request: Request,
+    pool: Any = Depends(get_pool),
 ) -> Any:
-    """Resolve EventBus for the session-validated profile_id (D2-04).
+    """Resolve EventBus for the device/session-validated profile_id (D2-04, D3-04).
 
-    Reads ONLY app.state — never get_pool (Pitfall 10 preserved: the SSE
-    endpoint must not hold a DB connection for the lifetime of the stream).
+    CRITICAL (Pitfall 10 / D3-13): this dep is async so it can call
+    resolve_profile_from_request which acquires + releases the pool BEFORE
+    returning the bus.  The generator body in events.py must NEVER hold a
+    DB connection — it reads only the asyncio.Queue.
 
     Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
+    Device binding overrides browse cookie (D3-05).
+    Pool is acquired and released inside this dep; zero pool holding in SSE.
     """
-    bound = request.cookies.get(BROWSE_BINDING_COOKIE)
-    if not bound:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"type": "session_unbound"},
-        )
-    if bound != profile_id:
+    # Device/browse validation — pool acquired + released atomically here.
+    # The generator body (events.py) must NOT call get_pool (Pitfall 10).
+    resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
+    if resolved_profile_id != profile_id:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"type": "profile_mismatch"},
