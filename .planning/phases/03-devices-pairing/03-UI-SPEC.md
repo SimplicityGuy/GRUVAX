@@ -70,7 +70,7 @@ Three fonts, two weights each. No new fonts or weights beyond what `gruvax-desig
 
 | Role | Font | CSS Token | Size | Weight | Line Height | Notes |
 |------|------|-----------|------|--------|-------------|-------|
-| Pairing code digits | DM Mono | `--gruvax-font-mono` | **96px** | 900 | 1.0 | 4 digits on one line, largest element on screen |
+| Pairing code digits | DM Mono | `--gruvax-font-mono` | **96px** | 500 | 1.0 | 4 digits on one line, largest element on screen (DM Mono's heaviest available weight; matches the "Data readout large" role) |
 | Screen heading | Barlow Condensed | `--gruvax-font-display` / `--gruvax-text-display-xl` | 48px | 900 | 1.1 | "PAIR THIS SCREEN" |
 | Instruction | Space Grotesk | `--gruvax-font-ui` / `--gruvax-text-body-lg` | 18px | 400 | 1.5 | "Enter this code in the admin app" |
 | Countdown label | DM Mono | `--gruvax-font-mono` / `--gruvax-text-mono-lg` | 16px | 500 | 1.5 | "4:59 remaining" |
