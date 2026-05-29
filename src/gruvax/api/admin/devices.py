@@ -26,6 +26,7 @@ import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+import psycopg
 from pydantic import BaseModel, field_validator
 
 from gruvax.api.admin.limiter import _BIND_RATE, _rate_limiter
@@ -85,35 +86,13 @@ _BIND_CODE = (
     " RETURNING fingerprint"
 )
 
-# UPSERT a device row keyed on fingerprint (partial-unique index ensures uniqueness
-# among active/non-revoked devices). If a row already exists for this fingerprint
-# (e.g., re-pairing after unbind), update profile_id and display_name.
-# fingerprint is not returned in any response — it stays internal.
-_UPSERT_DEVICE = (
-    "INSERT INTO gruvax.devices (fingerprint, profile_id, display_name)"
-    " VALUES (%s, %s::uuid, %s)"
-    " ON CONFLICT ON CONSTRAINT idx_devices_fingerprint_active"
-    " DO UPDATE SET"
-    "   profile_id = EXCLUDED.profile_id,"
-    "   display_name = EXCLUDED.display_name"
-    " RETURNING id, profile_id, display_name, revoked_at, last_seen_at, created_at"
-)
+# The bind path uses an explicit three-step upsert below
+# (_UPDATE_DEVICE_BY_FINGERPRINT → _UPDATE_DEVICE_BY_PROFILE → _INSERT_DEVICE),
+# all within a single transaction (see bind_device). The fingerprint is only ever
+# a query parameter — it is never returned in any response (T-03-08).
 
-# Fallback UPSERT that handles both insert and update on fingerprint (using
-# a plain ON CONFLICT approach based on the unique index name may not work
-# across all Postgres versions — use a CTE-based upsert instead).
-_UPSERT_DEVICE_SAFE = (
-    "INSERT INTO gruvax.devices (fingerprint, profile_id, display_name)"
-    " VALUES (%s, %s::uuid, %s)"
-    " ON CONFLICT (fingerprint)"
-    " WHERE revoked_at IS NULL"
-    " DO UPDATE SET"
-    "   profile_id = EXCLUDED.profile_id,"
-    "   display_name = EXCLUDED.display_name"
-    " RETURNING id, profile_id, display_name, revoked_at, last_seen_at, created_at"
-)
-
-# Insert-or-update device by fingerprint (handles both new device and re-pair).
+# Insert a new device row (re-pair / first pair). On conflict with the partial-unique
+# active-device indexes, surfaces a UniqueViolation that bind_device maps to a clean 409.
 _INSERT_DEVICE = (
     "INSERT INTO gruvax.devices (fingerprint, profile_id, display_name)"
     " VALUES (%s, %s::uuid, %s)"
@@ -272,34 +251,21 @@ async def bind_device(
 
     Flow:
     1. Rate-limit check (10/5min per IP).
-    2. Atomic UPDATE pairing_codes SET consumed_at=NOW() WHERE code=%s
-       AND consumed_at IS NULL AND expires_at > NOW() RETURNING fingerprint.
-       → 404 code_not_found if no row (expired, consumed, or non-existent).
-    3. UPSERT a devices row for the returned fingerprint.
+    2. Resolve profile_id (400 on bad UUID — BEFORE touching the DB so a client
+       error never burns the code).
+    3. In a SINGLE transaction: atomic UPDATE pairing_codes SET consumed_at=NOW()
+       WHERE code=%s AND consumed_at IS NULL AND expires_at > NOW() RETURNING
+       fingerprint (→ 404 code_not_found if no row), then UPSERT the devices row.
+       Code consumption and the device upsert commit together — if the upsert
+       fails, the consumed_at write rolls back and the code stays reusable (CR-02).
     4. Return 200 with device summary (NO fingerprint in response — T-03-08).
     """
     # Rate-limit check MUST be first line (T-03-05).
     _check_bind_rate_limit(request)
 
-    # Atomic "first wins" UPDATE — PostgreSQL row-level lock ensures concurrent
-    # binds on the same code result in exactly one success (RESEARCH.md Pattern 2).
-    async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(_BIND_CODE, (body.code,))
-        row = await cur.fetchone()
-        await conn.commit()
-
-    if row is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"type": "code_not_found"},
-        )
-
-    fingerprint: str = row[0]
-    # fingerprint is NOT logged (Pitfall 7) and NOT returned to client.
-
-    # Resolve profile_id: use supplied profile_id if provided, else default profile.
-    # Defaulting to DEFAULT_PROFILE_UUID on bind-without-profile matches the
-    # single-profile deployment model — the admin can always reassign later.
+    # Resolve profile_id BEFORE consuming the code: use supplied profile_id if
+    # provided, else default profile. A bad UUID must 400 without burning the code.
+    # Defaulting to DEFAULT_PROFILE_UUID matches the single-profile deployment model.
     profile_id_str: str = DEFAULT_PROFILE_UUID
     if body.profile_id:
         try:
@@ -313,31 +279,50 @@ async def bind_device(
 
     display_name: str = body.display_name or "Unnamed device"
 
-    # UPSERT device row:
-    # 1. Try to UPDATE an existing active row for this fingerprint (re-pairing).
-    # 2. If no row by fingerprint but profile has an existing active device,
-    #    UPDATE that row with the new fingerprint (rebind).
-    # 3. If neither exists, INSERT a new row.
-    # fingerprint is only used as a query parameter — never returned (T-03-08).
+    # Single transaction (CR-02): code consumption + device upsert commit together.
+    # The "first wins" UPDATE takes a PostgreSQL row-level lock so concurrent binds
+    # on the same code resolve to exactly one success (RESEARCH.md Pattern 2). If the
+    # device upsert raises, the whole transaction rolls back — the code is NOT burned.
+    # UPSERT priority:
+    #   1. UPDATE an existing active row for this fingerprint (re-pairing).
+    #   2. Else UPDATE the profile's existing active device to this fingerprint (rebind).
+    #   3. Else INSERT a new row.
+    # fingerprint is only ever a query parameter — never returned (T-03-08).
     device_row: tuple[Any, ...] | None = None
+    try:
+        async with pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(_BIND_CODE, (body.code,))
+            row = await cur.fetchone()
+            if row is None:
+                await conn.rollback()
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"type": "code_not_found"},
+                )
 
-    async with pool.connection() as conn, conn.cursor() as cur:
-        # Priority 1: existing active device for this fingerprint → update profile/name.
-        await cur.execute(_UPDATE_DEVICE_BY_FINGERPRINT, (profile_id_str, display_name, fingerprint))
-        device_row = await cur.fetchone()
+            fingerprint: str = row[0]
+            # fingerprint is NOT logged (Pitfall 7) and NOT returned to client.
 
-        if device_row is None and profile_id_str:
-            # Priority 2: existing active device for this profile → rebind to new fingerprint.
-            # This handles "admin re-pairs a kiosk" — old fingerprint is replaced.
-            await cur.execute(_UPDATE_DEVICE_BY_PROFILE, (fingerprint, display_name, profile_id_str))
+            await cur.execute(_UPDATE_DEVICE_BY_FINGERPRINT, (profile_id_str, display_name, fingerprint))
             device_row = await cur.fetchone()
 
-        if device_row is None:
-            # Priority 3: Insert a new device row.
-            await cur.execute(_INSERT_DEVICE, (fingerprint, profile_id_str, display_name))
-            device_row = await cur.fetchone()
+            if device_row is None and profile_id_str:
+                await cur.execute(_UPDATE_DEVICE_BY_PROFILE, (fingerprint, display_name, profile_id_str))
+                device_row = await cur.fetchone()
 
-        await conn.commit()
+            if device_row is None:
+                await cur.execute(_INSERT_DEVICE, (fingerprint, profile_id_str, display_name))
+                device_row = await cur.fetchone()
+
+            await conn.commit()
+    except psycopg.errors.UniqueViolation:
+        # Partial-unique index collision (e.g. the profile already has a different
+        # active device). The transaction rolls back automatically, so the code is
+        # NOT consumed and the kiosk can retry. Report a clean 409 instead of a 500.
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"type": "profile_already_bound"},
+        ) from None
 
     if device_row is None:
         logger.error("bind_device: UPSERT returned no row (unexpected)")

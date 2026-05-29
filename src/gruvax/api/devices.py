@@ -16,7 +16,6 @@ from __future__ import annotations
 
 import logging
 import secrets
-from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, status
 from fastapi.responses import JSONResponse
@@ -142,7 +141,7 @@ async def get_device_me(request: Request) -> JSONResponse:
         # device row not yet created — pending state).
         return JSONResponse(content={"state": "pending"})
 
-    device_id, profile_id, revoked_at = row
+    _device_id, profile_id, revoked_at = row
 
     if revoked_at is not None:
         return JSONResponse(content={"state": "revoked"})
