@@ -8,6 +8,7 @@ import { useSessionStore } from '../../state/sessionStore'
 import { CubeContentsPanel } from './CubeContentsPanel'
 import { EmptyCollectionState } from './EmptyCollectionState'
 import { ResultsList } from './ResultsList'
+import { ShelfLayoutNotConfigured } from './ShelfLayoutNotConfigured'
 import { SearchBox } from './SearchBox'
 import { ShelfGrid } from './ShelfGrid'
 import { ShelfLabel } from './ShelfLabel'
@@ -29,7 +30,7 @@ const SHELF_NAMES = ['SHELF A', 'SHELF B', 'SHELF C', 'SHELF D']
  * .shelf-area container — no forwardRef plumbing needed.
  */
 export function KioskView() {
-  const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch, setQuery } =
+  const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch, setQuery, shelfLayoutUnavailable, selectedReleaseId } =
     useGruvaxStore()
   // Phase 4 / D-01/D-03/RTM-04: reactive shimmer state from Zustand
   const shimmerCubes = useGruvaxStore((s) => s.shimmerCubes)
@@ -500,6 +501,14 @@ export function KioskView() {
         {/* Staleness banner (OBS-06, D-01) — above the grid, never overlaying it.
             Hidden when offline (health null) or sync_age <= 14d. */}
         <StalenessBar syncAgeSeconds={healthData?.sync_age_seconds ?? null} />
+
+        {/* Plan 09 / D-12: shelf layout not configured affordance.
+            Shown when a selected result IS in the collection (HTTP 200 locate)
+            but the bound profile has zero cube boundaries (null cube, 0 confidence).
+            NOT shown for: empty/unsynced collections, cleared search, genuine no-results. */}
+        {shelfLayoutUnavailable && !isEmptyCollection && selectedReleaseId != null && (
+          <ShelfLayoutNotConfigured />
+        )}
 
         {/* Shelf area — N×(4×4) grid — shelfAreaRef for GSAP selector scope */}
         <div className="shelf-area" ref={shelfAreaRef}>
