@@ -172,7 +172,7 @@ Plans:
 
 **Wave 4** *(blocked on Wave 3 completion)*
 
-- [ ] 03-04-PLAN.md — Frontend: /pair countdown route + admin Devices UI (groups + drawer + NumericKeypad bind) + routing precedence + affordances (DEV-02, DEV-03)
+- [x] 03-04-PLAN.md — Frontend: /pair countdown route + admin Devices UI (groups + drawer + NumericKeypad bind) + routing precedence + affordances (DEV-02, DEV-03)
 
 **Wave 5** *(blocked on Wave 4 completion)*
 
@@ -202,7 +202,7 @@ Plans:
 |-------|-----------|-------|--------|-----------|
 | 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
 | 2. Real Position Estimation | v1.0 | 11/10 | Complete    | 2026-05-29 |
-| 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 4/6 | In Progress|  |
+| 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/6 | In Progress|  |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
 | 6. LED Contract over MQTT | v1.0 | 4/4 | Complete | 2026-05-24 |
