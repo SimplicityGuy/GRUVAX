@@ -8,6 +8,7 @@ import { CubesGrid } from './routes/admin/CubesGrid'
 import { Diagnostics } from './routes/admin/Diagnostics'
 import { HistoryView } from './routes/admin/HistoryView'
 import Import from './routes/admin/Import'
+import { DevicesManager } from './routes/admin/DevicesManager'
 import { ProfilesManager } from './routes/admin/ProfilesManager'
 import { Settings } from './routes/admin/Settings'
 import { ShelfBinList } from './routes/admin/ShelfBinList'
@@ -100,6 +101,7 @@ function AppInner() {
         <Route index element={<Settings />} />
         <Route path="settings" element={<Settings />} />
         <Route path="profiles" element={<ProfilesManager />} />
+        <Route path="devices" element={<DevicesManager />} />
         <Route path="cubes" element={<CubesGrid />} />
         <Route path="cubes/:unit" element={<ShelfBinList />} />
         <Route path="cubes/:unit/:row/:col" element={<BinWidthEditor />} />

@@ -5443,3 +5443,378 @@
   from { opacity: 1; }
   to   { opacity: 0; }
 }
+
+/* ── P3: Devices ─────────────────────────────────────────────────────────── */
+/* ALL values reference CSS custom properties — no hardcoded hex.             */
+
+/* ── DevicesManager page ─────────────────────────────────────────────────── */
+
+.devices-manager {
+  padding: var(--gruvax-space-5);
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-4);
+}
+
+.devices-manager-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-lg);  /* 36px */
+  font-weight: 900;
+  color: var(--gruvax-text-primary);
+  line-height: var(--gruvax-leading-tight);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.devices-manager-loading,
+.devices-manager-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  color: var(--gruvax-text-secondary);
+  padding: var(--gruvax-space-5);
+}
+
+/* ── Empty state ─────────────────────────────────────────────────────────── */
+
+.devices-empty-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  padding: var(--gruvax-space-7) var(--gruvax-space-5);
+  text-align: center;
+}
+
+.devices-empty-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md);  /* 24px */
+  font-weight: 900;
+  color: var(--gruvax-text-primary);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  margin: 0;
+}
+
+.devices-empty-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);  /* 14px */
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  max-width: 320px;
+  margin: 0;
+}
+
+/* ── Group headers ───────────────────────────────────────────────────────── */
+
+.devices-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);  /* 8px below header to first card */
+  margin-top: var(--gruvax-space-5);  /* 24px from preceding group */
+}
+
+.devices-group:first-child {
+  margin-top: 0;
+}
+
+.devices-group-header {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+}
+
+.devices-group-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);  /* 16px */
+  font-weight: 700;
+  color: var(--gruvax-text-muted);
+  letter-spacing: var(--gruvax-tracking-label);  /* 0.14em */
+  text-transform: uppercase;
+  white-space: nowrap;
+}
+
+.devices-group-rule {
+  flex: 1;
+  height: 1px;
+  background: var(--gruvax-border-faint);
+}
+
+/* ── Device list ─────────────────────────────────────────────────────────── */
+
+.devices-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.devices-list-item {
+  display: contents;
+}
+
+/* ── Device card ─────────────────────────────────────────────────────────── */
+
+.device-card {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);  /* 4px between name row and meta row */
+  width: 100%;
+  min-height: 64px;  /* touch target — wall-mounted display */
+  padding: var(--gruvax-space-4);  /* 16px horizontal padding */
+  background: var(--gruvax-white);
+  border: none;
+  border-radius: 0;
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.device-card--even {
+  background: var(--gruvax-off-white);
+}
+
+.device-card:hover {
+  background: var(--gruvax-blue-faint);
+}
+
+.device-card:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: -2px;
+}
+
+.device-card-main {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gruvax-space-3);
+}
+
+.device-card-name {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md);  /* 24px */
+  font-weight: 900;
+  color: var(--gruvax-text-primary);
+  line-height: var(--gruvax-leading-tight);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1;
+  min-width: 0;
+}
+
+.device-card-right {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);  /* 8px between badge and chevron */
+  flex-shrink: 0;
+}
+
+.device-card-chevron {
+  color: var(--gruvax-text-muted);
+}
+
+.device-card-meta {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);  /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0;
+}
+
+.device-card-meta-id {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);  /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+}
+
+.device-card-meta-sep {
+  color: var(--gruvax-text-muted);
+}
+
+.device-card-meta-profile,
+.device-card-meta-seen {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-text-muted);
+}
+
+/* ── Device state badge ──────────────────────────────────────────────────── */
+
+.device-state-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px var(--gruvax-space-2);  /* 2px 8px */
+  border-radius: var(--gruvax-radius-pill);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-body-sm);  /* 14px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);  /* 0.14em */
+  text-transform: uppercase;
+  white-space: nowrap;
+  /* Smooth state badge transition */
+  transition:
+    background-color var(--gruvax-duration-base) var(--gruvax-ease-standard),
+    color var(--gruvax-duration-base) var(--gruvax-ease-standard);
+}
+
+/* PAIRED → success tint (matches CONNECTED badge formula) */
+.device-state-badge--paired {
+  background: color-mix(in srgb, var(--gruvax-success) 12%, transparent);
+  color: var(--gruvax-success);
+}
+
+/* PENDING → warning tint */
+.device-state-badge--pending {
+  background: color-mix(in srgb, var(--gruvax-warning) 12%, transparent);
+  color: var(--gruvax-warning);
+}
+
+/* REVOKED → error tint */
+.device-state-badge--revoked {
+  background: color-mix(in srgb, var(--gruvax-error) 10%, transparent);
+  color: var(--gruvax-error);
+}
+
+/* ── ADD DEVICE dashed row ───────────────────────────────────────────────── */
+
+.devices-add-row {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 56px;
+  padding: var(--gruvax-space-4);
+  background: var(--gruvax-off-white);
+  border: 1.5px dashed var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);  /* 16px */
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.devices-add-row:hover {
+  background: var(--gruvax-blue-faint);
+}
+
+.devices-add-row:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+/* ── DeviceDrawer — bind code entry ─────────────────────────────────────── */
+
+.device-drawer-code-display {
+  display: flex;
+  gap: var(--gruvax-space-3);
+  justify-content: center;
+  align-items: center;
+  padding: var(--gruvax-space-4) 0;
+}
+
+.device-drawer-code-digit {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-display-lg);  /* 36px */
+  font-weight: 500;
+  color: var(--gruvax-blue);
+  line-height: 1.0;
+  width: 1.2ch;
+  text-align: center;
+  letter-spacing: 0;
+}
+
+.device-drawer-code-digit--empty {
+  color: var(--gruvax-text-faint);
+}
+
+.device-id-line {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);  /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  margin: 0 0 var(--gruvax-space-3);
+}
+
+/* ── Device destructive confirm blocks ───────────────────────────────────── */
+
+.device-revoke-confirm,
+.device-delete-confirm,
+.device-unbind-confirm {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  padding: var(--gruvax-space-3) 0;
+}
+
+.device-confirm-heading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);  /* 16px */
+  font-weight: 500;
+  color: var(--gruvax-error);
+  margin: 0;
+  line-height: var(--gruvax-leading-tight);
+}
+
+.device-confirm-heading--unbind {
+  color: var(--gruvax-text-secondary);
+}
+
+.device-confirm-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);  /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0;
+}
+
+/* ── "PAIR THIS SCREEN" affordance button ────────────────────────────────── */
+
+.pair-screen-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 100%;
+  min-height: 48px;
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  background: var(--gruvax-yellow);
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-body-lg);  /* 18px — large text for 3.1:1 contrast */
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-blue-darker);
+  cursor: pointer;
+  text-decoration: none;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.pair-screen-btn:hover {
+  background: var(--gruvax-yellow-dark);
+}
+
+.pair-screen-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.pair-screen-sub {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);  /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  text-align: center;
+  margin: 0;
+  line-height: var(--gruvax-leading-normal);
+}

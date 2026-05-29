@@ -18,12 +18,16 @@
  *   onClose  — called when the sheet dismisses
  */
 
+import type { DeviceRow } from '../../api/devices'
+
 interface DeviceDrawerProps {
-  device?: unknown
+  device?: DeviceRow
   mode?: string
   onClose?: () => void
+  onActionComplete?: (message: string) => void
 }
 
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 export function DeviceDrawer(_props: DeviceDrawerProps) {
   return null
 }
