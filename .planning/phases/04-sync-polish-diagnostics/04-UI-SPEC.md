@@ -24,7 +24,7 @@ components. The contract covers: five surfaces, all polished extensions.
 | Preset | not applicable |
 | Component library | none (hand-authored DOM components) |
 | Icon library | inline SVG (Lucide-pattern, `stroke="currentColor"`) |
-| Font | Barlow Condensed 700/900 · Space Grotesk 400/500/700 · DM Mono 400/500 (Google Fonts) |
+| Font | Barlow Condensed 700 · Space Grotesk 400/700 · DM Mono 400 (Google Fonts) |
 
 Source of truth: `design/gruvax-design-tokens.css` + `design/gruvax-design-language.md`.
 Enforce: no hardcoded hex values anywhere in P4 CSS or TSX — consume tokens only.
@@ -39,6 +39,7 @@ Declared values (consumed from `--gruvax-space-*` tokens — never hardcode):
 |-------|-------|-------|
 | xs | 4px (`--gruvax-space-1`) | Icon-to-label gap, inline indicator gaps |
 | sm | 8px (`--gruvax-space-2`) | Badge padding, spinner-to-label gap |
+| md-sm | 12px (`--gruvax-space-3`) | Kiosk banner vertical padding (matches `staleness-bar`) |
 | md | 16px (`--gruvax-space-4`) | Card content padding, row padding |
 | lg | 24px (`--gruvax-space-5`) | Section vertical rhythm (between cards) |
 | xl | 32px (`--gruvax-space-6`) | Section break (PROFILES heading to first card) |
@@ -57,13 +58,15 @@ Three-font system. P4 introduces no new type sizes — all values already declar
 
 | Role | Font | Size | Weight | Line Height | Usage in P4 |
 |------|------|------|--------|-------------|-------------|
-| Section heading | Barlow Condensed | 24px (`--gruvax-text-display-md`) | 900 | 1.1 (`--gruvax-leading-tight`) | "PROFILES" heading on `/admin/diagnostics`; reuses `.diag-heading` |
+| Section heading | Barlow Condensed | 24px (`--gruvax-text-display-md`) | 700 | 1.1 (`--gruvax-leading-tight`) | "PROFILES" heading on `/admin/diagnostics` |
 | Row label / badge text | Barlow Condensed | 16px (`--gruvax-text-display-sm`) | 700 | 1.1 | Profile name in diagnostics card; status badge copy; cadence select label |
 | Body / instructions | Space Grotesk | 14px (`--gruvax-text-body-sm`) | 400 | 1.5 (`--gruvax-leading-normal`) | Card metadata values, banner copy (≥18px exception below), error/empty text |
 | Data readout | DM Mono | 14px (`--gruvax-text-mono`) | 400 | 1.5 | `last_sync_at`, `last_sync_item_count`, elapsed sync seconds |
 | Kiosk banner (accessibility floor) | Space Grotesk | 18px (`--gruvax-text-body-lg`) | 400 | 1.5 | Re-auth inline banner — yellow-on-blue-darker at 18px meets WCAG large-text |
 
-Font weights in use: **400** (body/data) + **700/900** (display/labels). Never introduce a third weight family for P4 work.
+Font weights in use: **400** (body/data) + **700** (display/labels/headings). Exactly two weights — never introduce a third for P4 work.
+
+> Note: P4 demotes the diagnostics section heading from the design language's default 900 to **700**. Barlow Condensed 700 at 24px still reads as a strong display heading and keeps P4 within the two-weight cap. P4 does NOT reuse the existing `.diag-heading` class (which is 900); it declares a 700-weight heading class instead.
 
 ---
 
@@ -104,6 +107,8 @@ P4 touches five surfaces. Each surface extends existing components; no full rewr
 ### Surface 1 — `/admin/diagnostics`: PROFILES section (new section appended to existing page)
 
 **What it is:** A new `<section class="settings-section">` appended below the existing "SYSTEM" section. Contains per-profile diagnostic cards — one card per non-deleted profile.
+
+**Focal point:** the `ProfileStatusBadge` in each card header row — the first thing an admin scans to assess sync health. Card layout, color, and spacing all serve to make the badge the immediate read; metadata rows are secondary detail.
 
 **Per-profile card layout:**
 - Card container: `settings-section` (existing class, `--gruvax-off-white` background, `--gruvax-shadow-sm`, `--gruvax-radius-lg` border-radius, `--gruvax-space-4` padding)
@@ -181,7 +186,7 @@ P4's polish task: confirm elapsed-seconds counter renders in the existing `SyncP
 - Background: `--gruvax-yellow`
 - Text: `--gruvax-blue-darker`
 - Font: Space Grotesk 18px 400, line-height 1.5 — matches `staleness-bar` exactly
-- Padding: `var(--gruvax-space-3)` vertical × `var(--gruvax-space-4)` horizontal
+- Padding: `var(--gruvax-space-3)` (12px) vertical × `var(--gruvax-space-4)` (16px) horizontal
 - Full-width, `border-radius: 0` (flush edge-to-edge, system-bar style)
 - Icon: inline SVG `KeyRound` or `AlertCircle` (18×18, `aria-hidden="true"`, Lucide-pattern, `stroke="currentColor"`)
 - Mount animation: `staleness-bar-enter` keyframe (already defined in `StalenessBar.css`) — share or copy the rule
@@ -210,7 +215,7 @@ P4's polish task: confirm elapsed-seconds counter renders in the existing `SyncP
 | Cadence select sub-label | "Syncs run at 03:00, 15:00 (12h), 09:00/21:00 (6h) server time." |
 | Cadence saved confirmation | "Saved" (Space Grotesk 14px success-colored, auto-fades at 2s) |
 | Sync staleness banner (existing, unchanged) | "Collection data may be outdated — last synced {N}d ago" |
-| Diagnostics PROFILES section heading | "PROFILES" (Barlow Condensed 24px 900, ALL CAPS) |
+| Diagnostics PROFILES section heading | "PROFILES" (Barlow Condensed 24px 700, ALL CAPS) |
 | Diagnostics LAST SYNC row label | "LAST SYNC" |
 | Diagnostics STATUS row label | "STATUS" |
 | Diagnostics ITEMS row label | "ITEMS" |
@@ -307,7 +312,7 @@ Existing components P4 extends (no full rewrites):
 | Component | File | P4 Change |
 |-----------|------|-----------|
 | `Diagnostics` | `routes/admin/Diagnostics.tsx` | Add `ProfilesDiagnosticsSection` after "SYSTEM" section |
-| `Diagnostics.css` | `routes/admin/Diagnostics.css` | Add `.diag-profiles-grid`, `.diag-profile-card` rules if needed |
+| `Diagnostics.css` | `routes/admin/Diagnostics.css` | Add `.diag-profiles-grid`, `.diag-profile-card`, and a 700-weight profiles-heading rule (do NOT reuse `.diag-heading` which is 900) |
 | `ProfileStatusBadge` | `routes/admin/ProfileStatusBadge.tsx` | Wire `app_token_revoked` → `re-auth-required` status (data change, no CSS change) |
 | `ProfileDrawer` | `routes/admin/ProfileDrawer.tsx` | Confirm elapsed-seconds rendering in `SyncProgressSection`; confirm toast fires on terminal |
 | `SyncProgressSection` | `routes/admin/SyncProgressSection.tsx` | Add elapsed seconds counter to `sync-progress-count` slot |
