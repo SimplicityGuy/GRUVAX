@@ -135,6 +135,11 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 - [x] 02-07-PLAN.md — Profile-manager admin UI: PROFILES tab + list + status badges + bottom-sheet drawer (connect/rotate/rename/sync/delete) + 202 poll + toast (PROF-02, PROF-01, D2-11)
 
+**Wave 6 — gap closure** *(closes 02-UAT.md gaps from user-driven UAT; both parallel — disjoint files)*
+
+- [ ] 02-08-PLAN.md — GAP 1 (major): poll-until-terminal `refetchInterval` in ProfileDrawer (stop only on 'ok'/'failed') + atomic terminal-write confirmation → drawer auto-transitions SYNCING → CONNECTED + toast without manual refresh (PROF-02, PROF-01)
+- [ ] 02-09-PLAN.md — GAP 2 (minor): kiosk "shelf layout not configured" affordance when an in-collection result lands no cube (zero-boundary profile); admin boundary-onboarding flow explicitly deferred to a future phase (PROF-02)
+
 **UI hint**: yes
 
 ### Phase 3: Devices + pairing
