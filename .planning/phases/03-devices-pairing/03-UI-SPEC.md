@@ -70,7 +70,7 @@ Three fonts, two weights each. No new fonts or weights beyond what `gruvax-desig
 
 | Role | Font | CSS Token | Size | Weight | Line Height | Notes |
 |------|------|-----------|------|--------|-------------|-------|
-| Pairing code digits | DM Mono | `--gruvax-font-mono` | **96px** (Barlow Condensed 900 hero override — see below) | 900 | 1.0 | 4 digits on one line, largest element on screen |
+| Pairing code digits | DM Mono | `--gruvax-font-mono` | **96px** | 900 | 1.0 | 4 digits on one line, largest element on screen |
 | Screen heading | Barlow Condensed | `--gruvax-font-display` / `--gruvax-text-display-xl` | 48px | 900 | 1.1 | "PAIR THIS SCREEN" |
 | Instruction | Space Grotesk | `--gruvax-font-ui` / `--gruvax-text-body-lg` | 18px | 400 | 1.5 | "Enter this code in the admin app" |
 | Countdown label | DM Mono | `--gruvax-font-mono` / `--gruvax-text-mono-lg` | 16px | 500 | 1.5 | "4:59 remaining" |
@@ -80,6 +80,8 @@ Three fonts, two weights each. No new fonts or weights beyond what `gruvax-desig
 
 ### Surface 2 — Admin `/admin/devices` (mobile-first, 390px baseline)
 
+Exactly four font sizes: 36 / 24 / 16 / 14px.
+
 | Role | Font | CSS Token | Size | Weight | Line Height | Notes |
 |------|------|-----------|------|--------|-------------|-------|
 | Page heading | Barlow Condensed | `--gruvax-font-display` / `--gruvax-text-display-lg` | 36px | 900 | 1.1 | "DEVICES" ALL CAPS |
@@ -87,7 +89,7 @@ Three fonts, two weights each. No new fonts or weights beyond what `gruvax-desig
 | Device label (name) | Barlow Condensed | `--gruvax-font-display` / `--gruvax-text-display-md` | 24px | 900 | 1.1 | Device display name |
 | Device ID | DM Mono | `--gruvax-font-mono` / `--gruvax-text-mono` | 14px | 400 | 1.5 | Short truncated `device_id` (first 8 chars) |
 | Metadata line | Space Grotesk | `--gruvax-font-ui` / `--gruvax-text-body-sm` | 14px | 400 | 1.5 | Profile name + last seen |
-| State badge | Barlow Condensed | `--gruvax-font-display` tag pattern | 13px | 700 | n/a | "PAIRED" / "PENDING" / "REVOKED" pill |
+| State badge | Barlow Condensed | `--gruvax-font-display` tag pattern | 14px | 700 | n/a | "PAIRED" / "PENDING" / "REVOKED" pill — stays distinct from the 14px Space Grotesk metadata line via Barlow Condensed 700 + `--gruvax-tracking-label` tracking |
 | Drawer heading | Barlow Condensed | `--gruvax-font-display` / `--gruvax-text-display-lg` | 36px | 900 | 1.1 | Device name, ALL CAPS |
 | Drawer body copy | Space Grotesk | `--gruvax-font-ui` / `--gruvax-text-body-sm` | 14px | 400 | 1.5 | Action descriptions, confirmations |
 | Code entry display | DM Mono | `--gruvax-font-mono` / `--gruvax-text-mono-lg` | 16px | 500 | 1.5 | 4 digit dots / confirmed code |
@@ -122,7 +124,7 @@ All values are token references. Hex shown for documentation only — never use 
 
 ### State badge colors
 
-Follow `ProfileStatusBadge` pattern exactly (color-mix, token-only):
+Follow `ProfileStatusBadge` pattern exactly (color-mix, token-only). Badge text is Barlow Condensed 700 at 14px with `--gruvax-tracking-label` tracking:
 
 | State | Background | Text | Border |
 |-------|-----------|------|--------|
@@ -254,7 +256,7 @@ Each card is a full-width tappable button (same pattern as `ProfileCard`). Minim
 | Element | Font | Size | Weight | Color | Notes |
 |---------|------|------|--------|-------|-------|
 | Device name | Barlow Condensed | 24px | 900 | `--gruvax-text-primary` | Truncate at 1 line, ellipsis |
-| State badge | Barlow Condensed tag | 13px | 700 | semantic (see badge table) | Right-aligned |
+| State badge | Barlow Condensed tag | 14px | 700 | semantic (see badge table) | Right-aligned; `--gruvax-tracking-label` tracking keeps it distinct from the metadata line |
 | Device ID | DM Mono | 14px | 400 | `--gruvax-text-muted` | First 8 chars + "…" e.g. "a3f7c2d1" |
 | Profile name | Space Grotesk | 14px | 400 | `--gruvax-text-secondary` | Middle dot separator |
 | Last seen | Space Grotesk | 14px | 400 | `--gruvax-text-muted` | "2h ago" / "just now" / "never" |
@@ -320,13 +322,13 @@ Reuses the `record-picker-sheet` / `sheet-*` CSS classes from `admin.css` (estab
 
 Actions (in order):
 1. "BIND TO PROFILE" — opens profile-picker bottom sheet (reuse or adapt the existing profile list pattern); on pick: auto-submits bind with the last pending code if available, else prompts for code entry.
-2. "RENAME" — inline text input (same pattern as ProfileDrawer rename mode).
-3. "REVOKE" — destructive, see destructive section below.
+2. "RENAME DEVICE" — inline text input (same pattern as ProfileDrawer rename mode).
+3. "REVOKE DEVICE" — destructive, see destructive section below.
 
 #### PAIRED device drawer
 
 Actions (in order):
-1. "RENAME" — inline text input, same pattern as ProfileDrawer rename mode.
+1. "RENAME DEVICE" — inline text input, same pattern as ProfileDrawer rename mode.
 2. "CHANGE PROFILE" — opens profile-picker; on pick: PATCH `profile_id` on the device row.
 3. "UNBIND" — removes `profile_id` (device becomes PENDING); confirmation: "Remove the profile binding? The kiosk will return to the profile picker." Primary/Cancel — no separate confirm screen (non-destructive).
 4. "REVOKE DEVICE" — destructive, see destructive section below.
@@ -334,7 +336,7 @@ Actions (in order):
 #### REVOKED device drawer
 
 Actions (in order):
-1. "REINSTATE" — clears `revoked_at`, returns device to PENDING state; no confirmation needed (reversal action).
+1. "REINSTATE DEVICE" — clears `revoked_at`, returns device to PENDING state; no confirmation needed (reversal action).
 2. "DELETE PERMANENTLY" — hard-delete; see destructive section below.
 
 ---
@@ -395,11 +397,11 @@ All labels in ALL CAPS (Barlow Condensed 700+). All instructions in sentence cas
 | Drawer — enter code heading | ENTER PAIRING CODE |
 | Drawer — code placeholder | · · · · |
 | Bind CTA | BIND DEVICE |
-| Rename CTA | RENAME |
+| Rename CTA | RENAME DEVICE |
 | Change profile CTA | CHANGE PROFILE |
 | Unbind CTA | UNBIND |
 | Revoke CTA | REVOKE DEVICE |
-| Reinstate CTA | REINSTATE |
+| Reinstate CTA | REINSTATE DEVICE |
 | Delete CTA | DELETE PERMANENTLY |
 | Empty state heading (no devices) | NO DEVICES YET |
 | Empty state body | Pair a kiosk screen to get started. Tap ADD DEVICE and enter the code shown on the kiosk. |
