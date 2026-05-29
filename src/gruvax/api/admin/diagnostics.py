@@ -97,6 +97,31 @@ async def get_diagnostics(
     slow_queries_raw = list(slow_ring)
     slow_queries = list(reversed(slow_queries_raw))
 
+    # ── Per-profile diagnostics (D4-15) ────────────────────────────────────
+    # require_admin guard (line ~48) already covers this data.
+    # Soft-deleted profiles (deleted_at IS NOT NULL) are excluded.
+    # No f-string interpolation — parameterized %s (bandit B608 compliant).
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT id::text, display_name, last_sync_at, last_sync_status, "
+            "       last_sync_item_count, last_sync_error, app_token_revoked "
+            "FROM gruvax.profiles WHERE deleted_at IS NULL ORDER BY created_at"
+        )
+        profile_rows = await cur.fetchall()
+
+    profile_diagnostics = [
+        {
+            "id": row[0],
+            "display_name": row[1],
+            "last_sync_at": row[2].isoformat() if row[2] else None,
+            "last_sync_status": row[3],
+            "last_sync_item_count": row[4],
+            "last_sync_error": row[5],
+            "app_token_revoked": bool(row[6]),
+        }
+        for row in profile_rows
+    ]
+
     return {
         "sync_age_seconds": sync_age,
         "top_searched": top_searched,
@@ -105,6 +130,7 @@ async def get_diagnostics(
         "pool": {"size_used": size_used, "size_min": pool_min},
         "phantom_boundary_count": phantom_count,
         "recent_logs": recent_logs,
+        "profiles": profile_diagnostics,  # D4-15
     }
 
 
