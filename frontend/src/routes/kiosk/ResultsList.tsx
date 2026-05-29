@@ -3,6 +3,7 @@ import { AnimatePresence, motion } from 'motion/react'
 import { illuminateRecord, locateRelease } from '../../api/client'
 import type { SearchResult } from '../../api/types'
 import { useGruvaxStore } from '../../state/store'
+import { useSessionStore } from '../../state/sessionStore'
 import { DidYouMean } from './DidYouMean'
 import { NoResultsRow } from './NoResultsRow'
 import { ResultRow } from './ResultRow'
@@ -67,8 +68,12 @@ export function ResultsList({
     const top = items[0]
     setSelectedResult(top)
     setSelectedReleaseId(top.release_id)
-    // Fire locate for top result — feed full result into store (CUBE-04/Phase 2)
-    void locateRelease(top.release_id)
+    // Fire locate for top result — feed full result into store (CUBE-04/Phase 2).
+    // D2-04: locate's profile_id query param is REQUIRED (locate.py), so pass the
+    // bound profile or every call 422s and is swallowed (no cube, no affordance).
+    // Read at call-time via getState() to stay stale-closure-safe (matches KioskView).
+    const topPid = useSessionStore.getState().boundProfileId
+    void locateRelease(top.release_id, topPid ?? undefined)
       .then((result) => {
         setLocateResult(result)
         // Phase 6: fire-and-forget illuminate — never block locate path (D-01)
@@ -88,7 +93,9 @@ export function ResultsList({
     onResultSelect?.()
     setSelectedResult(result)
     setSelectedReleaseId(result.release_id)
-    void locateRelease(result.release_id)
+    // D2-04: pass the bound profile_id (required query param) — see auto-locate note above.
+    const pid = useSessionStore.getState().boundProfileId
+    void locateRelease(result.release_id, pid ?? undefined)
       .then((located) => {
         setLocateResult(located)
         // Phase 6: fire-and-forget illuminate after explicit select (D-01)
