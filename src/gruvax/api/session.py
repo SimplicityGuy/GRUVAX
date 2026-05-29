@@ -35,6 +35,7 @@ from pydantic import BaseModel
 from gruvax.auth.sessions import (
     BROWSE_BINDING_COOKIE,
     clear_browse_binding_cookie,
+    get_fingerprint,
     set_browse_binding_cookie,
 )
 
@@ -57,6 +58,17 @@ _SELECT_ACTIVE_PROFILES = (
 _SELECT_PROFILE_BY_ID = (
     "SELECT 1 FROM gruvax.profiles"
     " WHERE id = %s::uuid AND deleted_at IS NULL"
+)
+
+# Device lookup for GET /api/session bootstrap (D3-04 — device binding extension).
+# Returns id, profile_id, revoked_at so we can:
+#   - Override bound_profile_id when the device is paired (profile_id IS NOT NULL)
+#   - Expose device_id (non-secret) in the session response (D3-05)
+#   - Treat revoked devices as unpaired (no override) — T-03-14
+#   - Never put the fingerprint value in the response (T-03-14)
+_SELECT_DEVICE_BY_FINGERPRINT = (
+    "SELECT id, profile_id, revoked_at"
+    " FROM gruvax.devices WHERE fingerprint = %s"
 )
 
 
@@ -107,7 +119,42 @@ async def get_session(
 
     bound_profile_id: str | None = request.cookies.get(BROWSE_BINDING_COOKIE)
 
-    # Single-profile auto-bind (D2-08)
+    # Device-binding extension (D3-04): check fingerprint cookie before constructing
+    # the response.  If the fingerprint maps to a paired device, override
+    # bound_profile_id (device binding wins over browse-binding, D3-05) and expose
+    # device_id + is_device_paired.  Never put the fingerprint value in the response
+    # (T-03-14 — fingerprint is a session-equivalent secret).
+    device_id: str | None = None
+    is_device_paired: bool = False
+
+    fp = get_fingerprint(request)
+    if fp:
+        async with db_pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(_SELECT_DEVICE_BY_FINGERPRINT, (fp,))
+            device_row = await cur.fetchone()
+
+        if device_row is not None:
+            dev_id, dev_profile_id, dev_revoked_at = device_row
+            device_id = str(dev_id)  # non-secret UUID — safe to expose (D3-05)
+
+            if dev_revoked_at is None:
+                # Not revoked — check if paired (profile_id IS NOT NULL)
+                if dev_profile_id is not None:
+                    # Paired device: device binding wins (D3-05)
+                    bound_profile_id = str(dev_profile_id)
+                    is_device_paired = True
+                    logger.debug(
+                        "GET /session: device binding override → device_id=%s profile_id=%s",
+                        device_id,
+                        bound_profile_id,
+                    )
+                # else: orphaned device (profile soft-deleted) — bound_profile_id stays
+                # as-is from the browse cookie (picker), is_device_paired stays False.
+            # else: revoked device — treat as unpaired (no override), is_device_paired=False.
+            # device_id is still exposed so the SPA can show a "revoked" indicator.
+
+    # Single-profile auto-bind (D2-08) — only runs when device binding did NOT set a
+    # bound_profile_id (i.e., no paired fingerprint is overriding).
     response_cookies: dict[str, Any] | None = None
     if len(profiles) == 1 and not bound_profile_id:
         bound_profile_id = profiles[0]["id"]
@@ -116,10 +163,12 @@ async def get_session(
             "GET /session: single-profile auto-bind → profile_id=%s", bound_profile_id
         )
 
-    content = {
+    content: dict[str, Any] = {
         "profile_count": len(profiles),
         "bound_profile_id": bound_profile_id,
         "profiles": profiles,
+        "device_id": device_id,
+        "is_device_paired": is_device_paired,
     }
 
     response = JSONResponse(content=content)
