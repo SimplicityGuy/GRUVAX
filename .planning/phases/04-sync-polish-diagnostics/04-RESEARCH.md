@@ -668,22 +668,25 @@ function formatRelativeTime(isoString: string | null): string {
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED during planning)
 
 1. **FK direction on `change_log` / `change_sets` → `profile_collection`**
    - What we know: D4-13 states "keeps audit lineage FKs" — implying a FK relationship exists
    - What's unclear: Whether it's `change_log.release_id REFERENCES profile_collection.release_id` (risky) or the FK goes the other direction / through `profiles`
    - Recommendation: Planner checks migration 0009 DDL for FK constraints involving `profile_collection` before writing the purge DELETE task
+   - **RESOLVED:** No `change_log` / `change_sets` tables ship in this codebase. `profile_collection.profile_id REFERENCES profiles(id) ON DELETE CASCADE`, but profiles are never hard-deleted (D4-14), so the cascade never fires. Nothing references `profile_collection`. The purge `DELETE` has zero audit-cascade risk. Recorded in 04-00 (test docstring) and 04-01 (`<interfaces>` block).
 
 2. **Kiosk session refresh cadence for `needs_reauth`**
    - What we know: KioskView does not currently poll `GET /api/session` on an interval
    - What's unclear: How quickly `app_token_revoked=TRUE` propagates to the kiosk banner (≤24h SLA is fine by D4-08, but the kiosk may need to detect it within minutes for a good UX on a freshly-rotated PAT that fails)
    - Recommendation: Add a low-frequency `useQuery` poll (e.g., 5-minute interval) for `GET /api/session` in KioskView, or derive `needsReauth` from the existing health query result if it already carries per-profile staleness data
+   - **RESOLVED:** 04-03 T1 adds a ≤5-minute `refetchInterval` on the session bootstrap so a freshly-revoked PAT surfaces the banner without a manual reload.
 
 3. **Nightly loop location: `app.py` inline vs `sync/nightly.py` module**
    - What we know: `_refresh_all_profiles_state` is inline in `app.py`; it's a simple loop
    - What's unclear: Whether the increased complexity of the nightly loop (DST computation, cadence branching, per-profile iteration) warrants extraction
    - Recommendation: Extract to `src/gruvax/sync/nightly.py` for testability (the `next_fire_after()` function needs unit tests that don't require a full app fixture)
+   - **RESOLVED:** Extracted to `src/gruvax/sync/nightly.py` (04-01 `files_modified`); 04-00 imports `gruvax.sync.nightly` so `next_fire_after()` is unit/property-testable without a full app fixture.
 
 ---
 
