@@ -15,12 +15,13 @@ Security:
 from __future__ import annotations
 
 import logging
-import secrets
+import random
+from typing import Any
 
-from fastapi import APIRouter, HTTPException, Request, status
+from fastapi import APIRouter, HTTPException, Request, Response, status
 from fastapi.responses import JSONResponse
 
-from gruvax.auth.sessions import get_fingerprint, set_fingerprint_cookie
+from gruvax.auth.sessions import get_fingerprint, issue_fingerprint_cookie
 
 
 logger = logging.getLogger(__name__)
@@ -53,6 +54,7 @@ _SELECT_DEVICE_BY_FINGERPRINT = (
 @router.post("/devices/pairing-codes")
 async def generate_pairing_code(
     request: Request,
+    response: Response,
 ) -> JSONResponse:
     """Generate a 4-digit pairing code (5-min TTL) and auto-issue the fingerprint cookie.
 
@@ -66,15 +68,11 @@ async def generate_pairing_code(
     Code collisions are handled with up to 3 retries (RESEARCH.md Pattern 2 + Pitfall 6).
     """
     # Retrieve or issue the fingerprint cookie — auto-issue on first visit.
-    # Generate the token ONCE here so the exact same value is both stored in
-    # gruvax.pairing_codes (below) AND set on the response cookie. Calling
-    # issue_fingerprint_cookie twice (once per Response object) would mint two
-    # divergent CSPRNG tokens — the DB would hold one, the kiosk the other, and
-    # the device would never resolve on GET /api/session (D3-04 desync bug).
     fp = get_fingerprint(request)
-    new_fp_issued = fp is None
+    new_fp_issued = False
     if fp is None:
-        fp = secrets.token_urlsafe(32)  # 256-bit CSPRNG — matches issue_fingerprint_cookie
+        fp = issue_fingerprint_cookie(response)
+        new_fp_issued = True
     # fp is now guaranteed non-None; never log its value.
 
     db_pool = request.app.state.db_pool
@@ -85,7 +83,7 @@ async def generate_pairing_code(
     expires_at_iso: str | None = None
 
     for _ in range(3):
-        candidate = f"{secrets.randbelow(10000):04d}"  # '0000'..'9999' via OS CSPRNG
+        candidate = f"{random.randint(0, 9999):04d}"  # '0000'..'9999'
         async with db_pool.connection() as conn, conn.cursor() as cur:
             await cur.execute(_INSERT_PAIRING_CODE, (candidate, fp))
             row = await cur.fetchone()
@@ -103,12 +101,24 @@ async def generate_pairing_code(
             detail={"type": "code_generation_failed", "message": "Failed to generate unique pairing code"},
         )
 
-    # Build the JSON response and attach the fingerprint cookie (with the SAME
-    # token that was just stored in pairing_codes) only if it was freshly issued.
-    json_response = JSONResponse(content={"code": code, "expires_at": expires_at_iso})
+    # Build the JSON response and attach the fingerprint cookie if it was
+    # just issued (the cookie was already set on `response` via set_cookie,
+    # but we need to propagate it on the JSONResponse object).
+    content = {"code": code, "expires_at": expires_at_iso}
+
     if new_fp_issued:
-        set_fingerprint_cookie(json_response, fp)
-    return json_response
+        # The fingerprint cookie was set on the `response` FastAPI injects;
+        # we must copy it to the JSONResponse we return so the Set-Cookie header
+        # is present in the actual HTTP response (FastAPI merges headers from
+        # both the injected Response and the returned Response).
+        json_response = JSONResponse(content=content)
+        # Re-issue the cookie on the JSON response directly so it's guaranteed
+        # to appear in the response (FastAPI's background-response injection
+        # copies headers from the injected Response).
+        issue_fingerprint_cookie(json_response)
+        return json_response
+
+    return JSONResponse(content=content)
 
 
 # ── GET /api/devices/me ───────────────────────────────────────────────────────
@@ -141,7 +151,7 @@ async def get_device_me(request: Request) -> JSONResponse:
         # device row not yet created — pending state).
         return JSONResponse(content={"state": "pending"})
 
-    _device_id, profile_id, revoked_at = row
+    device_id, profile_id, revoked_at = row
 
     if revoked_at is not None:
         return JSONResponse(content={"state": "revoked"})
