@@ -115,11 +115,13 @@ async def login(
             detail={"type": "invalid_pin"},
         )
 
-    # Fetch the stored PIN hash from gruvax.settings
+    # Fetch the stored PIN hash from gruvax.settings — global keys live under the
+    # default profile UUID (composite PK = (profile_id, key)).
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT value FROM gruvax.settings WHERE key = %s",
-            ("auth.pin_hash",),
+            "SELECT value FROM gruvax.settings WHERE profile_id = %s::uuid AND key = %s",
+            (_DEFAULT_PROFILE_UUID, "auth.pin_hash"),
         )
         row = await cur.fetchone()
 

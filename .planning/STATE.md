@@ -2,16 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-User Collections
-status: ready_to_plan
-last_updated: 2026-05-27T23:40:01.882Z
-last_activity: 2026-05-27
+status: "Phase 3 shipped — PR #16"
+last_updated: "2026-05-29T20:44:06.012Z"
+last_activity: 2026-05-29
 progress:
   total_phases: 6
-  completed_phases: 0
-  total_plans: 7
-  completed_plans: 11
-  percent: 0
-stopped_at: Phase 1 complete (11/11) — ready to discuss Phase 2
+  completed_phases: 2
+  total_plans: 27
+  completed_plans: 29
+  percent: 33
+stopped_at: Phase 03 complete (7/6) — ready to discuss Phase 4
 ---
 
 # State: GRUVAX
@@ -22,7 +22,7 @@ stopped_at: Phase 1 complete (11/11) — ready to discuss Phase 2
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 2 — multi profile migration + profile manager
+**Current Focus:** Phase 4 — sync polish + diagnostics
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -30,10 +30,11 @@ stopped_at: Phase 1 complete (11/11) — ready to discuss Phase 2
 
 ## Current Position
 
-Phase: 2
+Phase: 4
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-27 -- Phase 01 execution started
+Status: Phase 3 shipped — PR #16
+Last activity: 2026-05-29 -- Phase 03 execution started
+Resume file: .planning/phases/03-devices-pairing/03-UI-SPEC.md
 
 ## Performance Metrics (v2.0)
 
@@ -142,7 +143,7 @@ To be resolved during plan-phase or as the discogsography agent reports:
 
 ## Session Continuity
 
-**Last activity:** 2026-05-27
+**Last activity:** 2026-05-29
 **Prev:** 2026-05-26 (v1.0 milestone archived: Phases 1–10, 50 plans, 10 days, ~36k LOC. 9 SPIDR-deferred reqs relocated to v2/Backlog. v2.0 milestone created via `/gsd-new-milestone v2.0 --reset-phase-numbers`. ROADMAP/REQUIREMENTS/STATE rewritten for v2.0 P1–P4 with 12 active reqs mapped 100%; AUTH-01 deferred to v2.2.)
 **Prev2:** 2026-05-25 (Phase 10 Plan 03 COMPLETE — traceability/count reconcile (docs-only). v1.0 internal consistency achieved: 84 total = 75 satisfied + 9 deferred.)
 **Next action:** Wait for DGS-PREREQ closure (discogsography v2 ships `docs/specs/v2-gruvax-integration.md` in their repo). Once that lands, read the artifact, reconcile contract drift against the refined spec, then run `/gsd-discuss-phase 1`.

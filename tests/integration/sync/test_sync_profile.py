@@ -106,25 +106,34 @@ async def _truncate_profile_collection(db_pool) -> None:  # type: ignore[no-unty
         await conn.commit()
 
 
-def _make_app_state(db_pool) -> types.SimpleNamespace:  # type: ignore[no-untyped-def]
-    """Build a minimal app_state with the four cache hooks as AsyncMock.
+DEFAULT_UUID_STR = DEFAULT_UUID
 
-    Task 1 tests don't assert reload semantics; Task 2 tests use real
-    instances. Task 1's mock suffices to keep the sync_profile call path
-    runnable without dragging in BoundaryCache / SegmentCache plumbing.
+
+def _make_app_state(db_pool) -> types.SimpleNamespace:  # type: ignore[no-untyped-def]
+    """Build a minimal app_state with per-profile registry mocks.
+
+    Phase 2 (Plan 02-02): sync_profile calls _refresh_profile_caches which
+    uses boundary_cache_registry, snapshot_registry, segment_cache_registry,
+    and event_bus_registry keyed by profile_id string. The mocks satisfy the
+    attribute access pattern without dragging in real cache plumbing.
     """
+    from gruvax.events.bus import EventBus
+
     snapshot = AsyncMock()
     snapshot.invalidate = lambda: None  # sync method
     boundary = AsyncMock()
+    boundary.invalidate = lambda: None
     segment = AsyncMock()
     segment.derive = lambda *a, **kw: None  # sync method
     # boundary_cache.overrides is a dict in real code
     boundary.overrides = {}
+    bus = EventBus()  # real bus so publish("collection_changed", ...) works
     return types.SimpleNamespace(
         db_pool=db_pool,
-        collection_snapshot=snapshot,
-        boundary_cache=boundary,
-        segment_cache=segment,
+        boundary_cache_registry={DEFAULT_UUID_STR: boundary},
+        snapshot_registry={DEFAULT_UUID_STR: snapshot},
+        segment_cache_registry={DEFAULT_UUID_STR: segment},
+        event_bus_registry={DEFAULT_UUID_STR: bus},
     )
 
 

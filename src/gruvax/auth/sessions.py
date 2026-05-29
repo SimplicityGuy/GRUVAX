@@ -26,12 +26,32 @@ from itsdangerous import URLSafeSerializer
 
 
 if TYPE_CHECKING:
-    from fastapi import Response
+    from fastapi import Request, Response
 
 
 # Cookie name constants — imported by deps.py, login.py, tests/conftest.py
 SESSION_COOKIE = "gruvax_session"
 CSRF_COOKIE = "gruvax_csrf"
+
+# Browse-binding cookie (D2-10 — INDEPENDENT of admin session cookie).
+# httponly=False: SPA reads it to derive per-profile SSE URL.
+# samesite=strict: home LAN same-site; secure=False for LAN HTTP.
+# max_age=7 days: kiosk Chromium survives restarts without forcing /select.
+# Value = plain UUID string — server validates against active-profiles set
+# on every per-profile endpoint (D2-04, T-02-04-01); no signing needed on LAN.
+BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
+
+# Device fingerprint cookie (DEV-01 — INDEPENDENT of admin session + browse-binding).
+# HttpOnly=True: JS must NEVER read the fingerprint — it is a session-equivalent
+# secret (T-03-01). The SPA identifies the device by device_id (non-secret UUID)
+# returned by GET /api/session; the fingerprint itself never reaches the DOM.
+# max_age=30 days: Chromium only writes cookies to disk (user-data-dir) when
+# max_age is explicitly set — session cookies are NOT persisted on browser exit
+# (RESEARCH.md Pitfall 1, verified: Playwright issue #36139 upstream Chromium).
+# Secure=False for home-LAN HTTP; set True when TLS lands (mirrors BROWSE_BINDING).
+# The 30-day horizon outlives any reboot cycle; revocation is authoritative (D3-07).
+FINGERPRINT_COOKIE = "gruvax_device_fp"
+FINGERPRINT_MAX_AGE = 30 * 24 * 3600
 
 # Hard session cap (30 min) — override via function arg if needed (Pitfall 23)
 HARD_CAP_SECONDS = 1800
@@ -192,6 +212,158 @@ async def revoke_all_sessions_except(
         (now, current_session_id),
     )
     await conn.commit()
+
+
+def set_browse_binding_cookie(
+    response: Response,
+    profile_id: str,
+    secure: bool = False,
+    max_age: int = 7 * 24 * 3600,
+) -> None:
+    """Set the browse-binding cookie (D2-10 — independent of admin session).
+
+    httponly=False: the SPA must read the cookie to build the per-profile
+    SSE URL (e.g., ``/api/events/{profile_id}``).
+    samesite=strict: all GRUVAX requests are same-site on the home LAN;
+    this blocks cross-site POST forging a bind (T-02-04-04).
+    secure=False: home-LAN HTTP; set True in a future TLS deployment.
+    max_age=7 days: kiosk Chromium survives a Pi reboot without returning
+    to the profile-picker screen every morning.
+
+    Value is the plain profile UUID string — the server validates it against
+    the active-profiles registry on every per-profile endpoint (D2-04,
+    T-02-04-01), so a forged / stale UUID resolves to 404/403.
+
+    Args:
+        response:   FastAPI ``Response`` to attach the cookie to.
+        profile_id: UUID string of the profile to bind.
+        secure:     Whether to set the ``Secure`` flag (default False).
+        max_age:    Cookie max-age in seconds (default 7 days).
+    """
+    response.set_cookie(
+        BROWSE_BINDING_COOKIE,
+        profile_id,
+        httponly=False,
+        samesite="strict",
+        secure=secure,
+        max_age=max_age,
+    )
+
+
+def clear_browse_binding_cookie(response: Response, secure: bool = False) -> None:
+    """Clear the browse-binding cookie (Switch-profile unbind, D2-07).
+
+    The ``delete_cookie`` attributes MUST match the ``set_cookie`` attributes
+    exactly (path, httponly, secure, samesite) so browsers actually remove the
+    cookie (same constraint as ``clear_session_cookies``, CR-04).
+
+    Args:
+        response: FastAPI ``Response`` to modify.
+        secure:   Whether the cookie was set with ``Secure=True`` (default False).
+    """
+    response.delete_cookie(
+        BROWSE_BINDING_COOKIE,
+        path="/",
+        httponly=False,
+        samesite="strict",
+        secure=secure,
+    )
+
+
+def issue_fingerprint_cookie(response: Response, secure: bool = False) -> str:
+    """Issue a new opaque HttpOnly fingerprint cookie and return the raw token.
+
+    Generates a 32-byte CSPRNG token via ``secrets.token_urlsafe(32)`` (256 bits
+    of entropy — RESEARCH.md Pattern 1; ASVS V6). Sets the cookie HttpOnly so JS
+    can NEVER read it (fingerprint is a session-equivalent secret, T-03-01).
+
+    max_age is required: Chromium does NOT persist session cookies (no max_age) to
+    the user-data-dir SQLite store — they vanish on browser exit / Pi reboot.
+    Setting max_age=FINGERPRINT_MAX_AGE (30 days) ensures disk persistence
+    (RESEARCH.md Pitfall 1, D3-09).
+
+    The raw token value is returned so the caller can persist it to gruvax.devices.
+    NEVER log this value — treat with the same redaction discipline as the admin PIN
+    (RESEARCH.md Pitfall 7, T-03-02).
+
+    This cookie is INDEPENDENT of the admin session cookie (D3-04). Do not couple
+    it to set_browse_binding_cookie — they serve different security domains.
+
+    Args:
+        response: FastAPI ``Response`` to attach the cookie to.
+        secure:   Whether to set the ``Secure`` flag (default False for LAN HTTP;
+                  set True when TLS lands in a future deployment).
+
+    Returns:
+        The raw fingerprint token string (do not log; store to DB as-is).
+    """
+    fp = secrets.token_urlsafe(32)  # 32 bytes → ~43 URL-safe chars, 256-bit CSPRNG
+    set_fingerprint_cookie(response, fp, secure=secure)
+    return fp
+
+
+def set_fingerprint_cookie(response: Response, fp: str, secure: bool = False) -> None:
+    """Attach the fingerprint cookie with a CALLER-SUPPLIED token value.
+
+    Use when the token was already generated (or read) and must be set on a
+    different ``Response`` object than the one it was first issued on — e.g. when
+    an endpoint persists the fingerprint to the DB and then returns a fresh
+    ``JSONResponse``. Calling ``issue_fingerprint_cookie`` twice would mint a
+    SECOND, divergent token, desyncing the DB-stored fingerprint from the client
+    cookie (the device would never resolve on subsequent requests). Always issue
+    the token once, then propagate the same value with this helper.
+
+    Attributes mirror ``issue_fingerprint_cookie`` exactly (HttpOnly, SameSite=Strict,
+    max_age=30d) so the cookie persists across Pi reboots (RESEARCH.md Pitfall 1, D3-09).
+    NEVER log ``fp`` — it is a session-equivalent secret (T-03-02).
+    """
+    response.set_cookie(
+        FINGERPRINT_COOKIE,
+        fp,
+        httponly=True,
+        samesite="strict",
+        secure=secure,
+        max_age=FINGERPRINT_MAX_AGE,
+    )
+
+
+def get_fingerprint(request: Request) -> str | None:
+    """Extract the fingerprint from the HttpOnly cookie (None if absent).
+
+    Returns the raw opaque token string, or None if the fingerprint cookie is not
+    present in the request. Callers use this to identify devices on each request.
+
+    NEVER log the returned value — it is a session-equivalent secret (T-03-02).
+
+    Args:
+        request: FastAPI ``Request`` with cookies.
+
+    Returns:
+        The fingerprint token string, or ``None`` if the cookie is absent.
+    """
+    return request.cookies.get(FINGERPRINT_COOKIE)
+
+
+def clear_fingerprint_cookie(response: Response, secure: bool = False) -> None:
+    """Clear the fingerprint cookie (device unbind / revoke, D3-07).
+
+    The ``delete_cookie`` attributes MUST match the ``set_cookie`` attributes
+    exactly (path, httponly, samesite, secure) so browsers actually remove the
+    cookie. Mismatched attributes would be treated as a different cookie by the
+    browser, leaving the old fingerprint alive — the CR-04 invariant enforced here
+    mirrors ``clear_browse_binding_cookie`` (lines 248-268).
+
+    Args:
+        response: FastAPI ``Response`` to modify.
+        secure:   Whether the cookie was set with ``Secure=True`` (default False).
+    """
+    response.delete_cookie(
+        FINGERPRINT_COOKIE,
+        path="/",
+        httponly=True,
+        samesite="strict",
+        secure=secure,
+    )
 
 
 def clear_session_cookies(response: Response, secure: bool = False) -> None:

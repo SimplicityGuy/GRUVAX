@@ -13,8 +13,11 @@ const BASE = ''
 export async function searchCollection(
   q: string,
   limit = 10,
+  profileId?: string,
 ): Promise<SearchResponse> {
-  const params = new URLSearchParams({ q, limit: String(limit) })
+  const paramObj: Record<string, string> = { q, limit: String(limit) }
+  if (profileId) paramObj.profile_id = profileId
+  const params = new URLSearchParams(paramObj)
   const res = await fetch(`${BASE}/api/search?${params}`)
   if (!res.ok) {
     throw new Error(`Search failed: ${res.status}`)
@@ -22,8 +25,10 @@ export async function searchCollection(
   return res.json() as Promise<SearchResponse>
 }
 
-export async function locateRelease(releaseId: number): Promise<LocateResult> {
-  const params = new URLSearchParams({ release_id: String(releaseId) })
+export async function locateRelease(releaseId: number, profileId?: string): Promise<LocateResult> {
+  const paramObj: Record<string, string> = { release_id: String(releaseId) }
+  if (profileId) paramObj.profile_id = profileId
+  const params = new URLSearchParams(paramObj)
   const res = await fetch(`${BASE}/api/locate?${params}`)
   if (!res.ok) {
     if (res.status === 404) {

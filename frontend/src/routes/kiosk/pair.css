@@ -1,0 +1,223 @@
+/*
+ * pair.css — /pair kiosk route styles.
+ *
+ * ALL color, size, radius, and transition values reference CSS custom properties
+ * from gruvax-design-tokens.css. No hardcoded hex anywhere.
+ *
+ * Design contract: 03-UI-SPEC.md Surface 1 — Kiosk /pair route (wall-mounted).
+ */
+
+/* ── Page layout ─────────────────────────────────────────────────────────── */
+
+.pair-page {
+  min-height: 100dvh;
+  background: var(--gruvax-white);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: var(--gruvax-space-7) var(--gruvax-space-6);
+  gap: var(--gruvax-space-4);
+  font-family: var(--gruvax-font-ui);
+  position: relative;
+}
+
+/* ── Hidden milestone announcer (a11y) ───────────────────────────────────── */
+
+.pair-milestone-announcer {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* ── Icon mark ───────────────────────────────────────────────────────────── */
+
+.pair-icon-mark {
+  margin-bottom: var(--gruvax-space-3);
+}
+
+/* ── Screen heading ──────────────────────────────────────────────────────── */
+
+.pair-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-xl);  /* 48px */
+  font-weight: 900;
+  color: var(--gruvax-text-primary);
+  line-height: var(--gruvax-leading-tight);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  text-align: center;
+  margin: 0;
+}
+
+/* ── Instruction text ────────────────────────────────────────────────────── */
+
+.pair-instruction {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-lg);  /* 18px */
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  text-align: center;
+  margin: 0;
+}
+
+/* ── Code card ───────────────────────────────────────────────────────────── */
+
+.pair-code-card {
+  background: var(--gruvax-off-white);
+  border: 1.5px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-xl);
+  padding: var(--gruvax-space-5) var(--gruvax-space-7);  /* 24px 48px */
+  margin-top: var(--gruvax-space-7);   /* 48px gap above */
+  margin-bottom: var(--gruvax-space-5);  /* 24px gap below */
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 280px;
+  /* LED physics: border flashes yellow on new code via CSS transition */
+  transition:
+    border-color var(--gruvax-led-on-duration) var(--gruvax-led-on-ease),
+    background-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+/* Success state — border springs to yellow */
+.pair-code-card--success {
+  border-color: var(--gruvax-yellow);
+  transition:
+    border-color var(--gruvax-led-on-duration) var(--gruvax-led-on-ease);
+}
+
+/* Expired state — brief blue-light flash */
+.pair-code-card--expired {
+  background-color: var(--gruvax-blue-light);
+  transition: background-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+/* ── Code digits ─────────────────────────────────────────────────────────── */
+
+.pair-code-digits {
+  display: flex;
+  gap: var(--gruvax-space-3);  /* 12px between digits */
+  align-items: center;
+}
+
+.pair-code-digit {
+  font-family: var(--gruvax-font-mono);
+  font-size: clamp(64px, 12vw, 96px);  /* 96px on >=768px, clamp below */
+  font-weight: 500;
+  color: var(--gruvax-text-primary);
+  line-height: 1.0;
+  letter-spacing: var(--gruvax-tracking-descriptor);  /* 0.2em wide spacing */
+  /* Fixed-width ch-based box: prevents layout shift on digit change */
+  display: inline-block;
+  width: 1ch;
+  text-align: center;
+}
+
+/* ── Success state ───────────────────────────────────────────────────────── */
+
+.pair-code-success {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  color: var(--gruvax-success);
+  padding: var(--gruvax-space-3) 0;
+}
+
+.pair-code-success-text {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md);  /* 24px */
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+}
+
+/* ── Expired state text ──────────────────────────────────────────────────── */
+
+.pair-code-expired-text {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-lg);
+  color: var(--gruvax-text-muted);
+  font-weight: 400;
+}
+
+/* ── Status row (waiting pill + countdown) ───────────────────────────────── */
+
+.pair-status-row {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-3);  /* 12px */
+}
+
+/* ── Waiting pill ────────────────────────────────────────────────────────── */
+
+.pair-waiting-pill {
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);  /* 8px */
+  background: var(--gruvax-blue-faint);
+  color: var(--gruvax-text-primary);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  border-radius: var(--gruvax-radius-pill);
+}
+
+.pair-waiting-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);  /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);  /* 0.14em */
+  text-transform: uppercase;
+}
+
+/* ── Spinner ─────────────────────────────────────────────────────────────── */
+
+.pair-spinner {
+  animation: pair-spin 1s linear infinite;
+  flex-shrink: 0;
+}
+
+@keyframes pair-spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+
+/* ── Countdown ───────────────────────────────────────────────────────────── */
+
+.pair-countdown {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono-lg);  /* 16px */
+  font-weight: 500;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  text-align: center;
+  margin: 0;
+  transition: color var(--gruvax-duration-base) var(--gruvax-ease-standard);
+}
+
+/* Warning state — countdown ≤60s shifts to warning color (250ms transition) */
+.pair-countdown--warning {
+  color: var(--gruvax-warning);
+  transition: color 250ms var(--gruvax-ease-standard);
+}
+
+/* ── Focus rings (accessibility) ─────────────────────────────────────────── */
+
+.pair-page *:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* ── Touch targets — minimum 64×64px on wall-mounted display ────────────── */
+
+@media (min-width: 768px) {
+  .pair-code-digit {
+    font-size: 96px;
+  }
+}

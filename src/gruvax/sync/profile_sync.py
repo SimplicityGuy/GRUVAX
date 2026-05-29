@@ -315,31 +315,45 @@ async def _swap_inside_tx(
     )
 
 
-# ── cache refresh (D-14, Plan 01-03 Task 2 — exposed here for Task 1 imports) ─
+# ── cache refresh (D-14, Plan 02-02 — per-profile registry refresh) ──────────
 
 
-async def _refresh_app_caches(app_state: Any) -> None:
-    """Replay the lifespan-startup cache-load sequence (D-14).
+async def _refresh_profile_caches(profile_id: str, app_state: Any) -> None:
+    """Reload the registry caches for one profile and publish collection_changed.
 
-    Order matches src/gruvax/app.py:142-172 verbatim:
-      1. snapshot.invalidate()
-      2. await snapshot.load(pool)
-      3. await boundary_cache.load(pool)
-      4. segment_cache.derive(boundary_cache, snapshot, boundary_cache.overrides)
+    Called from ``sync_profile`` AFTER the swap transaction commits (D-14).
+    Order MUST be: invalidate → load cache → load snapshot → derive segment →
+    publish (Pitfall A: never publish before all caches are fresh).
 
     Pool checkout here is brief — these are cache-rebuild reads, not the
     multi-second collection sync. Pool isolation (Pitfall 6) is preserved
     because the long-running sync used its own dedicated connection above.
+
+    Args:
+        profile_id: str UUID of the profile whose registry entries to reload.
+        app_state: object with ``db_pool``, ``boundary_cache_registry``,
+                   ``snapshot_registry``, ``segment_cache_registry``,
+                   ``event_bus_registry`` attributes (typically
+                   ``request.app.state``).
     """
     pool = app_state.db_pool
-    snapshot = app_state.collection_snapshot
-    boundary = app_state.boundary_cache
-    segment = app_state.segment_cache
 
-    snapshot.invalidate()
-    await snapshot.load(pool)
-    await boundary.load(pool)
-    segment.derive(boundary, snapshot, boundary.overrides)
+    # Reload BoundaryCache for this profile (invalidate first — SEG-04 seam).
+    cache = app_state.boundary_cache_registry[profile_id]
+    cache.invalidate()
+    await cache.load(pool, profile_id=profile_id)
+
+    # Reload CollectionSnapshot for this profile.
+    snapshot = app_state.snapshot_registry[profile_id]
+    await snapshot.load(pool, profile_id=profile_id)
+
+    # Re-derive SegmentCache (CPU-only, no DB call).
+    seg = app_state.segment_cache_registry[profile_id]
+    seg.derive(cache, snapshot, cache.overrides)
+
+    # Publish collection_changed AFTER all caches are fresh (Pitfall A ordering).
+    bus = app_state.event_bus_registry[profile_id]
+    await bus.publish("collection_changed", {"profile_id": profile_id})
 
 
 # ── PAT load + sentinel detection (Pitfall 8) ────────────────────────────────
@@ -497,8 +511,9 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
             # so the outer except-chain knows NOT to overwrite status='ok'
             # with 'failed'. The caller (Plan 04 admin endpoint) sees the
             # original exception via .inner and translates to a 500.
+            # P2: use per-profile refresh (publishes collection_changed AFTER load).
             try:
-                await _refresh_app_caches(app_state)
+                await _refresh_profile_caches(profile_id, app_state)
             except Exception as exc:
                 logger.exception(
                     "sync_profile: cache refresh failed AFTER commit "

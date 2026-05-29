@@ -127,10 +127,12 @@ async def get_settings(
     Reads from ``gruvax.settings`` table.  Returns defaults if keys are absent.
     Colors returned as plain hex strings (stripped of JSON quotes).
     """
+    # Global settings live under the default profile UUID (composite PK = (profile_id, key)).
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT key, value FROM gruvax.settings WHERE key = ANY(%s)",
-            (list(_ALLOWED_SETTINGS_KEYS),),
+            "SELECT key, value FROM gruvax.settings WHERE profile_id = %s::uuid AND key = ANY(%s)",
+            (_DEFAULT_PROFILE_UUID, list(_ALLOWED_SETTINGS_KEYS)),
         )
         rows = await cur.fetchall()
 
@@ -264,6 +266,8 @@ async def update_settings(
                     },
                 )
 
+    # Global settings live under the default profile UUID (composite PK = (profile_id, key)).
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     updated: list[str] = []
     async with pool.connection() as conn:
         for body_key, db_key in key_map.items():
@@ -291,8 +295,9 @@ async def update_settings(
                 json_value = json.dumps(value)
 
             await conn.execute(
-                "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now() WHERE key = %s",
-                (json_value, db_key),
+                "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now()"
+                " WHERE profile_id = %s::uuid AND key = %s",
+                (json_value, _DEFAULT_PROFILE_UUID, db_key),
             )
             updated.append(db_key)
         await conn.commit()
@@ -310,7 +315,7 @@ async def update_settings(
     # same object in place means every holder of the reference sees the new values
     # immediately (D-15 "see new LED values immediately").
     try:
-        fresh = await load_settings_cache(pool)
+        fresh = await load_settings_cache(pool, profile_id=_DEFAULT_PROFILE_UUID)
         existing = getattr(request.app.state, "settings_cache", None)
         if isinstance(existing, dict):
             existing.clear()
@@ -354,11 +359,14 @@ async def change_pin(
             detail={"type": "invalid_pin_format", "message": "PIN must be exactly 4 digits"},
         )
 
+    # Global PIN lives under the default profile UUID (composite PK = (profile_id, key)).
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+
     # Fetch current hash
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT value FROM gruvax.settings WHERE key = %s",
-            ("auth.pin_hash",),
+            "SELECT value FROM gruvax.settings WHERE profile_id = %s::uuid AND key = %s",
+            (_DEFAULT_PROFILE_UUID, "auth.pin_hash"),
         )
         row = await cur.fetchone()
 
@@ -381,11 +389,11 @@ async def change_pin(
     new_hash = hash_pin(new_pin)
     async with pool.connection() as conn:
         await conn.execute(
-            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-            " VALUES ('auth.pin_hash', %s::jsonb, 'Argon2id-hashed admin PIN', now())"
-            " ON CONFLICT (key) DO UPDATE"
+            "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+            " VALUES (%s::uuid, 'auth.pin_hash', %s::jsonb, 'Argon2id-hashed admin PIN', now())"
+            " ON CONFLICT (profile_id, key) DO UPDATE"
             "  SET value = EXCLUDED.value, updated_at = now()",
-            (f'"{new_hash}"',),
+            (_DEFAULT_PROFILE_UUID, f'"{new_hash}"'),
         )
         # Revoke ALL other sessions (D-03b — lost device protection, T-03-08)
         current_session_id = admin["session_id"]

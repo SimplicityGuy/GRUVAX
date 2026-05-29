@@ -256,7 +256,7 @@ async def test_put_led_settings_persists_and_caches() -> None:
         "led_highlight.retain_ttl_seconds": 300,
     }
 
-    async def mock_load_settings_cache(pool: Any) -> dict[str, Any]:
+    async def mock_load_settings_cache(pool: Any, **kwargs: Any) -> dict[str, Any]:
         return expected_cache
 
     with patch(

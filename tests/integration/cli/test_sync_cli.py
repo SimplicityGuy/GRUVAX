@@ -189,12 +189,12 @@ def gruvax_api_server(gruvax_api_port, fake_disco_port, fake_disco_server) -> It
     # we don't leak into other test modules' cache-refresh assertions.
     from gruvax.sync import profile_sync as _profile_sync_mod
 
-    _original_refresh = _profile_sync_mod._refresh_app_caches
+    _original_refresh = _profile_sync_mod._refresh_profile_caches
 
-    async def _noop_refresh(_app_state) -> None:  # type: ignore[no-untyped-def]
+    async def _noop_refresh(_profile_id: str, _app_state: object) -> None:  # type: ignore[no-untyped-def]
         return None
 
-    _profile_sync_mod._refresh_app_caches = _noop_refresh  # type: ignore[assignment]
+    _profile_sync_mod._refresh_profile_caches = _noop_refresh  # type: ignore[assignment]
 
     app = create_app()
 
@@ -238,7 +238,7 @@ def gruvax_api_server(gruvax_api_port, fake_disco_port, fake_disco_server) -> It
     server.should_exit = True
     thread.join(timeout=5.0)
     # Restore the original cache-refresh so cross-module tests are unaffected.
-    _profile_sync_mod._refresh_app_caches = _original_refresh  # type: ignore[assignment]
+    _profile_sync_mod._refresh_profile_caches = _original_refresh  # type: ignore[assignment]
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -250,11 +250,12 @@ async def reset_profile_and_pin(db_pool) -> AsyncIterator[None]:  # type: ignore
     cipher = encrypt_pat(TEST_PAT)
     pin_hash = hash_pin(TEST_PIN)
     async with db_pool.connection() as conn:
+        _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
         await conn.execute(
-            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-            " VALUES ('auth.pin_hash', %s::jsonb, 'Test PIN for sync_cli', now())"
-            " ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
-            (f'"{pin_hash}"',),
+            "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+            " VALUES (%s::uuid, 'auth.pin_hash', %s::jsonb, 'Test PIN for sync_cli', now())"
+            " ON CONFLICT (profile_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+            (_DEFAULT_PROFILE_UUID, f'"{pin_hash}"'),
         )
         await conn.execute(
             "UPDATE gruvax.profiles SET "
@@ -325,23 +326,52 @@ async def test_bad_pin_exits_nonzero(  # type: ignore[no-untyped-def]
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_sync_503_exits_nonzero(  # type: ignore[no-untyped-def]
-    db_pool, reset_profile_and_pin, fake_disco_server, gruvax_api_server, gruvax_api_port
+    db_pool,
+    reset_profile_and_pin,
+    fake_disco_server,
+    gruvax_api_server,
+    gruvax_api_port,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    """Test 3: fake returns 500 → sync endpoint 503 → CLI exit non-zero."""
-    from fastapi import FastAPI, HTTPException
+    """Test 3: upstream returns 500 → background sync fails → CLI exit non-zero.
 
-    fake = FastAPI()
+    D2-13: the endpoint returns 202 immediately. The background sync runs and fails
+    (server_error). The CLI polls and sees last_sync_status='failed' → exits non-zero.
 
-    @fake.get("/api/user/collection")
-    async def _always_500() -> dict:
-        raise HTTPException(500, "boom")
+    The integration-conftest session fixture patches _make_client to the in-process
+    fake (50 items). We override it here to a client that always raises ServerError,
+    forcing the background task to fail and set last_sync_status='failed'.
+    """
+    from gruvax.discogsography.errors import ServerError
+    from gruvax.sync import profile_sync
 
-    _FAKE_MUX.app = fake
+    class _AlwaysFailsClient:
+        async def first_page(self) -> dict:
+            raise ServerError("simulated upstream 500")
+
+        async def _get_page(self, *, limit: int, offset: int) -> dict:
+            raise ServerError("simulated upstream 500")
+
+        async def aclose(self) -> None:
+            pass
+
+    def _failing_client_factory(base_url: str, pat: str):  # type: ignore[no-untyped-def]
+        return _AlwaysFailsClient()
+
+    monkeypatch.setattr(profile_sync, "_make_client", _failing_client_factory)
 
     result = _run_sync_cli(stdin=f"{TEST_PIN}\n", gruvax_api_port=gruvax_api_port)
-    assert result.returncode != 0
+    assert result.returncode != 0, (
+        f"CLI should exit non-zero when sync fails, got returncode={result.returncode}; "
+        f"stdout={result.stdout!r} stderr={result.stderr!r}"
+    )
     combined = result.stdout + result.stderr
-    assert ("503" in combined) or ("upstream_unavailable" in combined), combined
+    assert (
+        ("failed" in combined)
+        or ("server_error" in combined)
+        or ("503" in combined)
+        or ("upstream_unavailable" in combined)
+    ), f"Expected failure message in output, got: {combined!r}"
 
 
 @pytest.mark.asyncio(loop_scope="session")

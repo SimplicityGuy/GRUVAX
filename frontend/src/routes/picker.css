@@ -1,0 +1,203 @@
+/*
+ * Profile Picker + Onboarding styles — /select route (Surfaces 4 + 5).
+ *
+ * ALL color, size, radius, and transition values reference CSS custom properties
+ * from gruvax-design-tokens.css. No hardcoded hex anywhere.
+ */
+
+/* ── Picker page layout ──────────────────────────────────────────────────── */
+
+.picker-page {
+  min-height: 100dvh;
+  background: var(--gruvax-off-white);
+  font-family: var(--gruvax-font-ui);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--gruvax-space-8) var(--gruvax-space-5) var(--gruvax-space-8);
+}
+
+.picker-page--onboarding {
+  justify-content: flex-start;
+  padding-top: var(--gruvax-space-9); /* 96px top offset per UI-SPEC */
+}
+
+/* ── "CHOOSE A COLLECTION" / "NO COLLECTIONS YET" heading ───────────────── */
+
+.picker-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-xl); /* 48px */
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  line-height: var(--gruvax-leading-tight);
+  color: var(--gruvax-blue);
+  text-transform: uppercase;
+  text-align: center;
+  margin: 0 0 var(--gruvax-space-6) 0; /* 32px below heading */
+}
+
+/* ── Picker card grid ────────────────────────────────────────────────────── */
+
+.picker-grid {
+  width: 100%;
+  max-width: 640px;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: var(--gruvax-space-5); /* 24px */
+  margin-top: var(--gruvax-space-6); /* 32px */
+}
+
+/* ── Picker card ─────────────────────────────────────────────────────────── */
+
+.picker-card {
+  position: relative;
+  background: var(--gruvax-white);
+  border: 1.5px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-lg); /* 12px */
+  box-shadow: var(--gruvax-shadow-sm);
+  padding: var(--gruvax-space-5); /* 24px */
+  min-height: 140px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1); /* 4px between name/count/sync lines */
+  cursor: pointer;
+  transition:
+    border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+    box-shadow var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  outline: none;
+}
+
+.picker-card:hover {
+  border-color: var(--gruvax-blue);
+  box-shadow: var(--gruvax-shadow-md);
+}
+
+.picker-card:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* Profile name — Barlow Condensed 900 24px, --gruvax-blue */
+.picker-card__name {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md); /* 24px */
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  line-height: var(--gruvax-leading-tight);
+  color: var(--gruvax-text-primary);
+}
+
+/* Record count — DM Mono 16px 500, --gruvax-text-secondary */
+.picker-card__count {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono-lg); /* 16px */
+  font-weight: 500;
+  line-height: var(--gruvax-leading-normal);
+  color: var(--gruvax-text-secondary);
+  margin-top: var(--gruvax-space-2); /* 8px gap before count */
+}
+
+/* Last sync — Space Grotesk 12px 500, --gruvax-text-muted */
+.picker-card__sync {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-caption); /* 12px */
+  font-weight: 500;
+  line-height: var(--gruvax-leading-normal);
+  color: var(--gruvax-text-muted);
+}
+
+/* "BINDING…" busy overlay label */
+.picker-card__binding {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(255, 255, 255, 0.8);
+  border-radius: var(--gruvax-radius-lg);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  color: var(--gruvax-blue);
+}
+
+/* Inline error below card details */
+.picker-card__error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-error);
+  margin-top: var(--gruvax-space-2);
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* ── Picker loading state ────────────────────────────────────────────────── */
+
+.picker-loading {
+  width: 32px;
+  height: 32px;
+  border-radius: var(--gruvax-radius-pill);
+  border: 3px solid var(--gruvax-border-light);
+  border-top-color: var(--gruvax-blue);
+  animation: picker-spin 1s linear infinite;
+  margin-top: var(--gruvax-space-8);
+}
+
+@keyframes picker-spin {
+  to { transform: rotate(360deg); }
+}
+
+.picker-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  font-weight: 400;
+  color: var(--gruvax-error);
+  text-align: center;
+  margin-top: var(--gruvax-space-8);
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* ── Onboarding body copy ────────────────────────────────────────────────── */
+
+.onboarding-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body); /* 16px */
+  font-weight: 400;
+  line-height: var(--gruvax-leading-relaxed); /* 1.7 */
+  color: var(--gruvax-text-secondary);
+  text-align: center;
+  max-width: 480px;
+  margin: 0 0 var(--gruvax-space-5) 0; /* 24px before CTA */
+}
+
+/* ── Onboarding CTA — "OPEN ADMIN PANEL" ────────────────────────────────── */
+
+.onboarding-cta {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--gruvax-blue);
+  color: var(--gruvax-white);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  text-decoration: none;
+  border: none;
+  border-radius: var(--gruvax-radius-md); /* 8px */
+  padding: var(--gruvax-space-3) var(--gruvax-space-5); /* 12px 24px */
+  min-height: 44px; /* WCAG touch target */
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.onboarding-cta:hover {
+  background: var(--gruvax-blue-dark);
+}
+
+.onboarding-cta:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}

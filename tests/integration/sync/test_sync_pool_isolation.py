@@ -178,17 +178,21 @@ async def test_concurrent_pool_checkouts_unblocked_during_sync(  # type: ignore[
     slow_app = _make_slow_fake_app(seed_pages=5, page_size=200, page_sleep_s=0.5)
     monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(slow_app))
 
+    from gruvax.events.bus import EventBus
+
     snapshot = AsyncMock()
     snapshot.invalidate = lambda: None
     boundary = AsyncMock()
+    boundary.invalidate = lambda: None
     boundary.overrides = {}
     segment = AsyncMock()
     segment.derive = lambda *a, **kw: None
     app_state = types.SimpleNamespace(
         db_pool=tiny_pool,
-        collection_snapshot=snapshot,
-        boundary_cache=boundary,
-        segment_cache=segment,
+        boundary_cache_registry={DEFAULT_UUID: boundary},
+        snapshot_registry={DEFAULT_UUID: snapshot},
+        segment_cache_registry={DEFAULT_UUID: segment},
+        event_bus_registry={DEFAULT_UUID: EventBus()},
     )
 
     # Start the sync in the background.

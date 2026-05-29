@@ -165,6 +165,22 @@ export function AdminShell() {
             SETTINGS
           </NavLink>
           <NavLink
+            to="/admin/profiles"
+            className={({ isActive }) =>
+              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
+            }
+          >
+            PROFILES
+          </NavLink>
+          <NavLink
+            to="/admin/devices"
+            className={({ isActive }) =>
+              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
+            }
+          >
+            DEVICES
+          </NavLink>
+          <NavLink
             to="/admin/cubes"
             className={({ isActive }) =>
               `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`

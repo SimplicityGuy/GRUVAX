@@ -48,8 +48,8 @@ Full v1.0 phase details: [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMA
 Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a continuation of v1.0's numbering. The refined design spec at [`docs/superpowers/specs/2026-05-26-v2-multi-user-collections-refined.md`](../docs/superpowers/specs/2026-05-26-v2-multi-user-collections-refined.md) §"Phase Decomposition" is the authoritative source for phase exit criteria.
 
 - [x] **Phase 1: Walking skeleton — API client + single-profile sync** — Core Value end-to-end against one API-sourced collection; `v_collection` retired; positioning runs off the local `profile_collection` cache. (completed 2026-05-27)
-- [ ] **Phase 2: Multi-profile migration + profile manager** — Full `profiles` table with Fernet PAT storage; `profile_id` NOT NULL migration across 7 v1 tables; per-profile caches + SSE channel; profile manager admin UI; browser session profile picker.
-- [ ] **Phase 3: Devices + pairing** — `devices` + `pairing_codes` schemas; HttpOnly fingerprint cookie; 4-digit code pairing flow A (5-min TTL, auto-reroll); devices admin UI with PENDING / PAIRED / REVOKED groupings.
+- [x] **Phase 2: Multi-profile migration + profile manager** — Full `profiles` table with Fernet PAT storage; `profile_id` NOT NULL migration tightening the 5 per-profile data tables (the 2 global/infra tables keep nullable `profile_id`); per-profile caches + SSE channel; profile manager admin UI; browser session profile picker. (completed 2026-05-28)
+- [x] **Phase 3: Devices + pairing** — `devices` + `pairing_codes` schemas; HttpOnly fingerprint cookie; 4-digit code pairing flow A (5-min TTL, auto-reroll); devices admin UI with PENDING / PAIRED / REVOKED groupings. (completed 2026-05-29)
 - [ ] **Phase 4: Sync polish + diagnostics** — Nightly background sync (24h @ 03:00 local default, configurable 24h/12h/6h/off); 401 reauth UI; per-profile diagnostics cards; soft-delete cache-purge background task; "Sync now" progress + completion toast.
 
 ## Phase Details
@@ -107,11 +107,39 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
   1. Owner can create a profile (e.g., "Sam") via the profile manager admin UI, paste a PAT, see a successful synchronous `per_page=1` test sync capture `discogsography_user_id`, and observe the full async sync complete with `last_sync_status = 'ok'`.
   2. Two browser sessions on the LAN can concurrently show different profiles (each picks via the profile picker; session cookie binds `bound_profile_id`); a single-active-profile deployment auto-binds and skips the picker.
-  3. The `profile_id NOT NULL` migration across 7 v1 tables (`cube_boundaries`, `segments`, `change_log`, `change_sets`, `settings`, `record_stats`, `ambient_baseline`) backfills v1 data to the deterministic default profile and survives a clean Alembic upgrade↔downgrade round-trip (v1.0 CI invariant carries over).
+  3. The `profile_id NOT NULL` migration tightens the 5 per-profile data tables that received `profile_id` in migration 0009 (`cube_boundaries`, `settings`, `record_stats`, `segment_overrides`, `boundary_history`) to NOT NULL — `admin_sessions` and `idempotency_keys` keep their nullable `profile_id` (global/infra, not per-profile data) — backfills v1 data to the deterministic default profile, and survives a clean Alembic upgrade↔downgrade round-trip (v1.0 CI invariant carries over).
   4. Per-profile SSE channel `/api/events/{profile_id}` invalidates only the affected profile's `BoundaryCache` / `SegmentCache` / `CollectionSnapshot` on `boundary_changed` and `collection_changed` events; cross-profile data leakage is impossible by construction.
   5. p95 `/api/search` ≤ 200 ms and `/api/locate` ≤ 50 ms SLOs hold with 2+ profiles cached in memory (verified via the v1.0 Phase 8 CI benchmark gate, parameterized over profile_id).
 
-**Plans**: TBD
+**Plans**: 8 plans (6 waves; W0: 02-00 | W1: 02-01 | W2: 02-02 | W3 parallel: 02-03 + 02-04 + 02-05 | W4: 02-06 | W5: 02-07)
+**Wave 1**
+
+- [x] 02-00-PLAN.md — Wave 0 test scaffolding: 6 RED test files + `second_profile` fixture (PROF-04/PROF-02/API-02/SYN-02 baselines)
+- [x] 02-01-PLAN.md — Migration 0010: `profile_id NOT NULL` on 5 data tables + 4 composite PKs (2 infra tables stay nullable) + clean round-trip (PROF-04)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 02-02-PLAN.md — Per-profile cache/bus/state registries on app.state + per-profile resolution deps + per-profile sync cache refresh (API-02, SYN-02, D2-01..06)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 02-03-PLAN.md — Per-profile SSE `/api/events/{profile_id}` + profile-scoped search/locate/illuminate + re-parameterized SLO gate (API-02, SYN-02, D2-04)
+- [x] 02-04-PLAN.md — Browse-binding session: `GET /api/session` bootstrap + auto-bind + bind/unbind + independent cookie (PROF-02, SYN-02, D2-07/08/10)
+- [x] 02-05-PLAN.md — Profile CRUD + connect/rotate-PAT + 202+poll sync conversion + soft-delete registry eviction (PROF-01, PROF-02, D2-12/13)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 02-06-PLAN.md — Browser profile UX: `/select` picker + onboarding + Switch-profile button + empty-collection state + KioskView per-profile wiring (PROF-02, SYN-02, D2-03/07/08/09)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 02-07-PLAN.md — Profile-manager admin UI: PROFILES tab + list + status badges + bottom-sheet drawer (connect/rotate/rename/sync/delete) + 202 poll + toast (PROF-02, PROF-01, D2-11)
+
+**Wave 6 — gap closure** *(closes 02-UAT.md gaps from user-driven UAT; both parallel — disjoint files)*
+
+- [x] 02-08-PLAN.md — GAP 1 (major): poll-until-terminal `refetchInterval` in ProfileDrawer (stop only on 'ok'/'failed') + atomic terminal-write confirmation → drawer auto-transitions SYNCING → CONNECTED + toast without manual refresh (PROF-02, PROF-01)
+- [x] 02-09-PLAN.md — GAP 2 (minor): kiosk "shelf layout not configured" affordance when an in-collection result lands no cube (zero-boundary profile); admin boundary-onboarding flow explicitly deferred to a future phase (PROF-02)
+
 **UI hint**: yes
 
 ### Phase 3: Devices + pairing
@@ -127,7 +155,29 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
   4. The devices admin UI shows PENDING / PAIRED / REVOKED groupings with a drawer per device (rename / change-profile / unbind / revoke), all PIN-gated.
   5. Pairing-code brute-force resistance holds: 5-min TTL × 10k keyspace × `consumed_at` one-shot guard × admin PIN-gating on `/api/admin/devices/bind`; concurrent bind attempts on the same code → first wins, second sees "Code not found".
 
-**Plans**: TBD
+**Plans**: 6 plans (5 waves; W1: 03-00 | W2: 03-01 | W3 parallel: 03-02 + 03-03 | W4: 03-04 | W5: 03-05)
+Plans:
+**Wave 1**
+
+- [x] 03-00-PLAN.md — Wave 0 test scaffolding: RED test files for DEV-01/02/03 + Playwright dev dep (package-legitimacy checkpoint)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [x] 03-01-PLAN.md — Migration 0011 (devices + pairing_codes + indexes, round-trip) + HttpOnly fingerprint cookie helpers (DEV-01)
+
+**Wave 3** *(blocked on Wave 2 completion)*
+
+- [x] 03-02-PLAN.md — Kiosk pairing endpoints + admin device CRUD + atomic PIN-gated rate-limited bind + revoke/reassign SSE (DEV-02, DEV-03)
+- [x] 03-03-PLAN.md — Device-aware resolution + per-request revoke guard + GET /api/session device binding + profile soft-delete detach (DEV-02, DEV-03)
+
+**Wave 4** *(blocked on Wave 3 completion)*
+
+- [x] 03-04-PLAN.md — Frontend: /pair countdown route + admin Devices UI (groups + drawer + NumericKeypad bind) + routing precedence + affordances (DEV-02, DEV-03)
+
+**Wave 5** *(blocked on Wave 4 completion)*
+
+- [x] 03-05-PLAN.md — Pi provisioning artifacts (start-kiosk.sh + systemd unit + README) + Playwright reboot-persistence test (DEV-01)
+
 **UI hint**: yes
 
 ### Phase 4: Sync polish + diagnostics
@@ -151,8 +201,8 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
 | 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
-| 2. Real Position Estimation | v1.0 | 4/4 | Complete | 2026-05-20 |
-| 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
+| 2. Real Position Estimation | v1.0 | 11/10 | Complete    | 2026-05-29 |
+| 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 7/6 | Complete    | 2026-05-29 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
 | 6. LED Contract over MQTT | v1.0 | 4/4 | Complete | 2026-05-24 |
@@ -161,8 +211,8 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 | 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 0/6 | Planned (4 waves) | — |
-| 2. Multi-profile migration + profile manager | v2.0 | 0/0 | Not started | — |
-| 3. Devices + pairing | v2.0 | 0/0 | Not started | — |
+| 2. Multi-profile migration + profile manager | v2.0 | 0/8 | Planned (6 waves) | — |
+| 3. Devices + pairing | v2.0 | 0/6 | Planned (5 waves) | — |
 | 4. Sync polish + diagnostics | v2.0 | 0/0 | Not started | — |
 | 999.1. Shelf-overview mini-Kallax fill/occupancy | Backlog | 0/0 | Captured | — |
 | 999.2. LED "party" + "sound-reactive" modes | Backlog | 0/0 | Captured | — |

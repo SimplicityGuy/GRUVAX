@@ -1,8 +1,9 @@
 """GET /api/search — FTS + catalog-number union search (SRCH-01, SRCH-02, SRCH-04).
 
 Query parameters:
-  - ``q``:     Search query. ``min_length=1``, ``max_length=200`` (T-01-10).
-  - ``limit``: Max results. Default 20, ``ge=1``, ``le=50`` (T-01-08).
+  - ``q``:          Search query. ``min_length=1``, ``max_length=200`` (T-01-10).
+  - ``limit``:      Max results. Default 20, ``ge=1``, ``le=50`` (T-01-08).
+  - ``profile_id``: Profile UUID validated against gruvax_browse_binding cookie (D2-04).
 
 Response:
   ``{items: [{release_id, collection_item_id, title, primary_artist,
@@ -24,7 +25,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Query, Request
 
-from gruvax.api.deps import get_pool
+from gruvax.api.deps import get_pool, get_snapshot_for_profile
 from gruvax.db.queries import increment_search_count, search_collection
 from gruvax.middleware.timing import record_slow_query
 
@@ -39,17 +40,20 @@ async def search(
     request: Request,
     q: str = Query(min_length=1, max_length=200),
     limit: int = Query(default=20, ge=1, le=50),
+    profile_id: str = Query(),
     pool: Any = Depends(get_pool),
+    _snapshot: Any = Depends(get_snapshot_for_profile),  # validates 400/403 (D2-04)
 ) -> dict[str, Any]:
     """Search the collection via FTS and catalog-number prefix matching.
 
-    Returns a ranked list of collection items matching the query string.
-    FTS matches on artist name, title, and label; catalog-path matches on
-    separator-normalized catalog number prefix (e.g. ``blp4195`` hits ``BLP 4195``).
+    The profile_id query parameter is validated against the gruvax_browse_binding
+    session cookie (D2-04): 400 if unbound, 403 if mismatch.  The search is scoped
+    to that profile's collection data.
 
     Args:
-        q:     Search query (1-200 characters, T-01-10).
-        limit: Maximum results (1-50, default 20, T-01-08).
+        q:          Search query (1-200 characters, T-01-10).
+        limit:      Maximum results (1-50, default 20, T-01-08).
+        profile_id: Profile UUID (required; validated against browse cookie, D2-04).
 
     Returns:
         ``{items: [SearchRow, ...], took_ms: float, did_you_mean: str | None}``
@@ -58,7 +62,7 @@ async def search(
         ``did_you_mean`` is non-null only when items is empty and pg_trgm
         finds a high-similarity candidate (SRCH-07/D-11).
     """
-    rows, took_ms, did_you_mean = await search_collection(pool, q, limit)
+    rows, took_ms, did_you_mean = await search_collection(pool, q, limit, profile_id)
 
     # OBS-05: record in slow-query ring when request exceeds the /api/search SLO (200 ms).
     # For search, took_ms is both request-total and DB time (Pitfall 3 — inline approach).

@@ -16,16 +16,21 @@
 import type {
   AdminCubeBoundary,
   AdminCubesResponse,
+  AdminProfile,
+  AdminProfilesResponse,
   AdminSession,
   AdminSettings,
   AdminSettingsPut,
   CatalogOption,
   ChangePinPayload,
   CommitResponse,
+  ConnectPatPayload,
+  CreateProfilePayload,
   CubeBoundaryEdit,
   HistoryResponse,
   LabelOption,
   LoginResponse,
+  RenameProfilePayload,
   RevertResponse,
   SuggestResponse,
   ValidateResponse,
@@ -54,8 +59,11 @@ function getCsrfToken(): string {
  * When ``body`` is a ``FormData`` instance, the ``Content-Type`` default is
  * intentionally omitted so the browser can set the multipart boundary
  * automatically (file upload pattern — PATTERNS.md §adminClient.ts).
+ *
+ * Exported so sibling admin clients (e.g. ``api/devices.ts``) reuse the single
+ * CSRF/credentials path instead of re-implementing it (CR-01).
  */
-async function adminFetch(
+export async function adminFetch(
   path: string,
   options: RequestInit = {},
 ): Promise<Response> {
@@ -876,4 +884,152 @@ export class BulkSaveError extends Error {
     this.serverMessage = serverMessage
     this.body = body
   }
+}
+
+// ── Phase 2: Profile Manager endpoints (plan 02-07) ──────────────────────────
+
+/**
+ * Error type discriminator thrown by profile endpoints.
+ * Carries the ``type`` field from the backend JSON response.
+ */
+export class ProfileApiError extends Error {
+  readonly status: number
+  readonly errorType: string | undefined
+  constructor(status: number, errorType?: string, message?: string) {
+    super(message ?? `Profile API error: ${status}`)
+    this.name = 'ProfileApiError'
+    this.status = status
+    this.errorType = errorType
+  }
+}
+
+async function parseProfileError(res: Response): Promise<ProfileApiError> {
+  let errorType: string | undefined
+  let message: string | undefined
+  try {
+    const body = await res.json() as Record<string, unknown>
+    errorType = typeof body.type === 'string' ? body.type : undefined
+    message = typeof body.message === 'string' ? body.message : undefined
+    if (!message && typeof body.detail === 'object' && body.detail !== null) {
+      const detail = body.detail as Record<string, unknown>
+      errorType = typeof detail.type === 'string' ? detail.type : errorType
+      message = typeof detail.message === 'string' ? detail.message : undefined
+    }
+  } catch {
+    // Non-JSON body — leave errorType/message undefined
+  }
+  return new ProfileApiError(res.status, errorType, message)
+}
+
+/** GET /api/admin/profiles — list all active profiles with derived status. */
+export async function getAdminProfiles(): Promise<AdminProfilesResponse> {
+  const res = await adminFetch('/api/admin/profiles')
+  if (!res.ok) throw new Error(`Failed to fetch profiles: ${res.status}`)
+  return res.json() as Promise<AdminProfilesResponse>
+}
+
+/** GET /api/admin/profiles/{id} — single profile (poll target for D2-13). */
+export async function getAdminProfile(id: string): Promise<AdminProfile> {
+  const res = await adminFetch(`/api/admin/profiles/${id}`)
+  if (res.status === 404) throw new ProfileApiError(404, 'profile_not_found')
+  if (!res.ok) throw new Error(`Failed to fetch profile: ${res.status}`)
+  return res.json() as Promise<AdminProfile>
+}
+
+/** POST /api/admin/profiles — create a PENDING profile. */
+export async function createAdminProfile(
+  payload: CreateProfilePayload,
+): Promise<AdminProfile> {
+  const res = await adminFetch('/api/admin/profiles', {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (res.status === 409) throw await parseProfileError(res)
+  if (!res.ok) throw new Error(`Failed to create profile: ${res.status}`)
+  return res.json() as Promise<AdminProfile>
+}
+
+/** PATCH /api/admin/profiles/{id} — rename profile. */
+export async function renameAdminProfile(
+  id: string,
+  payload: RenameProfilePayload,
+): Promise<AdminProfile> {
+  const res = await adminFetch(`/api/admin/profiles/${id}`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload),
+  })
+  if (res.status === 409) throw await parseProfileError(res)
+  if (res.status === 404) throw new ProfileApiError(404, 'profile_not_found')
+  if (!res.ok) throw new Error(`Failed to rename profile: ${res.status}`)
+  return res.json() as Promise<AdminProfile>
+}
+
+/**
+ * POST /api/admin/profiles/{id}/connect — synchronous test-sync + kick full sync.
+ *
+ * Returns 200 on success. Throws ProfileApiError with errorType:
+ *   - pat_rejected (401)
+ *   - user_id_collision (409)
+ *   - rate_limited_upstream / upstream_unavailable (503)
+ */
+export async function connectAdminProfilePat(
+  id: string,
+  payload: ConnectPatPayload,
+): Promise<{ status: string; profile_id: string }> {
+  const res = await adminFetch(`/api/admin/profiles/${id}/connect`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (res.status === 401 || res.status === 409 || res.status === 503) {
+    throw await parseProfileError(res)
+  }
+  if (!res.ok) throw new Error(`Failed to connect PAT: ${res.status}`)
+  return res.json() as Promise<{ status: string; profile_id: string }>
+}
+
+/**
+ * POST /api/admin/profiles/{id}/rotate — rotate PAT (must be same account).
+ *
+ * Throws ProfileApiError with errorType:
+ *   - pat_rejected (401)
+ *   - user_id_mismatch (409)
+ *   - upstream errors (503)
+ */
+export async function rotateAdminProfilePat(
+  id: string,
+  payload: ConnectPatPayload,
+): Promise<{ status: string; profile_id: string }> {
+  const res = await adminFetch(`/api/admin/profiles/${id}/rotate`, {
+    method: 'POST',
+    body: JSON.stringify(payload),
+  })
+  if (res.status === 401 || res.status === 409 || res.status === 503) {
+    throw await parseProfileError(res)
+  }
+  if (!res.ok) throw new Error(`Failed to rotate PAT: ${res.status}`)
+  return res.json() as Promise<{ status: string; profile_id: string }>
+}
+
+/** POST /api/admin/profiles/{id}/sync — trigger async sync (202). */
+export async function syncAdminProfile(
+  id: string,
+): Promise<{ status: string; profile_id: string }> {
+  const res = await adminFetch(`/api/admin/profiles/${id}/sync`, {
+    method: 'POST',
+  })
+  if (!res.ok) throw new Error(`Failed to trigger sync: ${res.status}`)
+  return res.json() as Promise<{ status: string; profile_id: string }>
+}
+
+/** DELETE /api/admin/profiles/{id} — soft-delete profile. */
+export async function deleteAdminProfile(
+  id: string,
+): Promise<{ id: string; status: string }> {
+  const res = await adminFetch(`/api/admin/profiles/${id}`, {
+    method: 'DELETE',
+  })
+  if (res.status === 409) throw await parseProfileError(res)
+  if (res.status === 404) throw new ProfileApiError(404, 'profile_not_found')
+  if (!res.ok) throw new Error(`Failed to delete profile: ${res.status}`)
+  return res.json() as Promise<{ id: string; status: string }>
 }

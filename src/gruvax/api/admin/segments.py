@@ -386,26 +386,34 @@ async def set_bin_overrides(
     applied = 0
     cleared = 0
 
+    # Admin segment writes operate on the default profile (P1-compat path;
+    # per-profile segment editor deferred to Phase 3).
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with pool.connection() as conn, conn.transaction():
         for ov in body.overrides:
             if ov.fraction is None:
                 # Clear the override for this label (DELETE)
                 sql_del = """
 DELETE FROM gruvax.segment_overrides
-WHERE unit_id = %s AND row = %s AND col = %s AND lower(label) = lower(%s)
+WHERE profile_id = %s::uuid
+  AND unit_id = %s AND row = %s AND col = %s AND lower(label) = lower(%s)
 """
-                result = await conn.execute(sql_del, (unit_id, row, col, ov.label))
+                result = await conn.execute(
+                    sql_del, (_DEFAULT_PROFILE_UUID, unit_id, row, col, ov.label)
+                )
                 if result.rowcount and result.rowcount > 0:
                     cleared += 1
             else:
                 # Upsert the override fraction (INSERT ON CONFLICT DO UPDATE)
                 sql_upsert = """
-INSERT INTO gruvax.segment_overrides (unit_id, row, col, label, fraction, updated_at)
-VALUES (%s, %s, %s, %s, %s, now())
-ON CONFLICT (unit_id, row, col, label)
+INSERT INTO gruvax.segment_overrides (profile_id, unit_id, row, col, label, fraction, updated_at)
+VALUES (%s::uuid, %s, %s, %s, %s, %s, now())
+ON CONFLICT (profile_id, unit_id, row, col, label)
 DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()
 """
-                await conn.execute(sql_upsert, (unit_id, row, col, ov.label, ov.fraction))
+                await conn.execute(
+                    sql_upsert, (_DEFAULT_PROFILE_UUID, unit_id, row, col, ov.label, ov.fraction)
+                )
                 applied += 1
 
         response_body = {

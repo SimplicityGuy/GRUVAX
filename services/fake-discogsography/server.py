@@ -15,9 +15,12 @@ The module-level ``app`` symbol is what uvicorn binds to:
     uvicorn server:app --host 0.0.0.0 --port 8004
 
 The ``user_id`` in every response envelope is fixed to the dev-only sentinel
-``00000000-0000-0000-0000-DEFAULTDEVUSER`` — Plan 04's ``gruvax-set-pat`` test
-sync validates this against ``gruvax.profiles.discogsography_user_id`` when the
-operator rotates the PAT.
+``dddddddd-dddd-dddd-dddd-dddddddddddd`` — a VALID UUID. The column
+``gruvax.profiles.discogsography_user_id`` is UUID-typed (migration 0009), so the
+prior ``00000000-0000-0000-0000-DEFAULTDEVUSER`` form was not valid hex and broke
+the ``connect_pat`` ``::uuid`` cast on the compose stack. Plan 04's
+``gruvax-set-pat`` test sync validates this against
+``gruvax.profiles.discogsography_user_id`` when the operator rotates the PAT.
 """
 
 from __future__ import annotations
@@ -35,4 +38,4 @@ _seed = yaml.safe_load(_SEED_PATH.read_text())["releases"]
 # Module-level FastAPI app — uvicorn binds to `server:app`.
 # user_id is a fixed dev sentinel; production uses the real discogsography
 # service, never this container.
-app = create_fake_app(seed=_seed, user_id="00000000-0000-0000-0000-DEFAULTDEVUSER")
+app = create_fake_app(seed=_seed, user_id="dddddddd-dddd-dddd-dddd-dddddddddddd")

@@ -129,17 +129,28 @@ async def admin_session(client: Any) -> dict[str, Any]:  # type: ignore[no-untyp
     # passlib's Argon2 verify is still fast enough at default params for a few tests.
     test_pin_hash = hash_pin("0000")
 
-    # Upsert the test PIN hash into gruvax.settings
-    pool = client.app.state.db_pool  # type: ignore[attr-defined]
-    async with pool.connection() as conn:
-        await conn.execute(
-            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-            " VALUES ('auth.pin_hash', %s, 'Test PIN hash seeded by conftest', now())"
-            " ON CONFLICT (key) DO UPDATE"
-            "  SET value = EXCLUDED.value, updated_at = now()",
-            (f'"{test_pin_hash}"',),
-        )
-        await conn.commit()
+    # Upsert the test PIN hash into gruvax.settings.
+    # Settings PK is (profile_id, key) — global keys live under the default profile UUID.
+    # Use ON CONFLICT (profile_id, key) with an explicit profile_id column.
+    #
+    # Some test modules (e.g. test_profile_manager_api) provide a client fixture
+    # that already seeded the PIN inside their own fixture and wraps the inner
+    # app with LifespanManager without exposing client.app directly. In that case,
+    # skip the re-seed here (the PIN is already in the DB from the client fixture).
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+    pool = getattr(getattr(client, "app", None), "state", None)
+    if pool is not None:
+        pool = getattr(pool, "db_pool", None)
+    if pool is not None:
+        async with pool.connection() as conn:
+            await conn.execute(
+                "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+                " VALUES (%s::uuid, 'auth.pin_hash', %s, 'Test PIN hash seeded by conftest', now())"
+                " ON CONFLICT (profile_id, key) DO UPDATE"
+                "  SET value = EXCLUDED.value, updated_at = now()",
+                (_DEFAULT_PROFILE_UUID, f'"{test_pin_hash}"'),
+            )
+            await conn.commit()
 
     # Log in with the test PIN
     res = await client.post("/api/admin/login", json={"pin": "0000"})
@@ -303,3 +314,60 @@ async def fake_discogsography_client(fake_discogsography_app):  # type: ignore[n
     transport = ASGITransport(app=fake_discogsography_app)
     async with AsyncClient(transport=transport, base_url="http://fake") as client:
         yield client
+
+
+# ── P2 Wave 0 fixtures (added by plan 02-00) ─────────────────────────────────
+#
+# ``second_profile`` — two-profile DB fixture for SLO benchmark + SSE-leakage tests.
+#   Seeds a second non-deleted profile row into gruvax.profiles via db_pool,
+#   yields its UUID string; teardown soft-deletes the row so the suite stays
+#   order-independent (T-02-00-01 mitigation).
+#
+# Usage: pass ``second_profile`` as a fixture parameter in tests that need two
+# active profiles (e.g. test_sse_per_profile.py, test_session_bootstrap.py).
+
+
+@pytest_asyncio.fixture
+async def second_profile(db_pool) -> Any:  # type: ignore[no-untyped-def]
+    """Seed a second non-deleted profile into gruvax.profiles; yield its UUID string.
+
+    Profile attributes:
+      - display_name:          'Sam'
+      - id:                    gen_random_uuid() (captured into the fixture return)
+      - app_token_encrypted:   b'' (Fernet placeholder — not a real PAT)
+      - app_token_revoked:     TRUE (no live token; D-02 sentinel pattern)
+      - last_sync_status:      NULL (never synced)
+
+    Teardown: sets deleted_at = now() (soft-delete) so the row is excluded from
+    all "active profiles" queries without hard-deleting related FK rows.
+
+    Parameterized SQL only — no f-strings or string interpolation (project convention).
+
+    Scope: function (each test gets a fresh profile row; avoids order-dependency).
+    """
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "INSERT INTO gruvax.profiles "
+            "(display_name, app_token_encrypted, app_token_revoked, last_sync_status) "
+            "VALUES ('Sam', %s::bytea, TRUE, NULL) "
+            "RETURNING id::text",
+            (b"",),
+        )
+        row = await cur.fetchone()
+        await conn.commit()
+
+    assert row is not None, "second_profile INSERT failed — no row returned"
+    profile_uuid: str = row[0]
+
+    yield profile_uuid
+
+    # Teardown: soft-delete the second profile so subsequent tests see only 1 active
+    # profile. Use UPDATE … SET deleted_at rather than DELETE to preserve FK constraints
+    # on related tables (T-02-00-01 — order-independent suite).
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "UPDATE gruvax.profiles SET deleted_at = now() "
+            "WHERE id = %s::uuid AND deleted_at IS NULL",
+            (profile_uuid,),
+        )
+        await conn.commit()

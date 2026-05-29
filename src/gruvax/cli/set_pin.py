@@ -35,13 +35,15 @@ async def _set_pin(pin: str) -> None:
 
     h = hash_pin(pin)
 
+    # Global PIN lives under the default profile UUID (composite PK = (profile_id, key))
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with get_pool_context() as pool, pool.connection() as conn:
         await conn.execute(
-            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-            " VALUES ('auth.pin_hash', %s::jsonb, 'Argon2id-hashed admin PIN', now())"
-            " ON CONFLICT (key) DO UPDATE"
+            "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+            " VALUES (%s::uuid, 'auth.pin_hash', %s::jsonb, 'Argon2id-hashed admin PIN', now())"
+            " ON CONFLICT (profile_id, key) DO UPDATE"
             "  SET value = EXCLUDED.value, updated_at = now()",
-            (f'"{h}"',),
+            (_DEFAULT_PROFILE_UUID, f'"{h}"'),
         )
         await conn.commit()
 

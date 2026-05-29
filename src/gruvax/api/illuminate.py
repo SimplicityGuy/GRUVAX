@@ -14,6 +14,11 @@ D-01 / SC5: The publish is fire-and-forget via asyncio.create_task.
   - If the broker is connected: task is scheduled, returns immediately.
   - If the broker is None (degraded mode): returns {"published": false} without
     raising any exception.  The locate path is NEVER blocked.
+
+Plan 02-03: profile_id is accepted as an optional query parameter to resolve the
+per-profile settings_cache from the registry (D2-04).  Since this endpoint is public
+(D-03), no 400/403 cookie validation is enforced — worst-case impact is using the
+default profile's settings, which is cosmetic.
 """
 
 from __future__ import annotations
@@ -23,7 +28,7 @@ from datetime import UTC, datetime
 import logging
 from typing import TYPE_CHECKING, Any
 
-from fastapi import APIRouter, Request
+from fastapi import APIRouter, Query, Request
 from pydantic import BaseModel
 
 from gruvax.mqtt import lifecycle, publishers
@@ -89,6 +94,7 @@ class IlluminateRequest(BaseModel):
 async def illuminate(
     request: Request,
     body: IlluminateRequest,
+    profile_id: str | None = Query(default=None),
 ) -> dict[str, Any]:
     """Accept a LocateResult and schedule LED fan-out to the MQTT broker.
 
@@ -109,9 +115,25 @@ async def illuminate(
     span/{change_id}, sub/{u}/{r}/{c}) plus retained state/* topics.
     D-01: no blocking; asyncio.create_task schedules the coroutine.
     D-03: no require_admin — public endpoint.
+    Plan 02-03: profile_id resolves the per-profile settings_cache from the registry
+    (D2-04).  No cookie validation enforced because D-03 (public); uses default
+    profile settings when profile_id is absent or unknown.
     """
     client: aiomqtt.Client | None = getattr(request.app.state, "mqtt", None)
-    settings_cache: dict[str, Any] = getattr(request.app.state, "settings_cache", {})
+
+    # Resolve per-profile settings_cache when profile_id is provided (D2-04).
+    # Fall back to the legacy flat settings_cache (P1 / startup edge case).
+    settings_cache: dict[str, Any]
+    if profile_id is not None:
+        settings_cache_registry: dict[str, dict[str, Any]] | None = getattr(
+            request.app.state, "settings_cache_registry", None
+        )
+        if settings_cache_registry is not None:
+            settings_cache = settings_cache_registry.get(profile_id, {})
+        else:
+            settings_cache = getattr(request.app.state, "settings_cache", {})
+    else:
+        settings_cache = getattr(request.app.state, "settings_cache", {})
     registry = getattr(request.app.state, "highlight_registry", None)
 
     if client is not None and registry is not None:

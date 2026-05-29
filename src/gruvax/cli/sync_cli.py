@@ -43,6 +43,7 @@ import asyncio
 import getpass
 import os
 import sys
+import time
 
 import httpx
 import psycopg
@@ -120,15 +121,42 @@ async def _run_sync(profile_name: str, api_url: str) -> None:
             f"/api/admin/profiles/{profile_id}/sync",
             headers={"X-CSRF-Token": csrf},
         )
-        if sync_resp.status_code != 200:
-            # Plain-text status + body to stderr; exit non-zero so init-sync
-            # containers fail loudly and Compose surfaces the error.
+        # D2-13: the endpoint now returns 202 Accepted immediately and runs the
+        # sync as a background task. The CLI polls GET /api/admin/profiles/{id}
+        # for last_sync_status transitions (in_progress → ok | failed).
+        if sync_resp.status_code == 200:
+            # Legacy path — should not occur after D2-13 but handle gracefully.
+            print(sync_resp.text)  # noqa: T201
+            return
+        if sync_resp.status_code != 202:
+            # 400/401/403/404 (profile not found, bad UUID, etc.) — hard error.
             sys.stderr.write(f"Sync failed: HTTP {sync_resp.status_code} — {sync_resp.text}\n")
             sys.exit(1)
 
-        # Plain text on stdout (Open Q2: operators run in compose-exec and
-        # parse JSON downstream; never structlog-JSON here).
-        print(sync_resp.text)  # noqa: T201 — CLI scripts intentionally print
+        # 202 Accepted — poll until the background sync completes.
+        deadline = time.monotonic() + 120.0  # 2-minute wall-clock cap (generous for ~3000 rows)
+        poll_url = f"/api/admin/profiles/{profile_id}"
+        while time.monotonic() < deadline:
+            await asyncio.sleep(1.0)
+            poll_resp = await client.get(poll_url)
+            if poll_resp.status_code != 200:
+                continue
+            data = poll_resp.json()
+            status = data.get("last_sync_status")
+            if status == "ok":
+                # Emit a JSON-like summary matching the old blocking response format
+                # so downstream scripts that parse '"status":"ok"' continue to work.
+                item_count = data.get("last_sync_item_count", 0)
+                print(f'{{"status":"ok","item_count":{item_count}}}')  # noqa: T201
+                return
+            if status and status not in ("in_progress",):
+                # Any terminal non-ok status (failed, etc.) is an error.
+                error = data.get("last_sync_error", "unknown")
+                sys.stderr.write(f"Sync failed: status={status!r} error={error!r}\n")
+                sys.exit(1)
+
+        sys.stderr.write("Sync timed out: background task did not complete within 120s\n")
+        sys.exit(1)
 
 
 # ── entry point ──────────────────────────────────────────────────────────────

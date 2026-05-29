@@ -4,12 +4,16 @@ import gsap from 'gsap'
 import { fetchCubesWithFill, fetchUnits, locateRelease, searchCollection } from '../../api/client'
 import type { CubeRef } from '../../api/types'
 import { useGruvaxStore, type ShimmerCube } from '../../state/store'
+import { useSessionStore } from '../../state/sessionStore'
 import { CubeContentsPanel } from './CubeContentsPanel'
+import { EmptyCollectionState } from './EmptyCollectionState'
 import { ResultsList } from './ResultsList'
+import { ShelfLayoutNotConfigured } from './ShelfLayoutNotConfigured'
 import { SearchBox } from './SearchBox'
 import { ShelfGrid } from './ShelfGrid'
 import { ShelfLabel } from './ShelfLabel'
 import { StalenessBar } from './StalenessBar'
+import { SwitchProfileButton } from './SwitchProfileButton'
 import './StalenessBar.css'
 import './kiosk.css'
 
@@ -26,11 +30,14 @@ const SHELF_NAMES = ['SHELF A', 'SHELF B', 'SHELF C', 'SHELF D']
  * .shelf-area container — no forwardRef plumbing needed.
  */
 export function KioskView() {
-  const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch, setQuery } =
+  const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch, setQuery, shelfLayoutUnavailable, selectedReleaseId } =
     useGruvaxStore()
   // Phase 4 / D-01/D-03/RTM-04: reactive shimmer state from Zustand
   const shimmerCubes = useGruvaxStore((s) => s.shimmerCubes)
   const shimmerExpiresAt = useGruvaxStore((s) => s.shimmerExpiresAt)
+  // Phase 2 / D2-04: session store for bound profile
+  const boundProfileId = useSessionStore((s) => s.boundProfileId)
+  const profiles = useSessionStore((s) => s.profiles)
   const queryClient = useQueryClient()
   const [debouncedQuery, setDebouncedQuery] = useState('')
   // Cube-tap state for the contents panel (CUBE-09, D-14)
@@ -131,13 +138,14 @@ export function KioskView() {
   }, [shimmerCubes, shimmerExpiresAt])
 
   // TanStack Query for search — fires on debouncedQuery change (SRCH-01)
+  // D2-04: pass bound profile_id as query param (02-03-SUMMARY: search uses query param)
   const {
     data: searchData,
     isFetching,
     isError,
   } = useQuery({
-    queryKey: ['search', debouncedQuery],
-    queryFn: () => searchCollection(debouncedQuery, 10),
+    queryKey: ['search', debouncedQuery, boundProfileId],
+    queryFn: () => searchCollection(debouncedQuery, 10, boundProfileId ?? undefined),
     enabled: debouncedQuery.trim().length > 0,
     staleTime: 30_000,
   })
@@ -181,7 +189,10 @@ export function KioskView() {
 
   // ── Phase 4: SSE consumer — boundary_changed live re-render (RTM-01, ADMN-11) ──
   //
-  // A single EventSource per kiosk session listens on GET /api/events.
+  // D2-04 (Phase 2): SSE URL is per-profile: /api/events/{profile_id} (path param).
+  // If no profile is bound (during bootstrap or after unbind), the SSE connection
+  // is not opened — Effect re-runs when boundProfileId changes (in dep array).
+  //
   // On connect: mark sseConnected + resync all boundary-derived queries (D-11).
   // On boundary_changed: invalidate the affected query keys so TanStack Query
   //   refetches in the background → re-renders affected cubes (D-04).
@@ -193,18 +204,16 @@ export function KioskView() {
   //
   // All store mutations use useGruvaxStore.getState() inside event handlers to
   // avoid stale closures (Pitfall 5 — do NOT read from the outer destructure).
-  //
-  // Real kiosk query keys (confirmed from this component — NOT ['cube', u, r, c]):
-  //   ['units'], ['cubes'], ['cube-contents', unit, row, col],
-  //   ['admin', 'cubes'], ['admin', 'history'], ['admin', 'settings']
   useEffect(() => {
     // D-05 + D-11: re-locate the active selection if one is set.
     // Uses .getState() to avoid stale closures (Pitfall 5).
-    // Mirrors ResultsList.tsx L70-89 — locateRelease(id).then(setLocateResult).
+    // D2-04: pass boundProfileId so locate also carries the profile param.
     const relocateActiveSelection = () => {
       const { selectedReleaseId } = useGruvaxStore.getState()
       if (selectedReleaseId != null) {
-        void locateRelease(selectedReleaseId).then((result) => {
+        // Read boundProfileId from session store at call-time (stale-closure safe)
+        const pid = useSessionStore.getState().boundProfileId
+        void locateRelease(selectedReleaseId, pid ?? undefined).then((result) => {
           // Re-read setLocateResult via getState to ensure it's current (Pitfall 5)
           useGruvaxStore.getState().setLocateResult(result)
         })
@@ -223,7 +232,15 @@ export function KioskView() {
       relocateActiveSelection()
     }
 
-    const es = new EventSource('/api/events')
+    // D2-04: per-profile SSE URL — only open when a profile is bound.
+    // If boundProfileId is null (unbound), skip SSE and mark disconnected.
+    const currentProfileId = useSessionStore.getState().boundProfileId
+    if (!currentProfileId) {
+      useGruvaxStore.getState().setSseConnected(false)
+      return
+    }
+
+    const es = new EventSource(`/api/events/${currentProfileId}`)
 
     es.onopen = () => {
       useGruvaxStore.getState().setSseConnected(true)
@@ -298,7 +315,8 @@ export function KioskView() {
     return () => {
       es.close()
     }
-  }, [queryClient])
+    // D2-04: re-run effect when boundProfileId changes so the SSE URL updates
+  }, [queryClient, boundProfileId])
 
   // Derived: the dropdown is open when there is a query that the user has not
   // dismissed by selecting a row. A new query (different string) reopens it
@@ -434,6 +452,17 @@ export function KioskView() {
     searchResults.length === 0 &&
     !isError
 
+  // D2-03: detect bound-but-unsynced profile (empty collection).
+  // Signal: the bound profile's last_sync_item_count is 0 (or null) and
+  // last_sync_status is not 'completed'/'ok' (never successfully synced).
+  // This is distinct from "search returned no matches" (NoResultsRow).
+  const boundProfile = profiles.find((p) => p.id === boundProfileId) ?? null
+  const isEmptyCollection =
+    boundProfile != null &&
+    (boundProfile.last_sync_item_count == null || boundProfile.last_sync_item_count === 0) &&
+    boundProfile.last_sync_status !== 'completed' &&
+    boundProfile.last_sync_status !== 'ok'
+
   const units = unitsData?.units ?? []
   // Sort units by ordering field
   const sortedUnits = [...units].sort((a, b) => a.ordering - b.ordering)
@@ -454,19 +483,32 @@ export function KioskView() {
             isLoading={showLoading}
             hasError={hasSearchError}
           />
-          <ResultsList
-            items={debouncedQuery.trim().length > 0 ? searchResults : []}
-            showNoResults={showNoResults}
-            didYouMean={searchData?.did_you_mean ?? null}
-            open={resultsOpen}
-            onResultSelect={() => setDismissedQuery(debouncedQuery)}
-            onDidYouMean={handleDidYouMean}
-          />
+          {/* D2-03: EmptyCollectionState replaces results area for unsynced profiles */}
+          {isEmptyCollection ? (
+            <EmptyCollectionState />
+          ) : (
+            <ResultsList
+              items={debouncedQuery.trim().length > 0 ? searchResults : []}
+              showNoResults={showNoResults}
+              didYouMean={searchData?.did_you_mean ?? null}
+              open={resultsOpen}
+              onResultSelect={() => setDismissedQuery(debouncedQuery)}
+              onDidYouMean={handleDidYouMean}
+            />
+          )}
         </div>
 
         {/* Staleness banner (OBS-06, D-01) — above the grid, never overlaying it.
             Hidden when offline (health null) or sync_age <= 14d. */}
         <StalenessBar syncAgeSeconds={healthData?.sync_age_seconds ?? null} />
+
+        {/* Plan 09 / D-12: shelf layout not configured affordance.
+            Shown when a selected result IS in the collection (HTTP 200 locate)
+            but the bound profile has zero cube boundaries (null cube, 0 confidence).
+            NOT shown for: empty/unsynced collections, cleared search, genuine no-results. */}
+        {shelfLayoutUnavailable && !isEmptyCollection && selectedReleaseId != null && (
+          <ShelfLayoutNotConfigured />
+        )}
 
         {/* Shelf area — N×(4×4) grid — shelfAreaRef for GSAP selector scope */}
         <div className="shelf-area" ref={shelfAreaRef}>
@@ -518,6 +560,9 @@ export function KioskView() {
         cube={tappedCube}
         onDismiss={() => setTappedCube(null)}
       />
+
+      {/* D2-09: persistent Switch-profile corner button (2+ profiles only) */}
+      <SwitchProfileButton />
     </div>
   )
 }

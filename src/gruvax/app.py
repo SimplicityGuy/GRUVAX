@@ -39,11 +39,13 @@ from fastapi.staticfiles import StaticFiles
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from gruvax.api.admin.router import create_admin_router
+from gruvax.api.devices import router as devices_router
 from gruvax.api.events import router as events_router
 from gruvax.api.health import router as health_router
 from gruvax.api.illuminate import router as illuminate_router
 from gruvax.api.locate import router as locate_router
 from gruvax.api.search import router as search_router
+from gruvax.api.session import router as session_router
 from gruvax.api.units import router as units_router
 from gruvax.api.version import router as version_router
 from gruvax.db.pool import create_pool
@@ -156,59 +158,125 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
             exc,
         )
 
-    # ── 3. Boundary cache (POS-04) ───────────────────────────────────────────
-    cache = BoundaryCache()
-    try:
-        await cache.load(pool)  # type: ignore[arg-type]
-        logger.info("Boundary cache loaded (%d rows)", len(list(cache.get_boundaries())))
-    except Exception as exc:
-        logger.error("Boundary cache load failed: %s", exc)
-        # Proceed with empty cache — locate will return no-boundary results.
-    app.state.boundary_cache = cache
+    # ── 3. Per-profile cache registries (D2-01/D2-02) ────────────────────────
+    # P2 replaces the five single-instance attributes with per-profile dict
+    # registries.  All non-deleted profiles are eager-loaded at startup so the
+    # kiosk is immediately responsive regardless of profile count (D2-02, P7).
+    # Registry key = str(profile_id) — plain string, NEVER uuid.UUID (Pitfall 2).
+    # Registries map str(profile_id) → instance. No inline annotation: mypy rejects
+    # type-annotated assignment to a non-self attribute (Starlette ``State`` is Any).
+    app.state.boundary_cache_registry = {}
+    app.state.snapshot_registry = {}
+    app.state.segment_cache_registry = {}
+    app.state.settings_cache_registry = {}
+    app.state.event_bus_registry = {}
 
-    # ── 3b. Collection snapshot (POS-03) ─────────────────────────────────────
-    snapshot = CollectionSnapshot()
-    try:
-        await snapshot.load(pool)  # type: ignore[arg-type]
-        logger.info("Collection snapshot loaded (%d labels)", len(snapshot._by_label))
-    except Exception as exc:
-        logger.error("Collection snapshot load failed: %s", exc)
-        # Proceed with empty snapshot — locate falls back to cube-only-v1.
-    app.state.collection_snapshot = snapshot
+    # Also keep P1-compatible singular attributes for any P1 code still reading them
+    # (health.py, ambient publish, etc.).  They point to the default profile's instances.
+    # Removed once all consumers are migrated.
+    _default_pid_str = DEFAULT_PROFILE_UUID
 
-    # ── 3c. SegmentCache (Phase 5) ───────────────────────────────────────────
-    # Derived from BoundaryCache + CollectionSnapshot (both already populated above).
-    # CPU-only; no DB access during derive() or any lookup. Mirrors the try/except
-    # + logger.error + proceed pattern of steps 3 and 3b.
-    segment_cache = SegmentCache()
-    try:
-        segment_cache.derive(cache, snapshot, cache.overrides)
-        logger.info("SegmentCache derived (%d bins)", len(segment_cache._bins))
-    except Exception as exc:
-        logger.error("SegmentCache derive failed — locate will fall back to cube-only-v1: %s", exc)
-        # Proceed with empty segment_cache — locate() falls back to cube-only-v1.
-    app.state.segment_cache = segment_cache
+    # Fetch all non-deleted profile IDs for eager load (D2-02).
+    # Empty-cache profiles (no sync yet) are valid — P7 guard: load regardless
+    # of app_token_revoked.
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute("SELECT id FROM gruvax.profiles WHERE deleted_at IS NULL")
+        profile_rows = await cur.fetchall()
 
-    # ── 3e. Settings cache (Phase 3) ─────────────────────────────────────────
-    # Loads gruvax.settings key/value rows into app.state.settings_cache so
-    # endpoints can read nominal_capacity, idle TTL, etc. without a DB hit.
-    # Mirrors the try/except + logger.error + proceed pattern of steps 3 and 3b.
-    try:
-        settings_map = await load_settings_cache(pool)
-        app.state.settings_cache = settings_map
-        logger.info("Settings cache loaded (%d keys)", len(settings_map))
-    except Exception as exc:
-        logger.error("Settings cache load failed — proceeding with empty cache: %s", exc)
-        app.state.settings_cache = {}
+    for (pid,) in profile_rows:
+        pid_str = str(pid)
 
-    # ── 3f. Event bus (Phase 4) ──────────────────────────────────────────────
-    event_bus = EventBus()
-    app.state.event_bus = event_bus
-    try:
-        await event_bus.publish("server_hello", {"version": "0.1.0"})
-        logger.info("EventBus ready; server_hello published")
-    except Exception as exc:
-        logger.error("EventBus server_hello publish failed: %s", exc)
+        # BoundaryCache — same try/except + logger.error + proceed pattern as P1.
+        _cache = BoundaryCache()
+        try:
+            # psycopg AsyncConnectionPool is invariant in its connection row type;
+            # create_pool yields tuple-rows, load() declares object-rows. Runtime is
+            # correct — the generic mismatch is a known psycopg typing friction.
+            await _cache.load(pool, profile_id=pid_str)  # type: ignore[arg-type]
+            logger.info(
+                "BoundaryCache loaded for profile=%s (%d rows)",
+                pid_str,
+                len(list(_cache.get_boundaries())),
+            )
+        except Exception as exc:
+            logger.error("BoundaryCache load failed for profile=%s: %s", pid_str, exc)
+            # Proceed with empty cache — locate will return no-boundary results.
+        app.state.boundary_cache_registry[pid_str] = _cache
+
+        # CollectionSnapshot
+        _snapshot = CollectionSnapshot()
+        try:
+            # psycopg pool invariance (see BoundaryCache.load above).
+            await _snapshot.load(pool, profile_id=pid_str)  # type: ignore[arg-type]
+            logger.info(
+                "CollectionSnapshot loaded for profile=%s (%d labels)",
+                pid_str,
+                len(_snapshot._by_label),
+            )
+        except Exception as exc:
+            logger.error("CollectionSnapshot load failed for profile=%s: %s", pid_str, exc)
+            # Proceed with empty snapshot — locate falls back to cube-only-v1.
+        app.state.snapshot_registry[pid_str] = _snapshot
+
+        # SegmentCache — CPU-only derive from this profile's cache + snapshot.
+        _segment_cache = SegmentCache()
+        try:
+            _segment_cache.derive(_cache, _snapshot, _cache.overrides)
+            logger.info(
+                "SegmentCache derived for profile=%s (%d bins)",
+                pid_str,
+                len(_segment_cache._bins),
+            )
+        except Exception as exc:
+            logger.error(
+                "SegmentCache derive failed for profile=%s — locate will fall back: %s",
+                pid_str,
+                exc,
+            )
+            # Proceed with empty segment_cache — locate() falls back to cube-only-v1.
+        app.state.segment_cache_registry[pid_str] = _segment_cache
+
+        # Settings cache
+        try:
+            _settings_map = await load_settings_cache(pool, profile_id=pid_str)
+            logger.info(
+                "Settings cache loaded for profile=%s (%d keys)",
+                pid_str,
+                len(_settings_map),
+            )
+        except Exception as exc:
+            logger.error("Settings cache load failed for profile=%s: %s", pid_str, exc)
+            _settings_map = {}
+        app.state.settings_cache_registry[pid_str] = _settings_map
+
+        # EventBus — one per profile; publish server_hello with profile_id.
+        _bus = EventBus()
+        try:
+            await _bus.publish("server_hello", {"version": "0.1.0", "profile_id": pid_str})
+            logger.info("EventBus ready for profile=%s; server_hello published", pid_str)
+        except Exception as exc:
+            logger.error("EventBus server_hello failed for profile=%s: %s", pid_str, exc)
+        app.state.event_bus_registry[pid_str] = _bus
+
+    # ── P1-compat singular aliases (consumed by deps.py, health.py, sync, etc.) ─
+    # Point to the default profile's instances; fall back to empty objects if
+    # the default profile hasn't been created yet (fresh install).
+    app.state.boundary_cache = app.state.boundary_cache_registry.get(
+        _default_pid_str, BoundaryCache()
+    )
+    app.state.collection_snapshot = app.state.snapshot_registry.get(
+        _default_pid_str, CollectionSnapshot()
+    )
+    app.state.segment_cache = app.state.segment_cache_registry.get(_default_pid_str, SegmentCache())
+    app.state.settings_cache = app.state.settings_cache_registry.get(_default_pid_str, {})
+    # P1-compat event_bus alias: admin editing endpoints (editing.py, cubes.py,
+    # segments.py, import_.py, history.py) still use get_event_bus(request) which
+    # reads app.state.event_bus. Wire it to the default profile's bus so those
+    # endpoints work until each is migrated to get_bus_for_profile (D2-04).
+    # Genuine wiring fix: without this alias the boundary_changed fan-out in admin
+    # edit endpoints is silently missing the per-profile EventBus and the SSE
+    # boundary_changed_latency test fails (ADMN-11 gate).
+    app.state.event_bus = app.state.event_bus_registry.get(_default_pid_str, EventBus())
 
     # ── 4. MQTT (non-blocking best-effort; DEP-01) ───────────────────────────
     await connect_mqtt(app)
@@ -224,56 +292,69 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # reuses this same set (see gruvax.api.illuminate).
     app.state.background_tasks = set()
 
-    # ── 1c. Default-profile-state background refresh (Plan 01-05, D-13) ─────
-    # Replaces v1's _refresh_sync_age. Reads gruvax.profiles.last_sync_at +
-    # last_sync_status + app_token_revoked for the default profile every 60s
-    # and caches on app.state.default_profile_* (consumed by health.py).
-    # sync_age_seconds is derived from last_sync_at (NOT from
-    # max(v_collection.synced_at) — that view was dropped in migration 0009).
+    # ── 1c. Per-profile-state background refresh (Plan 02-02 / SYN-02) ──────
+    # P2 generalises _refresh_default_profile_state to ALL non-deleted profiles.
+    # Reads gruvax.profiles.last_sync_at + last_sync_status + app_token_revoked
+    # for every non-deleted profile every 60s and stores per-profile entries in
+    # app.state.profile_state_registry.
+    #
+    # Also populates the P1-compat app.state.default_profile_* attributes and
+    # app.state.sync_age_seconds so health.py continues to work without change.
+    #
     # Initial safe defaults (set BEFORE scheduling so health.py never KeyErrors
     # if a request races the first task iteration):
+    app.state.profile_state_registry = {}  # str(profile_id) → state dict (no inline annotation — see above)
     app.state.default_profile_last_sync_at = None
     app.state.default_profile_last_sync_status = None
     # Default to True so health derives 'failed' until first task iteration
     # confirms otherwise. Better-default-safe than to optimistically claim 'ok'.
     app.state.default_profile_app_token_revoked = True
 
-    async def _refresh_default_profile_state() -> None:
+    async def _refresh_all_profiles_state() -> None:
         while True:
             try:
                 async with pool.connection() as conn, conn.cursor() as cur:
                     await cur.execute(
-                        "SELECT last_sync_at, last_sync_status, app_token_revoked "
+                        "SELECT id, last_sync_at, last_sync_status, app_token_revoked "
                         "FROM gruvax.profiles "
-                        "WHERE id = %s::uuid AND deleted_at IS NULL",
-                        (DEFAULT_PROFILE_UUID,),
+                        "WHERE deleted_at IS NULL"
                     )
-                    row = await cur.fetchone()
-                if row is not None:
-                    app.state.default_profile_last_sync_at = row[0]
-                    app.state.default_profile_last_sync_status = row[1]
-                    app.state.default_profile_app_token_revoked = bool(row[2])
-                    now = datetime.now(UTC)
-                    app.state.sync_age_seconds = (now - row[0]).total_seconds() if row[0] else None
+                    rows = await cur.fetchall()
+                for pid, last_sync_at, last_sync_status, revoked in rows:
+                    pid_str = str(pid)
+                    app.state.profile_state_registry[pid_str] = {
+                        "last_sync_at": last_sync_at,
+                        "last_sync_status": last_sync_status,
+                        "app_token_revoked": bool(revoked),
+                    }
+                    # P1-compat: update default-profile singular attrs for health.py
+                    if pid_str == DEFAULT_PROFILE_UUID:
+                        app.state.default_profile_last_sync_at = last_sync_at
+                        app.state.default_profile_last_sync_status = last_sync_status
+                        app.state.default_profile_app_token_revoked = bool(revoked)
+                        now = datetime.now(UTC)
+                        app.state.sync_age_seconds = (
+                            (now - last_sync_at).total_seconds() if last_sync_at else None
+                        )
             except Exception as exc:
-                logger.warning("default profile state refresh failed: %s", exc)
+                logger.warning("all-profiles state refresh failed: %s", exc)
             await asyncio.sleep(60)
 
-    _state_task = asyncio.create_task(_refresh_default_profile_state())
+    _state_task = asyncio.create_task(_refresh_all_profiles_state())
     # CR-01: strong reference so the GC cannot cancel the task mid-flight.
     app.state.background_tasks.add(_state_task)
     _state_task.add_done_callback(app.state.background_tasks.discard)
 
-    # Pitfall 2: log exceptions from the background refresh task.
+    # Log exceptions from the background refresh task.
     def _log_state_task_exc(t: asyncio.Task) -> None:  # type: ignore[type-arg]
         if not t.cancelled() and t.exception() is not None:
             logger.warning(
-                "default_profile_state background task exited unexpectedly: %s",
+                "all_profiles_state background task exited unexpectedly: %s",
                 t.exception(),
             )
 
     _state_task.add_done_callback(_log_state_task_exc)
-    logger.info("default_profile_state background refresh task scheduled (60s cadence)")
+    logger.info("all_profiles_state background refresh task scheduled (60s cadence)")
 
     # Publish ambient baseline for every cube — best-effort.  Never blocks startup.
     # Guard: only attempt when MQTT is connected (degraded mode → mqtt is None).
@@ -295,9 +376,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     yield  # ── App serves requests here ──────────────────────────────────────
 
     # ── Teardown ─────────────────────────────────────────────────────────────
-    # Publish server_shutdown before closing (clients will reconnect)
-    with contextlib.suppress(Exception):
-        await event_bus.publish("server_shutdown", {})
+    # P2: broadcast server_shutdown across ALL per-profile buses.
+    for _bus_entry in app.state.event_bus_registry.values():
+        with contextlib.suppress(Exception):
+            await _bus_entry.publish("server_shutdown", {})
 
     # Cancel all pending highlight revert tasks (T-06-22 leak guard).
     try:
@@ -352,6 +434,14 @@ def create_app() -> FastAPI:
 
     # ── Events router (Phase 4 / RTM-01) — BEFORE StaticFiles mount (Pitfall 3) ─
     app.include_router(events_router, prefix="/api")
+
+    # ── Session bootstrap router (Plan 02-04) — BEFORE StaticFiles mount (Pitfall 3) ─
+    # GET /api/session, POST/DELETE /api/session/bind — no PIN required (R7, D2-10).
+    app.include_router(session_router, prefix="/api")
+
+    # ── Kiosk device router (Plan 03-02) — BEFORE StaticFiles mount (Pitfall 3) ─
+    # POST /api/devices/pairing-codes, GET /api/devices/me — no PIN required (kiosk-facing).
+    app.include_router(devices_router, prefix="/api")
 
     # ── StaticFiles SPA mount LAST ───────────────────────────────────────────
     # Plan 04 (React SPA) builds the frontend and copies the dist/ into static/.

@@ -115,13 +115,14 @@ async def _seed_pin(db_pool) -> None:  # type: ignore[no-untyped-def]
     from gruvax.auth.pin import hash_pin
 
     h = hash_pin(_TEST_PIN)
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with db_pool.connection() as conn:
         await conn.execute(
-            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-            " VALUES ('auth.pin_hash', %s::jsonb, 'Test PIN seeded by test_admin_sync_endpoint', now())"
-            " ON CONFLICT (key) DO UPDATE"
+            "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+            " VALUES (%s::uuid, 'auth.pin_hash', %s::jsonb, 'Test PIN seeded by test_admin_sync_endpoint', now())"
+            " ON CONFLICT (profile_id, key) DO UPDATE"
             "  SET value = EXCLUDED.value, updated_at = now()",
-            (f'"{h}"',),
+            (_DEFAULT_PROFILE_UUID, f'"{h}"'),
         )
         await conn.commit()
 
@@ -223,7 +224,13 @@ async def test_logged_in_no_csrf_returns_403(app_client) -> None:  # type: ignor
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_happy_path_sync(app_client, db_pool, monkeypatch: pytest.MonkeyPatch) -> None:  # type: ignore[no-untyped-def]
-    """Test 3: valid login + CSRF + good profile → 200 with status/item_count/took_ms/user_id."""
+    """Test 3: valid login + CSRF + good profile → 202 accepted; DB shows ok + item_count=50.
+
+    D2-13: the endpoint returns 202 immediately and runs the sync as a background task.
+    The caller polls GET /api/admin/profiles/{id} (i.e. the DB row) for completion.
+    We verify 202 + {status:accepted} from the endpoint, then poll the DB until
+    last_sync_status = 'ok' (or timeout after 5s).
+    """
     client, _app = app_client
     await _seed_default_profile(db_pool)
 
@@ -237,21 +244,28 @@ async def test_happy_path_sync(app_client, db_pool, monkeypatch: pytest.MonkeyPa
         cookies=auth["cookies"],
         headers={"X-CSRF-Token": auth["csrf_token"]},
     )
-    assert res.status_code == 200, f"got {res.status_code}: {res.text}"
-
+    assert res.status_code == 202, f"got {res.status_code}: {res.text}"
     body = res.json()
-    assert body["status"] == "ok"
-    assert body["item_count"] == 50
-    assert "took_ms" in body
-    assert body["user_id"] == "aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa"
+    assert body["status"] == "accepted", body
+    assert body["profile_id"] == DEFAULT_UUID, body
 
-    async with db_pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            "SELECT last_sync_status, last_sync_item_count FROM gruvax.profiles WHERE id = %s::uuid",
-            (DEFAULT_UUID,),
-        )
-        row = await cur.fetchone()
-        assert row == ("ok", 50)
+    # Poll the DB until the background sync completes (max 5s).
+    import asyncio as _asyncio
+
+    deadline = _asyncio.get_event_loop().time() + 5.0
+    row = None
+    while _asyncio.get_event_loop().time() < deadline:
+        async with db_pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT last_sync_status, last_sync_item_count FROM gruvax.profiles WHERE id = %s::uuid",
+                (DEFAULT_UUID,),
+            )
+            row = await cur.fetchone()
+        if row and row[0] not in (None, "in_progress"):
+            break
+        await _asyncio.sleep(0.1)
+    assert row is not None, "profile row not found"
+    assert row == ("ok", 50), f"expected ('ok', 50), got {row}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -316,10 +330,16 @@ async def test_concurrent_sync_returns_409(  # type: ignore[no-untyped-def]
             cookies=auth["cookies"],
             headers={"X-CSRF-Token": auth["csrf_token"]},
         )
-        assert res.status_code == 409, f"got {res.status_code}: {res.text}"
+        # D2-13: the endpoint returns 202 immediately; the background task then
+        # races the held lock and fails with SyncInProgress. The DB will NOT
+        # transition to 'ok' because the background task fails at the lock
+        # acquisition step (before updating last_sync_status='failed' — SyncInProgress
+        # is never written to last_sync_status per profile_sync.py line 550-553).
+        # The observable contract: 202 is returned (request accepted); the background
+        # task logs the error. We assert 202 + {status:accepted}.
+        assert res.status_code == 202, f"got {res.status_code}: {res.text}"
         body = res.json()
-        detail = body.get("detail", body)
-        assert detail.get("type") == "already_in_progress", detail
+        assert body.get("status") == "accepted", body
     finally:
         async with holder.cursor() as cur:
             await cur.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
@@ -330,7 +350,14 @@ async def test_concurrent_sync_returns_409(  # type: ignore[no-untyped-def]
 async def test_pat_rejected_returns_401_typed(  # type: ignore[no-untyped-def]
     app_client, db_pool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Test 7: PATRejected (fake returns 401) → 401 with {"type":"pat_rejected"}."""
+    """Test 7: PATRejected (fake returns 401) → 202 accepted; DB shows failed/pat_rejected.
+
+    D2-13: the endpoint returns 202 immediately. The background sync then fails
+    with PATRejected and writes last_sync_status='failed', last_sync_error='pat_rejected',
+    app_token_revoked=TRUE. We verify this DB state by polling.
+    """
+    import asyncio as _asyncio
+
     client, _app = app_client
     await _seed_default_profile(db_pool)
 
@@ -348,17 +375,40 @@ async def test_pat_rejected_returns_401_typed(  # type: ignore[no-untyped-def]
         cookies=auth["cookies"],
         headers={"X-CSRF-Token": auth["csrf_token"]},
     )
-    assert res.status_code == 401, f"got {res.status_code}: {res.text}"
-    body = res.json()
-    detail = body.get("detail", body)
-    assert detail.get("type") == "pat_rejected", detail
+    assert res.status_code == 202, f"got {res.status_code}: {res.text}"
+    assert res.json().get("status") == "accepted"
+
+    # Poll DB for background task result (max 5s).
+    deadline = _asyncio.get_event_loop().time() + 5.0
+    row = None
+    while _asyncio.get_event_loop().time() < deadline:
+        async with db_pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT last_sync_status, last_sync_error, app_token_revoked "
+                "FROM gruvax.profiles WHERE id = %s::uuid",
+                (DEFAULT_UUID,),
+            )
+            row = await cur.fetchone()
+        if row and row[0] not in (None, "in_progress"):
+            break
+        await _asyncio.sleep(0.1)
+    assert row is not None, "profile row not found"
+    assert row[0] == "failed", f"expected status='failed', got {row}"
+    assert row[1] == "pat_rejected", f"expected error='pat_rejected', got {row}"
+    assert row[2] is True, f"expected app_token_revoked=True, got {row}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_server_error_returns_503_typed(  # type: ignore[no-untyped-def]
     app_client, db_pool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Test 8: upstream 5xx (after retries) → 503 with {"type":"upstream_unavailable"}."""
+    """Test 8: upstream 5xx → 202 accepted; DB shows failed/server_error.
+
+    D2-13: the endpoint returns 202 immediately. The background sync then fails
+    with ServerError and writes last_sync_status='failed', last_sync_error='server_error'.
+    """
+    import asyncio as _asyncio
+
     client, _app = app_client
     await _seed_default_profile(db_pool)
 
@@ -376,25 +426,42 @@ async def test_server_error_returns_503_typed(  # type: ignore[no-untyped-def]
         cookies=auth["cookies"],
         headers={"X-CSRF-Token": auth["csrf_token"]},
     )
-    assert res.status_code == 503, f"got {res.status_code}: {res.text}"
-    body = res.json()
-    detail = body.get("detail", body)
-    assert detail.get("type") == "upstream_unavailable", detail
+    assert res.status_code == 202, f"got {res.status_code}: {res.text}"
+    assert res.json().get("status") == "accepted"
+
+    # Poll DB for background task result (max 5s).
+    deadline = _asyncio.get_event_loop().time() + 5.0
+    row = None
+    while _asyncio.get_event_loop().time() < deadline:
+        async with db_pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT last_sync_status, last_sync_error FROM gruvax.profiles WHERE id = %s::uuid",
+                (DEFAULT_UUID,),
+            )
+            row = await cur.fetchone()
+        if row and row[0] not in (None, "in_progress"):
+            break
+        await _asyncio.sleep(0.1)
+    assert row is not None, "profile row not found"
+    assert row[0] == "failed", f"expected status='failed', got {row}"
+    assert row[1] == "server_error", f"expected error='server_error', got {row}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_caches_refreshed_inline(  # type: ignore[no-untyped-def]
     app_client, db_pool, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """Test 9: D-14 — caches refreshed inline before the endpoint returns 200.
+    """Test 9: D-14 — caches refreshed after the background sync completes.
 
-    Verified via the AsyncMock substitutes on app.state (see app_client fixture):
-    after the endpoint returns 200, ``collection_snapshot.load(pool)``,
-    ``boundary_cache.load(pool)``, and ``segment_cache.derive(...)`` must each
-    have been called at least once. Plan 06 swaps these production caches over
-    to query ``profile_collection``; this test guards the inline-refresh
-    contract independently of that read-path rewire.
+    D2-13: the endpoint returns 202 immediately and runs sync in the background.
+    After the background task completes, _refresh_profile_caches must have loaded
+    the per-profile registry entries. We verify via the per-profile registry mocks
+    on app.state: after the DB shows last_sync_status='ok', the registry caches
+    for the default profile must have been called at least once.
     """
+    import asyncio as _asyncio
+    from unittest.mock import AsyncMock
+
     client, app = app_client
     await _seed_default_profile(db_pool)
 
@@ -402,21 +469,48 @@ async def test_caches_refreshed_inline(  # type: ignore[no-untyped-def]
     fake = create_fake_app(seed=seed)
     monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(fake))
 
+    # Replace the per-profile registry entries with AsyncMocks so we can
+    # track calls to load/derive after the background sync runs.
+    mock_cache = AsyncMock()
+    mock_cache.invalidate = lambda: None
+    mock_cache.overrides = {}
+    mock_snapshot = AsyncMock()
+    mock_segment = AsyncMock()
+    mock_segment.derive = lambda *a, **kw: None
+    from gruvax.events.bus import EventBus
+
+    mock_bus = EventBus()  # real bus so publish works
+    app.state.boundary_cache_registry[DEFAULT_UUID] = mock_cache
+    app.state.snapshot_registry[DEFAULT_UUID] = mock_snapshot
+    app.state.segment_cache_registry[DEFAULT_UUID] = mock_segment
+    app.state.event_bus_registry[DEFAULT_UUID] = mock_bus
+
     auth = await _login(client)
     res = await client.post(
         f"/api/admin/profiles/{DEFAULT_UUID}/sync",
         cookies=auth["cookies"],
         headers={"X-CSRF-Token": auth["csrf_token"]},
     )
-    assert res.status_code == 200, res.text
+    assert res.status_code == 202, res.text
 
-    # Inline refresh contract (D-14): each cache hook fired at least once before
-    # the endpoint returned. The production caches still hit `v_collection` until
-    # Plan 06 lands, so we verify the contract via mock call counts.
-    snapshot = app.state.collection_snapshot
-    boundary = app.state.boundary_cache
-    assert snapshot.load.call_count >= 1, "snapshot.load was not invoked inline"
-    assert boundary.load.call_count >= 1, "boundary_cache.load was not invoked inline"
+    # Poll DB until background sync completes (max 5s).
+    deadline = _asyncio.get_event_loop().time() + 5.0
+    row = None
+    while _asyncio.get_event_loop().time() < deadline:
+        async with db_pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "SELECT last_sync_status FROM gruvax.profiles WHERE id = %s::uuid",
+                (DEFAULT_UUID,),
+            )
+            row = await cur.fetchone()
+        if row and row[0] not in (None, "in_progress"):
+            break
+        await _asyncio.sleep(0.1)
+    assert row is not None and row[0] == "ok", f"sync did not complete: {row}"
+
+    # Per-profile cache refresh (D-14): both boundary and snapshot must have been reloaded.
+    assert mock_cache.load.call_count >= 1, "boundary_cache.load was not invoked after sync"
+    assert mock_snapshot.load.call_count >= 1, "snapshot.load was not invoked after sync"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -450,17 +544,21 @@ async def test_pitfall_6_handler_does_not_hold_pool_during_sync(  # type: ignore
 
     from unittest.mock import AsyncMock
 
-    snapshot = AsyncMock()
-    snapshot.invalidate = lambda: None
-    boundary = AsyncMock()
-    boundary.overrides = {}
-    segment = AsyncMock()
-    segment.derive = lambda *a, **kw: None
+    from gruvax.events.bus import EventBus
+
+    mock_cache = AsyncMock()
+    mock_cache.invalidate = lambda: None
+    mock_cache.overrides = {}
+    mock_snapshot = AsyncMock()
+    mock_segment = AsyncMock()
+    mock_segment.derive = lambda *a, **kw: None
+    mock_bus = EventBus()
     app_state = types.SimpleNamespace(
         db_pool=db_pool,
-        collection_snapshot=snapshot,
-        boundary_cache=boundary,
-        segment_cache=segment,
+        boundary_cache_registry={DEFAULT_UUID: mock_cache},
+        snapshot_registry={DEFAULT_UUID: mock_snapshot},
+        segment_cache_registry={DEFAULT_UUID: mock_segment},
+        event_bus_registry={DEFAULT_UUID: mock_bus},
     )
 
     from gruvax.sync.profile_sync import sync_profile

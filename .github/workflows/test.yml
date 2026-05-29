@@ -90,6 +90,14 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
+      # Plan 03-05: tests/browser/test_reboot_persistence.py drives a real
+      # Chromium via Playwright. `uv sync` installs the playwright package but
+      # NOT the browser binary — install it (with OS deps) so the
+      # persistent-context reboot test runs instead of erroring on a missing
+      # executable.
+      - name: Install Playwright browser (chromium)
+        run: uv run playwright install --with-deps chromium
+
       # Seed ONLY the synthetic dataset — never the real collection CSV or background/
       # Plan 01-00 moved this file from fixtures/ to tests/fixtures/legacy/ so the
       # downgrade leg of the round-trip (migration 0009) can resolve gruvax_dev's

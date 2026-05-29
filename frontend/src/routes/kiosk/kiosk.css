@@ -851,3 +851,232 @@
   60%  { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* ── Switch-profile corner button (Surface 6 / D2-09) ───────────────────── */
+
+/*
+ * Fixed bottom-right pill button: RefreshCw icon + "SWITCH" label.
+ * Visible only when profileCount >= 2 (controlled by SwitchProfileButton.tsx).
+ * z-index var(--gruvax-z-overlay) = 20 — floats above shelf grid, below admin overlay.
+ */
+
+.switch-profile-btn {
+  position: fixed;
+  bottom: var(--gruvax-space-5);  /* 24px from bottom edge */
+  right: var(--gruvax-space-5);   /* 24px from right edge */
+  z-index: var(--gruvax-z-overlay);
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-1);  /* 4px between icon and label */
+  background: var(--gruvax-blue);
+  color: var(--gruvax-white);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  border: none;
+  border-radius: var(--gruvax-radius-pill); /* 9999px pill */
+  padding: var(--gruvax-space-2) var(--gruvax-space-3); /* 8px 12px */
+  min-height: 44px;  /* WCAG 2.5.5 touch target */
+  min-width: 44px;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.switch-profile-btn:hover {
+  background: var(--gruvax-blue-dark);
+}
+
+.switch-profile-btn:active {
+  background: var(--gruvax-blue-darker);
+}
+
+.switch-profile-btn:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+/* ── Switch-profile confirm modal (Surface 6 confirm) ───────────────────── */
+
+.switch-confirm-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--gruvax-z-overlay) + 1);
+  background: var(--gruvax-overlay-scrim);
+}
+
+.switch-confirm-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: calc(var(--gruvax-z-overlay) + 2);
+  background: var(--gruvax-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-lg); /* 12px */
+  box-shadow: var(--gruvax-shadow-lg);
+  padding: var(--gruvax-space-5); /* 24px */
+  max-width: 320px;
+  width: calc(100vw - var(--gruvax-space-7)); /* full-width minus margins on small screens */
+  animation: confirm-spring var(--gruvax-duration-fast) var(--gruvax-ease-spring) both;
+}
+
+@keyframes confirm-spring {
+  from { transform: translate(-50%, -50%) scale(0.95); opacity: 0; }
+  to   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+}
+
+/* "Switch collection?" heading — Space Grotesk 16px 700, --gruvax-text-primary */
+.switch-confirm-heading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);  /* 16px */
+  font-weight: 700;
+  color: var(--gruvax-text-primary);
+  line-height: var(--gruvax-leading-tight);
+  margin: 0 0 var(--gruvax-space-2) 0;
+}
+
+/* "You'll be taken to the profile picker." — Space Grotesk 14px, --gruvax-text-secondary */
+.switch-confirm-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);  /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0 0 var(--gruvax-space-4) 0;
+}
+
+/* Button row */
+.switch-confirm-actions {
+  display: flex;
+  gap: var(--gruvax-space-3); /* 12px */
+  flex-wrap: wrap;
+}
+
+/* Base confirm/dismiss button styles */
+.switch-confirm-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  border-radius: var(--gruvax-radius-md); /* 8px */
+  padding: var(--gruvax-space-3) var(--gruvax-space-5); /* 12px 24px */
+  min-height: 44px;
+  cursor: pointer;
+  border: none;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+/* SWITCH — blue background, white text */
+.switch-confirm-btn--confirm {
+  background: var(--gruvax-blue);
+  color: var(--gruvax-white);
+}
+
+.switch-confirm-btn--confirm:hover {
+  background: var(--gruvax-blue-dark);
+}
+
+.switch-confirm-btn--confirm:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+/* STAY HERE — transparent, muted text */
+.switch-confirm-btn--dismiss {
+  background: transparent;
+  color: var(--gruvax-text-muted);
+}
+
+.switch-confirm-btn--dismiss:hover {
+  background: var(--gruvax-blue-faint);
+}
+
+.switch-confirm-btn--dismiss:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+/* ── Shelf layout unconfigured state (Plan 09 / D-12) ───────────────────── */
+
+/*
+ * Shown near the shelf area when a locate result returns HTTP 200 with
+ * primary_cube=null and confidence=0 — the release IS in the collection but
+ * no cube boundary covers its label (zero-boundary profile).
+ *
+ * Distinct from EmptyCollectionState (unsynced/no records).
+ * Mirrors EmptyCollectionState spacing and typography; tokens only.
+ */
+
+.shelf-layout-unconfigured {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gruvax-space-3); /* 12px */
+  padding: var(--gruvax-space-6) var(--gruvax-space-5); /* 32px 24px */
+  text-align: center;
+}
+
+/* Heading: Space Grotesk 18px 400, --gruvax-text-muted, sentence case */
+.shelf-layout-unconfigured__heading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-lg); /* 18px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0;
+}
+
+/* Body: Space Grotesk 14px 400, --gruvax-text-muted */
+.shelf-layout-unconfigured__body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  max-width: 420px;
+  margin: 0;
+}
+
+/* ── Empty collection state (Surface 7 / D2-03) ─────────────────────────── */
+
+/*
+ * Replaces the search results area when the bound profile has no synced records.
+ * "No records yet" (sentence case, Space Grotesk 18px, NOT all-caps).
+ * Distinct from NoResultsRow (search returned no matches).
+ */
+
+.empty-collection-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gruvax-space-3); /* 12px */
+  padding: var(--gruvax-space-7) var(--gruvax-space-5); /* 48px 24px */
+  margin: auto;
+  text-align: center;
+}
+
+/* Heading: Space Grotesk 18px 400, --gruvax-text-muted, sentence case */
+.empty-collection-state__heading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-lg); /* 18px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0;
+}
+
+/* Body: Space Grotesk 14px 400, --gruvax-text-muted */
+.empty-collection-state__body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  max-width: 400px;
+  margin: 0;
+}

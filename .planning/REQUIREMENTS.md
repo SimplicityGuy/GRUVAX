@@ -18,10 +18,10 @@
 
 ### Profiles (PROF)
 
-- [ ] **PROF-01** — `profiles` table with Fernet-encrypted PAT storage, soft-delete via `deleted_at`, partial-unique indexes on `display_name` (case-insensitive) and `discogsography_user_id`
-- [ ] **PROF-02** — Profile manager admin UI (mobile-first, PIN-gated): list profiles with status badges; create / connect-PAT / rotate-PAT / rename / soft-delete; per-profile connection status view (last_sync, PAT health); "Sync now" button per profile
+- [x] **PROF-01** — `profiles` table with Fernet-encrypted PAT storage, soft-delete via `deleted_at`, partial-unique indexes on `display_name` (case-insensitive) and `discogsography_user_id`
+- [x] **PROF-02** — Profile manager admin UI (mobile-first, PIN-gated): list profiles with status badges; create / connect-PAT / rotate-PAT / rename / soft-delete; per-profile connection status view (last_sync, PAT health); "Sync now" button per profile
 - [x] **PROF-03** — v1 data backfill to a deterministic "default" profile during `profile_id` migration (id `00000000-0000-0000-0000-000000000001`, display_name `'Default'`, owner-renameable post-migration)
-- [ ] **PROF-04** — `profile_id NOT NULL` migration across 7 v1 tables (`cube_boundaries`, `segments`, `change_log`, `change_sets`, `settings`, `record_stats`, `ambient_baseline`) with composite-uniqueness updates and clean Alembic upgrade↔downgrade round-trip (v1.0 CI invariant)
+- [x] **PROF-04** — `profile_id NOT NULL` migration tightening the 5 per-profile data tables that received `profile_id` in migration 0009 (`cube_boundaries`, `settings`, `record_stats`, `segment_overrides`, `boundary_history`) with composite-uniqueness updates and clean Alembic upgrade↔downgrade round-trip (v1.0 CI invariant). `admin_sessions` + `idempotency_keys` keep nullable `profile_id` (global/infra, not per-profile data). *(Note: the original spec named `segments`/`change_log`/`change_sets`/`ambient_baseline` — those table names never shipped; migration 0009's fan-out is authoritative.)*
 
 ### API client + cache (API)
 
@@ -36,9 +36,9 @@
 
 ### Devices + pairing (DEV)
 
-- [ ] **DEV-01** — `devices` + `pairing_codes` tables: fingerprint cookie (HttpOnly + SameSite=Strict, persistent across reboot), partial-unique indexes on active rows, 5-min TTL on pairing codes with `consumed_at` one-shot guard
-- [ ] **DEV-02** — RPi device-to-profile binding: admin can assign / reassign / unbind / revoke via mobile UI (PENDING / PAIRED / REVOKED groupings, drawer per device); kiosk reflects bound profile across search, locate, SSE, LED, staleness; profile soft-delete detaches bound devices (kiosks revert to profile-picker)
-- [ ] **DEV-03** — Headless RPi pairing/binding flow A: kiosk displays a 4-digit server-generated code (Nordic Grid styling, large DM Mono digits, 5-min countdown, auto-reroll on expiry); admin types code in mobile admin (reuses v1 in-app numeric keypad from Phase 3); successful bind → kiosk auto-navigates to bound-profile search UI in <30s end-to-end
+- [x] **DEV-01** — `devices` + `pairing_codes` tables: fingerprint cookie (HttpOnly + SameSite=Strict, persistent across reboot), partial-unique indexes on active rows, 5-min TTL on pairing codes with `consumed_at` one-shot guard
+- [x] **DEV-02** — RPi device-to-profile binding: admin can assign / reassign / unbind / revoke via mobile UI (PENDING / PAIRED / REVOKED groupings, drawer per device); kiosk reflects bound profile across search, locate, SSE, LED, staleness; profile soft-delete detaches bound devices (kiosks revert to profile-picker)
+- [x] **DEV-03** — Headless RPi pairing/binding flow A: kiosk displays a 4-digit server-generated code (Nordic Grid styling, large DM Mono digits, 5-min countdown, auto-reroll on expiry); admin types code in mobile admin (reuses v1 in-app numeric keypad from Phase 3); successful bind → kiosk auto-navigates to bound-profile search UI in <30s end-to-end
 
 ---
 
@@ -112,7 +112,7 @@ Mapped 2026-05-26 by `gsd-roadmapper`. Each active REQ is owned by exactly one p
 | PROF-01 | profiles table + Fernet PAT storage | P2 | Pending |
 | PROF-02 | Profile manager admin UI (CRUD + status badges; P4 layers Sync-now progress + 401 badge via SYN-01/SYN-02) | P2 | Pending |
 | PROF-03 | v1 → default-profile backfill | P1 | Pending |
-| PROF-04 | profile_id NOT NULL migration (7 v1 tables) | P2 | Pending |
+| PROF-04 | profile_id NOT NULL migration (5 data tables; 2 infra stay nullable) | P2 | Pending |
 | API-01 | DiscogsographyClient paged sync + retry | P1 | Pending |
 | API-02 | Positioning off local cache + SLO preserved (P1 single-profile; P2 multi-profile cache routing completion) | P1 | Pending |
 | API-03 | Retire v_collection view + grant | P1 | Pending |

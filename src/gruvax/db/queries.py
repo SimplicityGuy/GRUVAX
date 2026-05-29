@@ -95,7 +95,7 @@ def is_catalog_query(q: str) -> bool:
 async def did_you_mean_query(
     pool: AsyncConnectionPool,
     q: str,
-    profile_id: str = DEFAULT_PROFILE_UUID,
+    profile_id: str,
 ) -> str | None:
     """Return the top trigram-similarity match for *q* over label/artist terms.
 
@@ -113,7 +113,7 @@ async def did_you_mean_query(
     Args:
         pool:       Open psycopg ``AsyncConnectionPool``.
         q:          Raw user query string (already length-validated at router).
-        profile_id: UUID of the profile to scope the suggestion to (P1: default).
+        profile_id: UUID of the profile to scope the suggestion to (required; D2-04).
 
     Returns:
         The best-matching term string if similarity > threshold, else ``None``.
@@ -149,7 +149,7 @@ async def search_collection(
     pool: AsyncConnectionPool,
     q: str,
     limit: int,
-    profile_id: str = DEFAULT_PROFILE_UUID,
+    profile_id: str,
 ) -> tuple[list[SearchRow], float, str | None]:
     """Execute FTS + catalog-number union search over gruvax.profile_collection.
 
@@ -192,7 +192,7 @@ async def search_collection(
         pool:       Open psycopg ``AsyncConnectionPool``.
         q:          Raw user query string (already length-validated at router).
         limit:      Max rows to return (already range-validated at router).
-        profile_id: UUID of the profile to search (P1: default).
+        profile_id: UUID of the profile to search (required; D2-04).
 
     Returns:
         A ``(rows, took_ms, did_you_mean)`` tuple where ``rows`` is a list of
@@ -370,6 +370,7 @@ LIMIT %s
 
 async def load_settings_cache(
     pool: AsyncConnectionPool,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> dict[str, Any]:
     """Load all rows from ``gruvax.settings`` into a key→value dict.
 
@@ -383,20 +384,22 @@ async def load_settings_cache(
 
     All SQL uses ``%s`` placeholders — no f-string interpolation (T-01-07).
 
-    Note: settings are global (not per-profile) in P1; the table has a
-    nullable ``profile_id`` column added in migration 0009 for P2 readiness,
-    but this loader returns every row regardless of profile.
+    Note: settings have a nullable ``profile_id`` column added in migration 0009.
+    In P1 all rows belong to the default profile; in P2 each profile gets its own
+    settings rows.  This loader scopes to the given profile_id.
 
     Args:
         pool: Open psycopg ``AsyncConnectionPool``.
+        profile_id: UUID string of the profile to scope the load to
+            (P1: default UUID; P2: per-session profile_id from registry).
 
     Returns:
         Dict mapping ``key`` (str) → decoded JSONB ``value`` for every row in
-        ``gruvax.settings``.  Returns ``{}`` if the table is empty.
+        ``gruvax.settings`` for the given profile.  Returns ``{}`` if the table is empty.
     """
-    sql = "SELECT key, value FROM gruvax.settings"
+    sql = "SELECT key, value FROM gruvax.settings WHERE profile_id = %s::uuid"
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql)
+        await cur.execute(sql, (profile_id,))
         rows = await cur.fetchall()
     return {str(row[0]): row[1] for row in rows}
 
@@ -409,7 +412,7 @@ LocateRecord = dict[str, Any]
 async def get_release_for_locate(
     pool: AsyncConnectionPool,
     release_id: int,
-    profile_id: str = DEFAULT_PROFILE_UUID,
+    profile_id: str,
 ) -> LocateRecord | None:
     """Fetch label and catalog_number for a release_id from profile_collection.
 
@@ -420,7 +423,7 @@ async def get_release_for_locate(
         pool:       Open psycopg pool.
         release_id: The Discogs release ID to look up (integer, already
                     validated at the router).
-        profile_id: UUID of the profile to scope the lookup to (P1: default).
+        profile_id: UUID of the profile to scope the lookup to (required; D2-04).
 
     Returns:
         A dict with keys ``release_id``, ``label``, ``catalog_number``,
@@ -685,6 +688,7 @@ async def write_history_row(
     new_first_catalog: str | None,
     new_is_empty: bool,
     source: str,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> None:
     """Append one row to boundary_history for a single cube change.
 
@@ -698,6 +702,9 @@ async def write_history_row(
     new_last_* because cube_boundaries no longer stores last_* values.
     prev_last_* are also NULL for rows written after the 0005 migration.
 
+    Phase 2 (D2 migration 0010): profile_id column is NOT NULL. Defaults to
+    DEFAULT_PROFILE_UUID for P1 single-profile call sites.
+
     Args:
         conn:          Open psycopg async connection (inside a transaction).
         change_set_id: UUID shared across all cubes in one atomic commit.
@@ -709,14 +716,15 @@ async def write_history_row(
         new_first_catalog: New cut-point catalog number (None only when is_empty=True).
         new_is_empty:  Whether the cube is now empty.
         source:        'manual', 'bulk', 'revert', or 'cut_insert'.
+        profile_id:    UUID of the profile these boundaries belong to (P1: default).
     """
     sql = """
 INSERT INTO gruvax.boundary_history (
-    change_set_id, unit_id, row, col,
+    profile_id, change_set_id, unit_id, row, col,
     prev_first_label, prev_first_catalog, prev_last_label, prev_last_catalog, prev_is_empty,
     new_first_label, new_first_catalog, new_last_label, new_last_catalog, new_is_empty,
     source
-) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
+) VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)
 """
     prev_first_label = prev.get("first_label") if prev else None
     prev_first_catalog = prev.get("first_catalog") if prev else None
@@ -728,6 +736,7 @@ INSERT INTO gruvax.boundary_history (
     await conn.execute(
         sql,
         (
+            profile_id,
             change_set_id,
             unit_id,
             row,
@@ -1027,11 +1036,13 @@ async def increment_search_count(
         pool:       Open psycopg ``AsyncConnectionPool``.
         release_id: Discogs release ID (integer, server-side — no user text stored).
     """
+    # record_stats PK is (profile_id, release_id) after migration 0010.
+    # Counters are tracked under the default profile (global stats for v1).
     sql = """
 INSERT INTO gruvax.record_stats
-    (release_id, search_count, search_count_7d, last_searched_at, updated_at)
-VALUES (%s, 1, 1, now(), now())
-ON CONFLICT (release_id) DO UPDATE SET
+    (profile_id, release_id, search_count, search_count_7d, last_searched_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000001'::uuid, %s, 1, 1, now(), now())
+ON CONFLICT (profile_id, release_id) DO UPDATE SET
     search_count     = gruvax.record_stats.search_count + 1,
     search_count_7d  = CASE
         WHEN gruvax.record_stats.last_searched_at > now() - INTERVAL '7 days'
@@ -1061,11 +1072,13 @@ async def increment_selection_count(
         pool:       Open psycopg ``AsyncConnectionPool``.
         release_id: Discogs release ID (integer, server-side — no user text stored).
     """
+    # record_stats PK is (profile_id, release_id) after migration 0010.
+    # Counters are tracked under the default profile (global stats for v1).
     sql = """
 INSERT INTO gruvax.record_stats
-    (release_id, selection_count, selection_count_7d, last_selected_at, updated_at)
-VALUES (%s, 1, 1, now(), now())
-ON CONFLICT (release_id) DO UPDATE SET
+    (profile_id, release_id, selection_count, selection_count_7d, last_selected_at, updated_at)
+VALUES ('00000000-0000-0000-0000-000000000001'::uuid, %s, 1, 1, now(), now())
+ON CONFLICT (profile_id, release_id) DO UPDATE SET
     selection_count     = gruvax.record_stats.selection_count + 1,
     selection_count_7d  = CASE
         WHEN gruvax.record_stats.last_selected_at > now() - INTERVAL '7 days'

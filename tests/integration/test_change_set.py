@@ -400,12 +400,13 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
     from gruvax.auth.pin import hash_pin
 
     test_pin_hash = hash_pin("0000")
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with db_pool.connection() as conn:
         await conn.execute(
-            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-            " VALUES ('auth.pin_hash', %s, 'Test PIN hash seeded by INT-B re-derive test', now())"
-            " ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
-            (f'"{test_pin_hash}"',),
+            "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+            " VALUES (%s::uuid, 'auth.pin_hash', %s, 'Test PIN hash seeded by INT-B re-derive test', now())"
+            " ON CONFLICT (profile_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+            (_DEFAULT_PROFILE_UUID, f'"{test_pin_hash}"'),
         )
         await conn.commit()
 
@@ -575,12 +576,13 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
     from gruvax.auth.pin import hash_pin
 
     test_pin_hash = hash_pin("0000")
+    _DEFAULT_PROFILE_UUID_CHANGESET = "00000000-0000-0000-0000-000000000001"
     async with db_pool.connection() as conn:
         await conn.execute(
-            "INSERT INTO gruvax.settings (key, value, description, updated_at)"
-            " VALUES ('auth.pin_hash', %s, 'Test PIN hash seeded by INT-B publish test', now())"
-            " ON CONFLICT (key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
-            (f'"{test_pin_hash}"',),
+            "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+            " VALUES (%s::uuid, 'auth.pin_hash', %s, 'Test PIN hash seeded by INT-B publish test', now())"
+            " ON CONFLICT (profile_id, key) DO UPDATE SET value = EXCLUDED.value, updated_at = now()",
+            (_DEFAULT_PROFILE_UUID_CHANGESET, f'"{test_pin_hash}"'),
         )
         await conn.commit()
 

@@ -126,13 +126,16 @@ async def test_fraction_check_rejects_over_one(migrate_pool) -> None:  # type: i
     unit_id = await _get_unit_id(migrate_pool)
     uid, r, c = await _get_first_cube(migrate_pool, unit_id)
 
+    # profile_id is required (NOT NULL) after migration 0010 — supply the default UUID
+    # so the NOT NULL constraint is satisfied and the CHECK on fraction can trip.
+    _DEFAULT_PID = "00000000-0000-0000-0000-000000000001"
     with pytest.raises((psycopg.errors.CheckViolation, Exception)) as exc_info:
         async with migrate_pool.connection() as conn:
             await conn.execute(
                 "INSERT INTO gruvax.segment_overrides"
-                " (unit_id, row, col, label, fraction)"
-                " VALUES (%s, %s, %s, %s, %s)",
-                (uid, r, c, "TEST_LABEL_OVER_ONE", 1.5),
+                " (profile_id, unit_id, row, col, label, fraction)"
+                " VALUES (%s::uuid, %s, %s, %s, %s, %s)",
+                (_DEFAULT_PID, uid, r, c, "TEST_LABEL_OVER_ONE", 1.5),
             )
             await conn.rollback()
 
@@ -150,13 +153,15 @@ async def test_fraction_check_rejects_zero(migrate_pool) -> None:  # type: ignor
     unit_id = await _get_unit_id(migrate_pool)
     uid, r, c = await _get_first_cube(migrate_pool, unit_id)
 
+    # profile_id is required (NOT NULL) after migration 0010 — supply the default UUID.
+    _DEFAULT_PID = "00000000-0000-0000-0000-000000000001"
     with pytest.raises((psycopg.errors.CheckViolation, Exception)) as exc_info:
         async with migrate_pool.connection() as conn:
             await conn.execute(
                 "INSERT INTO gruvax.segment_overrides"
-                " (unit_id, row, col, label, fraction)"
-                " VALUES (%s, %s, %s, %s, %s)",
-                (uid, r, c, "TEST_LABEL_ZERO", 0.0),
+                " (profile_id, unit_id, row, col, label, fraction)"
+                " VALUES (%s::uuid, %s, %s, %s, %s, %s)",
+                (_DEFAULT_PID, uid, r, c, "TEST_LABEL_ZERO", 0.0),
             )
             await conn.rollback()
 
@@ -173,25 +178,27 @@ async def test_fraction_check_accepts_boundary(migrate_pool) -> None:  # type: i
     uid, r, c = await _get_first_cube(migrate_pool, unit_id)
 
     # Use a unique label name to avoid collision with other tests
+    # profile_id is required (NOT NULL) after migration 0010 — supply the default UUID.
+    _DEFAULT_PID = "00000000-0000-0000-0000-000000000001"
     test_label = "TEST_LABEL_BOUNDARY_1_0"
     async with migrate_pool.connection() as conn:
         # Ensure clean state
         await conn.execute(
             "DELETE FROM gruvax.segment_overrides"
-            " WHERE unit_id=%s AND row=%s AND col=%s AND label=%s",
-            (uid, r, c, test_label),
+            " WHERE profile_id=%s::uuid AND unit_id=%s AND row=%s AND col=%s AND label=%s",
+            (_DEFAULT_PID, uid, r, c, test_label),
         )
         await conn.execute(
             "INSERT INTO gruvax.segment_overrides"
-            " (unit_id, row, col, label, fraction)"
-            " VALUES (%s, %s, %s, %s, %s)",
-            (uid, r, c, test_label, 1.0),
+            " (profile_id, unit_id, row, col, label, fraction)"
+            " VALUES (%s::uuid, %s, %s, %s, %s, %s)",
+            (_DEFAULT_PID, uid, r, c, test_label, 1.0),
         )
         # Clean up
         await conn.execute(
             "DELETE FROM gruvax.segment_overrides"
-            " WHERE unit_id=%s AND row=%s AND col=%s AND label=%s",
-            (uid, r, c, test_label),
+            " WHERE profile_id=%s::uuid AND unit_id=%s AND row=%s AND col=%s AND label=%s",
+            (_DEFAULT_PID, uid, r, c, test_label),
         )
         await conn.commit()
 
@@ -223,13 +230,16 @@ async def test_source_check_accepts_cut_insert(migrate_pool) -> None:  # type: i
             pytest.skip("No cube found for history test")
 
         first_label, first_catalog, is_empty = row
+        # profile_id is required (NOT NULL) after migration 0010.
+        _DEFAULT_PID = "00000000-0000-0000-0000-000000000001"
         await conn.execute(
             "INSERT INTO gruvax.boundary_history"
-            " (change_set_id, unit_id, row, col,"
+            " (profile_id, change_set_id, unit_id, row, col,"
             "  prev_first_label, prev_first_catalog, prev_is_empty,"
             "  new_first_label, new_first_catalog, new_is_empty, source)"
-            " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+            " VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
             (
+                _DEFAULT_PID,
                 change_set_id,
                 uid,
                 r,
@@ -277,15 +287,19 @@ async def test_source_check_rejects_unknown_source(migrate_pool) -> None:  # typ
 
         first_label, first_catalog, is_empty = row
 
+    # profile_id is required (NOT NULL) after migration 0010 — supply default UUID
+    # so the NOT NULL constraint is satisfied and the CHECK on source can trip.
+    _DEFAULT_PID = "00000000-0000-0000-0000-000000000001"
     with pytest.raises((psycopg.errors.CheckViolation, Exception)) as exc_info:
         async with migrate_pool.connection() as conn:
             await conn.execute(
                 "INSERT INTO gruvax.boundary_history"
-                " (change_set_id, unit_id, row, col,"
+                " (profile_id, change_set_id, unit_id, row, col,"
                 "  prev_first_label, prev_first_catalog, prev_is_empty,"
                 "  new_first_label, new_first_catalog, new_is_empty, source)"
-                " VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
+                " VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)",
                 (
+                    _DEFAULT_PID,
                     change_set_id,
                     uid,
                     r,
