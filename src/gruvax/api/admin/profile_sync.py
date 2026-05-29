@@ -1,5 +1,30 @@
 """POST /api/admin/profiles/{profile_id}/sync — manually trigger a profile sync (D-10).
 
+Poller contract (02-08):
+  The frontend poller (ProfileDrawer.tsx refetchInterval) keeps polling
+  GET /api/admin/profiles/{id} until a TERMINAL status ('ok' | 'failed') is
+  observed — it does NOT stop on 'in_progress' or null. The backend MUST
+  therefore never expose a non-terminal, non-'in_progress' status during an
+  active sync window.
+
+  Audit result — the only observable last_sync_status transitions during a
+  sync are:
+
+    ① null / prior terminal (before trigger_sync)
+    ② 'in_progress'  — written synchronously by trigger_sync before 202 returns
+    ③ 'ok'           — written atomically with last_sync_item_count inside
+                       sync.profile_sync._swap_inside_tx (one conn.transaction())
+       OR
+       'failed'       — written by sync.profile_sync._record_failure on any error
+
+  There is NO intermediate write that sets status to null or any other
+  non-terminal, non-'in_progress' value once a sync is in flight. The
+  'item_count + terminal status' flip is a single UPDATE inside one
+  transaction, so no observer can see a split state (item_count updated
+  but status still 'in_progress', or vice versa).
+
+  See: src/gruvax/sync/profile_sync.py::_swap_inside_tx
+
 Endpoint:
   POST /api/admin/profiles/{profile_id}/sync
 
