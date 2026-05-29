@@ -193,7 +193,21 @@ Plans:
   4. Soft-deleting a profile schedules a cache-purge background task that removes `profile_collection` rows and detaches bound devices without cascading the audit lineage (`change_log` / `change_sets` retain their FKs).
   5. The admin "Sync now" button shows progress until the sync completes and fires a completion toast; all v1.0 invariants — Alembic round-trip clean, p95 SLOs, structured logs, log-ring buffer, in-app keypad — continue to hold at v2.0 close.
 
-**Plans**: TBD
+**Plans**: 4 plans (3 waves; W0: 04-00 | W1 parallel: 04-01 + 04-02 | W2: 04-03)
+
+**Wave 0**
+
+- [ ] 04-00-PLAN.md — Wave 0 test scaffolding: 6 RED test files (scheduler property/unit, session needs_reauth, purge, diagnostics profiles[], cadence persistence) (SYN-01, SYN-02)
+
+**Wave 1** *(blocked on Wave 0 completion; parallel — disjoint files)*
+
+- [ ] 04-01-PLAN.md — Backend sync autonomy: nightly `_sync_loop()` + DST `next_fire_after()` + startup catch-up & purge sweeps + `sync.cadence` setting + soft-delete purge + `needs_reauth` on `GET /api/session` + D4-09/D4-07 verify (SYN-01, SYN-02)
+- [ ] 04-02-PLAN.md — `GET /api/admin/diagnostics` per-profile `profiles[]` section (SYN-02)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
+- [ ] 04-03-PLAN.md — Frontend: kiosk ReauthBanner + admin re-auth badge + per-profile diagnostics cards (30s refetch) + Sync-now spinner/elapsed/toast + cadence select (SYN-02)
+
 **UI hint**: yes
 
 ## Progress
@@ -213,7 +227,7 @@ Plans:
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 0/6 | Planned (4 waves) | — |
 | 2. Multi-profile migration + profile manager | v2.0 | 0/8 | Planned (6 waves) | — |
 | 3. Devices + pairing | v2.0 | 0/6 | Planned (5 waves) | — |
-| 4. Sync polish + diagnostics | v2.0 | 0/0 | Not started | — |
+| 4. Sync polish + diagnostics | v2.0 | 0/4 | Planned (3 waves) | — |
 | 999.1. Shelf-overview mini-Kallax fill/occupancy | Backlog | 0/0 | Captured | — |
 | 999.2. LED "party" + "sound-reactive" modes | Backlog | 0/0 | Captured | — |
 
