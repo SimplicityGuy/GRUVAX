@@ -5776,6 +5776,82 @@
   margin: 0;
 }
 
+/* ── Device profile-picker sub-sheet ────────────────────────────────────── */
+
+.device-profile-picker {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+  margin: var(--gruvax-space-2) 0;
+}
+
+.device-profile-picker-loading,
+.device-profile-picker-empty {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);  /* 14px */
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  margin: 0;
+  text-align: center;
+  padding: var(--gruvax-space-4) 0;
+}
+
+.device-profile-picker-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gruvax-space-3);
+  width: 100%;
+  min-height: 48px;
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  background: var(--gruvax-off-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  cursor: pointer;
+  text-align: left;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+              border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  touch-action: manipulation;
+}
+
+.device-profile-picker-row:hover:not(:disabled) {
+  background: var(--gruvax-blue-faint);
+  border-color: var(--gruvax-blue);
+}
+
+.device-profile-picker-row:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.device-profile-picker-row:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.device-profile-picker-name {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);  /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+}
+
+.device-profile-picker-current {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-label, 11px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  color: var(--gruvax-success);
+  background: color-mix(in srgb, var(--gruvax-success) 12%, transparent);
+  border-radius: var(--gruvax-radius-pill);
+  /* spacing-exception: 2px vertical pad — below --gruvax-space-1 (4px) for pill density */
+  padding: 2px var(--gruvax-space-2);
+  flex-shrink: 0;
+}
+
 /* ── "PAIR THIS SCREEN" affordance button ────────────────────────────────── */
 
 .pair-screen-btn {
