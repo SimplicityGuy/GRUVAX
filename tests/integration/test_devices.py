@@ -24,7 +24,6 @@ import os
 import socket
 import threading
 import time
-import uuid as _uuid_module
 from typing import TYPE_CHECKING
 
 import httpx
@@ -589,19 +588,12 @@ async def test_session_returns_device(client) -> None:  # type: ignore[no-untype
       - device_id: non-null UUID string
       - is_device_paired: True
     """
-    # Self-contained fingerprint: the module-scoped client shares one cookie jar,
-    # so an earlier test (e.g. test_revoke_guard) leaves a *revoked* fingerprint
-    # in the jar. generate_pairing_code never re-issues when a fp cookie already
-    # exists, so without this clear we'd inherit that revoked device and the bind
-    # below would not produce a clean paired state. Drop it to force a fresh
-    # fingerprint + fresh device row for this test.
-    client.cookies.delete(FINGERPRINT_COOKIE)
-
     # Generate + bind
     gen_res = await client.post("/api/devices/pairing-codes")
     if gen_res.status_code != 200:
         pytest.skip("pairing-codes endpoint not yet implemented")
     code = gen_res.json()["code"]
+    fp_cookies = gen_res.cookies
 
     admin = await _admin_login(client)
     bind_res = await client.post(
@@ -613,10 +605,8 @@ async def test_session_returns_device(client) -> None:  # type: ignore[no-untype
     if bind_res.status_code != 200:
         pytest.skip("bind endpoint not yet implemented")
 
-    # GET /api/session — the fresh fingerprint cookie now lives in the client jar
-    # (set by the pairing-codes response above); rely on the jar rather than the
-    # ambiguous per-request cookies= override (httpx deprecates per-request cookies).
-    session_res = await client.get("/api/session")
+    # GET /api/session with the paired fingerprint cookie
+    session_res = await client.get("/api/session", cookies=fp_cookies)
     assert session_res.status_code == 200, (
         f"GET /api/session expected 200 with paired fingerprint, "
         f"got {session_res.status_code}: {session_res.text}. "
@@ -767,16 +757,14 @@ async def test_sse_device_reassigned(live_server) -> None:  # type: ignore[no-un
         admin_cookies = dict(login_res.cookies)
         csrf = login_res.cookies.get("gruvax_csrf") or ""
 
-        # Create profile B for reassignment target — use unique name to avoid
-        # 409 Conflict on shared dev DB (Rule 1: test isolation fix).
-        unique_suffix = _uuid_module.uuid4().hex[:8]
+        # Create profile B for reassignment target
         create_res = await ac.post(
             "/api/admin/profiles",
-            json={"display_name": f"Profile B (reassign-{unique_suffix})"},
+            json={"display_name": "Profile B (reassign target)"},
             cookies=admin_cookies,
             headers={"X-CSRF-Token": csrf},
         )
-        if create_res.status_code not in (200, 201):
+        if create_res.status_code != 200:
             pytest.skip("create profile endpoint not available on live server")
         profile_b_id = create_res.json().get("id")
 
