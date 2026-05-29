@@ -24,6 +24,7 @@ import os
 import socket
 import threading
 import time
+import uuid as _uuid_module
 from typing import TYPE_CHECKING
 
 import httpx
@@ -757,14 +758,16 @@ async def test_sse_device_reassigned(live_server) -> None:  # type: ignore[no-un
         admin_cookies = dict(login_res.cookies)
         csrf = login_res.cookies.get("gruvax_csrf") or ""
 
-        # Create profile B for reassignment target
+        # Create profile B for reassignment target — use unique name to avoid
+        # 409 Conflict on shared dev DB (Rule 1: test isolation fix).
+        unique_suffix = _uuid_module.uuid4().hex[:8]
         create_res = await ac.post(
             "/api/admin/profiles",
-            json={"display_name": "Profile B (reassign target)"},
+            json={"display_name": f"Profile B (reassign-{unique_suffix})"},
             cookies=admin_cookies,
             headers={"X-CSRF-Token": csrf},
         )
-        if create_res.status_code != 200:
+        if create_res.status_code not in (200, 201):
             pytest.skip("create profile endpoint not available on live server")
         profile_b_id = create_res.json().get("id")
 
