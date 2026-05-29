@@ -155,7 +155,15 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
   4. The devices admin UI shows PENDING / PAIRED / REVOKED groupings with a drawer per device (rename / change-profile / unbind / revoke), all PIN-gated.
   5. Pairing-code brute-force resistance holds: 5-min TTL × 10k keyspace × `consumed_at` one-shot guard × admin PIN-gating on `/api/admin/devices/bind`; concurrent bind attempts on the same code → first wins, second sees "Code not found".
 
-**Plans**: TBD
+**Plans**: 6 plans (5 waves; W1: 03-00 | W2: 03-01 | W3 parallel: 03-02 + 03-03 | W4: 03-04 | W5: 03-05)
+
+Plans:
+- [ ] 03-00-PLAN.md — Wave 0 test scaffolding: RED test files for DEV-01/02/03 + Playwright dev dep (package-legitimacy checkpoint)
+- [ ] 03-01-PLAN.md — Migration 0011 (devices + pairing_codes + indexes, round-trip) + HttpOnly fingerprint cookie helpers (DEV-01)
+- [ ] 03-02-PLAN.md — Kiosk pairing endpoints + admin device CRUD + atomic PIN-gated rate-limited bind + revoke/reassign SSE (DEV-02, DEV-03)
+- [ ] 03-03-PLAN.md — Device-aware resolution + per-request revoke guard + GET /api/session device binding + profile soft-delete detach (DEV-02, DEV-03)
+- [ ] 03-04-PLAN.md — Frontend: /pair countdown route + admin Devices UI (groups + drawer + NumericKeypad bind) + routing precedence + affordances (DEV-02, DEV-03)
+- [ ] 03-05-PLAN.md — Pi provisioning artifacts (start-kiosk.sh + systemd unit + README) + Playwright reboot-persistence test (DEV-01)
 **UI hint**: yes
 
 ### Phase 4: Sync polish + diagnostics
@@ -190,7 +198,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 0/6 | Planned (4 waves) | — |
 | 2. Multi-profile migration + profile manager | v2.0 | 0/8 | Planned (6 waves) | — |
-| 3. Devices + pairing | v2.0 | 0/0 | Not started | — |
+| 3. Devices + pairing | v2.0 | 0/6 | Planned (5 waves) | — |
 | 4. Sync polish + diagnostics | v2.0 | 0/0 | Not started | — |
 | 999.1. Shelf-overview mini-Kallax fill/occupancy | Backlog | 0/0 | Captured | — |
 | 999.2. LED "party" + "sound-reactive" modes | Backlog | 0/0 | Captured | — |
