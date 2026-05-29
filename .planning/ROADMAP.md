@@ -137,8 +137,8 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 
 **Wave 6 — gap closure** *(closes 02-UAT.md gaps from user-driven UAT; both parallel — disjoint files)*
 
-- [ ] 02-08-PLAN.md — GAP 1 (major): poll-until-terminal `refetchInterval` in ProfileDrawer (stop only on 'ok'/'failed') + atomic terminal-write confirmation → drawer auto-transitions SYNCING → CONNECTED + toast without manual refresh (PROF-02, PROF-01)
-- [ ] 02-09-PLAN.md — GAP 2 (minor): kiosk "shelf layout not configured" affordance when an in-collection result lands no cube (zero-boundary profile); admin boundary-onboarding flow explicitly deferred to a future phase (PROF-02)
+- [x] 02-08-PLAN.md — GAP 1 (major): poll-until-terminal `refetchInterval` in ProfileDrawer (stop only on 'ok'/'failed') + atomic terminal-write confirmation → drawer auto-transitions SYNCING → CONNECTED + toast without manual refresh (PROF-02, PROF-01)
+- [x] 02-09-PLAN.md — GAP 2 (minor): kiosk "shelf layout not configured" affordance when an in-collection result lands no cube (zero-boundary profile); admin boundary-onboarding flow explicitly deferred to a future phase (PROF-02)
 
 **UI hint**: yes
 
@@ -179,7 +179,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 | Phase | Milestone | Plans | Status | Completed |
 |-------|-----------|-------|--------|-----------|
 | 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
-| 2. Real Position Estimation | v1.0 | 9/8 | Complete    | 2026-05-28 |
+| 2. Real Position Estimation | v1.0 | 11/10 | Complete   | 2026-05-29 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |

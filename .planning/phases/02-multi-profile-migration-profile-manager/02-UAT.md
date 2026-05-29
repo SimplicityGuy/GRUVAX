@@ -1,9 +1,9 @@
 ---
-status: diagnosed
+status: resolved
 phase: 02-multi-profile-migration-profile-manager
 source: [02-01-SUMMARY.md, 02-03-SUMMARY.md, 02-04-SUMMARY.md, 02-05-SUMMARY.md, 02-06-SUMMARY.md, 02-07-SUMMARY.md]
 started: 2026-05-28
-updated: 2026-05-28
+updated: 2026-05-29
 mode: user-driven
 note: independent of 02-HUMAN-UAT.md (automated run). Stack live at http://localhost:8000.
 ---
@@ -99,7 +99,7 @@ skipped: 0
 ## Gaps
 
 - truth: "A user can tell whether a profile's cube highlighting is unavailable because the shelf layout isn't configured (vs. search being broken)"
-  status: failed
+  status: resolved
   reason: "User reported: bin doesn't light up. Diagnosis: LiveVerify has 0 cube_boundaries; locate path verified working on Default. No in-kiosk affordance signals an unconfigured shelf layout, and there is no clear path for a newly-created profile to acquire boundaries."
   severity: minor
   test: 5
@@ -107,7 +107,7 @@ skipped: 0
   missing: ["kiosk affordance for 'shelf layout not configured for this profile'", "onboarding path to configure cube boundaries for a new profile"]
 
 - truth: "After connecting/syncing a profile, the admin drawer transitions SYNCING → CONNECTED with a completion toast without a manual refresh"
-  status: failed
+  status: resolved
   reason: "User reported: sync drawer stuck on 'Syncing… 3,000 items processed'; refresh shows synced. ProfileDrawer.tsx refetchInterval polls only while last_sync_status==='in_progress' and stops on any other value, so a transient/non-atomic status update halts polling before the terminal 'ok' is observed."
   severity: major
   test: 8
