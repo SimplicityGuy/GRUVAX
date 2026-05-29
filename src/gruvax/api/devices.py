@@ -15,7 +15,7 @@ Security:
 from __future__ import annotations
 
 import logging
-import random
+import secrets
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request, Response, status
@@ -83,7 +83,7 @@ async def generate_pairing_code(
     expires_at_iso: str | None = None
 
     for _ in range(3):
-        candidate = f"{random.randint(0, 9999):04d}"  # '0000'..'9999'
+        candidate = f"{secrets.randbelow(10000):04d}"  # '0000'..'9999' via OS CSPRNG
         async with db_pool.connection() as conn, conn.cursor() as cur:
             await cur.execute(_INSERT_PAIRING_CODE, (candidate, fp))
             row = await cur.fetchone()
