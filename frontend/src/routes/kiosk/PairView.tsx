@@ -134,7 +134,7 @@ export function PairView() {
     const clampedInitial = Math.max(0, initial)
     // eslint-disable-next-line react-hooks/set-state-in-effect -- countdown initial value derived from server-authoritative expires_at; no other place to set this than the effect that starts the interval
     setRemainingMs(clampedInitial)
-     
+
     setPairStatus(clampedInitial <= 60_000 ? 'expiring' : 'active')
 
     countdownIntervalRef.current = setInterval(() => {

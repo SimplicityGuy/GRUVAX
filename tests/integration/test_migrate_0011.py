@@ -17,7 +17,6 @@ import asyncio
 from pathlib import Path
 import subprocess
 
-import psycopg
 import pytest
 import pytest_asyncio
 
@@ -133,8 +132,13 @@ async def test_devices_table_created(
 
     # Verify required columns
     expected_columns = {
-        "id", "fingerprint", "profile_id", "display_name",
-        "revoked_at", "last_seen_at", "created_at",
+        "id",
+        "fingerprint",
+        "profile_id",
+        "display_name",
+        "revoked_at",
+        "last_seen_at",
+        "created_at",
     }
     async with db_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
@@ -144,8 +148,7 @@ async def test_devices_table_created(
         actual_columns = {row[0] for row in await cur.fetchall()}
     missing = expected_columns - actual_columns
     assert not missing, (
-        f"gruvax.devices is missing columns: {missing}. "
-        f"Actual columns: {actual_columns}"
+        f"gruvax.devices is missing columns: {missing}. Actual columns: {actual_columns}"
     )
 
 
@@ -214,8 +217,7 @@ async def test_pairing_codes_table_created(
         actual_columns = {row[0] for row in await cur.fetchall()}
     missing = expected_columns - actual_columns
     assert not missing, (
-        f"gruvax.pairing_codes is missing columns: {missing}. "
-        f"Actual columns: {actual_columns}"
+        f"gruvax.pairing_codes is missing columns: {missing}. Actual columns: {actual_columns}"
     )
 
     # Verify code is CHAR(4)

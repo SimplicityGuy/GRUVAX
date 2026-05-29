@@ -163,11 +163,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # registries.  All non-deleted profiles are eager-loaded at startup so the
     # kiosk is immediately responsive regardless of profile count (D2-02, P7).
     # Registry key = str(profile_id) — plain string, NEVER uuid.UUID (Pitfall 2).
-    app.state.boundary_cache_registry: dict[str, Any] = {}
-    app.state.snapshot_registry: dict[str, Any] = {}
-    app.state.segment_cache_registry: dict[str, Any] = {}
-    app.state.settings_cache_registry: dict[str, Any] = {}
-    app.state.event_bus_registry: dict[str, Any] = {}
+    # Registries map str(profile_id) → instance. No inline annotation: mypy rejects
+    # type-annotated assignment to a non-self attribute (Starlette ``State`` is Any).
+    app.state.boundary_cache_registry = {}
+    app.state.snapshot_registry = {}
+    app.state.segment_cache_registry = {}
+    app.state.settings_cache_registry = {}
+    app.state.event_bus_registry = {}
 
     # Also keep P1-compatible singular attributes for any P1 code still reading them
     # (health.py, ambient publish, etc.).  They point to the default profile's instances.
@@ -178,9 +180,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Empty-cache profiles (no sync yet) are valid — P7 guard: load regardless
     # of app_token_revoked.
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            "SELECT id FROM gruvax.profiles WHERE deleted_at IS NULL"
-        )
+        await cur.execute("SELECT id FROM gruvax.profiles WHERE deleted_at IS NULL")
         profile_rows = await cur.fetchall()
 
     for (pid,) in profile_rows:
@@ -189,7 +189,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # BoundaryCache — same try/except + logger.error + proceed pattern as P1.
         _cache = BoundaryCache()
         try:
-            await _cache.load(pool, profile_id=pid_str)
+            # psycopg AsyncConnectionPool is invariant in its connection row type;
+            # create_pool yields tuple-rows, load() declares object-rows. Runtime is
+            # correct — the generic mismatch is a known psycopg typing friction.
+            await _cache.load(pool, profile_id=pid_str)  # type: ignore[arg-type]
             logger.info(
                 "BoundaryCache loaded for profile=%s (%d rows)",
                 pid_str,
@@ -203,7 +206,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         # CollectionSnapshot
         _snapshot = CollectionSnapshot()
         try:
-            await _snapshot.load(pool, profile_id=pid_str)
+            # psycopg pool invariance (see BoundaryCache.load above).
+            await _snapshot.load(pool, profile_id=pid_str)  # type: ignore[arg-type]
             logger.info(
                 "CollectionSnapshot loaded for profile=%s (%d labels)",
                 pid_str,
@@ -263,12 +267,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.collection_snapshot = app.state.snapshot_registry.get(
         _default_pid_str, CollectionSnapshot()
     )
-    app.state.segment_cache = app.state.segment_cache_registry.get(
-        _default_pid_str, SegmentCache()
-    )
-    app.state.settings_cache = app.state.settings_cache_registry.get(
-        _default_pid_str, {}
-    )
+    app.state.segment_cache = app.state.segment_cache_registry.get(_default_pid_str, SegmentCache())
+    app.state.settings_cache = app.state.settings_cache_registry.get(_default_pid_str, {})
     # P1-compat event_bus alias: admin editing endpoints (editing.py, cubes.py,
     # segments.py, import_.py, history.py) still use get_event_bus(request) which
     # reads app.state.event_bus. Wire it to the default profile's bus so those
@@ -276,9 +276,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Genuine wiring fix: without this alias the boundary_changed fan-out in admin
     # edit endpoints is silently missing the per-profile EventBus and the SSE
     # boundary_changed_latency test fails (ADMN-11 gate).
-    app.state.event_bus = app.state.event_bus_registry.get(
-        _default_pid_str, EventBus()
-    )
+    app.state.event_bus = app.state.event_bus_registry.get(_default_pid_str, EventBus())
 
     # ── 4. MQTT (non-blocking best-effort; DEP-01) ───────────────────────────
     await connect_mqtt(app)
@@ -305,7 +303,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     #
     # Initial safe defaults (set BEFORE scheduling so health.py never KeyErrors
     # if a request races the first task iteration):
-    app.state.profile_state_registry: dict[str, Any] = {}
+    app.state.profile_state_registry = {}  # str(profile_id) → state dict (no inline annotation — see above)
     app.state.default_profile_last_sync_at = None
     app.state.default_profile_last_sync_status = None
     # Default to True so health derives 'failed' until first task iteration
@@ -322,7 +320,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
                         "WHERE deleted_at IS NULL"
                     )
                     rows = await cur.fetchall()
-                for (pid, last_sync_at, last_sync_status, revoked) in rows:
+                for pid, last_sync_at, last_sync_status, revoked in rows:
                     pid_str = str(pid)
                     app.state.profile_state_registry[pid_str] = {
                         "last_sync_at": last_sync_at,

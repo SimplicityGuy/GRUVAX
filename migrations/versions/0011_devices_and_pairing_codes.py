@@ -117,8 +117,7 @@ _IDX_DEVICES_FP_ACTIVE = (
 # does not match the index predicate). Cost is negligible at household scale.
 # (RESEARCH.md Pitfall 5 / Open Question 2)
 _IDX_DEVICES_FP_PLAIN = (
-    "CREATE INDEX IF NOT EXISTS idx_devices_fingerprint"
-    " ON gruvax.devices (fingerprint)"
+    "CREATE INDEX IF NOT EXISTS idx_devices_fingerprint ON gruvax.devices (fingerprint)"
 )
 
 # Partial-unique index on active (non-revoked), non-orphaned profile assignments.
@@ -138,8 +137,7 @@ _IDX_DEVICES_PROFILE_ACTIVE = (
 # The bind endpoint filters: WHERE consumed_at IS NULL AND expires_at > NOW()
 # so this index assists the range scan on expires_at at query time.
 _IDX_PAIRING_CODES_EXPIRES = (
-    "CREATE INDEX IF NOT EXISTS idx_pairing_codes_expires"
-    " ON gruvax.pairing_codes (expires_at)"
+    "CREATE INDEX IF NOT EXISTS idx_pairing_codes_expires ON gruvax.pairing_codes (expires_at)"
 )
 
 

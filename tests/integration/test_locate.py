@@ -101,7 +101,9 @@ async def test_locate_covered(client) -> None:  # type: ignore[no-untyped-def]
     correctly (Blue Note BLP 4001 is a multi-record label). The test validates
     the contract shape regardless of whether §4.1 or §4.8 was used.
     """
-    response = await client.get("/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200, f"Expected 200, got {response.status_code}: {response.text}"
     body = response.json()
 
@@ -129,7 +131,9 @@ async def test_locate_covered(client) -> None:  # type: ignore[no-untyped-def]
 @pytest.mark.asyncio(loop_scope="session")
 async def test_locate_not_found(client) -> None:  # type: ignore[no-untyped-def]
     """Unknown release_id → HTTP 404 with type='release_not_in_collection' (D-12)."""
-    response = await client.get("/api/locate", params={"release_id": ABSENT_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/locate", params={"release_id": ABSENT_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 404, (
         f"Expected 404 for absent release, got {response.status_code}: {response.text}"
     )
@@ -150,7 +154,10 @@ async def test_locate_no_boundary(client) -> None:  # type: ignore[no-untyped-de
     - primary_cube == null
     - label_span == []
     """
-    response = await client.get("/api/locate", params={"release_id": NO_BOUNDARY_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/locate",
+        params={"release_id": NO_BOUNDARY_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID},
+    )
     assert response.status_code == 200, (
         f"Expected 200 for no-boundary case, got {response.status_code}: {response.text}"
     )
@@ -167,7 +174,9 @@ async def test_locate_no_boundary(client) -> None:  # type: ignore[no-untyped-de
 @pytest.mark.asyncio(loop_scope="session")
 async def test_locate_noninteger_id(client) -> None:  # type: ignore[no-untyped-def]
     """T-01-09: release_id='abc' returns HTTP 422 (typed int param rejects strings)."""
-    response = await client.get("/api/locate", params={"release_id": "abc", "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/locate", params={"release_id": "abc", "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 422, (
         f"Expected 422 for non-integer release_id, got {response.status_code}"
     )
@@ -176,7 +185,9 @@ async def test_locate_noninteger_id(client) -> None:  # type: ignore[no-untyped-
 @pytest.mark.asyncio(loop_scope="session")
 async def test_locate_response_shape(client) -> None:  # type: ignore[no-untyped-def]
     """LocateResult response has all required keys."""
-    response = await client.get("/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
     required_keys = {
@@ -203,7 +214,9 @@ async def test_sub_cube_interval_populated(client) -> None:  # type: ignore[no-u
     Blue Note (BLP series) has multiple records in the seed — §4.1 should produce
     a populated SubInterval when the snapshot is loaded.
     """
-    response = await client.get("/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200, f"Got {response.status_code}: {response.text}"
     body = response.json()
 
@@ -228,7 +241,9 @@ async def test_sub_cube_interval_bounds(client) -> None:  # type: ignore[no-unty
     UI-SPEC §TypeScript Type Extension: the JSON shape omits the 'cube' field;
     the frontend derives the cube from primary_cube / label_span context.
     """
-    response = await client.get("/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
 
@@ -267,7 +282,9 @@ async def test_multi_cube_label_span(client) -> None:  # type: ignore[no-untyped
     # with non-overlapping catalog ranges.
     # This test documents that the Blue Note boundary DOES cover multiple cubes total —
     # it's up to individual record catalog ranges which cubes they land in.
-    response = await client.get("/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
 
@@ -297,7 +314,9 @@ async def test_singleton_full_cube_band(client) -> None:  # type: ignore[no-unty
     # Attempt with a covered singleton. In our seed the "Unknown" label (release_id~70s)
     # has a boundary but the catalog is "none" which parse_key treats as a sentinel.
     # Use the COVERED_RELEASE_ID as a covered example and skip if not singleton.
-    response = await client.get("/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
 

@@ -165,8 +165,7 @@ def get_event_bus(request: Request) -> Any:
 
 # SQL used by resolve_profile_from_request (module-level constant, parameterised %s)
 _SELECT_DEVICE_FOR_RESOLUTION = (
-    "SELECT id, profile_id, revoked_at"
-    " FROM gruvax.devices WHERE fingerprint = %s"
+    "SELECT id, profile_id, revoked_at FROM gruvax.devices WHERE fingerprint = %s"
 )
 
 # Throttled last_seen_at update — at most once per 60 s per device (Open Question 3)
@@ -381,9 +380,7 @@ async def get_bus_for_profile(
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"type": "profile_mismatch"},
         )
-    registry: dict[str, EventBus] | None = getattr(
-        request.app.state, "event_bus_registry", None
-    )
+    registry: dict[str, EventBus] | None = getattr(request.app.state, "event_bus_registry", None)
     if registry is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,

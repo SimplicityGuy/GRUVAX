@@ -54,7 +54,9 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
 @pytest.mark.asyncio(loop_scope="session")
 async def test_catalog_path(client) -> None:  # type: ignore[no-untyped-def]
     """Catalog path: 'BLP 1000' hits Blue Note BLP 1000 record."""
-    response = await client.get("/api/search", params={"q": "BLP 1000", "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": "BLP 1000", "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
     assert "items" in body
@@ -73,7 +75,9 @@ async def test_catalog_path(client) -> None:  # type: ignore[no-untyped-def]
 @pytest.mark.asyncio(loop_scope="session")
 async def test_catalog_path_normalized(client) -> None:  # type: ignore[no-untyped-def]
     """Normalized catalog path: 'blp1000' (no space/separator) hits BLP 1000."""
-    response = await client.get("/api/search", params={"q": "blp1000", "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": "blp1000", "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
     items = body["items"]
@@ -93,7 +97,9 @@ async def test_fts_artist(client) -> None:  # type: ignore[no-untyped-def]
     (Artist 1 has multiple records since the generator wraps around the
     artist-id pool).
     """
-    response = await client.get("/api/search", params={"q": "Artist 1", "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": "Artist 1", "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
     items = body["items"]
@@ -113,7 +119,9 @@ async def test_fts_title(client) -> None:  # type: ignore[no-untyped-def]
     "<Label> Title <N>" placeholders.  We assert the Blue Note Title prefix
     appears in the FTS results for "Blue Note".
     """
-    response = await client.get("/api/search", params={"q": "Blue Note Title", "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": "Blue Note Title", "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
     items = body["items"]
@@ -132,7 +140,9 @@ async def test_no_results(client) -> None:  # type: ignore[no-untyped-def]
     (SRCH-07 — value may be null when no trigram candidate exceeds threshold
     or when pg_trgm is unavailable).
     """
-    response = await client.get("/api/search", params={"q": "zzznomatch", "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": "zzznomatch", "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
     assert body["items"] == [], f"Expected empty items for 'zzznomatch', got: {body}"
@@ -148,7 +158,9 @@ async def test_sqli_payload(client) -> None:  # type: ignore[no-untyped-def]
     return no results (the payload matches nothing in the collection).
     """
     payload = "') OR 1=1 --"
-    response = await client.get("/api/search", params={"q": payload, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": payload, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     # Must NOT return 500 (SQL error) or any other error status
     assert response.status_code == 200, (
         f"SQL injection payload caused non-200 response: {response.status_code}, "
@@ -163,21 +175,27 @@ async def test_sqli_payload(client) -> None:  # type: ignore[no-untyped-def]
 async def test_max_length_enforced(client) -> None:  # type: ignore[no-untyped-def]
     """T-01-10: q with 201 characters returns HTTP 422 (max_length=200)."""
     long_q = "a" * 201
-    response = await client.get("/api/search", params={"q": long_q, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": long_q, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 422, f"Expected 422 for oversized q, got {response.status_code}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_limit_enforced(client) -> None:  # type: ignore[no-untyped-def]
     """T-01-08: limit=999 returns HTTP 422 (le=50)."""
-    response = await client.get("/api/search", params={"q": "blue note", "limit": 999, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": "blue note", "limit": 999, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 422, f"Expected 422 for limit=999, got {response.status_code}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_limit_zero_enforced(client) -> None:  # type: ignore[no-untyped-def]
     """T-01-08: limit=0 returns HTTP 422 (ge=1)."""
-    response = await client.get("/api/search", params={"q": "blue note", "limit": 0, "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": "blue note", "limit": 0, "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 422, f"Expected 422 for limit=0, got {response.status_code}"
 
 
@@ -191,7 +209,9 @@ async def test_empty_q_enforced(client) -> None:  # type: ignore[no-untyped-def]
 @pytest.mark.asyncio(loop_scope="session")
 async def test_response_shape(client) -> None:  # type: ignore[no-untyped-def]
     """Search response items have the expected field set."""
-    response = await client.get("/api/search", params={"q": "Blue Note", "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": "Blue Note", "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
     if body["items"]:
@@ -226,7 +246,9 @@ async def test_did_you_mean(client) -> None:  # type: ignore[no-untyped-def]
     """
     # Use a near-miss query that returns no strong FTS hit but is close to
     # a real label/artist in the collection.
-    response = await client.get("/api/search", params={"q": "zzznomatch", "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": "zzznomatch", "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
     assert "did_you_mean" in body, f"Response missing 'did_you_mean' key: {body}"
@@ -253,7 +275,9 @@ async def test_catalog_boost(client) -> None:  # type: ignore[no-untyped-def]
     The catalog query must have the matching catalog record as items[0].
     """
     # Catalog-like query — is_catalog_query("BLP 1000") → True
-    response = await client.get("/api/search", params={"q": "BLP 1000", "profile_id": DEFAULT_PROFILE_UUID})
+    response = await client.get(
+        "/api/search", params={"q": "BLP 1000", "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response.status_code == 200
     body = response.json()
     assert "did_you_mean" in body, f"Response missing 'did_you_mean' key: {body}"
@@ -267,7 +291,9 @@ async def test_catalog_boost(client) -> None:  # type: ignore[no-untyped-def]
 
     # Plain artist text query — must also return did_you_mean key.
     # Plan 01-06: seed uses "Artist N" placeholders, not "Miles Davis".
-    response2 = await client.get("/api/search", params={"q": "Artist 1", "profile_id": DEFAULT_PROFILE_UUID})
+    response2 = await client.get(
+        "/api/search", params={"q": "Artist 1", "profile_id": DEFAULT_PROFILE_UUID}
+    )
     assert response2.status_code == 200
     body2 = response2.json()
     assert "did_you_mean" in body2, f"Response missing 'did_you_mean' key for artist query: {body2}"

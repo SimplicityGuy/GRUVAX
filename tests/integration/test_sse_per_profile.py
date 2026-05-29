@@ -19,6 +19,7 @@ delivered over a genuine TCP socket, mirroring the test_sse.py pattern exactly.
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import socket
 import threading
 import time
@@ -208,7 +209,7 @@ async def test_no_cross_profile_leakage(live_server) -> None:  # type: ignore[no
                     if "boundary_changed" in line or "collection_changed" in line:
                         received_by_a.append(line)
                         return
-        except (httpx.TimeoutException, httpx.RemoteProtocolError):
+        except httpx.TimeoutException, httpx.RemoteProtocolError:
             a_connected.set()
 
     async def subscribe_b() -> None:
@@ -233,7 +234,7 @@ async def test_no_cross_profile_leakage(live_server) -> None:  # type: ignore[no
                     if "boundary_changed" in line or "collection_changed" in line:
                         received_by_b.append(line)
                         return
-        except (httpx.TimeoutException, httpx.RemoteProtocolError):
+        except httpx.TimeoutException, httpx.RemoteProtocolError:
             b_connected.set()
 
     # Start both subscribers
@@ -255,10 +256,8 @@ async def test_no_cross_profile_leakage(live_server) -> None:  # type: ignore[no
 
     for task in (task_a, task_b):
         task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await task
-        except asyncio.CancelledError:
-            pass
 
     # The core leakage assertion: B must not receive profile A's events.
     assert not received_by_b, (

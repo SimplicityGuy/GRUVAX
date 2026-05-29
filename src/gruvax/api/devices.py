@@ -42,8 +42,7 @@ _INSERT_PAIRING_CODE = (
 # SELECT device row by fingerprint — intentionally selects the raw fingerprint
 # column to match the DB row, but fingerprint is NOT returned to clients.
 _SELECT_DEVICE_BY_FINGERPRINT = (
-    "SELECT id, profile_id, revoked_at"
-    " FROM gruvax.devices WHERE fingerprint = %s"
+    "SELECT id, profile_id, revoked_at FROM gruvax.devices WHERE fingerprint = %s"
 )
 
 
@@ -93,14 +92,19 @@ async def generate_pairing_code(
         if row is not None:
             code = row[0]
             expires_at = row[1]
-            expires_at_iso = expires_at.isoformat() if hasattr(expires_at, "isoformat") else str(expires_at)
+            expires_at_iso = (
+                expires_at.isoformat() if hasattr(expires_at, "isoformat") else str(expires_at)
+            )
             break
 
     if code is None:
         logger.error("generate_pairing_code: failed to generate unique code after 3 attempts")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"type": "code_generation_failed", "message": "Failed to generate unique pairing code"},
+            detail={
+                "type": "code_generation_failed",
+                "message": "Failed to generate unique pairing code",
+            },
         )
 
     # Build the JSON response and attach the fingerprint cookie (with the SAME

@@ -131,8 +131,7 @@ async def get_settings(
     _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT key, value FROM gruvax.settings"
-            " WHERE profile_id = %s::uuid AND key = ANY(%s)",
+            "SELECT key, value FROM gruvax.settings WHERE profile_id = %s::uuid AND key = ANY(%s)",
             (_DEFAULT_PROFILE_UUID, list(_ALLOWED_SETTINGS_KEYS)),
         )
         rows = await cur.fetchall()
@@ -151,7 +150,7 @@ async def get_settings(
         raw = settings_map.get(key, default)
         try:
             return int(raw)
-        except (TypeError, ValueError):
+        except TypeError, ValueError:
             return default
 
     def _get_bool(key: str, default: bool) -> bool:
@@ -248,7 +247,7 @@ async def update_settings(
             value = body[body_key]
             try:
                 int_value = int(value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={
@@ -283,7 +282,7 @@ async def update_settings(
                 # Store as bare integer JSON
                 try:
                     int_val = int(value)
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     logger.warning("Skipping invalid integer for %s: %r", db_key, value)
                     continue
                 json_value = str(int_val)
@@ -366,8 +365,7 @@ async def change_pin(
     # Fetch current hash
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT value FROM gruvax.settings"
-            " WHERE profile_id = %s::uuid AND key = %s",
+            "SELECT value FROM gruvax.settings WHERE profile_id = %s::uuid AND key = %s",
             (_DEFAULT_PROFILE_UUID, "auth.pin_hash"),
         )
         row = await cur.fetchone()

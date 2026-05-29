@@ -19,9 +19,9 @@ GREEN trigger confirming the refactor is complete.
 
 from __future__ import annotations
 
+from datetime import UTC, datetime
 import types
 import uuid
-from datetime import UTC, datetime
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -87,9 +87,7 @@ def test_profile_state_entry_has_required_keys() -> None:
     for pid in (pid_a, pid_b):
         entry = state.profile_state_registry[pid]
         missing = required_keys - entry.keys()
-        assert not missing, (
-            f"profile_state_registry[{pid!r}] missing required keys: {missing}"
-        )
+        assert not missing, f"profile_state_registry[{pid!r}] missing required keys: {missing}"
 
 
 def test_profile_state_last_sync_at_type() -> None:

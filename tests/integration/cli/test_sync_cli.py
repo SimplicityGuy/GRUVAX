@@ -326,7 +326,12 @@ async def test_bad_pin_exits_nonzero(  # type: ignore[no-untyped-def]
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_sync_503_exits_nonzero(  # type: ignore[no-untyped-def]
-    db_pool, reset_profile_and_pin, fake_disco_server, gruvax_api_server, gruvax_api_port, monkeypatch: pytest.MonkeyPatch
+    db_pool,
+    reset_profile_and_pin,
+    fake_disco_server,
+    gruvax_api_server,
+    gruvax_api_port,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """Test 3: upstream returns 500 → background sync fails → CLI exit non-zero.
 
@@ -361,9 +366,12 @@ async def test_sync_503_exits_nonzero(  # type: ignore[no-untyped-def]
         f"stdout={result.stdout!r} stderr={result.stderr!r}"
     )
     combined = result.stdout + result.stderr
-    assert ("failed" in combined) or ("server_error" in combined) or ("503" in combined) or ("upstream_unavailable" in combined), (
-        f"Expected failure message in output, got: {combined!r}"
-    )
+    assert (
+        ("failed" in combined)
+        or ("server_error" in combined)
+        or ("503" in combined)
+        or ("upstream_unavailable" in combined)
+    ), f"Expected failure message in output, got: {combined!r}"
 
 
 @pytest.mark.asyncio(loop_scope="session")

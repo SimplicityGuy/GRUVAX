@@ -20,25 +20,21 @@ Analog: tests/integration/test_admin_auth.py (ASGI client fixture, autouse rate-
 from __future__ import annotations
 
 import asyncio
+import contextlib
 import os
 import socket
 import threading
 import time
 import uuid as _uuid_module
-from typing import TYPE_CHECKING
 
+from asgi_lifespan import LifespanManager
 import httpx
+from httpx import ASGITransport, AsyncClient
 import pytest
 import pytest_asyncio
 import uvicorn
-from asgi_lifespan import LifespanManager
-from httpx import ASGITransport, AsyncClient
 
 from gruvax.app import create_app
-
-
-if TYPE_CHECKING:
-    pass
 
 
 # ── Test constants ────────────────────────────────────────────────────────────
@@ -210,9 +206,7 @@ async def test_generate_code(client) -> None:  # type: ignore[no-untyped-def]
     code = data.get("code", "")
     assert len(code) == 4, f"code must be exactly 4 chars, got {len(code)!r}: {code!r}"
     assert code.isdigit(), f"code must be all digits ('0000'..'9999'), got {code!r}"
-    assert data.get("expires_at") is not None, (
-        "expires_at must be non-null (5-min TTL from now)"
-    )
+    assert data.get("expires_at") is not None, "expires_at must be non-null (5-min TTL from now)"
 
     # Fingerprint cookie must be set
     assert FINGERPRINT_COOKIE in response.cookies, (
@@ -222,9 +216,7 @@ async def test_generate_code(client) -> None:  # type: ignore[no-untyped-def]
 
     # Must be HttpOnly (check raw Set-Cookie header)
     set_cookie_headers = response.headers.get_list("set-cookie")
-    fp_cookie_header = next(
-        (h for h in set_cookie_headers if FINGERPRINT_COOKIE in h), None
-    )
+    fp_cookie_header = next((h for h in set_cookie_headers if FINGERPRINT_COOKIE in h), None)
     assert fp_cookie_header is not None, f"{FINGERPRINT_COOKIE} Set-Cookie header missing"
     assert "httponly" in fp_cookie_header.lower(), (
         f"{FINGERPRINT_COOKIE} cookie must be HttpOnly (JS must never read it)"
@@ -269,8 +261,7 @@ async def test_me_transitions_to_paired(client) -> None:  # type: ignore[no-unty
     )
     if bind_res.status_code != 200:
         pytest.skip(
-            f"bind endpoint returned {bind_res.status_code} — "
-            f"skipping state-transition assertion"
+            f"bind endpoint returned {bind_res.status_code} — skipping state-transition assertion"
         )
 
     # Step 4: re-check state
@@ -279,9 +270,7 @@ async def test_me_transitions_to_paired(client) -> None:  # type: ignore[no-unty
         f"GET /api/devices/me after bind expected 200, got {me_after.status_code}"
     )
     after_state = me_after.json().get("state")
-    assert after_state == "paired", (
-        f"After bind, state must be 'paired', got {after_state!r}"
-    )
+    assert after_state == "paired", f"After bind, state must be 'paired', got {after_state!r}"
     assert me_after.json().get("profile_id") is not None, (
         "After bind, profile_id must be non-null in GET /api/devices/me response"
     )
@@ -362,9 +351,10 @@ async def test_bind_rate_limit(client) -> None:  # type: ignore[no-untyped-def]
         f"{response.text}. RED until Plan 03-01 ships bind rate limiting."
     )
     detail = response.json()
-    assert detail.get("type") == "rate_limited" or detail.get("detail", {}).get("type") == "rate_limited", (
-        f"429 response must include {{type: 'rate_limited'}}, got: {detail}"
-    )
+    assert (
+        detail.get("type") == "rate_limited"
+        or detail.get("detail", {}).get("type") == "rate_limited"
+    ), f"429 response must include {{type: 'rate_limited'}}, got: {detail}"
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -423,8 +413,7 @@ async def test_revoke_guard(client) -> None:  # type: ignore[no-untyped-def]
     )
     if revoke_res.status_code not in (200, 204):
         pytest.skip(
-            f"revoke endpoint returned {revoke_res.status_code} — "
-            f"skipping revoke guard assertion"
+            f"revoke endpoint returned {revoke_res.status_code} — skipping revoke guard assertion"
         )
 
     # A request with the revoked fingerprint cookie must be rejected
@@ -441,8 +430,7 @@ async def test_revoke_guard(client) -> None:  # type: ignore[no-untyped-def]
     if me_res.status_code == 200:
         revoked_state = me_res.json().get("state")
         assert revoked_state == "revoked", (
-            f"After revoke, GET /api/devices/me must return state=revoked, "
-            f"got {revoked_state!r}"
+            f"After revoke, GET /api/devices/me must return state=revoked, got {revoked_state!r}"
         )
 
 
@@ -664,7 +652,7 @@ async def test_sse_device_revoked(live_server) -> None:  # type: ignore[no-untyp
         if gen_res.status_code != 200:
             pytest.skip("pairing-codes endpoint not yet implemented on live server")
         code = gen_res.json()["code"]
-        fp_cookies = dict(gen_res.cookies)
+        dict(gen_res.cookies)
 
         # Bind the device
         bind_res = await ac.post(
@@ -705,7 +693,7 @@ async def test_sse_device_revoked(live_server) -> None:  # type: ignore[no-untyp
                         if "device_revoked" in line:
                             received_events.append(line)
                             return
-            except (httpx.TimeoutException, httpx.RemoteProtocolError):
+            except httpx.TimeoutException, httpx.RemoteProtocolError:
                 sse_ready.set()
 
         sse_task = asyncio.create_task(subscribe_sse())
@@ -731,10 +719,8 @@ async def test_sse_device_revoked(live_server) -> None:  # type: ignore[no-untyp
         # Wait briefly for the SSE event
         await asyncio.sleep(0.5)
         sse_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await sse_task
-        except asyncio.CancelledError:
-            pass
 
         assert any("device_revoked" in e for e in received_events), (
             f"SSE must deliver 'device_revoked' event after device revoke (D3-06). "
@@ -823,7 +809,7 @@ async def test_sse_device_reassigned(live_server) -> None:  # type: ignore[no-un
                         if "device_reassigned" in line:
                             received_events.append(line)
                             return
-            except (httpx.TimeoutException, httpx.RemoteProtocolError):
+            except httpx.TimeoutException, httpx.RemoteProtocolError:
                 sse_ready.set()
 
         sse_task = asyncio.create_task(subscribe_profile_a_sse())
@@ -850,10 +836,8 @@ async def test_sse_device_reassigned(live_server) -> None:  # type: ignore[no-un
         # Wait for SSE event on OLD channel (profile A)
         await asyncio.sleep(0.5)
         sse_task.cancel()
-        try:
+        with contextlib.suppress(asyncio.CancelledError):
             await sse_task
-        except asyncio.CancelledError:
-            pass
 
         assert any("device_reassigned" in e for e in received_events), (
             f"SSE on profile A (OLD channel) must deliver 'device_reassigned' event "
@@ -879,7 +863,7 @@ async def test_expired_code(client) -> None:  # type: ignore[no-untyped-def]
     gen_res = await client.post("/api/devices/pairing-codes")
     if gen_res.status_code != 200:
         pytest.skip("pairing-codes endpoint not yet implemented")
-    code = gen_res.json()["code"]
+    gen_res.json()["code"]
 
     # Expire the code directly in the DB (test setup — not a normal user action)
     # We use db_pool via the app's state. Since we only have `client` here (module fixture),

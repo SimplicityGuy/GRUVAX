@@ -117,8 +117,7 @@ async def export_settings(
     _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT key, value FROM gruvax.settings"
-            " WHERE profile_id = %s::uuid AND key = ANY(%s)",
+            "SELECT key, value FROM gruvax.settings WHERE profile_id = %s::uuid AND key = ANY(%s)",
             (_DEFAULT_PROFILE_UUID, list(_ALLOWED_SETTINGS_KEYS)),
         )
         rows = await cur.fetchall()

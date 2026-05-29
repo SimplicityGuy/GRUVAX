@@ -143,21 +143,15 @@ _REINSTATE_DEVICE = (
 _DELETE_DEVICE = "DELETE FROM gruvax.devices WHERE id = %s::uuid RETURNING id"
 
 _RENAME_DEVICE = (
-    "UPDATE gruvax.devices SET display_name = %s"
-    " WHERE id = %s::uuid"
-    " RETURNING id, display_name"
+    "UPDATE gruvax.devices SET display_name = %s WHERE id = %s::uuid RETURNING id, display_name"
 )
 
 _CHANGE_PROFILE = (
-    "UPDATE gruvax.devices SET profile_id = %s::uuid"
-    " WHERE id = %s::uuid"
-    " RETURNING id, profile_id"
+    "UPDATE gruvax.devices SET profile_id = %s::uuid WHERE id = %s::uuid RETURNING id, profile_id"
 )
 
 _UNBIND_DEVICE = (
-    "UPDATE gruvax.devices SET profile_id = NULL"
-    " WHERE id = %s::uuid"
-    " RETURNING id, profile_id"
+    "UPDATE gruvax.devices SET profile_id = NULL WHERE id = %s::uuid RETURNING id, profile_id"
 )
 
 
@@ -188,7 +182,10 @@ def _check_bind_rate_limit(request: Request) -> None:
     if not allowed:
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
-            detail={"type": "rate_limited", "message": "Too many attempts. Wait a moment and try again."},
+            detail={
+                "type": "rate_limited",
+                "message": "Too many attempts. Wait a moment and try again.",
+            },
         )
 
 
@@ -303,11 +300,15 @@ async def bind_device(
             fingerprint: str = row[0]
             # fingerprint is NOT logged (Pitfall 7) and NOT returned to client.
 
-            await cur.execute(_UPDATE_DEVICE_BY_FINGERPRINT, (profile_id_str, display_name, fingerprint))
+            await cur.execute(
+                _UPDATE_DEVICE_BY_FINGERPRINT, (profile_id_str, display_name, fingerprint)
+            )
             device_row = await cur.fetchone()
 
             if device_row is None and profile_id_str:
-                await cur.execute(_UPDATE_DEVICE_BY_PROFILE, (fingerprint, display_name, profile_id_str))
+                await cur.execute(
+                    _UPDATE_DEVICE_BY_PROFILE, (fingerprint, display_name, profile_id_str)
+                )
                 device_row = await cur.fetchone()
 
             if device_row is None:

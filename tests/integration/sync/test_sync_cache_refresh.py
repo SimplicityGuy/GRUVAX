@@ -151,6 +151,7 @@ async def test_snapshot_reloaded_after_sync(  # type: ignore[no-untyped-def]
     monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app))
 
     from gruvax.events.bus import EventBus
+
     app_state = types.SimpleNamespace(
         db_pool=db_pool,
         boundary_cache_registry={DEFAULT_UUID: boundary},
@@ -197,6 +198,7 @@ async def test_segment_cache_derive_called_with_fresh_snapshot(  # type: ignore[
     monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app))
 
     from gruvax.events.bus import EventBus
+
     app_state = types.SimpleNamespace(
         db_pool=db_pool,
         boundary_cache_registry={DEFAULT_UUID: boundary},

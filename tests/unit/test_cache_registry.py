@@ -28,8 +28,6 @@ from __future__ import annotations
 import types
 import uuid
 
-import pytest
-
 from gruvax.estimator.boundary_cache import BoundaryCache
 from gruvax.estimator.collection_snapshot import CollectionSnapshot
 from gruvax.estimator.segment_cache import SegmentCache

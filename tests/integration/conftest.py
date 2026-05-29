@@ -97,7 +97,7 @@ def _ensure_gruvax_secret_key() -> None:
             key_val = settings.GRUVAX_SECRET_KEY.get_secret_value()  # type: ignore[attr-defined]
             if key_val:
                 os.environ["GRUVAX_SECRET_KEY"] = key_val
-        except (AttributeError, Exception):
+        except AttributeError, Exception:
             # Fall back to generating a fresh key for the session.
             os.environ["GRUVAX_SECRET_KEY"] = Fernet.generate_key().decode()
     yield  # type: ignore[misc]
@@ -173,8 +173,13 @@ def _seed_cube_boundaries(conn: psycopg.Connection) -> None:
                 " ON CONFLICT (id) DO UPDATE SET display_name = EXCLUDED.display_name,"
                 "   rows = EXCLUDED.rows, cols = EXCLUDED.cols, ordering = EXCLUDED.ordering,"
                 "   updated_at = now()",
-                (unit_id, unit.get("display_name", f"Unit {unit_id}"),
-                 unit.get("rows", 4), unit.get("cols", 4), unit.get("ordering", unit_id)),
+                (
+                    unit_id,
+                    unit.get("display_name", f"Unit {unit_id}"),
+                    unit.get("rows", 4),
+                    unit.get("cols", 4),
+                    unit.get("ordering", unit_id),
+                ),
             )
             for cube in unit.get("cubes", []):
                 cur.execute(

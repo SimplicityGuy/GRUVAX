@@ -251,6 +251,7 @@ async def test_happy_path_sync(app_client, db_pool, monkeypatch: pytest.MonkeyPa
 
     # Poll the DB until the background sync completes (max 5s).
     import asyncio as _asyncio
+
     deadline = _asyncio.get_event_loop().time() + 5.0
     row = None
     while _asyncio.get_event_loop().time() < deadline:
@@ -434,8 +435,7 @@ async def test_server_error_returns_503_typed(  # type: ignore[no-untyped-def]
     while _asyncio.get_event_loop().time() < deadline:
         async with db_pool.connection() as conn, conn.cursor() as cur:
             await cur.execute(
-                "SELECT last_sync_status, last_sync_error "
-                "FROM gruvax.profiles WHERE id = %s::uuid",
+                "SELECT last_sync_status, last_sync_error FROM gruvax.profiles WHERE id = %s::uuid",
                 (DEFAULT_UUID,),
             )
             row = await cur.fetchone()
@@ -478,6 +478,7 @@ async def test_caches_refreshed_inline(  # type: ignore[no-untyped-def]
     mock_segment = AsyncMock()
     mock_segment.derive = lambda *a, **kw: None
     from gruvax.events.bus import EventBus
+
     mock_bus = EventBus()  # real bus so publish works
     app.state.boundary_cache_registry[DEFAULT_UUID] = mock_cache
     app.state.snapshot_registry[DEFAULT_UUID] = mock_snapshot

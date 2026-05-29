@@ -94,9 +94,7 @@ async def admin_session(client, db_pool):  # type: ignore[no-untyped-def]
     """
     # PIN hash is already seeded by the client fixture above; just log in.
     res = await client.post("/api/admin/login", json={"pin": "0000"})
-    assert res.status_code == 200, (
-        f"admin_session: login failed {res.status_code}: {res.text}"
-    )
+    assert res.status_code == 200, f"admin_session: login failed {res.status_code}: {res.text}"
     csrf = res.cookies.get("gruvax_csrf") or res.json().get("csrf_token")
     return {"cookies": res.cookies, "csrf_token": csrf}
 
@@ -121,9 +119,7 @@ async def test_single_profile_auto_binds(
     """
     # Verify there is exactly one active profile in the DB for this test.
     async with db_pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            "SELECT COUNT(*) FROM gruvax.profiles WHERE deleted_at IS NULL"
-        )
+        await cur.execute("SELECT COUNT(*) FROM gruvax.profiles WHERE deleted_at IS NULL")
         count_row = await cur.fetchone()
     active_count = count_row[0] if count_row else 0
     if active_count != 1:
@@ -143,15 +139,13 @@ async def test_single_profile_auto_binds(
         f"profile_count must be 1, got {body.get('profile_count')!r}"
     )
     assert body.get("bound_profile_id") is not None, (
-        f"single-profile session must auto-bind: bound_profile_id must be non-null, "
-        f"got None. D2-08 auto-bind is missing."
+        "single-profile session must auto-bind: bound_profile_id must be non-null, "
+        "got None. D2-08 auto-bind is missing."
     )
 
     # Response must set the browse-binding cookie
     set_cookie_headers = res.headers.get_list("set-cookie")
-    browse_cookie_header = next(
-        (h for h in set_cookie_headers if BROWSE_BINDING_COOKIE in h), None
-    )
+    browse_cookie_header = next((h for h in set_cookie_headers if BROWSE_BINDING_COOKIE in h), None)
     assert browse_cookie_header is not None, (
         f"GET /api/session must set {BROWSE_BINDING_COOKIE!r} cookie on auto-bind. "
         f"D2-08 single-profile auto-bind is missing."
@@ -212,9 +206,7 @@ async def test_bind_then_unbind(
 
     # Verify browse-binding cookie is set
     set_cookie_headers = bind_res.headers.get_list("set-cookie")
-    browse_cookie_header = next(
-        (h for h in set_cookie_headers if BROWSE_BINDING_COOKIE in h), None
-    )
+    browse_cookie_header = next((h for h in set_cookie_headers if BROWSE_BINDING_COOKIE in h), None)
     assert browse_cookie_header is not None, (
         f"POST /api/session/bind must set {BROWSE_BINDING_COOKIE!r} cookie"
     )
@@ -235,7 +227,7 @@ async def test_bind_then_unbind(
     # Verify browse-binding cookie is cleared (Set-Cookie with empty value or expired)
     set_cookie_after = unbind_res.headers.get_list("set-cookie")
     cleared = any(
-        BROWSE_BINDING_COOKIE in h and ("max-age=0" in h.lower() or 'expires=' in h.lower())
+        BROWSE_BINDING_COOKIE in h and ("max-age=0" in h.lower() or "expires=" in h.lower())
         for h in set_cookie_after
     )
     cookie_gone = BROWSE_BINDING_COOKIE not in unbind_res.cookies
@@ -276,10 +268,7 @@ async def test_binding_independent_of_admin(
         pytest.skip("Session bind endpoint not implemented — skipping independence test")
 
     # The bind operation must NOT modify the admin session cookie.
-    bind_set_cookies = {
-        h.split("=")[0].strip(): h
-        for h in bind_res.headers.get_list("set-cookie")
-    }
+    bind_set_cookies = {h.split("=")[0].strip(): h for h in bind_res.headers.get_list("set-cookie")}
     if SESSION_COOKIE in bind_set_cookies:
         # If gruvax_session appears in the response, it must not be cleared.
         assert "max-age=0" not in bind_set_cookies[SESSION_COOKIE].lower(), (
@@ -295,8 +284,7 @@ async def test_binding_independent_of_admin(
     )
     if logout_res.status_code == 200:
         logout_set_cookies = {
-            h.split("=")[0].strip(): h
-            for h in logout_res.headers.get_list("set-cookie")
+            h.split("=")[0].strip(): h for h in logout_res.headers.get_list("set-cookie")
         }
         if BROWSE_BINDING_COOKIE in logout_set_cookies:
             # Browse cookie must not be cleared by admin logout.

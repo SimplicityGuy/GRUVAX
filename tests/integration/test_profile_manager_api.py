@@ -115,9 +115,10 @@ async def test_create_profile(
         f"Newly created profile {new_profile_id!r} not in GET /api/admin/profiles listing"
     )
     # Status must be PENDING (no PAT connected yet)
-    assert found.get("status") in ("pending", "PENDING", None) or found.get("app_token_revoked") is True, (
-        f"New profile without PAT should have status PENDING or app_token_revoked=True, got: {found}"
-    )
+    assert (
+        found.get("status") in ("pending", "PENDING", None)
+        or found.get("app_token_revoked") is True
+    ), f"New profile without PAT should have status PENDING or app_token_revoked=True, got: {found}"
 
     # Cleanup: soft-delete the test profile
     await client.delete(
@@ -394,9 +395,7 @@ async def test_soft_delete_evicts(
     if session_res.status_code == 200:
         session_data = session_res.json()
         session_profiles = session_data.get("profiles", [])
-        in_session = any(
-            str(p.get("id", "")) == str(profile_id) for p in session_profiles
-        )
+        in_session = any(str(p.get("id", "")) == str(profile_id) for p in session_profiles)
         assert not in_session, (
             f"Soft-deleted profile {profile_id!r} should not appear in GET /api/session profiles[]"
         )
@@ -441,7 +440,8 @@ async def test_pat_rejected(
         error_body = connect_res.json()
         # Accept either top-level or nested type field
         error_type = error_body.get("type") or (
-            error_body.get("detail", {}).get("type") if isinstance(error_body.get("detail"), dict)
+            error_body.get("detail", {}).get("type")
+            if isinstance(error_body.get("detail"), dict)
             else None
         )
         assert error_type == "pat_rejected", (

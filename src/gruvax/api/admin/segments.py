@@ -398,7 +398,9 @@ DELETE FROM gruvax.segment_overrides
 WHERE profile_id = %s::uuid
   AND unit_id = %s AND row = %s AND col = %s AND lower(label) = lower(%s)
 """
-                result = await conn.execute(sql_del, (_DEFAULT_PROFILE_UUID, unit_id, row, col, ov.label))
+                result = await conn.execute(
+                    sql_del, (_DEFAULT_PROFILE_UUID, unit_id, row, col, ov.label)
+                )
                 if result.rowcount and result.rowcount > 0:
                     cleared += 1
             else:
@@ -409,7 +411,9 @@ VALUES (%s::uuid, %s, %s, %s, %s, %s, now())
 ON CONFLICT (profile_id, unit_id, row, col, label)
 DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()
 """
-                await conn.execute(sql_upsert, (_DEFAULT_PROFILE_UUID, unit_id, row, col, ov.label, ov.fraction))
+                await conn.execute(
+                    sql_upsert, (_DEFAULT_PROFILE_UUID, unit_id, row, col, ov.label, ov.fraction)
+                )
                 applied += 1
 
         response_body = {

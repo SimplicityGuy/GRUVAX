@@ -173,8 +173,6 @@ async def _run_sync_background(profile_id: str, app_state: Any) -> None:
     try:
         await sync_profile(profile_id, app_state)
     except Exception as exc:
-        logger.exception(
-            "background sync failed for profile=%s: %s", profile_id, exc
-        )
+        logger.exception("background sync failed for profile=%s: %s", profile_id, exc)
         # last_sync_status is already 'failed' via _record_failure inside
         # sync_profile's except chain — no double-write needed here.

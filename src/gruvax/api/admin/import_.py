@@ -537,7 +537,14 @@ async def import_boundaries(
                         " VALUES (%s::uuid, %s, %s, %s, %s, %s, now())"
                         " ON CONFLICT (profile_id, unit_id, row, col, label)"
                         " DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()",
-                        (_IMPORT_DEFAULT_PROFILE_UUID, entry.unit_id, entry.row, entry.col, label, fraction),
+                        (
+                            _IMPORT_DEFAULT_PROFILE_UUID,
+                            entry.unit_id,
+                            entry.row,
+                            entry.col,
+                            label,
+                            fraction,
+                        ),
                     )
 
         # Idempotency: store response + prune old keys inside the same transaction
@@ -687,7 +694,7 @@ async def import_settings(
         elif dotted_key in _BRIGHTNESS_KEYS:
             try:
                 int_value = int(value)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={
@@ -722,7 +729,7 @@ async def import_settings(
             elif dotted_key in _INT_KEYS:
                 try:
                     int_val = int(value)
-                except (TypeError, ValueError):
+                except TypeError, ValueError:
                     logger.warning("Skipping invalid integer for %s", dotted_key)
                     continue
                 json_value = str(int_val)

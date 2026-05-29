@@ -179,7 +179,9 @@ async def test_search_returns_canonical_catalog_row(db_pool) -> None:  # type: i
     in the Blue Note label. The catalog-boost path is the dominant scorer for
     is_catalog_query("BLP 1000") → True.
     """
-    rows, took_ms, _did_you_mean = await search_collection(db_pool, "BLP 1000", limit=10, profile_id=DEFAULT_PROFILE_UUID)
+    rows, took_ms, _did_you_mean = await search_collection(
+        db_pool, "BLP 1000", limit=10, profile_id=DEFAULT_PROFILE_UUID
+    )
     assert rows, f"Expected a hit for 'BLP 1000', got empty (took_ms={took_ms})"
     # Response-shape compatibility: primary_artist + collection_item_id + format
     # keys must be present (Plan 01-06 SQL alias compatibility decision).

@@ -131,7 +131,9 @@ async def test_did_you_mean_graceful_degrade() -> None:
     """
     exc = psycopg.errors.UndefinedFunction()
     fake_pool = _make_fake_pool_raising(exc)
-    result = await did_you_mean_query(fake_pool, "Miles Daviss", profile_id="00000000-0000-0000-0000-000000000001")  # type: ignore[arg-type]
+    result = await did_you_mean_query(
+        fake_pool, "Miles Daviss", profile_id="00000000-0000-0000-0000-000000000001"
+    )  # type: ignore[arg-type]
     assert result is None, f"Expected None when UndefinedFunction raised, got {result!r}"
 
 
@@ -146,7 +148,9 @@ async def test_did_you_mean_returns_top_match() -> None:
     term = "Blue Note"
     sim = DID_YOU_MEAN_THRESHOLD + 0.25  # clearly above threshold
     fake_pool = _make_fake_pool_returning([(term, sim)])
-    result = await did_you_mean_query(fake_pool, "Bleu Note", profile_id="00000000-0000-0000-0000-000000000001")  # type: ignore[arg-type]
+    result = await did_you_mean_query(
+        fake_pool, "Bleu Note", profile_id="00000000-0000-0000-0000-000000000001"
+    )  # type: ignore[arg-type]
     assert result == term, f"Expected {term!r}, got {result!r}"
 
 
@@ -154,5 +158,7 @@ async def test_did_you_mean_returns_top_match() -> None:
 async def test_did_you_mean_returns_none_when_no_rows() -> None:
     """When no terms exceed the threshold, did_you_mean_query returns None."""
     fake_pool = _make_fake_pool_returning([])
-    result = await did_you_mean_query(fake_pool, "zzznomatch", profile_id="00000000-0000-0000-0000-000000000001")  # type: ignore[arg-type]
+    result = await did_you_mean_query(
+        fake_pool, "zzznomatch", profile_id="00000000-0000-0000-0000-000000000001"
+    )  # type: ignore[arg-type]
     assert result is None, f"Expected None when no rows returned, got {result!r}"

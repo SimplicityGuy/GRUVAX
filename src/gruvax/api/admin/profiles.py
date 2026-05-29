@@ -313,7 +313,12 @@ async def create_profile(
                 "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at) "
                 "VALUES (%s::uuid, %s, %s::jsonb, %s, now()) "
                 "ON CONFLICT (profile_id, key) DO NOTHING",
-                (new_profile_id, key, value, f"Default value — seeded for profile {new_profile_id}"),
+                (
+                    new_profile_id,
+                    key,
+                    value,
+                    f"Default value — seeded for profile {new_profile_id}",
+                ),
             )
 
         await conn.commit()
@@ -346,6 +351,8 @@ async def create_profile(
         _state_reg[new_profile_id] = {
             "last_sync_at": None,
             "last_sync_status": None,
+            # nosec B105 — revocation flag (bool), not a credential; bandit matches the
+            # "token" substring in the key. A new profile has no PAT until one is connected.
             "app_token_revoked": True,
         }
 
@@ -484,9 +491,7 @@ async def connect_pat(
     )
 
     logger.info("PAT connected for profile=%s user_id=%s", str(uid), new_user_id)
-    return JSONResponse(
-        content={"status": "connected", "profile_id": str(uid)}
-    )
+    return JSONResponse(content={"status": "connected", "profile_id": str(uid)})
 
 
 # ── POST /profiles/{id}/rotate ────────────────────────────────────────────────
@@ -579,9 +584,7 @@ async def rotate_pat(
     )
 
     logger.info("PAT rotated for profile=%s user_id=%s", str(uid), new_user_id)
-    return JSONResponse(
-        content={"status": "connected", "profile_id": str(uid)}
-    )
+    return JSONResponse(content={"status": "connected", "profile_id": str(uid)})
 
 
 # ── DELETE /profiles/{id} ────────────────────────────────────────────────────
@@ -626,8 +629,7 @@ async def soft_delete_profile(
         # NULL out devices.profile_id so that the kiosk detects the orphaned state on
         # its next GET /api/devices/me poll and reverts to the profile picker (D3-03, D3-05).
         await conn.execute(
-            "UPDATE gruvax.devices SET profile_id = NULL"
-            " WHERE profile_id = %s::uuid",
+            "UPDATE gruvax.devices SET profile_id = NULL WHERE profile_id = %s::uuid",
             (str(uid),),
         )
         await conn.commit()

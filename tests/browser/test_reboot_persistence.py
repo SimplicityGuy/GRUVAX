@@ -24,6 +24,7 @@ from __future__ import annotations
 
 import time
 
+
 # Guard the module import — if playwright is not installed, skip the entire module.
 pytest = __import__("pytest")
 pytest.importorskip("playwright")
@@ -85,9 +86,7 @@ async def test_fingerprint_persists_across_reboot(live_server_url: str) -> None:
             )
             gen_body = await gen_response.json()
             code = gen_body["code"]
-            assert len(code) == 4 and code.isdigit(), (
-                f"pairing code must be 4 digits, got {code!r}"
-            )
+            assert len(code) == 4 and code.isdigit(), f"pairing code must be 4 digits, got {code!r}"
 
             # Admin login to get session cookie + CSRF token.
             login_response = await context.request.post(
@@ -98,24 +97,23 @@ async def test_fingerprint_persists_across_reboot(live_server_url: str) -> None:
             # Re-attempt with JSON body if form encoding failed
             if not login_response.ok:
                 import json as _json
+
                 login_response = await context.request.post(
                     f"{live_server_url}/api/admin/login",
                     data=_json.dumps({"pin": _TEST_PIN}),
                     headers={"Content-Type": "application/json"},
                 )
             assert login_response.ok, (
-                f"Admin login failed: {login_response.status} "
-                f"{await login_response.text()}"
+                f"Admin login failed: {login_response.status} {await login_response.text()}"
             )
 
             # Extract CSRF token from cookies (set by login endpoint).
             all_cookies = await context.cookies()
-            csrf_token = next(
-                (c["value"] for c in all_cookies if c["name"] == "gruvax_csrf"), ""
-            )
+            csrf_token = next((c["value"] for c in all_cookies if c["name"] == "gruvax_csrf"), "")
 
             # Bind the device to the default profile (admin action).
             import json as _json
+
             bind_response = await context.request.post(
                 f"{live_server_url}/api/admin/devices/bind",
                 data=_json.dumps({"code": code}),
@@ -131,9 +129,7 @@ async def test_fingerprint_persists_across_reboot(live_server_url: str) -> None:
 
             # Capture cookies before closing the context (simulated reboot).
             cookies_before = await context.cookies()
-            fp_before = next(
-                (c for c in cookies_before if c["name"] == FINGERPRINT_COOKIE), None
-            )
+            fp_before = next((c for c in cookies_before if c["name"] == FINGERPRINT_COOKIE), None)
 
             assert fp_before is not None, (
                 f"{FINGERPRINT_COOKIE!r} cookie must be issued when calling "
@@ -165,9 +161,7 @@ async def test_fingerprint_persists_across_reboot(live_server_url: str) -> None:
             )
 
             cookies_after = await context.cookies()
-            fp_after = next(
-                (c for c in cookies_after if c["name"] == FINGERPRINT_COOKIE), None
-            )
+            fp_after = next((c for c in cookies_after if c["name"] == FINGERPRINT_COOKIE), None)
 
             assert fp_after is not None, (
                 f"{FINGERPRINT_COOKIE!r} cookie must survive context close + reopen. "
@@ -181,9 +175,7 @@ async def test_fingerprint_persists_across_reboot(live_server_url: str) -> None:
 
             # GET /api/session must return the bound device_id + bound_profile_id.
             # The fingerprint cookie is sent automatically (it's in the context jar).
-            session_response = await context.request.get(
-                f"{live_server_url}/api/session"
-            )
+            session_response = await context.request.get(f"{live_server_url}/api/session")
             assert session_response.ok, (
                 f"GET /api/session failed on second launch: {session_response.status} "
                 f"{await session_response.text()}"
