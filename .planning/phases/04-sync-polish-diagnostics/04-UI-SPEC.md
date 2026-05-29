@@ -60,9 +60,11 @@ Three-font system. P4 introduces no new type sizes — all values already declar
 |------|------|------|--------|-------------|-------------|
 | Section heading | Barlow Condensed | 24px (`--gruvax-text-display-md`) | 700 | 1.1 (`--gruvax-leading-tight`) | "PROFILES" heading on `/admin/diagnostics` |
 | Row label / badge text | Barlow Condensed | 16px (`--gruvax-text-display-sm`) | 700 | 1.1 | Profile name in diagnostics card; status badge copy; cadence select label |
-| Body / instructions | Space Grotesk | 14px (`--gruvax-text-body-sm`) | 400 | 1.5 (`--gruvax-leading-normal`) | Card metadata values, banner copy (≥18px exception below), error/empty text |
+| Body / instructions | Space Grotesk | 14px (`--gruvax-text-body-sm`) | 400 | 1.5 (`--gruvax-leading-normal`) | Card metadata values, cadence sub-label, banner copy (≥18px exception below), error/empty text |
 | Data readout | DM Mono | 14px (`--gruvax-text-mono`) | 400 | 1.5 | `last_sync_at`, `last_sync_item_count`, elapsed sync seconds |
 | Kiosk banner (accessibility floor) | Space Grotesk | 18px (`--gruvax-text-body-lg`) | 400 | 1.5 | Re-auth inline banner — yellow-on-blue-darker at 18px meets WCAG large-text |
+
+Type scale is exactly four sizes: **14px · 16px · 18px · 24px**. No 5th size (no 12px) appears anywhere in P4 — sub-labels use 14px muted, not 12px.
 
 Font weights in use: **400** (body/data) + **700** (display/labels/headings). Exactly two weights — never introduce a third for P4 work.
 
@@ -170,7 +172,7 @@ P4's polish task: confirm elapsed-seconds counter renders in the existing `SyncP
   - Options: "Every 24 hours" / "Every 12 hours" / "Every 6 hours" / "Off"
   - Values: `"24h"` / `"12h"` / `"6h"` / `"off"`
   - Default displayed value: whichever is stored in `sync.cadence` setting (fetched on mount)
-- Sub-label (below select): "Syncs run at 03:00, 15:00 (12h), 09:00/21:00 (6h) server time." (Space Grotesk 12px `--gruvax-text-muted`)
+- Sub-label (below select): "Syncs run at 03:00, 15:00 (12h), 09:00/21:00 (6h) server time." (Space Grotesk 14px `--gruvax-text-muted` — subordinate via muted color, not a smaller size; keeps the type scale at four sizes)
 - Save behavior: auto-save on `onChange` (matches existing Settings pattern) with a transient "Saved" confirmation (Space Grotesk 14px `--gruvax-success`, fades after 2s)
 - Min-height: 44px on the select element
 
