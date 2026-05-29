@@ -620,6 +620,16 @@ async def soft_delete_profile(
             "WHERE id = %s::uuid AND deleted_at IS NULL",
             (str(uid),),
         )
+        # Detach all devices bound to this profile in the SAME transaction (criterion #3).
+        # ON DELETE SET NULL only fires on hard (physical) row deletion — a logical
+        # soft-delete (deleted_at = NOW()) does NOT trigger it.  We therefore explicitly
+        # NULL out devices.profile_id so that the kiosk detects the orphaned state on
+        # its next GET /api/devices/me poll and reverts to the profile picker (D3-03, D3-05).
+        await conn.execute(
+            "UPDATE gruvax.devices SET profile_id = NULL"
+            " WHERE profile_id = %s::uuid",
+            (str(uid),),
+        )
         await conn.commit()
 
     # Evict all six per-profile registry entries (D2-03, T-02-05-06).

@@ -1,12 +1,15 @@
 """GET /api/events/{profile_id} — per-profile SSE stream for kiosk live updates.
 
-Emits: boundary_changed, admin_editing, server_hello, server_shutdown.
+Emits: boundary_changed, admin_editing, server_hello, server_shutdown,
+       device_revoked, device_reassigned.
 
 Critical constraints (RESEARCH.md Pitfall 8 + 10):
   - Depends ONLY on get_bus_for_profile — NEVER on get_pool (D-09, Pitfall 10).
   - Sets X-Accel-Buffering: no and Cache-Control: no-store (Pitfall 8).
   - ping=15 is the sse-starlette default — do NOT increase it (Pitfall 8).
-  - path profile_id is validated against the gruvax_browse_binding cookie (D2-04).
+  - path profile_id is validated via resolve_profile_from_request in get_bus_for_profile
+    (D2-04, D3-04): device binding + revoke guard run before streaming begins; the
+    pool is acquired and released INSIDE the dep — generator body is pool-free.
 """
 
 from __future__ import annotations
@@ -39,10 +42,14 @@ async def stream_events(
     request: Request,
     bus: EventBus = Depends(get_bus_for_profile),  # NO get_pool — Pitfall 10
 ) -> EventSourceResponse:
-    """Per-profile SSE stream — no DB dependency (D-09, D2-04, Pitfall 10).
+    """Per-profile SSE stream — no DB dependency in generator (D-09, D2-04, Pitfall 10).
 
-    The path profile_id is validated against the gruvax_browse_binding session
-    cookie by get_bus_for_profile (400 unbound / 403 mismatch / 404 not found).
+    get_bus_for_profile (async dep) validates the request via resolve_profile_from_request:
+    the device fingerprint + revoke guard check acquires + releases the pool BEFORE this
+    handler runs (D3-04, D3-07).  The generator body reads ONLY the asyncio.Queue — zero
+    pool interaction (Pitfall 10 / T-03-13 preserved).
+    Error taxonomy: 400 session_unbound / 403 device_unknown / 403 device_revoked /
+    403 profile_mismatch / 503 registry not ready / 404 profile_not_found.
     Each connected client gets its own asyncio.Queue subscriber on the profile's bus.
     The generator unsubscribes on disconnect via the finally-block.
     ping=15 flushes nginx/reverse-proxy buffers (Pitfall 8).
