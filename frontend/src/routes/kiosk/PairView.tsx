@@ -104,8 +104,9 @@ export function PairView() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Initial fetch on mount
+  // Initial fetch on mount — side effect only (fetch + setState in callback)
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- fetching external data and updating state on result; this is the canonical pattern for data fetching in useEffect
     void fetchNewCode()
     return () => {
       fetchAbortRef.current?.abort()
@@ -131,7 +132,9 @@ export function PairView() {
 
     const initial = computeRemaining()
     const clampedInitial = Math.max(0, initial)
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- countdown initial value derived from server-authoritative expires_at; no other place to set this than the effect that starts the interval
     setRemainingMs(clampedInitial)
+     
     setPairStatus(clampedInitial <= 60_000 ? 'expiring' : 'active')
 
     countdownIntervalRef.current = setInterval(() => {
