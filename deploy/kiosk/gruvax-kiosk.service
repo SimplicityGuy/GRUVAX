@@ -1,0 +1,14 @@
+[Unit]
+Description=GRUVAX Kiosk Browser
+Documentation=https://github.com/SimplicityGuy/GRUVAX
+After=graphical-session.target
+
+[Service]
+Type=simple
+ExecStart=%h/.config/gruvax/start-kiosk.sh
+Restart=always
+RestartSec=3
+Environment=GRUVAX_URL=http://gruvax.lan/pair
+
+[Install]
+WantedBy=default.target
