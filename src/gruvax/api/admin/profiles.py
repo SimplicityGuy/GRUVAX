@@ -51,6 +51,7 @@ from gruvax.estimator.segment_cache import SegmentCache
 from gruvax.events.bus import EventBus
 from gruvax.settings import settings
 from gruvax.sync import profile_sync
+from gruvax.sync.nightly import _purge_profile_collection
 from gruvax.sync.pat_crypto import encrypt_pat
 
 
@@ -307,6 +308,11 @@ async def create_profile(
             ("cube.nominal_capacity", "95"),
             ("session.idle_ttl_seconds", "600"),
             ("session.hard_cap_seconds", "1800"),
+            # Phase 4 (SYN-01 / D4-06 / Pitfall 6): seed sync.cadence as a
+            # GLOBAL key under the default profile UUID.  Seeding it at
+            # profile-creation time means _read_sync_cadence() never hits the
+            # absent-row fallback path on first startup.
+            ("sync.cadence", '"24h"'),
         ]
         for key, value in _DEFAULT_SETTINGS:
             await cur.execute(
@@ -594,13 +600,15 @@ async def rotate_pat(
 async def soft_delete_profile(
     profile_id: str,
     request: Request,
+    background_tasks: BackgroundTasks,
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Soft-delete a profile and evict its in-memory registry entries (D2-03).
 
     The Default profile (DEFAULT_PROFILE_UUID) is protected from deletion
-    (returns 409). The async row purge is deferred to Phase 4 — this handler
-    only sets deleted_at and evicts the six registry caches.
+    (returns 409). After evicting registries, schedules a background purge of
+    profile_collection rows (D4-11/D4-13). The lifespan startup purge sweep
+    backstops any purge that is skipped due to crash or restart.
     """
     uid = _parse_uuid(profile_id)
 
@@ -637,5 +645,15 @@ async def soft_delete_profile(
     # Evict all six per-profile registry entries (D2-03, T-02-05-06).
     _evict_profile_registries(str(uid), request.app.state)
 
-    logger.info("profile soft-deleted: id=%s", str(uid))
+    # Phase 4 (D4-11/D4-13): schedule deletion of profile_collection rows as a
+    # request-scoped background task.  The task completes quickly (one DELETE by
+    # profile_id).  The lifespan startup purge sweep backstops this in case the
+    # request completes before the background task finishes (e.g. app crash).
+    background_tasks.add_task(
+        _purge_profile_collection,
+        pool=request.app.state.db_pool,
+        profile_id=str(uid),
+    )
+
+    logger.info("profile soft-deleted: id=%s; purge scheduled", str(uid))
     return JSONResponse(content={"id": str(uid), "status": "deleted"})

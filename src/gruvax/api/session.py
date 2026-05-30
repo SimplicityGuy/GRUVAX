@@ -156,12 +156,26 @@ async def get_session(
         response_cookies = {"profile_id": bound_profile_id}
         logger.debug("GET /session: single-profile auto-bind → profile_id=%s", bound_profile_id)
 
+    # D4-08: Derive needs_reauth from the bound profile's app_token_revoked flag.
+    # No new DB query — app_token_revoked is already fetched via _SELECT_ACTIVE_PROFILES.
+    # Always present in the response (not just when True) so the kiosk can rely on it.
+    # T-04-01-04: derived only from the BOUND profile; no cross-profile leakage.
+    # T-04-01-05: derived from the live per-request profiles read, not an app.state cache.
+    needs_reauth = False
+    if bound_profile_id:
+        bound_profile = next(
+            (p for p in profiles if str(p["id"]) == bound_profile_id), None
+        )
+        if bound_profile is not None:
+            needs_reauth = bool(bound_profile.get("app_token_revoked", False))
+
     content: dict[str, Any] = {
         "profile_count": len(profiles),
         "bound_profile_id": bound_profile_id,
         "profiles": profiles,
         "device_id": device_id,
         "is_device_paired": is_device_paired,
+        "needs_reauth": needs_reauth,  # D4-08
     }
 
     response = JSONResponse(content=content)

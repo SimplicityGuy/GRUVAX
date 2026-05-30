@@ -345,7 +345,7 @@ async def test_rotate_clears_revoked(db_pool) -> None:  # type: ignore[no-untype
                 base_url="http://test",
             ) as client,
         ):
-            pool = manager.app.state.db_pool
+            pool = app.state.db_pool
 
             # Seed PIN
             async with pool.connection() as conn:

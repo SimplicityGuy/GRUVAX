@@ -45,6 +45,8 @@ _ALLOWED_SETTINGS_KEYS = frozenset(
         # Phase 3 — capacity + session
         "cube.nominal_capacity",
         "session.idle_ttl_seconds",
+        # Phase 4 — nightly sync cadence (SYN-01 / D4-06)
+        "sync.cadence",
         # Phase 6 — LED colors (all six states)
         "led_color.position",
         "led_color.label_span",
@@ -98,6 +100,10 @@ _BOOL_KEYS = frozenset(
         "led_highlight.retain_mode",
     }
 )
+
+# Phase 4 (SYN-01 / D4-06): valid values for sync.cadence setting.
+# Stored as a JSON string (e.g. '"24h"') — same pattern as auth.pin_hash.
+_CADENCE_VALUES = frozenset({"24h", "12h", "6h", "off"})
 
 # WR-03: brightness keys must be within the 8-bit hardware range [0, 255].
 # Without this, a value like 999 is persisted verbatim, echoed back by GET, and
@@ -166,6 +172,8 @@ async def get_settings(
         # Phase 3 keys
         "cube_nominal_capacity": _get_int("cube.nominal_capacity", 95),
         "session_idle_ttl_seconds": _get_int("session.idle_ttl_seconds", 600),
+        # Phase 4 — nightly sync cadence (SYN-01 / D4-06)
+        "sync_cadence": _get_color("sync.cadence", "24h"),
         # Phase 6 — LED colors (LED-05)
         "led_color_position": _get_color("led_color.position", "#FFD700"),
         "led_color_label_span": _get_color("led_color.label_span", "#7C3AED"),
@@ -202,12 +210,14 @@ async def update_settings(
     body = await request.json()
 
     # Map JSON body keys → gruvax.settings DB keys
-    # Order: Phase 3 first, then Phase 6 LED keys.
+    # Order: Phase 3 first, Phase 4, then Phase 6 LED keys.
     # CRITICAL (D-24): led_brightness_span → led_brightness.span (NOT led_brightness.ambient)
     key_map: dict[str, str] = {
         # Phase 3
         "cube_nominal_capacity": "cube.nominal_capacity",
         "session_idle_ttl_seconds": "session.idle_ttl_seconds",
+        # Phase 4 — nightly sync cadence (SYN-01 / D4-06)
+        "sync_cadence": "sync.cadence",
         # Phase 6 — LED colors (LED-05)
         "led_color_position": "led_color.position",
         "led_color_label_span": "led_color.label_span",
@@ -265,6 +275,22 @@ async def update_settings(
                         "message": f"Brightness must be in [0, 255]. Got: {int_value}",
                     },
                 )
+        elif db_key == "sync.cadence":
+            # Phase 4 (D4-06 / T-04-01-03): validate against the allowed cadence values.
+            # Checked BEFORE any SQL write; invalid value returns 422 with type=invalid_cadence.
+            value = body[body_key]
+            if value not in _CADENCE_VALUES:
+                raise HTTPException(
+                    status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                    detail={
+                        "type": "invalid_cadence",
+                        "field": body_key,
+                        "message": (
+                            f"sync.cadence must be one of {sorted(_CADENCE_VALUES)}. "
+                            f"Got: {value!r}"
+                        ),
+                    },
+                )
 
     # Global settings live under the default profile UUID (composite PK = (profile_id, key)).
     _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
@@ -277,6 +303,10 @@ async def update_settings(
 
             if db_key in _COLOR_KEYS:
                 # Store as JSON string: '"#FFD700"' (consistent with auth.pin_hash pattern)
+                json_value = f'"{value}"'
+            elif db_key == "sync.cadence":
+                # Phase 4 (D4-06): store as JSON string — same pattern as auth.pin_hash.
+                # Validation already passed in the pre-check loop above.
                 json_value = f'"{value}"'
             elif db_key in _INT_KEYS:
                 # Store as bare integer JSON
@@ -294,11 +324,23 @@ async def update_settings(
                 # Fallback: plain JSON encoding
                 json_value = json.dumps(value)
 
-            await conn.execute(
-                "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now()"
-                " WHERE profile_id = %s::uuid AND key = %s",
-                (json_value, _DEFAULT_PROFILE_UUID, db_key),
-            )
+            if db_key == "sync.cadence":
+                # Phase 4 (D4-06): use UPSERT so the row is created on first PUT even
+                # if the profile was created before Phase 4 seeded the default row.
+                await conn.execute(
+                    "INSERT INTO gruvax.settings "
+                    "  (profile_id, key, value, description, updated_at) "
+                    "VALUES (%s::uuid, %s, %s::jsonb, 'Nightly sync cadence', now()) "
+                    "ON CONFLICT (profile_id, key) DO UPDATE "
+                    "  SET value = EXCLUDED.value, updated_at = now()",
+                    (_DEFAULT_PROFILE_UUID, db_key, json_value),
+                )
+            else:
+                await conn.execute(
+                    "UPDATE gruvax.settings SET value = %s::jsonb, updated_at = now()"
+                    " WHERE profile_id = %s::uuid AND key = %s",
+                    (json_value, _DEFAULT_PROFILE_UUID, db_key),
+                )
             updated.append(db_key)
         await conn.commit()
 
