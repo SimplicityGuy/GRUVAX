@@ -87,15 +87,27 @@ class ConnectPatRequest(BaseModel):
 def _profile_status(row: dict[str, Any]) -> str:
     """Derive human-readable status from profile row fields.
 
-    Status enum (D2-13):
-      re-auth-required — app_token_revoked is True (PAT rejected/expired)
+    Status enum (D2-13 / D4-07):
+      re-auth-required — app_token_revoked is True AND the profile was connected
+                         at least once (PAT rejected/expired after connecting)
+      pending          — app_token_revoked is True but never connected (no PAT yet)
       syncing          — last_sync_status = 'in_progress'
       connected        — last_sync_status = 'ok'
-      pending          — no PAT connected yet (app_token_revoked=True, never ok)
+
+    D4-07: app_token_revoked is the canonical re-auth signal. A 401 sets
+    last_sync_error='pat_rejected' and forces last_sync_status='failed', so the
+    re-auth-required branch MUST NOT key on last_sync_status=='ok' — that
+    combination never occurs in the real revocation flow (it would leave a
+    revoked-after-connect profile misclassified as 'pending'). Distinguish a
+    never-connected profile (pending) from a revoked-after-connect profile via
+    last_sync_error=='pat_rejected' or a non-null last_sync_at.
     """
-    if row.get("app_token_revoked") and row.get("last_sync_status") == "ok":
-        return "re-auth-required"
     if row.get("app_token_revoked"):
+        if (
+            row.get("last_sync_error") == "pat_rejected"
+            or row.get("last_sync_at") is not None
+        ):
+            return "re-auth-required"
         return "pending"
     if row.get("last_sync_status") == "in_progress":
         return "syncing"
@@ -181,17 +193,27 @@ async def list_profiles(
     async with db_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
             "SELECT id, display_name, last_sync_at, last_sync_status, "
-            "       last_sync_item_count, app_token_revoked "
+            "       last_sync_item_count, app_token_revoked, last_sync_error "
             "FROM gruvax.profiles WHERE deleted_at IS NULL ORDER BY created_at",
         )
         rows = await cur.fetchall()
 
     profiles = []
     for row in rows:
-        pid, display_name, last_sync_at, last_sync_status, item_count, revoked = row
+        (
+            pid,
+            display_name,
+            last_sync_at,
+            last_sync_status,
+            item_count,
+            revoked,
+            last_sync_error,
+        ) = row
         row_dict: dict[str, Any] = {
             "app_token_revoked": bool(revoked),
             "last_sync_status": last_sync_status,
+            "last_sync_at": last_sync_at,
+            "last_sync_error": last_sync_error,
         }
         profiles.append(
             {
