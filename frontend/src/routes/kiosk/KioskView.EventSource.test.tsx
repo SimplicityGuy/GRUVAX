@@ -13,7 +13,7 @@
  * Tests 3 and 4 are RED until Task 2 wires the re-locate in KioskView.tsx.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render } from '@testing-library/react'
+import { act, fireEvent, render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { KioskView } from './KioskView'
 import { useGruvaxStore } from '../../state/store'
@@ -33,11 +33,12 @@ vi.mock('../../api/client', async (importOriginal) => {
       sub_cube_interval: null,
       confidence: 0.8,
     }),
+    searchCollection: vi.fn().mockResolvedValue({ results: [], total: 0, took_ms: 1, did_you_mean: null }),
   }
 })
 
 // Import after vi.mock so we get the mocked version
-import { locateRelease } from '../../api/client'
+import { locateRelease, searchCollection } from '../../api/client'
 import { useSessionStore } from '../../state/sessionStore'
 
 const TEST_PROFILE_ID = '00000000-0000-0000-0000-000000000001'
@@ -128,8 +129,9 @@ beforeEach(() => {
       },
     ],
   })
-  // Reset locateRelease mock call count
+  // Reset locateRelease and searchCollection mock call counts
   vi.mocked(locateRelease).mockClear()
+  vi.mocked(searchCollection).mockClear()
 })
 
 afterEach(() => {
@@ -218,5 +220,57 @@ describe('KioskView EventSource consumer', () => {
     })
 
     expect(locateRelease).not.toHaveBeenCalled()
+  })
+
+  // B-01: collection_changed SSE event must invalidate the ['search'] query key
+  it('collection_changed invalidates search query key (B-01)', async () => {
+    const qc = makeQueryClient()
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
+    const es = await renderKioskAndFlush(qc)
+
+    await act(async () => {
+      es.dispatchEvent('collection_changed', {})
+    })
+
+    const calledKeys = invalidateSpy.mock.calls.map(
+      (args) => (args[0] as { queryKey?: unknown[] }).queryKey,
+    )
+    expect(calledKeys).toContainEqual(['search'])   // RED until B-01 listener is added
+  })
+
+  // B-02 frontend: search query must be disabled when boundProfileId is null
+  it('search query is disabled when boundProfileId is null (B-02)', async () => {
+    // Override session store: unbound state (no profile bound yet — session bootstrap pending)
+    useSessionStore.setState({ profileCount: 0, boundProfileId: null, profiles: [] })
+
+    const qc = makeQueryClient()
+    // Spy on the mocked searchCollection to assert it is NOT called
+    const searchSpy = vi.mocked(searchCollection)
+    searchSpy.mockClear()
+
+    const { container } = await act(async () =>
+      render(
+        <QueryClientProvider client={qc}>
+          <KioskView />
+        </QueryClientProvider>,
+      ),
+    )
+
+    // Simulate user typing in the search box to drive debouncedQuery
+    const input = container.querySelector<HTMLInputElement>('input[type="search"]')
+    if (input) {
+      await act(async () => {
+        fireEvent.change(input, { target: { value: 'Blue Note' } })
+      })
+      // Advance past the 250ms SearchBox debounce so debouncedQuery updates
+      await act(async () => {
+        await new Promise((r) => setTimeout(r, 300))
+      })
+    }
+
+    // Even with a non-empty query, searchCollection must NOT be called when boundProfileId is null.
+    // RED: current enabled gate only checks query length, not boundProfileId — so
+    // searchCollection WILL be called before the fix (failing this assertion).
+    expect(searchSpy).not.toHaveBeenCalled()
   })
 })
