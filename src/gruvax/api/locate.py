@@ -35,8 +35,6 @@ from starlette import status
 
 from gruvax.api.deps import (
     get_pool,
-    get_segment_cache_for_profile,
-    get_snapshot_for_profile,
     resolve_profile_from_request,
 )
 from gruvax.db.queries import get_release_for_locate, increment_selection_count
@@ -128,14 +126,41 @@ async def locate_endpoint(
         effective_profile_id = profile_id
 
     # Resolve the per-profile segment_cache and snapshot for position estimation.
-    # Calling the deps directly with the effective UUID — their internal mismatch checks
-    # pass because effective_profile_id == resolved_profile_id.
-    segment_cache: SegmentCache = await get_segment_cache_for_profile(
-        effective_profile_id, request, pool
+    # Registry-only lookups — resolve_profile_from_request already ran above; calling
+    # get_segment_cache_for_profile / get_snapshot_for_profile here would re-resolve
+    # (2-3 extra DB round-trips + duplicated throttled last_seen_at writes, WR-01).
+    # Reproduce the same 503/404 error taxonomy directly against the already-resolved
+    # effective_profile_id, then cast to the concrete type (the registry holds the
+    # right objects; TYPE_CHECKING imports keep mypy happy).
+    seg_registry: dict[str, SegmentCache] | None = getattr(
+        request.app.state, "segment_cache_registry", None
     )
-    snapshot: CollectionSnapshot = await get_snapshot_for_profile(
-        effective_profile_id, request, pool
+    if seg_registry is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Segment cache registry not ready",
+        )
+    segment_cache: SegmentCache | None = seg_registry.get(str(effective_profile_id))
+    if segment_cache is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "profile_not_found"},
+        )
+
+    snap_registry: dict[str, CollectionSnapshot] | None = getattr(
+        request.app.state, "snapshot_registry", None
     )
+    if snap_registry is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Snapshot registry not ready",
+        )
+    snapshot: CollectionSnapshot | None = snap_registry.get(str(effective_profile_id))
+    if snapshot is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "profile_not_found"},
+        )
 
     record = await get_release_for_locate(pool, release_id, effective_profile_id)
 

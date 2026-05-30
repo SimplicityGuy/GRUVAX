@@ -28,7 +28,7 @@ from typing import Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from starlette import status
 
-from gruvax.api.deps import get_pool, get_snapshot_for_profile, resolve_profile_from_request
+from gruvax.api.deps import get_pool, resolve_profile_from_request
 from gruvax.db.queries import increment_search_count, search_collection
 from gruvax.middleware.timing import record_slow_query
 
@@ -84,9 +84,23 @@ async def search(
         effective_profile_id = profile_id
 
     # Validate the effective profile against the snapshot registry (503/404 taxonomy).
-    # Calling the dep directly with the resolved UUID — its internal mismatch check
-    # passes because effective_profile_id == resolved_profile_id.
-    await get_snapshot_for_profile(effective_profile_id, request, pool)
+    # Registry-only lookup — resolve_profile_from_request already ran above; calling
+    # get_snapshot_for_profile here would re-resolve (second DB round-trip + second
+    # throttled last_seen_at write, WR-01). Instead, reproduce the same 503/404 error
+    # taxonomy directly against the already-resolved effective_profile_id.
+    snapshot_registry: dict[str, object] | None = getattr(
+        request.app.state, "snapshot_registry", None
+    )
+    if snapshot_registry is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Snapshot registry not ready",
+        )
+    if snapshot_registry.get(str(effective_profile_id)) is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "profile_not_found"},
+        )
 
     rows, took_ms, did_you_mean = await search_collection(pool, q, limit, effective_profile_id)
 
