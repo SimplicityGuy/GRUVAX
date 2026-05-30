@@ -28,6 +28,7 @@ import asyncio
 import logging
 import time
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
@@ -117,8 +118,26 @@ async def locate_endpoint(
         # Omitted-param path (B-02): use the cookie-authoritative resolved profile.
         effective_profile_id = resolved_profile_id
     else:
-        # Supplied-param path: preserve D2-04 mismatch check exactly.
-        if resolved_profile_id != profile_id:
+        # Supplied-param path: normalize both sides to canonical UUID form before
+        # comparing (WR-02 — raw string compare spuriously 403s when the client
+        # sends the same UUID in a different case/format).
+        try:
+            supplied_uuid = UUID(profile_id)
+        except ValueError:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
+                detail={"type": "invalid_profile_id"},
+            ) from None
+        # resolved_profile_id comes from the DB (canonical lowercase) or from the
+        # browse-binding cookie (raw string that may not be a valid UUID — e.g. a
+        # legacy value).  Guard the parse so a non-UUID resolved value falls back to
+        # the original string compare rather than raising an uncaught 500.
+        try:
+            resolved_uuid = UUID(resolved_profile_id)
+            mismatch = resolved_uuid != supplied_uuid
+        except ValueError:
+            mismatch = resolved_profile_id != profile_id
+        if mismatch:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail={"type": "profile_mismatch"},
