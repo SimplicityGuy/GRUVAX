@@ -1,8 +1,9 @@
 ---
 phase: 03-devices-pairing
 verified: 2026-05-29T12:00:00Z
-status: human_needed
+status: passed
 score: 5/5 must-haves verified
+human_verification_completed: 2026-05-30  # both items confirmed on real Pi hardware via 03-HUMAN-UAT.md (2/2 passed)
 overrides_applied: 0
 re_verification:
   previous_status: gaps_found
@@ -23,8 +24,8 @@ human_verification:
 # Phase 03: Devices + Pairing Verification Report
 
 **Phase Goal:** A headless RPi kiosk can be paired to a profile in under 30 seconds end-to-end via a 4-digit code shown on the kiosk; the binding persists across reboots; admin can rename, change-profile, unbind, or revoke devices from a mobile admin UI.
-**Verified:** 2026-05-29
-**Status:** human_needed
+**Verified:** 2026-05-29 (automated) · 2026-05-30 (human hardware verification complete)
+**Status:** passed
 **Re-verification:** Yes — after SC4 gap closure (commit 2c73a40, merged at 03-06)
 
 ---
