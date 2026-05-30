@@ -1,412 +1,321 @@
-# Stack Research — GRUVAX
+# Stack Research — GRUVAX v2.1 Additions
 
-**Domain:** Touchscreen kiosk (Chromium on Pi 5) + FastAPI service + MQTT stub on home LAN, alongside an existing FastAPI service (`discogsography`) sharing the same Postgres instance.
-**Researched:** 2026-05-18
-**Confidence:** HIGH on backend & containerization, HIGH on MQTT/realtime/kiosk, MEDIUM on frontend (final UI direction deferred to design phase — recommendations are honest defaults, not lock-ins).
+**Domain:** v2.1 Resilience + Privacy + UX polish additions to the shipped GRUVAX v2.0 stack
+**Researched:** 2026-05-30
+**Confidence:** HIGH on backend additions (all verified via PyPI + Context7), HIGH on offline UX recommendation, MEDIUM on frontend QR choice (both candidates are viable; rationale is clear)
 
----
-
-## TL;DR
-
-| Layer | Recommendation | Confidence |
-|-------|----------------|------------|
-| Backend language | Python 3.13 (match discogsography) | HIGH |
-| Web framework | FastAPI 0.136.x | HIGH |
-| DB driver | `psycopg` 3.2 (async) — match discogsography | HIGH |
-| Migrations | Alembic 1.18.x with async template | HIGH |
-| Config | `pydantic-settings` 2.x | HIGH |
-| Package manager | `uv` 0.5+ (match discogsography) | HIGH |
-| Lint/format | Ruff (match discogsography) | HIGH |
-| Type check | mypy (match discogsography) | HIGH |
-| Tests | pytest + pytest-asyncio + httpx + Hypothesis | HIGH |
-| Frontend framework | **React 19** with the React Compiler (default); Svelte 5 / SolidJS as serious alternatives — re-examine in UI design phase | MEDIUM |
-| Build tool | Vite 7.x (with Rolldown) | HIGH |
-| Animation | GSAP 3.13 core + Framer Motion (`motion`) for layout; CSS for transitions | MEDIUM |
-| Grid/canvas | Plain DOM + CSS Grid for v1; defer Pixi/Three.js until visual design demands it | MEDIUM |
-| Realtime push | Server-Sent Events via `sse-starlette` (or built-in `fastapi.sse` in FastAPI 0.135+) | HIGH |
-| MQTT broker | `eclipse-mosquitto:2.1-alpine` | HIGH |
-| MQTT client (Python) | `aiomqtt` 3.x | HIGH |
-| Auth | Starlette `SessionMiddleware` (signed cookies via `itsdangerous`) + a single PIN check route + sliding session TTL. Do **not** introduce `fastapi-users` for one PIN. | HIGH |
-| Container | Multi-stage Dockerfile, `uv` in builder stage, `python:3.13-slim` runtime, non-root user | HIGH |
-| Kiosk OS | Raspberry Pi OS Trixie (Debian 13), Wayland with `labwc` compositor, Chromium kiosk launched from `~/.config/labwc/autostart` and supervised by a `systemd --user` unit | HIGH |
+This file covers ONLY the net-new stack decisions for v2.1. The existing validated stack (Python 3.13, FastAPI 0.136, psycopg 3.2, SQLAlchemy 2.0, Alembic 1.18, itsdangerous 2.2, sse-starlette 2.x, React 19, Vite 8, TanStack Query 5, Zustand 5, GSAP) is NOT re-examined here.
 
 ---
 
-## Recommended Stack — Backend
+## Summary of Net-New Additions
 
-### Core
+| Feature | Addition | Layer | Why |
+|---------|----------|-------|-----|
+| DEV-04 QR pairing | `react-qr-code` 2.0.21 | Frontend only | Render QR in-browser from the pairing URL; no server dependency |
+| AUTH-02 invite tokens | `itsdangerous.URLSafeTimedSerializer` (already present) + `invite_tokens` DB table | Backend | TTL-signed tokens from existing dep; DB row enforces single-use |
+| OFF-01..04 offline UX | TanStack Query `networkMode: 'offlineFirst'` + custom `useBackendOnline` hook + native `EventSource` auto-reconnect | Frontend | No new package; already-present primitives are sufficient |
+| PRIV-01..04 privacy | `sessionStorage` (browser built-in) | Frontend | Zero-install; clears automatically on tab/browser close |
 
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Python | 3.13.x | Runtime | Discogsography uses 3.13+. Avoiding a version split simplifies shared dev tooling, Docker base images, and any future code sharing. Python 3.13 is current stable; 3.14 is recent but `aiomqtt` and others have less production exposure on it. |
-| FastAPI | 0.136.1 (April 2026) | HTTP framework + OpenAPI | Discogsography already uses FastAPI; consistent dev story. 0.135+ added first-class SSE (`fastapi.sse`) which is directly relevant to the realtime requirement. |
-| Uvicorn | 0.32+ | ASGI server | The de facto FastAPI runner; works correctly with the long-lived SSE connections this app needs. |
-| Pydantic | 2.13.x | Models, validation, OpenAPI | Required by FastAPI 0.136; v2 is the Rust-core version that's 5–50x faster than v1. |
-| pydantic-settings | 2.x | Configuration | Standard partner to Pydantic v2 for env-var/.env-driven config. Validates at startup — config typos crash boot, not a request three hours later. |
-
-### Database
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| PostgreSQL | 16+ (whatever discogsography runs) | Storage | Shared instance, dedicated `gruvax` schema. Read-only views/grants onto discogsography's `releases`/`artists`/`collection_items`. Same-host = lowest possible kiosk latency. |
-| psycopg | 3.2+ | Async DB driver | **Match discogsography.** psycopg3 is the modern successor with native async support. asyncpg is ~5x faster in microbenchmarks but for a home-LAN kiosk with one user the absolute latency difference is sub-millisecond — operational consistency with discogsography wins. psycopg3 also has Row Factories that map cleanly to Pydantic models. |
-| SQLAlchemy | 2.0.x (async) | Lightweight ORM / query builder | Cube boundary CRUD is small and well-suited to either ORM or hand-written SQL. SQLAlchemy 2.0's async + typed API is the path of least surprise and feeds Alembic autogenerate. Skip the ORM only if discogsography deliberately doesn't use one — then mirror its choice. |
-| Alembic | 1.18.x | Migrations | The standard SQLAlchemy migration tool. Use the async template (`alembic init -t async`). Define naming conventions on the `Base` metadata to make autogenerate produce stable migration names. CI sanity check: `alembic upgrade head && alembic downgrade base && alembic upgrade head`. |
-
-**Why not plain SQL migrations?** A `gruvax` schema with a handful of tables (cube boundaries, units, color settings, admin sessions) is small enough that hand-written SQL is tempting, but Alembic costs almost nothing to set up, gives you reversible migrations, and matches what the project will need once boundaries data evolves with new Kallax units.
-
-### Realtime / Messaging
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| sse-starlette | 2.x | SSE response class | Until FastAPI's built-in `fastapi.sse` is rock-solid, `sse-starlette` is the proven implementation. Handles ping/heartbeats and client-disconnect cleanup correctly. If on FastAPI ≥ 0.135 with no plugin friction, switch to `fastapi.sse` later — it serializes Pydantic on the Rust side. |
-| aiomqtt | 3.x | MQTT client | v3 is pure asyncio (no paho-mqtt thread bridge). Idiomatic `async with Client(...)` and `await client.publish(...)`. Avoid `fastapi-mqtt` (extra abstraction over `gmqtt`) — direct `aiomqtt` is simpler to reason about for a publish-only stub. |
-
-### Auth / Sessions
-
-| Technology | Version | Purpose | Why |
-|------------|---------|---------|-----|
-| Starlette `SessionMiddleware` | bundled | Signed session cookie | Already in Starlette/FastAPI, uses `itsdangerous` to sign cookies. For a single-PIN home-LAN app, this is exactly the right size. Set a short `max_age` (e.g., 600s) and refresh on activity. |
-| itsdangerous | 2.2+ | Token signing | Indirect dependency of `SessionMiddleware`. Also useful directly for short-lived single-use admin links if ever needed. |
-| passlib[argon2] | 1.7.4+ | Hash the admin PIN | Even for one PIN, don't store it in plaintext or compare via `==`. Hash with Argon2id and use `secrets.compare_digest` on the verification path. |
-
-**Why not `fastapi-users`?** It's excellent for multi-user apps with registration, password reset, OAuth providers, etc. For one PIN on a home LAN it adds models, migrations, dependencies, and concepts (user table, JWT, refresh tokens) that the system doesn't need. **Why not `authlib`?** Authlib shines for OAuth2/OIDC providers and clients; GRUVAX has no third-party identity to integrate. **Why not hand-rolled JWT?** Token signing + rotation + revocation is more surface area than a signed cookie for a single PIN that sits behind a LAN.
-
-### Code Quality / Dev
-
-| Tool | Purpose | Notes |
-|------|---------|-------|
-| Ruff (latest) | Lint + format | Match discogsography. Replaces flake8, black, isort, pyupgrade in one binary. |
-| mypy | Static types | Match discogsography. Use `--strict` in CI for backend code. |
-| pytest | Test runner | Standard. |
-| pytest-asyncio | Async test support | Required because FastAPI handlers are async. |
-| httpx | API tests | The `AsyncClient` is the modern standard for testing ASGI apps; FastAPI's `TestClient` is a Starlette wrapper around httpx anyway. |
-| Hypothesis | Property-based tests | Specifically valuable for the position-estimation algorithm (see Testing section below). |
-| pytest-cov | Coverage | Standard. |
-| coverage[toml] | Backend for pytest-cov | Standard. |
-| just | Task runner | Match discogsography. `justfile` for `just test`, `just lint`, `just up`, etc. |
+**No new backend Python packages are required for v2.1.** All four feature areas are served by existing dependencies plus one frontend package.
 
 ---
 
-## Recommended Stack — Frontend
+## 1. QR-Code Generation (DEV-04)
 
-> **Honesty up front:** Final UI direction is deferred to the UI design phase. The recommendation below is a *defensible default*, not a lock-in. If the design pass favors an aesthetic that needs heavy custom canvas/WebGL (cube flythroughs, 3D shelf rendering), some of these calls change.
+### Decision: Frontend-only with `react-qr-code`
 
-### Core
+**Do not generate QR codes server-side.** The kiosk already knows the pairing URL — it owns both the display and the session. Generating a PNG on the server and shipping it to the browser adds an HTTP round-trip, an image decoding step, and a new backend endpoint, in exchange for nothing. The QR content is not secret (it encodes the same 4-digit code + server URL the kiosk already shows in text).
 
-| Technology | Version | Purpose | Why Default |
-|------------|---------|---------|-------------|
-| React | 19.x | UI framework | Largest ecosystem for the supporting libs we likely want (animation, virtualized lists, a11y primitives). The React Compiler shipped stable in October 2025 — auto-memoization eliminates most of the manual `useMemo`/`useCallback` overhead that historically made React slower than Solid/Svelte for animation-heavy UIs. Chromium on a Pi 5 has no problem with React's ~45 KB runtime. |
-| TypeScript | 5.7+ | Types | Non-negotiable for a UI with REST + SSE + admin forms. |
-| Vite | 7.x | Build tool + dev server | Default for everything except Next.js. Rolldown bundler (Rust) is now Vite's production bundler — fast cold builds, fast HMR. |
-| React Router | 7.x | Routing | Kiosk view, admin login, admin boundary editor — distinct routes. |
-| TanStack Query | 5.x | Server state | Caches typeahead results, manages SSE-invalidated keys cleanly. |
-| Zustand | 5.x | Local state | Tiny (~1 KB), no boilerplate, perfect for "current selection", "admin mode", "offline banner state". Don't reach for Redux. |
+| Library | Version | Status | Why / Why Not |
+|---------|---------|--------|---------------|
+| **`react-qr-code`** | **2.0.21** | **Recommended** | Actively maintained (last publish 2026-04-29, npm last confirmed). Outputs pure SVG — scales perfectly on any DPI without blurriness on the Pi's 7" screen. Zero runtime dependencies. 340+ dependents. MIT licensed. |
+| `qrcode.react` | 4.2.0 | Not recommended | Last publish 2024-12-11 — over 17 months without a release. Still functional, but `react-qr-code` is the actively-maintained successor with equivalent API surface. |
+| `python-qrcode[pil]` | 8.2 | Do not add | Server-side generation for this use case is overcomplicated. Adds Pillow to the runtime image for a feature that runs better client-side. Only warranted if you need to embed QR codes in PDF reports or email — neither applies here. |
+| `qrcode` (pure Python, SVG mode) | 8.2 | Do not add | Same rationale as above. The SVG factory is useful for server-rendered documents; not for a kiosk SPA. |
 
-### Animation
+### Integration
 
-| Library | Version | Purpose | When |
-|---------|---------|---------|------|
-| GSAP core | 3.13.x | Cube-highlight choreography | MIT-licensed core is sufficient; the paid Club GSAP plugins (MorphSVG, SplitText, etc.) are **not** needed for this app's scope. GSAP runs outside React's render cycle, which is exactly what you want for the "search lands → cube glows" cinematic moment. |
-| Framer Motion / `motion` | 12.x | Layout + presence transitions | MIT-licensed. Use for declarative React-level transitions (list re-orderings, mounting/unmounting modals). The two libraries coexist cleanly. |
-| Plain CSS | n/a | Most state transitions | Cheapest possible: `transition: transform 200ms`. Reach for JS animation only when CSS can't express it. |
+`react-qr-code` is a single `<QRCode>` component. The kiosk's existing pairing screen renders the 4-digit code as text today (v2.0). In v2.1 it renders both:
 
-**Why not Three.js or Pixi.js for v1?** A 2×4×4 cube grid is 32 rectangles. CSS Grid handles this perfectly. Three.js/Pixi pay off when you want depth, particle effects, or shader-driven visuals — that's a design decision for later, not the path of least resistance for the MVP "highlight the right cube" requirement.
+```tsx
+import QRCode from 'react-qr-code';
 
-**Why not Svelte 5 or SolidJS as defaults?** Both are technically excellent (smaller runtime, fine-grained reactivity, better animation FPS on weak hardware). Svelte 5 has ~1/4 the npm ecosystem of React; SolidJS, smaller still. For a single-author project that may want a virtualized result list, accessible combobox, mobile-friendly numeric keyboard, etc., React's library coverage saves more hours than Svelte's bundle savings cost. **If the UI design phase concludes the kiosk needs sub-16ms animation budgets and the design is simple enough that ecosystem doesn't matter — SolidJS is the right pivot.**
-
-### Search UX primitives
-
-| Library | Purpose |
-|---------|---------|
-| Fuse.js (only if backend fuzzy is insufficient) | Client-side fuzzy. Default plan: do search server-side via Postgres FTS for sub-200 ms RTT; only add Fuse if testing shows server search misses on typo-heavy input. |
-| `cmdk` or `downshift` | Accessible combobox / typeahead primitive. `cmdk` (the Vercel Command Menu library) is the modern choice for keyboard-first typeahead. |
-| `@tanstack/react-virtual` | Virtualize the results list if it ever exceeds ~50 visible rows. |
-
-### Mobile admin
-
-Same SPA, separate `/admin` route. The admin views are typing-heavy forms — React Hook Form + Zod validation is the boring-correct choice:
-
-| Library | Purpose |
-|---------|---------|
-| react-hook-form | 7.x — form state without re-renders |
-| Zod | 3.x — schema validation; can be derived from the same OpenAPI schema FastAPI exports |
-
-### What NOT to use (frontend)
-
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| Next.js / Remix | Server rendering offers nothing for a kiosk SPA served off a single LAN host. Adds build complexity. | Vite + React SPA |
-| Webpack | Slower dev, slower builds, more config. | Vite |
-| Redux | Heavy for the amount of state this app has. | Zustand |
-| MobX | Same — overkill. | Zustand |
-| jQuery / static GSAP-on-page | No build pipeline = harder kiosk caching + service worker story. | React + Vite |
-| Three.js / React Three Fiber (in v1) | Pi 5 can do WebGL fine, but a 32-cube grid is a CSS layout problem. | CSS Grid + DOM |
-| GSAP Club plugins | Paid. Not needed for the scope of v1. | GSAP core + CSS |
-| Styled Components / Emotion | Runtime CSS-in-JS adds to React render cost. | Tailwind CSS 4 (zero-runtime utilities) or CSS Modules |
-
----
-
-## Recommended Stack — Infrastructure
-
-### Containerization
-
-**Docker Compose only.** No Kubernetes, no Nomad, no Swarm. One host (`lux`), one operator. Compose handles dependency ordering, network namespacing, and volume mounts — exactly what's needed.
-
-**Dockerfile pattern for the FastAPI service** (multi-stage, `uv`-driven, distroless or `python:3.13-slim` runtime):
-
-```dockerfile
-# syntax=docker/dockerfile:1.7
-FROM python:3.13-slim AS builder
-COPY --from=ghcr.io/astral-sh/uv:0.5 /uv /uvx /bin/
-ENV UV_LINK_MODE=copy UV_COMPILE_BYTECODE=1
-WORKDIR /app
-COPY pyproject.toml uv.lock ./
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-install-project --no-dev
-COPY . .
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv sync --frozen --no-dev
-
-FROM python:3.13-slim AS runtime
-RUN useradd -r -u 10001 gruvax
-WORKDIR /app
-COPY --from=builder --chown=gruvax:gruvax /app /app
-ENV PATH="/app/.venv/bin:$PATH"
-USER gruvax
-EXPOSE 8000
-HEALTHCHECK CMD ["python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz').read()"]
-CMD ["uvicorn", "gruvax.app:app", "--host", "0.0.0.0", "--port", "8000"]
+// pairingUrl = `http://gruvax.local:8000/pair?code=1234&device=<fingerprint>`
+<QRCode value={pairingUrl} size={180} level="M" />
 ```
 
-Key points:
-- BuildKit cache mounts for `~/.cache/uv` make subsequent builds seconds, not minutes.
-- Non-root user (`gruvax`) is the 2026 baseline expectation.
-- `uv sync --frozen` forces lockfile use — no surprise resolutions in CI/prod.
-- Two `uv sync` stages: one before the source copy (lets the dependency layer cache between source-only changes), one after for the package itself.
+The `level="M"` error-correction level handles up to ~15% damage — adequate for a phone camera reading a clean screen. `size={180}` fits the existing pairing modal without layout changes.
 
-### MQTT broker
-
-| Technology | Image | Purpose | Why |
-|------------|-------|---------|-----|
-| Eclipse Mosquitto | `eclipse-mosquitto:2.1-alpine` (~9 MB) | Pub/sub broker for LED messages | Tiny footprint, single-threaded, handles 100k+ concurrent connections on one node — vastly more than needed. The "right size" for a home LAN broker between one publisher (GRUVAX) and a handful of ESP32 subscribers. EMQX exists for clustered, million-connection deployments — that's a strictly bigger problem than this. |
-
-Mosquitto config notes:
-- Bind to a Compose network only — never expose 1883 to the LAN until the LED milestone introduces ESP32s.
-- Enable persistence (`persistence true`, `persistence_location /mosquitto/data/`) so retained messages survive container restarts. For v1's stub, this is mostly future-proofing.
-- Username/password auth even on internal network (one shared credential per device class).
-
-### Frontend hosting
-
-Two clean options; pick the simpler:
-
-1. **Static build served by FastAPI** — `StaticFiles` mount on `/`. One container, one URL, no CORS to configure. Recommended for v1.
-2. **Separate nginx-alpine container** — only if you want to push the static build behind an aggressive cache without involving Python. Adds an extra Compose service and a second port.
-
-Start with option 1; switch to 2 only if profiling shows the FastAPI static serving is a measurable factor (it won't be at this traffic level).
+**Do NOT add** `qrcode.react`, `@zxing/library`, `html5-qrcode`, or any QR *scanner* library — the kiosk renders the code, the admin's phone scans it with its native camera app.
 
 ---
 
-## Recommended Stack — Raspberry Pi Kiosk
+## 2. One-Time Invite Tokens (AUTH-02)
 
-| Concern | Choice | Rationale |
-|---------|--------|-----------|
-| OS | Raspberry Pi OS Trixie (Debian 13), 64-bit | Official supported release since Oct 2025. Includes the labwc compositor by default for Wayland sessions on Pi 5. |
-| Display server | **Wayland with `labwc`** | Default for Pi 5 in Trixie. Hardware video acceleration through KMS works correctly. X11 still works but is the legacy path; the active development is Wayland. |
-| Browser | Chromium (from Raspberry Pi OS repo, not snap/flatpak) | The packaged Chromium has the proprietary V4L2/MMAL bits configured. Same browser the Pi Foundation tests against. |
-| Launcher | `~/.config/labwc/autostart` invoking a `start-kiosk.sh` script | `start-kiosk.sh` runs the browser with the right flags (`--kiosk`, `--noerrdialogs`, `--disable-infobars`, `--no-first-run`, `--password-store=basic`, `--ozone-platform=wayland`, `--app=http://lux.local:PORT/`). `--password-store=basic` avoids the keyring unlock dialog on boot. |
-| Supervision / auto-restart | `systemd --user` unit that owns the Chromium process, with `Restart=always` and a small `RestartSec` | Browser crash or memory leak → automatic restart with clean logs via `journalctl --user`. More reliable than respawn loops in shell scripts. |
-| Cursor hide | `seatd` + Wayland-native cursor hiding via labwc config | `unclutter` is X11-only and broken under Wayland. |
-| Screen blanking | Disabled via labwc/Wayland idle settings | Black-screen-on-idle is in scope for v1 *as a product behavior* — implement at the app level (CSS+JS), not by letting the compositor blank the screen, so the offline banner stays reachable on touch. |
-| On-screen keyboard | **Open issue.** `squeekboard` does not currently render above fullscreen Chromium under labwc. | If touch keyboard is required for kiosk admin fallback, mitigation options: (a) leave admin to the mobile UI; (b) build an in-app virtual keyboard in the SPA itself; (c) drop kiosk fullscreen flag and live with a window frame. Recommend (b) — the typing-heavy admin path is mobile-first per requirements; the kiosk admin fallback only needs limited input. **Flag for the UI/admin phase.** |
+### Decision: `itsdangerous.URLSafeTimedSerializer` + `invite_tokens` DB table
 
-### Touchscreen calibration
+`itsdangerous` 2.2.0 is already a transitive dependency of `starlette.SessionMiddleware` (already in the lockfile). No new package is needed.
 
-Pi 5 + 7" official touchscreen needs no calibration. Third-party HDMI+USB touchscreens may need `libinput`'s `MatchProduct` config — flag for hardware-setup phase, not stack choice.
+`URLSafeTimedSerializer` provides:
+- Cryptographic signing with HMAC-SHA1 (configurable to SHA-512)
+- Built-in timestamp embedding (`dumps()` includes the signing time)
+- `max_age` on `loads()` enforces TTL — raises `SignatureExpired` if the token is older than the threshold
+- URL-safe base64 encoding — the token is embeddable in a URL query parameter without percent-encoding
+
+**Critical limitation:** `itsdangerous` tokens are NOT single-use by themselves. The signature is stateless — the same token verifies successfully on every call until it expires. Single-use enforcement requires a database-side "consumed" flag.
+
+### Required: `invite_tokens` Table
+
+```sql
+-- Alembic migration
+CREATE TABLE gruvax.invite_tokens (
+    id          uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    token_hash  text NOT NULL UNIQUE,   -- SHA-256 of the raw token string
+    profile_id  uuid NOT NULL REFERENCES gruvax.profiles(id) ON DELETE CASCADE,
+    created_by  text NOT NULL,          -- 'owner' sentinel or future user ref
+    expires_at  timestamptz NOT NULL,
+    used_at     timestamptz,            -- NULL = unused; NOT NULL = consumed
+    created_at  timestamptz NOT NULL DEFAULT now()
+);
+CREATE INDEX ON gruvax.invite_tokens (token_hash) WHERE used_at IS NULL;
+```
+
+### Flow
+
+1. Owner requests an invite link via the admin UI → server calls `URLSafeTimedSerializer(secret_key, salt='invite').dumps({'profile_id': str(profile_id)})`, writes the SHA-256 of the token to `invite_tokens`, sets `expires_at = now() + 24h`.
+2. Server returns the signed URL (e.g. `http://gruvax.local:8000/invite?token=<token>`).
+3. Recipient opens the URL in their browser, pastes their own Discogs PAT into a minimal form.
+4. Server: `loads(token, max_age=86400)` — raises `SignatureExpired` if >24h. Look up `token_hash` in `invite_tokens` where `used_at IS NULL` — if absent or already used, reject. If valid: store the Fernet-encrypted PAT on the profile row, set `used_at = now()`.
+
+**TTL:** 24 hours is the right default for a household. The owner sends the link to a family member who acts within the day. Configure via `Settings` if needed — the `expires_at` column makes this trivial to adjust.
+
+**Why not JWT?** JWT is stateless; you cannot revoke a JWT without a denylist (which is the same DB table you'd need anyway). `itsdangerous` is already present; introducing `python-jose` or `PyJWT` for this single use case adds a package for no benefit.
+
+**Why not a random UUID token stored in plain?** Also valid. The `itsdangerous` approach has the advantage that the signature check catches tampering before hitting the DB, reducing unnecessary DB lookups for malformed tokens. The difference is small — either approach works. Signed tokens are chosen because the library is already present.
+
+**Do NOT add** `PyJWT`, `python-jose`, `authlib`, `fastapi-users`, or any OAuth library for this feature.
 
 ---
 
-## Testing the Position-Estimation Algorithm
+## 3. Offline / Reconnect UX (OFF-01..04)
 
-The algorithm investigation is its own research stream (per PROJECT.md). For the **harness**, use this stack:
+### Decision: No new package — compose existing primitives
 
-| Tool | Purpose |
-|------|---------|
-| pytest | Runner |
-| pytest-asyncio | If algorithm is exposed as an async endpoint test |
-| Hypothesis | Property-based tests for invariants ("estimated position is always within the label-span"; "monotonic in catalog number for the same label"; "results are stable across normalization of catalog-number whitespace/case") |
-| pytest fixtures (`@pytest.fixture(scope="session")`) | Load the ~3,000-row CSV once per test session |
-| pytest.mark.parametrize | Drive per-label golden-result tests from a fixtures table |
-| `pytest-benchmark` | Track 200 ms p95 regression for search → estimate path |
+The v2.1 offline requirements are:
+- OFF-01: detect backend/LAN loss
+- OFF-02: graceful degraded mode (search from cache, locate from cache — already works; just need a UI banner)
+- OFF-03: auto-reconnect when connectivity returns
+- OFF-04: offline banner, dismissible
 
-**Layered approach (recommended):**
-1. **Golden tests:** parametrized over a small hand-curated set of labels representing each known edge case (single record, single-cube label, multi-cube label, inconsistent catalog format like `Twelve 002` vs `TWELVE 003`, numeric-only prefix `19BOX019`). Pin the expected (cube, sub-cube interval) for each. These are regression nets.
-2. **Property tests (Hypothesis):** for any input record in the real CSV, estimated cube ∈ label-span; cube boundaries are sorted; running the algorithm on a permuted-then-resorted catalog list is invariant.
-3. **Benchmarks:** budget tests that fail CI if p95 search-to-estimate crosses, say, 50 ms (leaving 150 ms for network + render).
+All four are achievable with what is already in the project:
 
-CSV stays gitignored. The CI job either downloads it from a tracked private location or — better — generates a synthetic 3000-row dataset that mirrors the *shape* of the real one (similar label distribution, similar catalog-format mix) and uses that for CI. The real CSV is for local validation runs.
+**TanStack Query `networkMode: 'offlineFirst'`** (no package addition)
+
+```tsx
+// QueryClient config — set once at app root
+const queryClient = new QueryClient({
+  defaultOptions: {
+    queries: {
+      networkMode: 'offlineFirst',  // run the query; pause retries while offline
+      staleTime: 5 * 60 * 1000,
+      gcTime: 30 * 60 * 1000,
+      retry: 3,
+    },
+  },
+});
+```
+
+`offlineFirst` lets queries run on first mount (hits the local cache), then pauses retries when the browser detects offline — exactly what a kiosk with a local cache needs. It does not block rendering on network state.
+
+**Custom `useBackendOnline` hook** (no package; ~25 lines)
+
+`navigator.onLine` is unreliable for a home LAN scenario: it reflects "has a network interface" not "can reach the GRUVAX server". A kiosk connected to WiFi but with the Docker host restarted would show `navigator.onLine === true` while being effectively offline to the app.
+
+The correct approach for a LAN-only deployment is a lightweight periodic health check against the server:
+
+```tsx
+// hooks/useBackendOnline.ts — no external package required
+function useBackendOnline(intervalMs = 10_000) {
+  const [online, setOnline] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    const check = async () => {
+      try {
+        const res = await fetch('/healthz', { signal: AbortSignal.timeout(3000) });
+        if (!cancelled) setOnline(res.ok);
+      } catch {
+        if (!cancelled) setOnline(false);
+      }
+    };
+    check();
+    const id = setInterval(check, intervalMs);
+    return () => { cancelled = true; clearInterval(id); };
+  }, [intervalMs]);
+
+  return online;
+}
+```
+
+`/healthz` already exists (Phase 8 of v1.0). `AbortSignal.timeout(3000)` (Web API, no polyfill needed in Chromium) bounds the check to 3 seconds. A 10-second poll interval means the banner appears within 10–20 seconds of backend loss — acceptable for a household kiosk.
+
+**Zustand offline slice** (already in project)
+
+```tsx
+// Store already exists; add one field:
+interface KioskStore {
+  backendOnline: boolean;
+  setBackendOnline: (v: boolean) => void;
+}
+```
+
+The offline banner component reads from Zustand and renders based on `backendOnline`. The `useBackendOnline` hook calls `setBackendOnline` on state transitions.
+
+**SSE auto-reconnect** (native `EventSource` behavior, no code required)
+
+The browser's native `EventSource` API automatically reconnects with a 3-second default retry interval when the connection drops. The existing `sse-starlette` backend sends `retry:` fields that can tune this. For the GRUVAX SSE channel (`/api/events/{profile_id}`), native reconnect is sufficient — no reconnect library needed.
+
+When the SSE connection drops and the health check sees the backend offline, suppress the SSE reconnect noise in the UI (don't show a "reconnecting" spinner on top of the offline banner — that's redundant). When health check comes back positive, the SSE reconnect will have already happened automatically.
+
+### Why NOT `vite-plugin-pwa` / Workbox
+
+`vite-plugin-pwa` + Workbox is the right tool when you need:
+- Installability as a PWA (home screen icon, standalone window)
+- Aggressive precaching of static assets for full offline operation without a server
+- Background sync for mutation queuing while offline
+- Push notifications
+
+GRUVAX needs none of these. The kiosk always has the server on the same LAN — the "offline" state is a temporary disruption (server restart, network blip), not a design intent to operate without a server. The search/locate results come from the server cache; the frontend itself is served by FastAPI's `StaticFiles` and caches in Chromium's standard HTTP cache between loads.
+
+Adding a service worker intercepts ALL requests, which complicates the SSE connection (service workers do not support `EventSource` in the intercepted context without explicit passthrough), adds a second request-handling layer to debug, and requires careful cache invalidation strategy on every deploy. The complexity-to-benefit ratio is negative for this use case.
+
+**Do NOT add** `vite-plugin-pwa`, `workbox-window`, `workbox-precaching`, `workbox-routing`, or any service worker library.
 
 ---
 
-## Installation
+## 4. Privacy / Session-Only History (PRIV-01..04)
+
+### Decision: `sessionStorage` (browser built-in, zero install)
+
+PRIV requirements:
+- PRIV-01: session-only search history (clears when tab/browser closes)
+- PRIV-02: no server-side query-text persistence
+- PRIV-03: aggregate-only stats (already enforced server-side in v2.0 `record_stats`)
+- PRIV-04: no-PIN "reset kiosk" (clears client state without server auth)
+
+**`sessionStorage`** is the correct storage primitive for PRIV-01 and PRIV-04:
+
+- Tied to the browser tab/session; cleared automatically when Chromium is restarted (which happens on every kiosk reboot via the `systemd --user` unit restart)
+- 5 MB limit — more than adequate for a list of recent searches (strings)
+- Synchronous API — no async complexity for a read/write of a few strings
+- Isolated per origin — no cross-tab leakage
+- Not persisted to disk in the same way as `localStorage` (important for a shared kiosk)
+
+```tsx
+// Recently pulled list (SRCH-09) + search history (PRIV-01)
+// Stored as JSON arrays in sessionStorage — no library needed
+const RECENT_KEY = 'gruvax:recent_searches';
+
+function getRecentSearches(): string[] {
+  try {
+    return JSON.parse(sessionStorage.getItem(RECENT_KEY) ?? '[]');
+  } catch {
+    return [];
+  }
+}
+
+function addRecentSearch(query: string): void {
+  const recent = getRecentSearches();
+  const deduped = [query, ...recent.filter(q => q !== query)].slice(0, 20);
+  sessionStorage.setItem(RECENT_KEY, JSON.stringify(deduped));
+}
+```
+
+PRIV-02 (no server-side query text) is a backend implementation constraint, not a stack question — the `/api/search` handler must not log the `q` parameter and must not write it to any DB table. This is enforced at code-review time, not by a library.
+
+PRIV-04 (reset kiosk) clears `sessionStorage` (and optionally the TanStack Query cache) then redirects to the home route — no server call, no PIN required. The "reset" is purely client-side state disposal.
+
+**Why not `localStorage`?** `localStorage` persists across browser restarts, which violates PRIV-01. On a shared kiosk, a visitor's searches surviving to the next session is the exact privacy failure the requirement exists to prevent.
+
+**Why not `IndexedDB`?** IndexedDB is the right choice for structured offline storage of large datasets (think: a local copy of the collection for full offline search). For a list of 10–20 recent search strings, IndexedDB's async API and transaction model is unnecessary complexity. The data is session-scoped and tiny.
+
+**Why not Zustand `persist` middleware?** Zustand's `persist` middleware defaults to `localStorage`. You CAN configure it to use `sessionStorage` (via `storage: createJSONStorage(() => sessionStorage)`), and that would also work. The raw `sessionStorage` approach is simpler because it avoids tying the persistence decision into the Zustand store shape. Use whichever is more consistent with how the rest of the app manages local state — both are zero-install options.
+
+**Do NOT add** `idb`, `localforage`, `dexie`, or any IndexedDB wrapper for this use case.
+
+---
+
+## Net-New Installation
 
 ```bash
-# Backend: bootstrap with uv
-uv init --package gruvax
-cd gruvax
-uv add fastapi "uvicorn[standard]" "psycopg[binary,pool]" sqlalchemy alembic \
-       pydantic pydantic-settings sse-starlette aiomqtt \
-       "passlib[argon2]" itsdangerous
-uv add --dev pytest pytest-asyncio pytest-cov httpx hypothesis \
-       ruff mypy types-passlib
+# Frontend — one package added
+npm install react-qr-code
 
-# Frontend
-npm create vite@latest gruvax-ui -- --template react-ts
-cd gruvax-ui
-npm install react-router @tanstack/react-query zustand \
-            gsap motion cmdk react-hook-form zod
-npm install -D tailwindcss @types/node vitest @testing-library/react \
-            @testing-library/jest-dom playwright
+# Backend — no new packages; itsdangerous is already a transitive dep
+# New Alembic migration needed for invite_tokens table (no pip changes)
 ```
+
+---
+
+## What NOT to Add (v2.1 Explicit Exclusions)
+
+| Do NOT Add | Why | What to Use Instead |
+|------------|-----|---------------------|
+| `python-qrcode` | Server-side QR generation unnecessary; adds Pillow bloat | `react-qr-code` (frontend) |
+| `qrcode.react` | Effectively unmaintained since Dec 2024 | `react-qr-code` 2.0.21 |
+| `PyJWT` / `python-jose` | No JWT need; `itsdangerous` is already present | `URLSafeTimedSerializer` + `invite_tokens` table |
+| `authlib` | OAuth machinery; invite tokens are a much simpler problem | `itsdangerous` + DB row |
+| `fastapi-users` | Multi-user auth for a single-PIN + invite-token flow | `SessionMiddleware` + `invite_tokens` table |
+| `vite-plugin-pwa` | Service workers complicate SSE, add cache invalidation overhead, solve a "full offline" problem GRUVAX doesn't have | TanStack Query `offlineFirst` + `useBackendOnline` hook |
+| `workbox-window` / `workbox-precaching` | Same rationale as `vite-plugin-pwa` | — |
+| `localforage` / `dexie` / `idb` | IndexedDB is the wrong scope for session-only search history | `sessionStorage` (built-in) |
+| `use-online` / `react-use` network hooks | Thin wrappers around `navigator.onLine` — unreliable for LAN-only detection | Custom `useBackendOnline` with `/healthz` ping |
+| `react-use` (full lib) | Pulls in ~100 hooks for 2–3 needed ones | Write the 2–3 needed hooks directly (~25 lines each) |
 
 ---
 
 ## Alternatives Considered
 
-| Recommended | Alternative | When to Use Alternative |
-|-------------|-------------|-------------------------|
-| psycopg3 (match discogsography) | asyncpg | If raw query/s ever becomes the bottleneck (5x microbenchmark advantage). Won't matter on a home LAN. |
-| SQLAlchemy 2.0 async | Hand-written SQL + `psycopg` rows + `Pydantic` models | Acceptable for a schema this small; choose only if discogsography explicitly avoids SQLAlchemy. |
-| Alembic | yoyo-migrations, dbmate, sqitch | Worth it only if you want migrations decoupled from the Python toolchain. Sticking with Alembic keeps the Python story unified. |
-| Starlette `SessionMiddleware` | `fastapi-users`, hand-rolled JWT | `fastapi-users` if user management ever expands beyond one PIN. JWT if you ever expose the API beyond home LAN and want stateless tokens. Neither fits the v1 model. |
-| React 19 (+ Compiler) | Svelte 5, SolidJS | Svelte/Solid if UI design phase shows extreme animation density and you want the smallest possible runtime on the Pi. Both are objectively faster per-update; both have meaningfully smaller ecosystems. |
-| Vite 7 | Next.js, Remix | Only if SEO and SSR matter — they don't for a LAN-only kiosk. |
-| GSAP core + Framer Motion | Anime.js, Theatre.js, React Spring | Anime.js is great but smaller community. Theatre.js is for design-tool-driven motion graphics (too much for this scope). React Spring is fine but Framer Motion's API is more familiar and similar feature coverage. |
-| Eclipse Mosquitto | EMQX, HiveMQ, NanoMQ, VerneMQ | EMQX/HiveMQ are right when you need clustering or 100k+ connections. NanoMQ is interesting for ultra-constrained edge devices. None apply at this scale. |
-| Server-Sent Events | WebSocket | WebSocket if the admin UI ever needs to *stream* edits back (collaborative editor style). For one-way "boundary changed, please refetch" SSE is strictly simpler. |
-| Static files via FastAPI | Separate nginx container | nginx if the kiosk static assets ever need to be cached aggressively independent of API restarts. |
+| Feature | Recommended | Alternative | Why Not |
+|---------|-------------|-------------|---------|
+| QR generation | `react-qr-code` (frontend, SVG) | `python-qrcode` server-side PNG | Unnecessary server round-trip; client has all data it needs |
+| QR generation | `react-qr-code` | `qrcode.react` | Last release 2024-12-11; `react-qr-code` is actively maintained successor |
+| Invite tokens | `itsdangerous` + DB table | Random UUID in DB only | Both work; `itsdangerous` adds tamper-detection before hitting DB for free (lib already present) |
+| Invite tokens | `itsdangerous` + DB table | JWT (python-jose / PyJWT) | JWT is stateless — still needs a denylist table to enforce single-use, defeating the stateless advantage |
+| Offline detection | Custom `/healthz` hook | `navigator.onLine` events only | `navigator.onLine` detects "has network interface", not "can reach GRUVAX server" — unreliable on home LAN |
+| Offline detection | Custom hook | `vite-plugin-pwa` + Workbox | Workbox solves "fully offline" PWA; GRUVAX needs "detect disruption + reconnect", a much simpler problem |
+| Privacy history | `sessionStorage` | `localStorage` | `localStorage` persists across browser restarts — violates PRIV-01 |
+| Privacy history | `sessionStorage` | Zustand `persist` + `sessionStorage` storage | Both work; raw `sessionStorage` is simpler for this case |
 
 ---
 
-## What NOT to Use
+## Version Compatibility Notes
 
-| Avoid | Why | Use Instead |
-|-------|-----|-------------|
-| Python 3.10 or 3.11 | Discogsography is on 3.13+; splitting versions adds maintenance for zero benefit. | Python 3.13 |
-| Poetry (for this project) | Slower than `uv` for installs and locks. Discogsography uses `uv`. | `uv` |
-| `pipenv` | Effectively abandoned. | `uv` |
-| Pydantic v1 | EOL — many libraries have dropped support. | Pydantic v2 |
-| psycopg2 | Legacy sync driver; no async. | psycopg 3 |
-| Tortoise ORM / pony ORM / encode/databases | Smaller communities, async support more brittle. | SQLAlchemy 2.0 async |
-| Manual SQL migrations / Flyway / Liquibase | Adds JVM or external tooling to a pure-Python project. | Alembic |
-| Flask | Synchronous-first; would lose all the FastAPI infrastructure discogsography shares. | FastAPI |
-| Django | Wrong size — full ORM, admin, migrations, templates — for a single-schema microservice. | FastAPI |
-| `fastapi-users` | Multi-user auth machinery for a single-PIN app. | Starlette `SessionMiddleware` + PIN check |
-| Hand-rolled JWT auth | More to get wrong than a signed cookie for a LAN app. | Starlette `SessionMiddleware` |
-| `paho-mqtt` directly | Sync API; awkward bridge into FastAPI's async event loop. | `aiomqtt` 3.x |
-| `fastapi-mqtt` | Extra abstraction over `gmqtt`; less direct than `aiomqtt`. | `aiomqtt` 3.x |
-| EMQX (for this scale) | Enterprise-scale broker overhead; configuration surface dwarfs need. | `eclipse-mosquitto` |
-| Webpack | Slow, complex config compared to Vite. | Vite |
-| Create React App | Officially deprecated. | Vite + React |
-| Redux Toolkit (for this app) | Too much ceremony for the amount of state. | Zustand |
-| Three.js / Pixi.js (v1) | Solving a layout problem with a renderer. | CSS Grid + DOM |
-| GSAP Club paid plugins | Cost without commensurate benefit at this scope. | GSAP core + CSS |
-| Snap-packaged Chromium on Pi | Missing GPU integration. | `chromium-browser` from RasPiOS apt repo |
-| X11 (on a fresh Pi 5 Trixie build) | Wayland is the default and where Pi Foundation invests now. | Wayland + labwc |
-| `unclutter` (under Wayland) | X11-only; broken under Wayland. | Wayland cursor hiding via compositor config |
-| Polling for kiosk → boundary updates | Wastes CPU on the Pi, adds steady network chatter. | SSE |
-| Cookie-based session storage for *large* state | 4 KB cookie limit. | Cookie for session ID only; server keeps state in-memory or in Postgres. (Not an issue here — sessions are tiny.) |
-| Pulling the collection CSV into the repo or any CI image | Explicit project constraint. | CSV stays gitignored, mounted from host or fetched in dev. CI uses a synthetic dataset. |
-
----
-
-## Stack Patterns by Variant
-
-**If the UI design phase requires immersive 3D / cinematic transitions:**
-- Add React Three Fiber + drei for declarative Three.js, OR
-- Switch to a Pixi.js-based renderer for 2D-with-shader-effects
-- In either case, re-validate FPS budget on the Pi 5 — these will not be free
-
-**If discogsography turns out *not* to use SQLAlchemy:**
-- Drop SQLAlchemy from GRUVAX too; use raw `psycopg` async cursors with Pydantic mapping
-- Keep Alembic regardless — it operates against the database, not against an ORM
-
-**If the admin UI ever grows beyond a single PIN (multi-household / guests):**
-- Migrate from `SessionMiddleware` + PIN to `fastapi-users` with email/password
-- Add the OAuth provider story via `authlib` *only* if integrating with something external
-
-**If LED publish volume ever justifies it (it won't at this scale):**
-- Stay on Mosquitto. EMQX's clustering is for thousands of concurrent device connections, not for a handful of ESP32s talking to one home server.
-
----
-
-## Version Compatibility
-
-| Package A | Compatible With | Notes |
-|-----------|-----------------|-------|
-| `fastapi==0.136.x` | `pydantic>=2.7`, `starlette>=1.0.0` | 0.136.1 pinned Starlette 1.0.0; mind transitive upgrades. |
-| `sqlalchemy==2.0.x` (async) | `psycopg[binary,pool]>=3.2` | Use `psycopg.AsyncConnection`; the SQLAlchemy URL prefix is `postgresql+psycopg://`. |
-| `alembic==1.18.x` | `sqlalchemy>=2.0` | Init with `alembic init -t async`. |
-| `aiomqtt==3.x` | Python 3.10+, no paho dependency | Drop-in once configured; uses `mqtt5` sans-io internally. |
-| `pydantic-settings==2.x` | `pydantic>=2.7` | Lockstep with Pydantic v2 minor releases. |
-| `sse-starlette==2.x` | `starlette>=1.0` | Watch FastAPI 0.135+ to migrate to built-in `fastapi.sse` later. |
-| `vite==7.x` | Node.js 20.19+ or 22.12+ | Node 18 is EOL; Pi 5 runs Node 20 fine. |
-| React 19 + React Compiler | `react@^19`, `react-dom@^19`, `babel-plugin-react-compiler` (or SWC plugin in Vite) | Compiler 1.0 stable since Oct 2025. |
-| Chromium kiosk | Raspberry Pi OS Trixie, labwc compositor | `--ozone-platform=wayland`; package via apt, not snap. |
-| Mosquitto 2.1-alpine | MQTT 3.1, 3.1.1, 5 | Use MQTT 5 for retained topics and shared subscriptions. |
-
----
-
-## Discogsography Alignment Notes
-
-| Item | Constraint | Rationale |
-|------|------------|-----------|
-| Python 3.13 | Hard match | Shared dev tooling, single Docker base layer story. |
-| FastAPI | Soft match (same library, version can drift minor) | Both stay on the same major; FastAPI minor versions are usually safe to differ. |
-| psycopg3 | Hard match | Shared Postgres instance; discogsography already runs the migration story. |
-| uv | Hard match | Lockfile format and CI scripts can be near-identical. |
-| Ruff + mypy | Hard match | Identical lint config makes mental context-switching painless. |
-| Auth | No alignment needed | Discogsography uses Discogs OAuth; GRUVAX uses a local PIN. Different problem. |
-| Neo4j | Skip entirely for GRUVAX | GRUVAX doesn't need a graph view for v1. Future "find related releases by label-mate" could leverage it through discogsography's MCP, not by adding the driver here. |
-| RabbitMQ | Skip | Discogsography uses RabbitMQ for ingestion pipelines. GRUVAX's pub/sub is LED-shaped — MQTT is the right tool. |
+| Addition | Requires | Notes |
+|----------|----------|-------|
+| `react-qr-code` 2.0.21 | React 16+ | Compatible with React 19. Pure SVG, no canvas requirement. |
+| `URLSafeTimedSerializer` | `itsdangerous>=2.2` (already pinned) | `loads(token, max_age=86400)` raises `SignatureExpired` on TTL breach; `BadSignature` on tampering. Catch both as `BadData`. |
+| `invite_tokens` table | Alembic + Postgres | New migration; FK to `profiles.id` with `ON DELETE CASCADE`. Index on `token_hash WHERE used_at IS NULL` for fast lookup. |
+| TanStack Query `offlineFirst` | TanStack Query v5 (already in use) | `networkMode: 'offlineFirst'` in `QueryClient` defaultOptions. No API changes to individual `useQuery` calls unless you need per-query override. |
+| `sessionStorage` | Chromium (already the kiosk browser) | No polyfill needed. Available in all modern browsers since IE8. Cleared on Chromium restart (happens on every kiosk reboot). |
 
 ---
 
 ## Sources
 
-### Authoritative
-
-- [FastAPI on PyPI](https://pypi.org/project/fastapi/) — verified 0.136.1, Python ≥ 3.10 — HIGH
-- [FastAPI release notes (GitHub)](https://github.com/fastapi/fastapi/releases) — SSE support in 0.135.0, Python 3.14t support in 0.136.0 — HIGH
-- [Pydantic on PyPI](https://pypi.org/project/pydantic/) — 2.13.4 latest (May 2026) — HIGH
-- [Eclipse Mosquitto on Docker Hub](https://hub.docker.com/_/eclipse-mosquitto) — `2.1-alpine` ~9 MB, current tag — HIGH
-- [Vite 7.0 announcement](https://vite.dev/blog/announcing-vite7) — Node 20.19+ requirement, Rolldown bundler — HIGH
-- [React Compiler 1.0 announcement](https://react.dev/blog/2025/10/07/react-compiler-1) — Stable Oct 2025 — HIGH
-- [Alembic Cookbook](https://alembic.sqlalchemy.org/en/latest/cookbook.html) — async template patterns — HIGH
-- [discogsography README (GitHub)](https://github.com/SimplicityGuy/discogsography) — verified Python 3.13+, FastAPI, psycopg3, uv, Ruff, mypy, just — HIGH
-
-### Comparative / Verified-with-multiple-sources
-
-- [SSE vs WebSockets for real-time FastAPI (Medium, 2026)](https://medium.com/@rameshkannanyt0078/fastapi-real-time-api-websockets-vs-sse-vs-long-polling-2026-guide-ce1029e4432e) — MEDIUM, cross-checked with FastAPI SSE docs
-- [Mosquitto vs EMQX comparison (Cedalo, 2026)](https://www.cedalo.com/blog/mosquitto-vs-emqx-an-honest-comparison-for-iot-teams) — MEDIUM
-- [uv vs Poetry comparison (multiple 2026 sources)](https://www.danilchenko.dev/posts/uv-vs-pip-vs-poetry/) — MEDIUM, confirmed by discogsography choice
-- [SolidJS vs Svelte vs React reactivity (PkgPulse, 2026)](https://www.pkgpulse.com/guides/solidjs-vs-svelte-5-vs-react-reactivity-2026) — MEDIUM
-- [GSAP vs Framer Motion (Annnimate, 2026)](https://www.annnimate.com/blog/gsap-vs-framer-motion-vs-react-spring) — MEDIUM
-- [psycopg3 vs asyncpg benchmarks (Fernando Arteaga)](https://fernandoarteaga.dev/blog/psycopg-vs-asyncpg/) — MEDIUM
-
-### Pi-kiosk specifics
-
-- [Raspberry Pi Kiosk Display System (TOLDOTECHNIK GitHub)](https://github.com/TOLDOTECHNIK/Raspberry-Pi-Kiosk-Display-System) — labwc autostart pattern — MEDIUM
-- [Automated RPi Web Kiosk Setup (benswift.me, July 2025)](https://benswift.me/blog/2025/07/16/automated-rpi-web-kiosk-setup-in-2025/) — recent, working pattern — MEDIUM
-- [labwc + Chromium kiosk discussion (raspberrypi.org forums)](https://forums.raspberrypi.com/viewtopic.php?t=390764) — community-validated patterns — MEDIUM
-- [Squeekboard fullscreen issue (labwc/labwc#2926)](https://github.com/labwc/labwc/issues/2926) — known open issue, drives the touch-keyboard recommendation — HIGH (it's an open bug)
-
-### MQTT / Realtime
-
-- [aiomqtt on GitHub (empicano)](https://github.com/empicano/aiomqtt) — v3 sans-io rewrite — HIGH
-- [sse-starlette on PyPI](https://pypi.org/project/sse-starlette/) — current SSE implementation — HIGH
+- [react-qr-code on npm](https://www.npmjs.com/package/react-qr-code) — version 2.0.21, last published 2026-04-29 — HIGH
+- [qrcode.react on npm](https://www.npmjs.com/package/qrcode.react) — version 4.2.0, last published 2024-12-11 — HIGH (confirmed stale)
+- [python-qrcode on PyPI](https://pypi.org/project/qrcode/) — version 8.2, released 2025-05-01, Python 3.9–3.13 — HIGH
+- [itsdangerous Context7 docs](/pallets/itsdangerous) — `URLSafeTimedSerializer`, `max_age`, `SignatureExpired`, `BadData` — HIGH
+- [itsdangerous PyPI](https://pypi.org/project/itsdangerous/) — version 2.2.0 current — HIGH
+- [TanStack Query v5 Context7 docs](/tanstack/query) — `networkMode: 'offlineFirst'`, `networkMode: 'always'`, `onlineManager` — HIGH
+- [TanStack Query Network Mode docs](https://tanstack.com/query/v5/docs/react/guides/network-mode) — three modes confirmed, `offlineFirst` behavior documented — HIGH
+- [MDN Navigator.onLine](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/onLine) — known unreliability for LAN scenarios documented — HIGH
+- [vite-plugin-pwa Context7 docs](/websites/vite-pwa-org_netlify_app) — service worker capabilities and scope confirmed — MEDIUM (service worker confirmed as the wrong tool for this case)
+- [Browser storage comparison (multiple sources)](https://dev.to/arnavsharma2711/browser-storage-explained-localstorage-vs-sessionstorage-vs-indexeddb-vs-cookies-283k) — `sessionStorage` session-scoped behavior confirmed — MEDIUM
 
 ---
 
-*Stack research for: GRUVAX (Pi 5 kiosk + FastAPI + MQTT-stub + Postgres on shared host).*
-*Researched: 2026-05-18*
+*Stack research for: GRUVAX v2.1 Resilience + Privacy + UX polish (net-new additions only)*
+*Researched: 2026-05-30*

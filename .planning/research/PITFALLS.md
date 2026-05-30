@@ -1,1161 +1,636 @@
-# Pitfalls Research — GRUVAX
+# Pitfalls Research — GRUVAX v2.1 (Resilience + Privacy + UX Polish)
 
-**Domain:** Personal-collection touchscreen kiosk (Chromium kiosk on Pi 5) + FastAPI + MQTT-stubbed LED layer, deployed via Docker Compose alongside an existing `discogsography` service sharing a Postgres instance.
-**Researched:** 2026-05-18
-**Confidence:** HIGH on category-specific pitfalls (anchored to STACK.md/FEATURES.md/ARCHITECTURE.md and verified against current `aiomqtt`/`sse-starlette` docs via Context7). MEDIUM on the position-estimation pitfalls (the algorithm is its own research stream; pitfalls here describe *contract-level* dangers, not algorithm choice).
+**Domain:** Adding invite-token member onboarding, QR-code kiosk pairing, offline/reconnect UX, query-privacy enforcement, and v2.0 tech-debt closure to a shipped Python/FastAPI + React household vinyl-locator kiosk.
+**Researched:** 2026-05-30
+**Confidence:** HIGH on security and privacy pitfalls (anchored to current MDN/OWASP guidance and verified patterns). HIGH on SSE/offline pitfalls (anchored to TanStack Query network-mode docs and EventSource spec). MEDIUM on QR pairing MITM (home-LAN threat model reduces many enterprise risks but does not eliminate them).
 
-This document is opinionated and project-specific. Generic "test your code" advice is omitted. Every prevention strategy references a concrete GRUVAX surface (a table, a view, a setting, an endpoint, a Compose service).
+This document covers **only v2.1-specific pitfalls**. The v1.0 pitfall catalog (catalog-number sort, retained MQTT state, squeekboard, etc.) remains the authoritative reference for v1-era concerns. Every prevention strategy here references a concrete GRUVAX surface.
 
 **Severity legend:**
-- **Critical** — silently corrupts data or makes the system unusable.
-- **Major** — multi-hour fix or forces a re-design.
-- **Minor** — annoying but quickly fixable.
+- **Critical** — silently corrupts data, leaks a secret, or makes a security promise false.
+- **Major** — multi-hour fix or broken named feature; no data corruption or secret leak.
+- **Minor** — annoying but quickly fixable; no security or integrity impact.
 
 ---
 
 ## Critical Pitfalls
 
-### Pitfall 1: Catalog-number string comparison silently breaks natural sort
+### Pitfall 24: Invite token leaks via Referrer header or Uvicorn access log
 
 **What goes wrong:**
-A user searches for `Blue Note BLP-4195`; the kiosk highlights the wrong cube. Investigation shows the boundary table has `last_catalog = 'BLP 4200'` and `BLP-4195` lexicographically *exceeds* `BLP 4200` because `' '` (0x20) < `'-'` (0x2D). The "deterministic ordering" invariant is broken not by user error but by ASCII.
+The invite URL is `https://gruvax.local/invite/accept?token=<fernet_ciphertext>`. The member opens the link on their phone, which may have a browser extension that pings an analytics service on navigation, or may load a resource from an external domain (a font, a favicon, any `<img src>` or `<link>` in the accept page). The browser sends `Referer: https://gruvax.local/invite/accept?token=<ciphertext>` to that external domain. The token is now in that third party's access log. Simultaneously, Uvicorn's default access log records the full request path including the query string — the token appears in `journalctl` and Docker's `json-file` log in plaintext.
 
-**Specific symptom:**
-- Two records from the same label land in different cubes than the owner's hand-sorted shelf says they should.
-- Affected labels are usually the ones with mixed separators across catalog numbers (e.g., `BLP 4195` shelved next to `BLP-4196`).
-- Bug is **silent**: kiosk renders a wrong-but-plausible cube; no error log.
+Even though the token is Fernet-encrypted (not a raw PAT), an attacker with that log entry has a valid single-use invite link they can race against the real member.
 
 **Why it happens:**
-`(label, catalog#)` is treated as `TEXT` in `cube_boundaries`. Python and Postgres default string ordering is byte-wise (or locale-driven), neither of which respects the user's mental "BLP 4195 comes right before BLP-4196" model. The CSV documented in PROJECT.md shows the real catalog-number formats are inconsistent across labels and sometimes within a label.
-
-**Warning signs (detect early):**
-- During the position-estimator research stream: any property test that says "for any release in the CSV, `primary_cube` is in `label_span`" fails on a label whose catalog numbers mix separators or case.
-- Manual spot-check after first wizard run: pick 5 records whose catalog numbers contain a digit and a separator, verify each lands in the cube the owner's eyes say it should.
-- Slow-query log or `confidence: 0` rate climbs on a specific label after a reshuffle.
-
-**Prevention:**
-- Treat catalog-number comparison as the position estimator's responsibility, **not** the database's. `cube_boundaries.first_catalog`/`last_catalog` store the **original** (display) catalog number; the estimator normalizes both the boundary values and the queried record's catalog number through the same `normalize.py` (per ARCHITECTURE.md project structure) before comparing.
-- Recommended normalization stages (each a step in `normalize.py`): case-fold, collapse runs of whitespace/`-`/`_`/`.` to a single canonical separator, then split into `(alpha_prefix, numeric_suffix, trailing)` and compare the parts independently with numeric-aware comparison on the digit run.
-- Add Hypothesis property: "for every label in the seed CSV, sorting the label's catalog numbers via the estimator's comparator produces the same order as the hand-curated golden list for that label." Run on every commit.
-- Boundary admin save path runs the same comparator: reject save if `first > last` per the comparator (not per string order).
-
-**Recovery (if it slips past prevention):**
-- Add the missing normalization rule, write a Hypothesis test that fails without it, ship.
-- For affected boundaries already in production: a one-time admin "re-validate all boundaries" diagnostic that flags any cube whose boundaries the new comparator would reject. Owner reviews flagged cubes and edits via the wizard. The `boundary_history` append-only log means the reshuffle is auditable.
-
-**Severity:** Critical (silently corrupts the answer the product exists to give).
-
-**Phase to address:** Position-estimator research stream (algorithm), then Backend Phase (admin save validation using the same comparator), then Test Phase (Hypothesis property suite).
-
----
-
-### Pitfall 2: Boundary points at a record that no longer exists in the collection
-
-**What goes wrong:**
-Owner sells a record, runs the next discogsography sync; the boundary `last_catalog` is now a `(label, catalog#)` pair that has no row in `v_collection`. The estimator still works (it does interval lookup, not exact match), but the *admin wizard's autocomplete* and the *cube-contents reveal* (FEATURES.md Category 2 differentiator) return empty for that boundary value. Worse, on the next reshuffle the wizard may "auto-suggest" a midpoint between two boundaries where one endpoint is a phantom record, producing nonsense.
-
-**Specific symptom:**
-- Admin wizard's autocomplete returns 0 results when typing the exact catalog number that the boundary already stores.
-- Cube reverse-lookup (`/api/cubes/{unit}/{row}/{col}`) returns empty `sample_records` even though `is_empty: false`.
-- Boundary validation passes (it checks against itself, not against `v_collection`).
-
-**Why it happens:**
-Two read-vs-write timelines: `cube_boundaries` is GRUVAX-owned and changes only on admin edits; `v_collection` reflects discogsography's sync of the owner's live Discogs collection. Selling a record is a discogsography-side event GRUVAX never sees.
+Invite tokens placed in URL query strings are subject to referrer leakage regardless of encryption. Uvicorn logs the full path by default; any docker logs capture or log-shipper will contain the token. This is a well-documented class of vulnerability with multiple HackerOne reports on password-reset tokens following the same pattern.
 
 **Warning signs:**
-- Periodic admin diagnostic: count of `cube_boundaries` rows where `(first_label, first_catalog)` or `(last_label, last_catalog)` does not match any `v_collection` row. Surface in `/api/admin/diagnostics` as `phantom_boundary_count`.
-- Sync staleness indicator (FEATURES.md Category 7) staying current but `phantom_boundary_count > 0` means the divergence is real, not a sync lag.
+- The `GET /invite/accept` endpoint accepts `?token=` as a query parameter.
+- Uvicorn's `--access-log` is enabled in the production `CMD`.
+- The accept page loads any resource from a domain other than `gruvax.local`.
+- `docker logs gruvax-api` shows invite token strings in the path field.
 
 **Prevention:**
-- **Pre-validate boundary edits against `v_collection` and reject if the `(label, catalog#)` isn't in the collection.** This is the concrete shape of the FEATURES.md Category 3 "Sanity validation against `collection_items`" item. The `POST /api/admin/cubes/validate` endpoint runs this check.
-- **Tolerant trigram match for near-misses:** if no exact match, suggest the closest 3 collection items as "did you mean?" (FEATURES.md Category 1 differentiator reused here).
-- **Stale-boundary detector job:** a daily Postgres `NOTIFY` (or a cheap polling endpoint hit by the admin diagnostics page) that recomputes `phantom_boundary_count` and lists the offending cubes. Doesn't auto-fix; informs the owner.
+- **Use `POST` body or URL path segment, not `?token=` query parameter.** The invite URL is `GET /invite/{token}` (path param), which still shows in Uvicorn's access log, OR a two-step flow: the email/QR-code carries a short opaque code (`/invite/accept#code=XXXX`) and the actual token lives in a POST body the JS submits. The cleanest approach for a LAN app with no external resources: use a path segment (`/invite/{token}`) and suppress the Uvicorn access log on that specific path via a custom `LogFilter` on `uvicorn.access`.
+- **Set `Referrer-Policy: no-referrer` on the invite accept page** via a response header from FastAPI. This instructs the browser not to send the `Referer` header for any resource the page loads.
+- **Suppress Uvicorn access log entries for `/invite/` routes** in production. Use a structlog-based middleware that logs the invite path as `/invite/<redacted>` and sets `access_log=False` for Uvicorn; the structlog layer logs with the token hash (first 8 chars only) for audit.
+- **Short TTL (30 minutes maximum).** Fernet's built-in `ttl` parameter enforces this at decryption time. Even if the token leaks, a 30-minute window is the attack surface.
+- **Single-use: mark consumed in DB immediately on first valid decrypt.** The `invite_tokens` table row gets `used_at = now()` in the same transaction that creates the profile's encrypted PAT. Any second attempt returns 410 Gone, even if the TTL has not expired.
 
-**Recovery:**
-- Admin opens diagnostics, sees the phantom list, runs the wizard for affected cubes only (don't full-reshuffle). The wizard suggests the natural midpoint based on currently-collected releases between adjacent populated cubes.
-- The undo/history log means a wrong-fix is one tap back.
-
-**Severity:** Critical (affects accuracy of the wizard's suggestions; corrupts future reshuffles silently).
-
-**Phase to address:** Backend Phase (validate endpoint + diagnostic count), Admin Phase (wizard consumes validate), Ops Phase (schedule the periodic check).
+**Phase to address:**
+AUTH-02 phase (invite-token backend) must own the referrer-policy header, the Uvicorn log filter, the single-use DB write, and the short TTL. The invite acceptance frontend page must not load any external resources.
 
 ---
 
-### Pitfall 3: Mosquitto retained-state messages persist beyond their useful life
+### Pitfall 25: Invite token is not single-use — replay window after member completes onboarding
 
 **What goes wrong:**
-The architecture publishes `gruvax/v1/leds/state/{unit}/{row}/{col}` as a **retained** topic so a freshly-booted ESP32 picks up current desired state. During v1 stub development, every test "illuminate" call leaves a retained payload on the broker. Six months later, the hardware milestone arrives, an ESP32 connects, and the shelves immediately light up cubes that were used in testing 6 months ago.
-
-**Specific symptom:**
-- First ESP32 boot after hardware integration produces nonsensical LED state (cubes 7 and 18 glowing purple because someone tested those during the v1 stub phase).
-- `mosquitto_sub -t 'gruvax/v1/leds/state/#' -v` shows dozens of retained payloads with old `issued_at` timestamps.
-- A redeploy of `gruvax-api` leaves the state topics intact (retained survives broker restarts and gruvax-api restarts because of `persistence true`).
+The server generates a Fernet token with a 24-hour TTL. The member completes onboarding at T+5 minutes. At T+12 hours, the same token link (still valid by TTL) is forwarded in a group chat. A second household member pastes their own PAT into the same invite form. The invite link is effectively reusable for anyone who has it within the TTL window.
 
 **Why it happens:**
-Retained messages are designed to survive broker restarts. There's no automatic TTL on retained payloads in MQTT 3.1.1; MQTT 5 supports message-expiry but Mosquitto's behavior depends on broker config. Once retained, a payload stays until it's overwritten with an empty payload (`payload=b''`, `retain=True` — the "clear retained" idiom) or the broker's persistence file is deleted.
-
-**Warning signs (detect early):**
-- During v1 stub development: `mosquitto_sub -t 'gruvax/v1/leds/state/#' -v` shows growing retained payloads with no clearing strategy.
-- The diagnostic endpoint (`POST /api/admin/leds/diagnostic`) does not include a "clear all retained state" step.
-- No "clear retained" admin button.
-
-**Prevention:**
-- **Set MQTT 5 message-expiry on every retained publish.** With `aiomqtt` 3.x (Context7-verified), pass `message_expiry_interval` on publish (e.g., 4 hours for `state/*`). After expiry the broker drops the retained payload.
-- **`POST /api/admin/leds/off` clears retained state.** The "all off" panic button (FEATURES.md Category 4 table stakes) is implemented by publishing `retain=True, payload=b''` to every `state/{unit}/{row}/{col}` topic, *not* by publishing an "off" command. This is the idiomatic MQTT way to clear retained state.
-- **Document the retained-state lifecycle** in the LED contract README so the hardware-milestone implementor knows what to expect on first boot.
-- **Per-environment topic prefix:** use `gruvax/v1/dev/leds/...` in dev and `gruvax/v1/leds/...` in production so dev retained junk doesn't pollute prod. Configurable via `MQTT_TOPIC_PREFIX` env.
-
-**Recovery:**
-- One-shot script: `mosquitto_sub -t 'gruvax/v1/leds/state/#' -v` to list, then publish empty retained to each. Document this in the hardware-milestone runbook.
-- Or: stop Mosquitto, delete `/mosquitto/data/mosquitto.db`, restart. Nuclear but effective.
-
-**Severity:** Critical (impossible to debug the hardware milestone if retained state ghosts test runs from months prior).
-
-**Phase to address:** Backend Phase (MQTT publish wrapper sets expiry; "all off" clears retained), Hardware Milestone (runbook).
-
----
-
-### Pitfall 4: Squeekboard / on-screen keyboard breaks the kiosk admin fallback
-
-**What goes wrong:**
-PROJECT.md Active scope says "Kiosk admin fallback (touchscreen, used at the shelf)." STACK.md flags as an open issue: `squeekboard` does not currently render above fullscreen Chromium under labwc (verified open bug, `labwc/labwc#2926`). Result: an admin tries to type a PIN on the kiosk and there is no keyboard. They are physically locked out of admin from the device the requirement specifies.
-
-**Specific symptom:**
-- Admin tap on the PIN input field; nothing rises from the bottom of the screen.
-- Tap-and-hold gives the standard `text` context menu but no keyboard.
-- Switching off `--kiosk` flag makes the keyboard appear but exposes window chrome.
-
-**Why it happens:**
-labwc + fullscreen Chromium is a known interaction that suppresses overlay surfaces from input methods. The Pi Foundation's expected pattern is a non-fullscreen window or a different compositor; neither matches the v1 kiosk constraints.
-
-**Warning signs (detect early):**
-- Kiosk hardware setup phase: test "type something on the touchscreen with a focused input" *before* any product work depends on it.
-- The phrase "in-app virtual keyboard" doesn't appear anywhere in the frontend backlog.
-
-**Prevention:**
-- **Build an in-app virtual keyboard inside the SPA.** STACK.md option (b) — this is the right call given (a) the bug is real and live, (b) admin is mobile-first by requirement, (c) only PIN entry and short text fields need to work on-kiosk. ~80 lines of React for a numeric keypad + alphabetic letter board with backspace and submit. Tap-target ≥ 44pt.
-- **Make the kiosk PIN entry numeric-only** (PROJECT.md doesn't say otherwise — the PIN is single-secret on home LAN, so 6 digits is fine). Reduces the keyboard surface to a 10-key.
-- **Treat squeekboard as not-available** in the architecture; do not load any state that assumes it exists.
-
-**Recovery:**
-- If shipped without the in-app keyboard: ship the in-app keyboard as a v1 hotfix. The data model and routes are unchanged.
-
-**Severity:** Critical (a documented requirement — kiosk admin fallback — is non-functional without it).
-
-**Phase to address:** UI Design / Frontend Phase (in-app keypad component); Hardware Setup Phase (verify the bug is still present, not silently fixed upstream).
-
----
-
-### Pitfall 5: discogsography schema migration breaks `v_collection` and search dies
-
-**What goes wrong:**
-discogsography's maintainer renames `releases.label` to `releases.label_name`, or normalizes labels from a `TEXT` column into a separate `release_labels` join table. GRUVAX boots, `gruvax.v_collection` references the removed column, every `/api/search` request errors. The kiosk shows "no results" or 500s for every query. Failure is total.
-
-**Specific symptom:**
-- `/api/health` returns `discogsography_view_check: failed` (per ARCHITECTURE.md failure modes table) — *if* the health check is wired to validate the view.
-- Without that wiring: every search returns 500; the SPA renders "No results" and the offline banner stays off because `/api/events` is healthy.
-- `journalctl --user-unit gruvax` shows Postgres errors mentioning a missing column.
-
-**Why it happens:**
-GRUVAX is a downstream consumer of a schema GRUVAX doesn't control. ARCHITECTURE.md's "view as the read-only contract surface" pattern reduces blast radius from "the whole codebase" to "one view," but it does not prevent breakage; it makes breakage *localized and discoverable*.
+Fernet's TTL only prevents time-expired replays. Without a server-side "was this token already consumed?" check, the token is reusable within the TTL window. This is a standard replay-attack failure mode — the same pattern that bit natlas and multiple HackerOne-disclosed password-reset flows.
 
 **Warning signs:**
-- discogsography has a release whose changelog mentions schema changes; you didn't notice because no automated alert is wired.
-- `SELECT 1 FROM gruvax.v_collection LIMIT 1` at boot is **not** part of the FastAPI lifespan.
+- The `invite_tokens` table lacks a `used_at` column.
+- The `POST /api/admin/invite/accept` handler decrypts the token and proceeds without checking any server-side state.
+- Integration tests do not attempt a second POST with the same token after a successful first POST.
 
 **Prevention:**
-- **Implement the view-health-probe at startup** (ARCHITECTURE.md prescribes it). The lifespan runs `SELECT 1 FROM gruvax.v_collection LIMIT 1` before yielding; on failure, GRUVAX still boots but `/api/health` reports `discogsography_view_check: failed` and search returns 503 with a clear error pointing at the upstream schema.
-- **Pin discogsography to a specific tag (or commit SHA) in the Compose stack on `lux`.** Don't auto-upgrade discogsography in the same docker-compose action as GRUVAX. Upgrade discogsography deliberately, verify GRUVAX still passes its integration test (which runs `SELECT 1 FROM gruvax.v_collection LIMIT 1` plus a representative search), then commit.
-- **Subscribe to discogsography's release notes / watch the GitHub repo.** This is a one-time setup.
-- **Integration test against a real discogsography schema:** in CI, spin up the *actual* discogsography Postgres dump (or a representative subset; see Section "Discogs/discogsography integration pitfalls" elsewhere), apply GRUVAX migrations, run the view-health probe, run one representative search end-to-end.
+- **`invite_tokens` table with `(id, token_hash, profile_id, created_at, expires_at, used_at nullable)`.** The handler: (1) decrypt and TTL-check via Fernet, (2) look up `token_hash` in the table, (3) if `used_at IS NOT NULL`, return 410 Gone, (4) otherwise set `used_at = now()` and proceed — all in one database transaction with `FOR UPDATE` to prevent concurrent double-use.
+- **Token hash:** store `sha256(token_bytes)`, not the token itself, so the DB row cannot be used to reconstruct the token.
+- **TTL ≤ 30 minutes.** The shorter the TTL, the smaller the replay window even if the single-use check fails.
+- **Integration test: POST the same token twice; assert the second returns 410.**
 
-**Recovery:**
-- Edit `migrations/versions/xxxx_update_v_collection.py` to match the new upstream column names; `alembic upgrade head`; redeploy. One-line view change per ARCHITECTURE.md.
-- If the upstream change is structural (e.g., label moved to a join table): the view definition gets longer, but no application code changes. The whole point of the view pattern.
-
-**Severity:** Critical (total search outage until fixed) but **bounded** (one view, predictable recovery).
-
-**Phase to address:** Backend Phase (lifespan view probe + `/api/health` field), Ops Phase (CI integration test + discogsography pinning).
+**Phase to address:**
+AUTH-02 phase. The `invite_tokens` table is the minimal schema addition; the `FOR UPDATE` transaction is the critical implementation detail.
 
 ---
 
-### Pitfall 6: instance_id vs release_id confusion in the LED publish path
+### Pitfall 26: Owner can read back a member's PAT after it is stored
 
 **What goes wrong:**
-Discogs distinguishes `release_id` (a release in the global catalog) from `instance_id` (a specific copy in a user's collection — important when an owner has two copies of the same record, or when collection state like "for sale" differs per copy). discogsography stores both. GRUVAX uses `release_id` everywhere because the position estimator does not care about specific copies (a label+catalog# is unique enough for shelf placement). But if any endpoint accidentally accepts `instance_id` and passes it through as `release_id`, lookups silently return wrong records.
-
-**Specific symptom:**
-- A search result `tap-to-illuminate` produces a `release_id` that exists in the catalog but is not in the owner's collection (the owner has the *other* copy, with a different `instance_id`).
-- Position estimate returns 404 `release_not_in_collection` for a record visibly on the shelf.
-- Or, worse, returns a confident cube for a wrong record (both copies of the release share `(label, catalog#)`, so the wrong-record case rarely fires for *position* but does fire for "what's in this cube?" reverse lookup if `collection_item_id` was confused with `release_id`).
+The invite flow's stated privacy guarantee is: "member pastes their own PAT; owner never sees it." If the `/api/admin/invite/accept` response body echoes the accepted PAT, or if the admin's "profiles" GET endpoint returns the Fernet-encrypted PAT field (even encrypted), the owner can:
+(a) copy the ciphertext and decrypt it with GRUVAX's Fernet key (which the owner controls), or
+(b) the frontend inadvertently renders the field in a dev-mode React component tree inspector.
 
 **Why it happens:**
-The ARCHITECTURE.md view exposes `collection_item_id`, `release_id`, and (implicitly via the join) the position-relevant fields. A handler that takes a `release_id` query param from the frontend and passes it as `collection_item_id` to a query is a one-character typo.
+FastAPI response models default to returning all fields on a Pydantic model. If `Profile` includes `app_token_encrypted`, it will appear in `GET /api/admin/profiles/{id}` unless explicitly excluded. The owner is the same person who controls the server and holds the Fernet key, so encryption does not protect the PAT *from the owner*.
 
 **Warning signs:**
-- API search results emit a field literally named `id` (ambiguous) rather than `release_id`/`collection_item_id`.
-- A 404 on `/api/locate?release_id=...` rate climbs after a release that the owner has two copies of.
+- The `ProfileResponse` Pydantic model includes `app_token_encrypted`.
+- `GET /api/admin/profiles/{id}` returns a field whose name contains "token" or "encrypted."
+- The admin profile detail page renders all API response fields.
 
 **Prevention:**
-- **Name the field explicitly everywhere:** `release_id`, `collection_item_id`. Never just `id`. Pydantic models on every endpoint reject ambiguity at the boundary.
-- **The position-estimator contract (ARCHITECTURE.md) already takes `release_id`** — keep it that way. `collection_item_id` is only used in the cube-contents reverse-lookup (where it disambiguates which physical copy is in this cube — though for v1 with no per-copy tracking, this is moot).
-- **Search endpoint returns both** `release_id` and `collection_item_id`. The illuminate endpoint takes `release_id`. The bridge in the SPA is explicit.
-- **Integration test that exercises a real "owner has two copies" case:** synthetic CI dataset includes one duplicated release_id under two collection_item_ids; assertion is that both produce the same `/api/locate` result.
+- **`ProfileResponse` schema never includes `app_token_encrypted` or any derivative.** Use a separate `ProfileAdminResponse` for the admin panel that contains only `id`, `display_name`, `discogs_username`, `last_sync_at`, `last_sync_status`, `has_token: bool` (a boolean computed server-side: `app_token_encrypted IS NOT NULL`). The `has_token` field tells the admin "this profile has a connected PAT" without exposing the token or its ciphertext.
+- **No endpoint returns the encrypted token.** The only operation on the token after storage is: (a) use it for sync (internal only), (b) overwrite it (via re-invite), (c) clear it (revoke).
+- **Add a `has_token` field to the profile response** so the admin UI can show "Connected / Not connected" without needing the token value.
+- **Test:** `GET /api/admin/profiles/{id}` response JSON must not contain the string "token" or "encrypted" in any key or value.
 
-**Recovery:**
-- Rename fields, add Pydantic models. Migration is a frontend change because the field names change on the wire.
+**Phase to address:**
+AUTH-02 phase. This is a response-schema discipline issue; the Pydantic model is the enforcement point.
 
-**Severity:** Critical for the reverse-lookup view; Major for primary search→illuminate flow (position is the same per release).
+---
 
-**Phase to address:** Backend Phase (Pydantic model design), Test Phase (the "two copies" fixture).
+### Pitfall 27: Member pastes a wrong or over-scoped PAT — silently accepted
+
+**What goes wrong:**
+The invite form says "paste your discogsography Personal Access Token." The member:
+(a) pastes a classic wide-scope PAT instead of a `collection:read`-scoped one, or
+(b) pastes a PAT for a different discogsography user (copy-paste error from another tab),
+(c) pastes a plaintext string that is not a PAT at all.
+
+In case (a), GRUVAX stores an over-privileged credential (privacy/security concern). In cases (b) and (c), nightly sync will fail silently with a 401, and the profile appears broken for no obvious reason.
+
+**Why it happens:**
+Fernet encryption happens client-side-agnostic: the server receives whatever the member typed, encrypts it, and stores it. Without a validation round-trip to discogsography before storing, the token is "accepted" regardless of its validity or scope.
+
+**Warning signs:**
+- The `POST /api/admin/invite/accept` handler stores the PAT without a test API call to discogsography.
+- The invite form has no scope guidance ("use `collection:read` scope only").
+- The first sync fails 24 hours after onboarding with a 401 error the member doesn't understand.
+
+**Prevention:**
+- **Validate the PAT immediately before storing.** The accept handler makes one `GET /api/user/collection?limit=1` request to the discogsography API with the supplied PAT. If it returns 200, the PAT is valid and the user identity is confirmed. If it returns 401/403, return a 422 to the invite form: "Token is invalid or lacks collection:read access." If it returns wrong user (the profile `discogs_username` from the invite payload does not match the API response's username field), return a 422: "This token belongs to a different Discogs account."
+- **The invite payload includes the expected `discogs_username`** (owner fills this in when generating the invite). The accept handler compares the identity the PAT authenticates as against the expected username.
+- **Invite form copy:** "Create a Personal Access Token in discogsography with `collection:read` scope only. Do not use a wide-scope token."
+- **Scope check:** discogsography's `GET /api/user/collection` will return 403 if the PAT lacks `collection:read`. This doubles as a scope validator.
+- **If discogsography is temporarily unreachable** (during an invite accept attempt): return 503 "Cannot validate token right now — try again in a moment." Do not store an unvalidated token.
+
+**Phase to address:**
+AUTH-02 phase. The validation call is a mandatory step in the accept handler, not an optional audit.
+
+---
+
+### Pitfall 28: QR code encodes a reusable credential instead of an opaque bind URL
+
+**What goes wrong:**
+The kiosk displays a QR code for pairing. If the QR encodes the existing 4-digit PIN (or any persistent credential), anyone with a camera who walks past the kiosk can photograph it and use that credential later — on the LAN, on a different device, or shared in a group chat. The QR code becomes a permanently-visible credential display.
+
+**Why it happens:**
+It is tempting to encode "whatever the device needs to authenticate" directly into the QR code for simplicity. The error is treating the QR as a secure channel when it is an optical broadcast to anyone with a camera.
+
+**Warning signs:**
+- The QR code encodes the 4-digit pairing code, the PIN hash, or any reusable credential.
+- The QR code does not expire.
+- The same QR code is valid indefinitely or until manually regenerated.
+
+**Prevention:**
+- **The QR encodes only an opaque, time-limited, single-use bind URL:** `http://gruvax.local:PORT/api/devices/pair/qr/{nonce}` where `nonce` is a 128-bit cryptographically random value stored in the `pairing_codes` table with a 5-minute TTL.
+- **The nonce is NOT the 4-digit code** — it is a separate, longer secret generated purely for QR use. The admin's phone opens the URL (or the SPA reads it), which completes the bind server-side. The 4-digit code path remains separate and valid simultaneously.
+- **The QR auto-rotates every 60 seconds** by generating a new nonce. The old nonce is invalidated server-side. This limits the window in which a photo attack is viable.
+- **Single-use:** the `pairing_codes` row is marked `used_at = now()` on first successful bind, even within the TTL.
+- **The QR bind endpoint is rate-limited** (5 attempts per 5 minutes per IP) to prevent brute-force nonce guessing.
+
+**Phase to address:**
+DEV-04 phase. The existing 4-digit code flow (v2.0) must NOT be changed — it remains a parallel path. DEV-04 adds a separate nonce-based QR path on top of it.
+
+---
+
+### Pitfall 29: QR pairing and 4-digit code both accepted simultaneously — two unguarded paths
+
+**What goes wrong:**
+v2.0 ships the 4-digit code flow. v2.1 adds QR. If both paths remain active indefinitely and the QR nonce path is less strictly rate-limited than the 4-digit path, the QR path becomes the easier attack surface. Alternatively, the QR path skips some validation that the PIN path enforces (e.g., the QR path does not require admin confirmation).
+
+**Why it happens:**
+The QR path is implemented as an additive feature on top of the existing flow. Under time pressure, parity checks between the two paths are skipped.
+
+**Warning signs:**
+- The QR nonce bind endpoint (`/api/devices/pair/qr/{nonce}`) has no rate limit.
+- The QR path does not emit the same device-created audit log entry that the 4-digit path emits.
+- The QR path does not enforce the same `pairing_codes` TTL logic as the 4-digit path.
+- Integration tests exercise only one path.
+
+**Prevention:**
+- **Both paths share the same `pairing_codes` table and TTL logic.** The QR nonce is just another column: `(code_4digit, qr_nonce, profile_id, created_at, expires_at, used_at)`. The bind logic is a single `complete_pairing(pairing_code_id)` function called by both handlers.
+- **Both paths emit identical audit log entries** to the `change_log` table: `action: device_paired, device_id: ..., method: qr|pin`.
+- **Both paths have equivalent rate limits.** If the 4-digit path is 5 attempts/5 minutes per IP, the QR nonce path is also rate-limited (nonce guessing is harder, but the rate limit is the safety net for path parity).
+- **Integration test matrix:** test both paths for: happy path, expired TTL, second use of same token, rate-limit breach.
+
+**Phase to address:**
+DEV-04 phase. The shared `complete_pairing` function is the architectural discipline that prevents divergence.
+
+---
+
+### Pitfall 30: Query text leaks into structlog output despite "no server-side persistence" promise
+
+**What goes wrong:**
+PRIV-01 promises no server-side query-text storage. But the search handler logs `log.info("search", query=q, profile_id=...)` at INFO level. The structlog JSON lands in Docker's `json-file` log, which is preserved across container restarts (Docker log rotation keeps the last 3 files per the v1 ops pitfall). The effective retention is 3 × 10 MB = up to 30 MB of logs containing real user queries. The "no persistence" promise is false.
+
+**Why it happens:**
+The existing v1.0 PITFALLS.md already calls out "search query redaction" as a checklist item (Pitfall v1 Technical Debt: "Search query body logged in plaintext"). In v2.1, the PRIV-01..04 requirements make this a first-class named requirement, which means the existing v1 pattern needs to be audited and enforced, not just mentioned. Under time pressure the structlog field is added for debugging and never removed.
+
+**Warning signs:**
+- `docker logs gruvax-api | grep '"query"'` returns matches for user search strings.
+- The structlog configuration does not include a processor that redacts the `query` field.
+- Uvicorn's `--access-log` is enabled, logging `GET /api/search?q=radiohead`.
+- The SSE event payload for `search_completed` includes the query string (which would persist it in any SSE connection log).
+
+**Prevention:**
+- **The structlog pipeline includes a `redact_fields` processor** that replaces `query` with `"<redacted>"` for all log records from the search handler. Implement as a structlog processor: if `event_dict.get("query")` is set, replace with `"<redacted>"`. Register at pipeline construction, not per-callsite.
+- **The search handler logs only counts and latency:** `log.info("search", query="<redacted>", result_count=N, profile_id=..., latency_ms=X)`. Never the query text.
+- **Uvicorn access log is disabled in production** (already a v1 ops pattern; re-verify in v2.1 CI).
+- **SSE events for search completion carry only `result_count` and a `request_id`**, never the query string.
+- **`GET /api/search` uses query parameters (`?q=radiohead`)** not path segments, so the Uvicorn path log shows `/api/search?q=<value>`. The Uvicorn log filter for `/api/search` must redact the `q` parameter from the logged path, OR Uvicorn access log must be disabled and all audit logging goes through structlog with redaction.
+- **Audit:** `grep -r '"query"' src/` and `grep -r 'log.*query' src/` — any callsite that could emit the query string must go through the redactor.
+
+**Phase to address:**
+PRIV-01 phase. The structlog processor is the enforcement mechanism. CI must include a test: after a search, `docker logs gruvax-api` must not contain the search string.
+
+---
+
+### Pitfall 31: Session search history persists in localStorage across "no-PIN reset kiosk" and across Chromium sessions
+
+**What goes wrong:**
+PRIV-02 requires session-only search history (visible to the current user while they are using the kiosk; gone when they leave). PRIV-04 requires a no-PIN "reset kiosk" button that clears this. If the history is stored in `localStorage` (persistent across Chromium sessions and across kiosk reboots), then:
+(a) A visitor's searches are visible to the next visitor who opens the browser.
+(b) The kiosk reboot that follows a Compose redeploy does NOT clear `localStorage`, so old history persists.
+(c) The Zustand `persist` middleware (used legitimately for wizard `pendingChangeSet`) will also persist the history store if not explicitly excluded.
+
+**Why it happens:**
+React/Zustand developers reach for `localStorage` by default for "persistence." The distinction between "persist across sessions" (wizard draft — correct) and "session-only" (search history — must NOT persist) requires explicit per-store configuration. The Zustand `persist` middleware applies to the whole store unless partitioned.
+
+**Warning signs:**
+- The Zustand store containing `recentSearches` uses the `persist` middleware.
+- Opening Chromium on the kiosk, searching, closing Chromium, reopening Chromium shows the search history.
+- The "reset kiosk" action only clears React state (in-memory), not `localStorage`.
+
+**Prevention:**
+- **Search history lives in `sessionStorage`, not `localStorage`.** `sessionStorage` is cleared when the browser session ends (tab close or kiosk reboot via the `systemd` unit that kills and restarts Chromium). Zustand's `persist` middleware supports `storage: createSessionStorageWrapper()`.
+- **Alternatively, store history only in React component state (not even sessionStorage):** on a kiosk, the browser is always the same process; in-memory state lasts for the kiosk "session" (until Chromium restarts). This is simpler and makes the "no persistence" promise trivially true.
+- **The "reset kiosk" (PRIV-04) action calls `sessionStorage.clear()` AND resets React state.** If using in-memory-only, just reset React state.
+- **Zustand `persist` middleware must NOT include the `recentSearches` slice.** Explicitly exclude it from the partitioned persist config: `partialize: (state) => ({ pendingChangeSet: state.pendingChangeSet })` — only the wizard draft is persisted.
+- **Test:** open kiosk, search for "radiohead", hard-reload Chromium (simulating a reboot), verify the history is empty.
+
+**Phase to address:**
+PRIV-02 and PRIV-04 phases. The storage medium choice (sessionStorage vs in-memory) is the single most important decision. Zustand persist partitioning is the guard.
+
+---
+
+### Pitfall 32: "No-PIN reset kiosk" becomes an admin-session bypass
+
+**What goes wrong:**
+PRIV-04 adds a "reset kiosk" button visible without a PIN. If this button is accessible on the same page as an active admin session, or if its click handler calls any state-mutating API (not just local state clearing), it becomes an unauthenticated path to modify server state. Specifically: if "reset kiosk" also calls `POST /api/search/history/clear` (a server-side endpoint), that endpoint must not be callable without authentication — but it appears related to the "no PIN" flow.
+
+A more subtle attack: if "reset kiosk" navigates to a URL that triggers an admin action as a side effect (e.g., `GET /api/admin/reset` which was intended for internal use only), anyone can trigger it.
+
+**Why it happens:**
+The distinction between "clear local kiosk state" (no auth needed) and "clear server state" (admin auth needed) blurs during implementation. The reset button is designed to be accessible without PIN, so developers avoid authentication on everything it touches — including endpoints that should require it.
+
+**Warning signs:**
+- The "reset kiosk" click handler calls any `/api/admin/*` endpoint.
+- `POST /api/search/history/clear` does not require an admin session cookie.
+- The reset button is visible when an admin session is active — a visitor could use it to terminate the owner's admin session.
+
+**Prevention:**
+- **"Reset kiosk" is purely client-side.** It clears `sessionStorage`, resets React/Zustand in-memory state, and navigates to `/` (the search page). It does NOT call any server endpoint.
+- **PRIV-01 (no server-side query-text storage) means there is nothing server-side to clear.** The reset button's only job is to clear the client-side session history. If there is no server-side history, the reset is trivially safe.
+- **If a "clear stats" or similar server-side action is desired** as part of reset: gate it behind the existing admin PIN. The "no-PIN" requirement applies only to clearing local kiosk state, not server state.
+- **The reset button does NOT appear during an active admin session.** Hide it when `isAdminSession === true` in Zustand. This prevents a visitor from disrupting the owner's active boundary editing session.
+- **Test (negative):** clicking "reset kiosk" with no admin session active must not result in any API call. Verify via browser network tab or test mock.
+
+**Phase to address:**
+PRIV-04 phase. The "client-side only" constraint is the security invariant. Any deviation (even a logging call to the server) must require admin auth.
 
 ---
 
 ## Major Pitfalls
 
-### Pitfall 7: Half-finished reshuffle leaves cubes in inconsistent state
+### Pitfall 33: `write_boundary` WHERE clause missing `profile_id` — cross-profile boundary corruption
 
 **What goes wrong:**
-Owner runs the reshuffle wizard mid-haul, gets interrupted (Wi-Fi blip, phone battery, doorbell), comes back later. Some cubes have updated boundaries reflecting the new shelf order, some still have the old boundaries. Search returns confidently-wrong cubes for records affected by the partial change.
-
-**Specific symptom:**
-- A search lands on a cube that has the right label but the wrong catalog-number range; the user walks to a cube whose physical contents disagree with the kiosk.
-- `boundary_history` shows a half-completed `change_set_id` (some cubes touched, some not).
-- The wizard's "resume" path either doesn't exist or shows wrong "current" state.
+The v2.0 tech-debt item `write_boundary` profile scoping is the most dangerous deferred debt item. If the `UPDATE cube_boundaries SET ... WHERE unit=? AND row=? AND col=?` query does not include `AND profile_id=?`, then an admin editing profile A's boundaries can overwrite profile B's boundaries for the same physical cube position. With two household members each using a 4×4 Kallax unit, this is the "cross-profile write" failure mode the v2.0 architecture was designed to prevent.
 
 **Why it happens:**
-The wizard is a multi-step flow over multiple cubes; without an explicit transaction model, intermediate state lives in the SPA's `pendingChangeSet` (ARCHITECTURE.md Zustand store) but is *not* applied atomically to the DB until the final save. If "save" is per-cube instead of per-wizard-run, partial state lands in DB.
+The v2.0 audit flagged this as `tech_debt` (not a blocker). The WHERE clause is easy to add — and equally easy to forget under time pressure. SQLAlchemy's `.where()` chaining makes it syntactically simple to add `profile_id` but the code compiles and runs correctly without it (the query just operates on all profiles' matching rows).
 
 **Warning signs:**
-- The `POST /api/admin/cubes/bulk` endpoint is implemented but the wizard issues `PUT /api/admin/cubes/{unit}/{row}/{col}/boundary` per-cube.
-- The wizard has no "discard draft" button.
-- Two `boundary_history` change_sets have timestamps within a few minutes of each other for the same reshuffle event.
+- The `write_boundary` handler extracts `profile_id` from the session/cookie but does not pass it to the query.
+- The `cube_boundaries` table has `profile_id` NOT NULL but no Postgres Row-Level Security policy enforcing it from within the DB.
+- Integration tests only create one profile; the cross-profile write is never exercised.
 
 **Prevention:**
-- **Wizard accumulates in `pendingChangeSet` in Zustand; final "Save reshuffle" calls `POST /api/admin/cubes/bulk` with all changes.** Atomic in DB (one `change_set_id`, one transaction). Per-cube saves during the wizard go through `pendingChangeSet`, not the DB. (ARCHITECTURE.md already prescribes this; the pitfall is forgetting it under time pressure during the admin phase.)
-- **Persist `pendingChangeSet` in `localStorage`** so a Wi-Fi blip or page reload doesn't lose progress. The Zustand persist middleware handles this in a few lines.
-- **Idempotency-Key header on the bulk save** (ARCHITECTURE.md prescribes this). Reload of the wizard tab will not double-save.
-- **The wizard's "resume" path reads from `localStorage`** and shows a "Continue your reshuffle" banner on next admin login.
+- **Add `AND profile_id = :profile_id` to every `UPDATE cube_boundaries` and `DELETE FROM cube_boundaries` statement.** This is the v2.0 tech-debt closure. SQLAlchemy 2.0 async: `.where(CubeBoundary.profile_id == profile_id)` chained after the existing coordinate filter.
+- **Add a Postgres RLS policy** as a defense-in-depth layer: `CREATE POLICY cube_boundaries_profile_isolation ON cube_boundaries USING (profile_id = current_setting('app.profile_id')::uuid)`. Set `current_setting` in each transaction's preamble. This makes the WHERE clause omission a Postgres-level error, not a silent data corruption.
+- **Integration test: create two profiles, write boundaries for profile A, attempt write via profile B's session for the same cube coordinates, assert profile A's boundaries are unchanged.**
+- **Code review checklist:** every DB mutation for boundary/segment/settings tables must include `profile_id` in the WHERE or VALUES. Add this to the project's PR template.
 
-**Recovery (if partial commit happens):**
-- Admin opens history, sees the partial change set, taps "Revert change set" — `POST /api/admin/history/{change_set_id}/revert` writes inverse rows. Now the DB is back to pre-reshuffle. Run the wizard again, this time atomically.
-- Because history is append-only, no state is lost.
-
-**Severity:** Major (data loss avoided by ARCHITECTURE.md design, but UX disaster if implementation skips the atomic-bulk pattern).
-
-**Phase to address:** Admin Phase (wizard uses bulk endpoint), Frontend Phase (Zustand persist + resume UX).
+**Phase to address:**
+Tech-debt closure phase (or the first phase that touches boundary writes). This must be resolved before any multi-profile boundary-editing UI is exposed in v2.1.
 
 ---
 
-### Pitfall 8: SSE reverse-proxy buffering breaks live admin → kiosk updates
+### Pitfall 34: SSE `collection_changed` fan-out sends all profiles' events to the wrong kiosk
 
 **What goes wrong:**
-Admin saves a boundary on mobile, kiosk does not re-render. The SSE channel appears connected (network tab shows the request open), but events are buffered server-side or proxy-side and arrive in 30-second clumps. The "live cross-device refresh" UX is broken without a clear error.
+DEV-02 (tech debt): the SSE `boundary_changed` / `collection_changed` event bus currently fans out to all connected SSE clients, not just those bound to the affected profile. A kiosk displaying profile A receives and acts on a `collection_changed` event triggered by profile B's nightly sync. The kiosk unnecessarily re-fetches (minor), or worse, displays a "collection updated" toast for a collection it is not showing (confusing).
 
-**Specific symptom:**
-- `EventSource` is `readyState === 1` (OPEN) on the kiosk but no events fire for 30 seconds, then several arrive at once.
-- nginx or any reverse proxy (if added in front of FastAPI) shows `proxy_buffering on` (the default).
-- `curl -N http://lux.local:PORT/api/events` from the Pi LAN shows event lines arriving in spurts, not streaming.
+If the refetch is expensive (full collection re-render) and both profiles' nightly syncs fire at 03:00, all kiosks thrash simultaneously.
 
 **Why it happens:**
-HTTP/1.1 proxies buffer by default. nginx (verified via Context7 on `sse-starlette`) needs explicit `proxy_buffering off; chunked_transfer_encoding off;` for SSE. `sse-starlette` recommends `X-Accel-Buffering: no` and `Cache-Control: no-store` response headers to instruct nginx/cloud-buffering layers to not buffer this response.
+The v2.0 in-process event bus was built profile-aware in data but the SSE broadcast layer may still be topic-blind: `bus.broadcast(event)` to all subscribers regardless of `profile_id`.
 
 **Warning signs:**
-- A bench test of admin save → kiosk re-render shows >5 seconds latency on the LAN (should be <300 ms).
-- Adding a reverse proxy to the stack later (e.g., a Traefik front-door) without re-testing SSE.
+- The SSE event payload includes `profile_id` but the broadcast does not filter by it.
+- A kiosk bound to profile A shows a "collection updated" toast when profile B syncs.
+- The event bus `subscribe()` API does not accept a `profile_id` filter parameter.
 
 **Prevention:**
-- **Set `X-Accel-Buffering: no` and `Cache-Control: no-store` response headers** on the SSE endpoint via `sse-starlette`'s `headers=` (Context7-verified pattern).
-- **Use the default 15-second ping** in `sse-starlette` — it's specifically designed to flush proxy buffers and keep the connection alive (Context7-verified, default `ping=15`).
-- **STACK.md recommends serving the SPA via FastAPI `StaticFiles` directly** (no nginx in front). Stick with that for v1; the buffering pitfall is mostly a future-nginx concern.
-- **If nginx is ever added later:** copy the exact config from `sse-starlette`'s README — `proxy_http_version 1.1; proxy_set_header Connection ''; proxy_buffering off; chunked_transfer_encoding off;` on the `/api/events` location.
-- **Integration test:** assert end-to-end "admin PUT → kiosk SSE event" latency < 500 ms; run on every CI build (synthetic discogsography schema + real GRUVAX API + curl SSE consumer).
+- **Profile-scoped event bus subscriptions.** The SSE handler subscribes to `bus.subscribe(profile_id=bound_profile_id)` — a per-profile topic. Events published for profile A are only delivered to queues subscribed with `profile_id=A`.
+- **Implementation:** the in-process bus uses a `dict[uuid, list[asyncio.Queue]]` keyed by `profile_id`. `publish(event, profile_id)` puts the event only on the queues for that profile. `subscribe(profile_id)` creates a queue in the correct bucket.
+- **The `boundary_changed` and `collection_changed` publishers already carry `profile_id` in the payload.** The fix is routing, not payload format.
+- **Test:** two SSE clients subscribed to different profiles; trigger a sync for profile A; assert only profile A's client receives the `collection_changed` event.
 
-**Recovery:**
-- Add the headers / nginx config; restart. No data is affected.
-
-**Severity:** Major (UX disaster for a named differentiator; no data loss).
-
-**Phase to address:** Backend Phase (SSE response headers), Ops Phase (if reverse proxy is ever introduced).
+**Phase to address:**
+DEV-02 tech-debt closure (first phase of v2.1, before any SSE-dependent feature). The event bus change is low-risk and unblocks all downstream SSE-dependent v2.1 features.
 
 ---
 
-### Pitfall 9: Chromium kiosk goes into a restart loop and the Pi is unreachable
+### Pitfall 35: Offline UX trusts `navigator.onLine` and shows false connectivity state
 
 **What goes wrong:**
-Chromium crashes (memory leak, GPU driver glitch, an upstream JS exception in the SPA). `systemd --user` restarts it. Crash repeats. The Pi's local display shows the Chromium error or a black screen; the screen is the only user-visible feedback; SSH is the only way to reach the Pi. If SSH is not pre-configured, the device is bricked-feeling until physical recovery.
+`navigator.onLine` returns `true` if the Pi is connected to the local network — regardless of whether the GRUVAX server (`lux`) is reachable. On a home LAN, the Pi is almost always connected to the router. But `lux` could be down (Compose restart, Docker update, nightly backup), making `lux` unreachable while `navigator.onLine` remains `true`. The offline banner never shows; the user types a search; the request hangs; the kiosk appears frozen with no feedback.
 
-**Specific symptom:**
-- 7" screen shows "Aw, Snap!" or a black screen.
-- `journalctl --user -u kiosk-chromium` shows repeated start/exit cycles within seconds.
-- No keyboard attached; ssh is the only escape.
+This is a documented browser quirk: MDN explicitly states that `onLine` "only means the device is connected to some network, not necessarily the internet or your specific server."
 
 **Why it happens:**
-A `systemd --user` unit with `Restart=always` and no rate limit will retry instantly. If the crash is deterministic (an SPA exception on load), the loop is infinite. Per STACK.md, `Restart=always` with a small `RestartSec` is recommended — without a *burst limit*, the loop is uncapped.
-
-**Warning signs (detect early):**
-- The `systemd --user` unit file does not set `StartLimitIntervalSec=` and `StartLimitBurst=`.
-- No second tty/console enabled by default on the Pi.
-- ssh keys not configured on the Pi at provisioning.
-
-**Prevention:**
-- **Set `StartLimitIntervalSec=120` and `StartLimitBurst=5`** in the systemd unit so 5 crashes in 2 minutes drops the unit into `failed` state. Use `RestartSec=10` so each retry is 10 s apart, giving you a window to ssh.
-- **Enable ssh on the Pi at provisioning, with key auth.** Standard Pi OS step but specifically necessary for kiosk recovery.
-- **Enable autologin on tty1** to a regular user shell as a fallback. Plugging in a USB keyboard then drops you into a shell.
-- **Add a `/healthz` SPA route** that the systemd unit's `ExecStartPost` curl-checks; if the route doesn't respond within 30 s of Chromium launch, treat the launch as failed.
-- **Run the SPA's `index.html` with a try/catch'd minimal-mode bootstrap** that always renders *something* — even just "GRUVAX failed to load, ssh to lux to check `/api/health`" — so the screen is never a black hole.
-
-**Recovery:**
-- Ssh to the Pi (`ssh pi@<ip>`), `systemctl --user status kiosk-chromium`, read the journal, fix the root cause (often: rebuild SPA after a JS error, redeploy).
-- If ssh is broken: physical USB keyboard + tty1 fallback.
-
-**Severity:** Major (operationally painful; no data loss).
-
-**Phase to address:** Kiosk Setup Phase (systemd unit, ssh, autologin tty), Frontend Phase (minimal-mode bootstrap).
-
----
-
-### Pitfall 10: Connection pool exhaustion under SSE + concurrent search
-
-**What goes wrong:**
-Each SSE connection on `/api/events` holds resources (a coroutine, an event-bus subscriber queue, an HTTP keep-alive). If the implementation accidentally holds a DB connection from the pool per SSE client (e.g., a dependency injection that opens a connection at request scope for an SSE endpoint), then with the kiosk + mobile + ssh-tunneled-dev-browser open, three of `psycopg_pool`'s 10 connections are pinned forever. A burst of type-ahead requests under that condition starves on the remaining pool, and the 200 ms latency SLO is gone.
-
-**Specific symptom:**
-- p95 search latency climbs from 30 ms to >500 ms after the kiosk has been up for hours.
-- `psycopg_pool` metric `pool.size_used` stays at or near `pool.size_min`.
-- Slow-query log (FEATURES.md Category 7) flags the offending requests.
-
-**Why it happens:**
-FastAPI's `Depends(get_db_session)` pattern usually checks out a connection for the request lifetime. SSE endpoints have a request lifetime of *hours*, not milliseconds. A naive `Depends` on the SSE endpoint pins a pool slot.
-
-**Warning signs (detect early):**
-- The SSE endpoint uses a `Depends(get_db)` style dependency.
-- The boundary cache (ARCHITECTURE.md Pattern 3) is not implemented yet, so search is doing direct DB lookups.
-
-**Prevention:**
-- **The SSE endpoint does not depend on a DB session.** It depends only on the in-process event bus (ARCHITECTURE.md Pattern 2 — `bus.subscribe()` returns an `asyncio.Queue`, no DB touch). If the SSE endpoint ever *needs* DB data, it acquires a connection from the pool inline (`async with pool.connection() as conn:`) for that one query and releases it immediately, not for the lifetime of the SSE stream.
-- **The boundary cache (ARCHITECTURE.md Pattern 3) loads boundaries at startup and on `boundary_changed` events.** Locate calls don't touch DB.
-- **Size the pool for: 2× max concurrent SSE clients + 5 spare for searches.** With kiosk + mobile + dev, that's 6 + 5 = ~10. The default `psycopg_pool` 10 connections is fine.
-- **Pool health in `/api/health`:** include `pool.size_used` and `pool.size_min` so a runaway is visible.
-- **Background task that periodically logs pool stats** at INFO level; spike in `size_used` after long SSE uptime is the warning sign.
-
-**Recovery:**
-- Restart `gruvax-api` (drops all SSE clients; they reconnect via `EventSource` browser default backoff).
-- Code fix is one-liner: replace the offending `Depends(get_db)`.
-
-**Severity:** Major (degrades the Core Value SLO; recovery is a restart but root cause is sneaky).
-
-**Phase to address:** Backend Phase (SSE endpoint pattern), Ops Phase (pool stat surfacing).
-
----
-
-### Pitfall 11: Mosquitto data volume not persisting across container recreations
-
-**What goes wrong:**
-ARCHITECTURE.md prescribes `mosquitto-data` and `mosquitto-log` as named Docker volumes for persistence. If the operator runs `docker compose down -v` (the `-v` removes volumes) or if the Compose file's `volumes:` block is mistakenly removed or renamed, every Mosquitto restart loses all retained state. ESP32s (future) would reset their displayed state every redeploy.
-
-**Specific symptom:**
-- `mosquitto_sub -t '$SYS/broker/uptime'` resets to 0 after every compose redeploy.
-- `mosquitto_sub -t 'gruvax/v1/leds/state/#' -v` returns nothing after a redeploy even though `gruvax-api` has not republished.
-- `gruvax-api`'s `server/hello` retained announcement is gone after a Mosquitto restart.
-
-**Why it happens:**
-Docker volumes are named in the Compose file but are easily lost via `docker compose down -v` or a Compose file edit that breaks the volume mapping. Mosquitto requires `persistence true` AND `persistence_location /mosquitto/data/` AND a writable volume at that location.
-
-**Warning signs (detect early):**
-- Compose file does not declare `mosquitto.conf` with `persistence true`.
-- `docker volume ls` doesn't show `gruvax_mosquitto-data` after first run.
-- No documented runbook for "redeploying without losing state."
-
-**Prevention:**
-- **Mosquitto config `persistence true; persistence_location /mosquitto/data/; autosave_interval 30`** baked into `mosquitto/mosquitto.conf` (ARCHITECTURE.md project structure).
-- **Named volumes (not bind mounts) for `mosquitto-data` and `mosquitto-log`** in Compose (ARCHITECTURE.md compose example).
-- **Document `docker compose down` (no `-v`) as the redeploy path** in the project README. Reserve `-v` for "I want to wipe state."
-- **Runbook entry: "Wiping retained state intentionally"** so operators can do it deliberately rather than discovering it accidentally.
-- **Per Pitfall 3, do not rely on retained state for correctness anyway.** Hardware-milestone firmware MUST tolerate "no retained state" (the first-ever boot case) gracefully.
-
-**Recovery:**
-- If retained state is lost: in v1 (no hardware), no impact. In hardware milestone: republish current desired state via a "refresh all" admin button (publish `state/{unit}/{row}/{col}` for every cube based on current `cube_boundaries`).
-
-**Severity:** Major (matters in hardware milestone; harmless in v1 stub).
-
-**Phase to address:** Ops Phase (Compose + Mosquitto config), Hardware Milestone (refresh-all admin button, firmware tolerant of empty initial state).
-
----
-
-### Pitfall 12: Single PIN shared in plain text and never rotated
-
-**What goes wrong:**
-PIN is set once at deployment, stored Argon2id-hashed in `gruvax.settings` (per ARCHITECTURE.md), but the operator emails the plaintext PIN to a friend during a demo, or writes it on a sticky note near the kiosk. Two years later, the PIN is "everyone in three houses" and no one has rotated it.
-
-**Specific symptom:**
-- No mechanism in the admin UI to change the PIN.
-- The PIN's hash in `gruvax.settings.auth.pin_hash` has not been updated in months/years.
-- `gruvax.admin_sessions` has rows from unknown user agents.
-
-**Why it happens:**
-Single-PIN is a deliberate v1 simplification (PROJECT.md). It's the right call. But "change PIN" is small in scope and easily deferred forever in a one-operator product.
+`navigator.onLine` is the first tool developers reach for because it's built-in. Its behavior is well-documented but easy to ignore.
 
 **Warning signs:**
-- The admin Settings page has color picker rows but no "Change PIN" row.
-- The deployment runbook says "set PIN_HASH in env" but doesn't say "rotate periodically."
+- The offline detection logic is `if (!navigator.onLine) showOfflineBanner()`.
+- The SSE `EventSource` disconnection does not independently trigger the offline state.
+- There is no health probe or heartbeat check to the GRUVAX API.
 
 **Prevention:**
-- **Ship "Change PIN" in v1 admin Settings.** Tiny endpoint: `PUT /api/admin/settings/pin` (rate-limited, requires current PIN as a confirmation). Writes new Argon2id hash to `gruvax.settings`.
-- **Login revokes all other sessions** of the same admin label on PIN change. `admin_sessions.revoked_at` set for all rows except the new one.
-- **Diagnostics surface "PIN last changed Y days ago"** so the operator notices when it's been too long. Cosmetic, not enforced.
-- **Argon2id hash with `passlib[argon2]`** (STACK.md) so even a DB leak doesn't expose PINs.
-- **The PIN is never logged.** Login route logs `pin_attempt: redacted`, not the actual digits, even at DEBUG.
+- **Use SSE connection state as the primary offline indicator.** The SSE `EventSource` connects to `lux` directly. When it closes (`EventSource.onerror` or `EventSource.onclose`), the Zustand `connectivity.sseConnected` flag goes `false` and the offline banner appears — within the `sse-starlette` default 15-second ping interval.
+- **`navigator.onLine` is used only as a secondary hint** to distinguish "LAN down" (onLine=false) from "server down" (onLine=true, SSE disconnected). The distinction is cosmetic — the banner copy differs ("No network" vs "Server unreachable") — not functional.
+- **TanStack Query `networkMode: 'always'`** so queries do not pause waiting for `navigator.onLine` to return true; use the SSE-derived connectivity state to pause queries instead. This prevents the thundering-herd refetch storm when the network reports "online" but the server is still starting up.
+- **Do not disable the search input based on `navigator.onLine`.** Disable it based on `!connectivity.sseConnected` instead.
 
-**Recovery:**
-- If PIN exposure is suspected: open admin (with current PIN), change PIN, all sessions revoked. Sticky note story over.
-
-**Severity:** Major (security hygiene; not catastrophic on a home LAN but unprofessional to omit).
-
-**Phase to address:** Admin Phase (Change PIN endpoint + Settings UI row), Ops Phase (runbook line about rotation).
+**Phase to address:**
+OFF-01 phase. The SSE-connectivity-as-primary-signal is the architectural decision; everything else follows from it.
 
 ---
 
-### Pitfall 13: CSRF on admin state-changing endpoints not enforced
+### Pitfall 36: SSE reconnect storm when GRUVAX server restarts after a Compose redeploy
 
 **What goes wrong:**
-Admin is logged in on mobile (session cookie present). Admin opens an unrelated site that issues a `POST /api/admin/cubes/bulk` from a `<form>` or `<img src>` (less for POST, but `fetch` with cookie credentials does it). Same-origin policy doesn't apply because the cookie's SameSite isn't tight enough, or the admin clicks a phishing link. Boundaries get overwritten without the admin's knowledge.
+GRUVAX restarts (Compose redeploy, server update). All SSE `EventSource` connections disconnect simultaneously. The browser's default retry is 3 seconds; with multiple kiosks and an open admin tab, 3–5 clients all reconnect at T+3s. Each reconnect triggers:
+1. An SSE subscription (in-process event bus registration).
+2. A `GET /api/admin/cubes` refetch (TanStack Query `refetchOnReconnect`).
+3. A `/api/search` refetch if there was a pending query.
 
-**Specific symptom:**
-- `boundary_history` shows an unauthorized `change_set_id` not initiated by the admin.
-- Cubes light up wrong on the kiosk; admin investigates and finds someone else's POST.
+This is the classic "thundering herd" — 3–5 simultaneous requests at T+3s. On a home LAN with one Uvicorn worker, this is recoverable (not catastrophic). But if nightly sync fires at the same time (03:00 restart + 03:00 sync), the server starts under load from the reconnect storm and the sync.
 
 **Why it happens:**
-Cookie-based auth is vulnerable to CSRF by default. ARCHITECTURE.md prescribes the double-submit cookie pattern (`gruvax_csrf` non-HttpOnly cookie + `X-CSRF-Token` header). If that's forgotten or partially implemented, CSRF risk is real.
+Browser `EventSource` retry is fixed at 3 seconds by default unless the server sends `retry: <ms>`. Without jitter, all clients retry at the same moment.
+
+**Prevention:**
+- **Server sends `retry: <jitter_ms>` on initial SSE response.** With `sse-starlette`, use `ping_message_factory` or the initial event payload to include `retry: <random between 2000 and 8000>`. Each client gets a different retry interval, spreading reconnects over a 6-second window.
+- **TanStack Query `refetchOnReconnect: true` is fine for individual clients but should use `staleTime` to avoid redundant refetches.** Set `staleTime` to 30 seconds on the cubes query so a client that reconnects after 10 seconds does not refetch data that was just fetched before the disconnect.
+- **The nightly sync starts at 03:00 but only after the server has been stable for 30 seconds** (already implemented in the DST-safe scheduler). This provides a buffer between Compose restart and sync start.
+- **Kiosk health: the `systemd` unit's `ExecStartPost` curl healthcheck waits for the SSE endpoint to be ready** before Chromium boots. This prevents a "kiosk starts before server is ready" scenario adding a 4th client to the reconnect storm.
+
+**Phase to address:**
+OFF-02 phase. The `retry` jitter is a one-line addition to the SSE setup; TanStack Query staleTime is a per-query config.
+
+---
+
+### Pitfall 37: Stale TanStack Query cache served as fresh after reconnect — user sees old data
+
+**What goes wrong:**
+The kiosk loses connectivity at T=0. TanStack Query serves the stale `profile_collection` cache (search works from local Postgres; this is correct per CON-offline-resilience-preserved). At T+30 minutes, nightly sync runs on the server. At T+45 minutes, connectivity restores. TanStack Query's `refetchOnReconnect` triggers a refetch of the search cache. BUT: if the query was marked `stale` while offline (which it was — TanStack Query marks all queries stale after `staleTime` ms), the refetch overwrites the cache with the new data. However, if optimistic updates were applied to the client state during the offline period (e.g., a "recently pulled" list that was modified), those optimistic updates are now wiped by the refetch.
+
+The more concrete failure: the "collection diff" badge (API-04 — "N new records since last sync") was computed from stale data. After reconnect, the diff is re-fetched. But if the UI had already shown "3 new records" and the user had dismissed the badge, the refetch could re-show it.
+
+**Why it happens:**
+TanStack Query's optimistic updates are cleared on refetch by default unless `cancelRefetch: true` and explicit rollback logic is implemented. The offline → reconnect transition is the exact scenario where this bites.
+
+**Prevention:**
+- **The "collection diff" badge is server-authoritative:** `GET /api/search/diff?since=<last_sync_at>` returns the count. The client dismisses the badge by writing a `dismissed_diff_at` timestamp to `sessionStorage`. On reconnect, if `dismissed_diff_at > last_sync_at`, do not re-show the badge.
+- **"Recently pulled" list is in-memory (sessionStorage) — not subject to server refetch.** It is not a TanStack Query cache key; it is pure local state managed by Zustand. The reconnect refetch cannot clobber it.
+- **For the search cache:** `staleTime: 60_000` (60 seconds). This means a client that was offline for < 60 seconds after reconnect will NOT refetch. For a client offline for > 60 seconds, a refetch is correct behavior.
+- **Do not use optimistic updates for any query that conflicts with server state on reconnect.** Optimistic updates are only appropriate for admin mutations (boundary edits) that are followed immediately by a server confirmation. Search results are not optimistically updated.
+- **TanStack Query `networkMode: 'always'`** prevents queries from being paused during offline, which prevents the reconnect-triggered mass refetch from hitting all paused queries at once.
+
+**Phase to address:**
+OFF-03/API-04 phase. The `dismissed_diff_at` sessionStorage pattern and the staleTime configuration are the prevention.
+
+---
+
+### Pitfall 38: Invite flow generates an invite link for a profile that already has a PAT
+
+**What goes wrong:**
+Owner generates an invite for profile "Alice." Alice completes onboarding. Owner, forgetting, generates another invite for the same profile and sends it to a different person. The second person pastes their PAT, which overwrites Alice's PAT. Alice's collection is now replaced by the second person's collection; her next sync returns different data.
+
+**Why it happens:**
+The invite-token generation endpoint does not check whether the target profile already has a connected PAT.
 
 **Warning signs:**
-- The double-submit pattern is mentioned in ARCHITECTURE.md but not enforced in the admin middleware.
-- No 403 returned when a request has a session cookie but no `X-CSRF-Token` header.
+- `POST /api/admin/invite/generate` succeeds even if `profiles.app_token_encrypted IS NOT NULL`.
+- The admin invite UI does not show "Already connected" for profiles that have a PAT.
 
 **Prevention:**
-- **Implement the double-submit token check as middleware** on all admin state-changing routes. `PUT/POST/PATCH/DELETE` under `/api/admin/*` require `X-CSRF-Token` to equal the `gruvax_csrf` cookie value. Missing or mismatched → 403.
-- **`SameSite=Strict` on the session cookie** (ARCHITECTURE.md uses `Lax` for the session, `Strict` for the CSRF). Strict on session cookie further reduces cross-site request risk but breaks "user clicks a link to /admin from email." For home LAN with no email-driven workflow, `SameSite=Strict` on both cookies is the right call.
-- **The login response sets both cookies and returns the CSRF token in the response body** so the SPA can stash it. Frontend `fetch` wrapper adds `X-CSRF-Token` automatically on admin requests.
-- **Test:** an integration test that sends an admin POST with a valid session cookie but missing CSRF header — expect 403.
+- **`POST /api/admin/invite/generate` returns 409 Conflict if the profile already has `app_token_encrypted IS NOT NULL`.** The error message: "This profile already has a connected token. Revoke it first if you want to re-invite."
+- **The admin profiles list shows `has_token: true/false`** (from Pitfall 26's `has_token` field), so the owner knows before generating an invite.
+- **"Revoke token" admin action** (clears `app_token_encrypted`, sets last sync status to "revoked") is a prerequisite for re-inviting. This is a separate explicit action, not implicit on re-invite.
 
-**Recovery:**
-- If a CSRF-fueled change happens: revert via `boundary_history` (one tap). Rotate PIN. Investigate.
-
-**Severity:** Major (real attack vector even on home LAN if any houseguest's device is compromised).
-
-**Phase to address:** Backend Phase (CSRF middleware + cookie configuration), Test Phase (negative test).
+**Phase to address:**
+AUTH-02 phase. The 409 guard is a two-line check in the generate handler.
 
 ---
 
-### Pitfall 14: Volume permissions break on first boot (non-root container can't write)
+### Pitfall 39: QR code displayed on an HTTP (not HTTPS) LAN URL — bind URL interceptable on LAN
 
 **What goes wrong:**
-STACK.md Dockerfile creates a non-root user `gruvax` (uid 10001) and `USER gruvax` at the end. On first boot, Compose mounts the named volumes (e.g., for mosquitto, or any bind-mount for static files), and they're owned by root. The container starts as `gruvax` and gets `Permission denied` writing logs or migrating the DB.
+The QR code encodes `http://gruvax.local:PORT/api/devices/pair/qr/{nonce}`. The admin's phone scans it and sends a GET to that URL. On a home LAN with a network sniffer, this GET is visible in plaintext. The nonce (the secret) transits unencrypted.
 
-**Specific symptom:**
-- `docker compose up` fails with `PermissionError: [Errno 13] Permission denied: '/app/static/...'` or similar.
-- Mosquitto fails with `Error: Unable to open '/mosquitto/data/mosquitto.db': Permission denied`.
-- The Pi-OS bind-mounted `static/` directory has uid 1000:1000 from the host, not 10001:10001.
+For a household with only trusted members, this is a low-severity concern. But the project constraint explicitly mentions "home LAN only; no public exposure" — not "trusted LAN." If any LAN device is compromised (e.g., a smart TV with a vulnerable firmware), the nonce can be captured and used to pair a rogue device within its TTL.
 
 **Why it happens:**
-Named Docker volumes are created with the *image's* user ownership at first use, but only if the Dockerfile `chowns` the mount point during build. For bind mounts to host directories, the host's uid is what counts. Mosquitto's official image uses uid 1883; if you `chown` the named volume to 10001, Mosquitto can't write.
+Setting up HTTPS for a home LAN service is an operational burden (self-signed cert, trust installation on all devices). Many developers skip it for LAN-only services.
 
-**Warning signs:**
-- The Dockerfile doesn't `chown` future-mount directories during build.
-- The Compose file uses bind mounts (`./mosquitto/passwd:...:ro`) without verifying host-side ownership.
+**Prevention (proportionate to threat):**
+- **Option A (recommended for this threat level): Accept HTTP + short-TTL + single-use nonce.** The attack window is 60 seconds (QR auto-rotate interval). A passive LAN sniffer would need to act within that window. For a home with trusted members, this risk is acceptable. Document the decision explicitly.
+- **Option B (belt-and-suspenders): Add a confirmation step on the server side.** After the admin's phone GETs the QR nonce URL, the server does NOT immediately bind the device. Instead, it transitions the pairing to a "pending confirmation" state. The admin's phone must then confirm via a separate authenticated admin session action (`POST /api/admin/devices/{id}/confirm`). This prevents a passive sniffer from completing the bind without the admin's involvement.
+- **Option C (operational effort justified if any external devices share the LAN):** Deploy a self-signed CA cert for `gruvax.local`, install it on all household devices, serve over HTTPS. The QR URL then encodes `https://gruvax.local:PORT/...`.
+- **Regardless of option chosen:** the nonce bind URL must not encode any permanent credential (Pitfall 28's prevention applies).
 
-**Prevention:**
-- **`mosquitto.conf` and `passwd` are bind-mounted read-only** (`:ro` per ARCHITECTURE.md) — the container doesn't need to write them, so host-side uid doesn't matter.
-- **Named volumes for writable state** (`mosquitto-data`, `mosquitto-log`) inherit the container's uid on first use; Mosquitto's image handles this internally for its own uid.
-- **GRUVAX container does not bind-mount writable host directories.** Static files are baked into the image (or copied at startup from a read-only mount).
-- **If a writable bind mount is unavoidable:** `chown 10001:10001` the host path during provisioning (document in runbook).
-- **Test: `docker compose up` on a fresh host (no existing volumes)** — must succeed first time.
-
-**Recovery:**
-- Bind-mount-related: `chown` the host path, retry.
-- Named-volume-related: `docker volume rm <vol>` and recreate.
-
-**Severity:** Major (blocks first-time deployment; well-understood once seen, easy to miss in dev).
-
-**Phase to address:** Ops Phase (Dockerfile + Compose review on fresh host).
-
----
-
-### Pitfall 15: discogsography sync staleness hides "newly added but unfindable"
-
-**What goes wrong:**
-Owner adds 30 records to their Discogs collection from a record-fair haul. discogsography's sync schedule (whatever it is) hasn't run yet. Owner walks to the kiosk to file the new haul into cubes, types a new title — "no results." They assume they typo'd; they try variants; they give up and shelve by hand without GRUVAX confirming the position. The new records are misshelved by humans who lost faith in the tool.
-
-**Specific symptom:**
-- Search returns no results for records the owner knows they just added.
-- Admin diagnostics shows `last_synced` is 2-3 days old.
-- The wizard's autocomplete is missing recently-added titles.
-
-**Why it happens:**
-discogsography runs its own sync schedule; GRUVAX is a passive reader. Sync latency is invisible from the GRUVAX UI unless explicitly surfaced.
-
-**Warning signs (detect early):**
-- The kiosk SPA has no indicator of sync staleness.
-- No "force sync" admin action exists (it'd live in discogsography, not GRUVAX; but a one-click trigger would help).
-
-**Prevention:**
-- **Surface sync staleness in admin diagnostics** (FEATURES.md Category 7 differentiator). `last_synced` = `max(v_collection.synced_at)`. If older than 24 h, render a yellow warning. If older than 7 days, render red.
-- **Kiosk shows a subtle banner if `last_synced` > 7 days:** "Collection last updated 8 days ago — recently added records may not appear yet." Doesn't disable search; informs the user.
-- **Admin has a "request sync" button** that hits discogsography's API (or its MCP server) to trigger a sync. Out-of-band call; surfaces sync as a deliberate operator action, not a mystery.
-- **Search "no results" page suggests checking sync staleness:** "No matches found. Last collection sync was X hours ago — try the admin Diagnostics page."
-
-**Recovery:**
-- Owner triggers sync in discogsography; GRUVAX picks up automatically.
-- For the immediate shelf job: owner manually edits boundaries for the new records using catalog numbers (wizard works without `v_collection` validation if the user accepts a "force save" toggle — but this opens Pitfall 2, so default-off).
-
-**Severity:** Major (UX disaster for the "I just got back from the fair" use case which is precisely when GRUVAX should shine).
-
-**Phase to address:** Admin Phase (diagnostics + banner), Kiosk Phase (no-results suggestion text).
-
----
-
-### Pitfall 16: Animations that look great in dev feel laggy on the Pi 5
-
-**What goes wrong:**
-The "selection lands" choreography (FEATURES.md Category 2 differentiator) is designed on a fast Mac in Chrome DevTools and approved by stakeholders. On the Pi 5 + 7" screen + Chromium-on-Wayland, the same GSAP timeline drops frames during the highlight pulse. The Core Value moment feels broken.
-
-**Specific symptom:**
-- DevTools Performance trace on the Pi shows long animation frames (>16 ms) during the "cube pulse" segment.
-- The "feels snappy" promise of <200 ms TTI is undermined by a janky 600 ms animation that follows it.
-- Layout thrashing during the multi-cube label-span dim-in.
-
-**Why it happens:**
-Pi 5 GPU is fine for WebGL but Chromium's compositor on Wayland + animating many DOM elements (32 cubes) with simultaneous `transform`, `opacity`, AND `box-shadow` transitions can blow the 60fps budget. Box-shadow especially is a known offender.
-
-**Warning signs:**
-- Animation tests only run on the developer's laptop.
-- The cube grid uses `box-shadow` for the glow effect rather than a separate compositor layer.
-- No `will-change` hints on animated elements.
-
-**Prevention:**
-- **Test animations on the actual Pi 5 + 7" screen as part of the frontend phase**, not deferred to "kiosk setup." Hardware-in-the-loop animation review before stakeholder sign-off.
-- **Animate transform + opacity only** for the GPU-cheap path. The glow effect is a separate absolutely-positioned layer with `opacity` transitions, not `box-shadow` on the cube itself.
-- **`will-change: transform, opacity`** on cubes that the user has interacted with (don't set globally — defeats the purpose).
-- **Cap the animation timeline at 400 ms total**, not 600. Faster feels more responsive even if it loses some choreography drama.
-- **Frame-budget test in CI** (Playwright + the Pi as a runner if practical): assert <16 ms p95 frame time during the "search lands" timeline.
-
-**Recovery:**
-- Profile, simplify animation, re-test.
-
-**Severity:** Major (undermines Core Value perception; not data-related).
-
-**Phase to address:** Frontend Phase (animation design), Hardware Setup Phase (Pi-side frame-budget check).
+**Phase to address:**
+DEV-04 phase. The decision between Options A/B/C must be made before the QR implementation; document it in the project's Key Decisions.
 
 ---
 
 ## Minor Pitfalls
 
-### Pitfall 17: Touchscreen fingerprints make the dark theme unreadable
+### Pitfall 40: "Recently pulled" list (SRCH-09) persists between visitor sessions via localStorage
 
 **What goes wrong:**
-The mockup is dark/monospace/gold (PROJECT.md). Looks great in screenshots. On a touchscreen used daily near vinyl-handling (fingertips have a film of slipmat/dust), the dark theme amplifies fingerprint smears. Readability drops in real-world lighting.
-
-**Specific symptom:**
-- Two weeks in, the owner squints at the screen because the dark background reflects ambient and shows every smudge.
-- Houseguests report needing to wipe the screen before searching.
+The recently-pulled list is implemented as a Zustand store persisted to `localStorage`. Visitor A searches for "Blue Note BLP-4195" — it appears in the recently-pulled list. Visitor B opens the kiosk and sees Visitor A's recent search. This is a privacy concern (PRIV-02 scope) and confusing UX.
 
 **Why it happens:**
-Mockups are evaluated under ideal lighting and clean screens. Real-world conditions for a kiosk *at the shelves* include uneven LED lighting, occasional sunlight if the shelves are near a window, and finger oils.
-
-**Warning signs:**
-- All UI evaluation happens in a non-kiosk environment.
-- No "light mode" toggle even as an experimental setting.
+Same root cause as Pitfall 31 — `localStorage` is the default for Zustand persistence. The distinction between "persist for this user's session" and "persist forever" must be explicit.
 
 **Prevention:**
-- **Test the kiosk in its actual mounting location** during the UI design phase. Take a photo at the actual touchscreen position with normal kitchen/living-room lighting.
-- **Use higher contrast than the mockup suggests** — pure black backgrounds suffer the most fingerprint impact. A near-black like `#0a0a0c` or even a deep neutral helps.
-- **Ship an admin-toggled "high contrast" mode** as a v1 setting (cheap; same Tailwind tokens).
-- **Buy a matte-finish screen protector** as part of the hardware budget — it kills 80% of fingerprint glare.
+- Same fix as Pitfall 31: recently-pulled list in `sessionStorage` or in-memory state only.
+- The "reset kiosk" (PRIV-04) action must clear this list.
 
-**Recovery:**
-- Toggle high contrast. Buy screen protector. Done.
-
-**Severity:** Minor (annoying, not blocking).
-
-**Phase to address:** UI Design Phase (real-conditions evaluation), Hardware Setup Phase (screen protector).
+**Phase to address:**
+SRCH-09 phase. Design the storage medium before implementing the feature.
 
 ---
 
-### Pitfall 18: Color-blind admin can't distinguish label-span from primary-cube highlight
+### Pitfall 41: Collection diff count (API-04) triggers a spurious "N new records" on first sync after stale period, not a real collection change
 
 **What goes wrong:**
-Admin-configurable colors (PROJECT.md Active scope) default to (e.g.) red for primary cube and green for label-span. A red-green color-blind visitor sees both highlights as similar olive, can't tell which cube to walk to. Even the admin, picking colors, doesn't realize the defaults fail accessibility.
-
-**Specific symptom:**
-- Houseguest with deuteranopia / protanopia uses the kiosk and asks "which cube?"
-- Admin's chosen palette has too-similar luminance between primary and span.
+The diff is computed as `count(profile_collection WHERE added_to_cache_at > last_shown_diff_at)`. But if the server was down for 3 days and nightly sync was skipped, then catches up with 3 days of accumulation, the diff shows all 3 days' worth of changes as "new" simultaneously — potentially a large number that startles the user even if no real new records were added (the accumulation was just sync catching up).
 
 **Why it happens:**
-"RGB LED" implies color-as-information. For color-blind users (~8% of men), color-only signaling fails. Both UI and LED layers are affected.
-
-**Warning signs:**
-- Default color settings in `gruvax.settings.led_color.*` are red+green or other deuteranopia-collapsed pairs.
-- The color picker UI doesn't show a contrast/distinguishability score.
-- No non-color signal (animation, brightness, size) distinguishes primary from span.
+The diff is count-based and does not distinguish "newly added to Discogs collection" from "newly added to local cache." A long sync gap inflates the diff count.
 
 **Prevention:**
-- **Pick defaults that are color-blind-safe:** primary = warm yellow/gold (e.g. `#FFD700`), span = deep purple (e.g., `#7C3AED`). These have high luminance contrast AND distinct hue under all common forms of color blindness.
-- **Brightness *and* color** differentiate: span at 30-50% brightness, primary at 100% brightness. Even if a viewer can't see hue at all, brightness conveys "this one matters more."
-- **Distinct animation:** primary cube pulses, span cubes are static. Motion is an information channel.
-- **Sub-cube position bar is always the *highest* contrast** against the cube background. It's the most precise affordance; don't hide it behind subtle color.
-- **In the admin color picker, show a "color-blind preview"** that simulates deuteranopia/protanopia/tritanopia (matrix transformation; cheap, well-documented).
-- **Sub-cube bar has a distinct shape (a thin horizontal line)** so position is conveyed by shape and location even without color.
+- **The diff tracks `discogs_added_at`** (the date the member added the record to their Discogs collection), not `cache_added_at`. Compare `discogs_added_at > profiles.last_shown_diff_at`. This correctly counts "new since you last looked" regardless of sync gaps.
+- **`last_shown_diff_at` is updated on kiosk load** (or on "dismiss diff badge"), not on sync completion.
+- **The diff badge shows "N new records added to your Discogs collection since [date]"** — the date anchors the user's expectation.
+- **Cap the displayed count at 99+** to prevent extreme numbers from alarming users.
 
-**Recovery:**
-- Admin re-picks colors. If a houseguest hits this once, the color-blind preview in the picker prevents repeat.
-
-**Severity:** Minor (rare; admin-configurable; only critical if accessibility is a stated requirement).
-
-**Phase to address:** UI Design Phase (defaults + color-blind preview), Backend Phase (settings schema supports per-state brightness as well as color).
+**Phase to address:**
+API-04 phase. The `discogs_added_at` field must be in the `profile_collection` cache (CON-collection-cache-fields allows for additional fields; add it).
 
 ---
 
-### Pitfall 19: Browser cache holds stale SPA bundle after a redeploy
+### Pitfall 42: Aggregate-only stats (PRIV-03) still leak individual query patterns via timing
 
 **What goes wrong:**
-Operator redeploys GRUVAX with a fixed JS bug. The kiosk's Chromium loads the cached old `bundle-abc123.js` because the HTML still points there or because of an aggressive cache header. The bug appears fixed in dev but persists on the kiosk for hours.
-
-**Specific symptom:**
-- A confirmed-fixed bug still reproduces on the kiosk.
-- DevTools Network panel on the kiosk (via remote debugging) shows the old bundle hash.
-- Hard-refresh fixes it.
+PRIV-03 stores only aggregate counts (searches per hour, locate calls per day) not individual query texts. But the aggregate is stored per-hour with high time resolution. An observer with access to the stats table can infer individual sessions: "3 searches in the 14:23 hour, 0 all other hours → someone was searching at 2:23 PM." For a home system, this is low concern. But the intent of PRIV-03 should be explicitly scoped.
 
 **Why it happens:**
-Vite emits content-hashed asset filenames (`bundle-abc123.js` → `bundle-def456.js`), and `index.html` is regenerated to point at the new hash. But `index.html` itself, if cached with a long max-age or by a service worker, still points at the old hash. Or, if you serve `index.html` with `Cache-Control: public, max-age=3600`, the kiosk holds the stale one for up to an hour.
-
-**Warning signs:**
-- Static file serving (FastAPI `StaticFiles`) uses default cache headers.
-- A service worker is added without a `skipWaiting`/`clientsClaim` strategy.
+Aggregate statistics always leak some temporal information. The question is whether the granularity is fine enough to be a concern.
 
 **Prevention:**
-- **`index.html` is served with `Cache-Control: no-store, max-age=0`.** Always fresh.
-- **Hashed assets (JS/CSS) are served with `Cache-Control: public, max-age=31536000, immutable`.** Hash change = new filename = automatic cache bust.
-- **If a service worker is added (FEATURES.md Category 6 differentiator):** use Workbox `precacheAndRoute` with `skipWaiting()` and `clientsClaim()` on activate; the kiosk receives the new SW on next reload and immediately swaps.
-- **Kiosk auto-reloads daily at, say, 4 AM** via a small SPA timer: if the build hash from `/api/version` differs from the loaded build hash, reload. Cheap insurance.
+- **Explicitly document PRIV-03's scope:** "No query text stored; aggregate counts at hourly granularity; temporal inference from hourly buckets is acceptable for a home system." This is a documented decision, not an oversight.
+- **If higher privacy is required:** bucket to daily granularity only. But for a home system, hourly is fine.
+- **The stats table does NOT store `profile_id` on individual query events** — only on the aggregate counter row. This prevents cross-profile comparison.
 
-**Recovery:**
-- Hard-refresh the kiosk; or, ssh + remote-debugging-port reload.
-
-**Severity:** Minor (annoying after every deploy; trivially preventable).
-
-**Phase to address:** Backend Phase (StaticFiles cache headers), Frontend Phase (build hash check + auto-reload).
+**Phase to address:**
+PRIV-03 phase. The documentation of scope is the mitigation — no code change needed if hourly granularity is acceptable.
 
 ---
 
-### Pitfall 20: Log volume blows up disk on `lux` or Pi
+### Pitfall 43: QR code rendering is blurry or too small on the 7" kiosk screen to be scanned
 
 **What goes wrong:**
-Default Python logging at INFO + Uvicorn access logs + Mosquitto info logs + Compose default log driver (json-file with no size limit) → tens of MB per day → after a year, gigabytes of logs on `lux`'s SSD. Or on the Pi: kiosk Chromium dumps GPU warnings to journald, which grows unboundedly.
-
-**Specific symptom:**
-- `df -h` on `lux` shows /var/lib/docker filling up.
-- `journalctl --disk-usage` on the Pi exceeds a GB.
-- Performance unaffected until disk fills, then writes fail catastrophically.
+The QR code is rendered as a 200×200 CSS pixel element. On the Pi's 7" display (typically 800×480 at 60dpi effective), the QR code is physically 3.3 inches — small but scannable with most phones from normal distance. If the QR is further reduced by padding, margins, or a surrounding "pair your device" dialog, it may drop below the comfortable scan distance for the admin's phone camera.
 
 **Why it happens:**
-Docker's default `json-file` log driver has no rotation. Mosquitto in default config logs everything. Chromium emits a lot of warnings to stderr that journald captures.
-
-**Warning signs:**
-- Compose file lacks `logging:` directives.
-- `mosquitto.conf` has `log_type all` or default verbose settings.
+QR code scannable size depends on physical size and error correction level. A 37-char URL encoded at QR error-correction level M requires at minimum a 25×25 module grid. At 200 CSS pixels, each module is 8 pixels — fine. But if the display is DPI-scaled differently, the physical size drops.
 
 **Prevention:**
-- **Compose `logging` directive on each service:** `driver: json-file, options: {max-size: "10m", max-file: "3"}`. Caps each service at 30 MB.
-- **Mosquitto:** `log_type error, warning, notice` (drop `information` and `debug`).
-- **Python logging at INFO in production, DEBUG only in dev.** `LOG_LEVEL` env (STACK.md).
-- **Uvicorn `--access-log` only in dev**; in prod, structlog at INFO captures requests with timing and skips per-request access-log noise.
-- **journald on the Pi:** set `SystemMaxUse=500M` in `/etc/systemd/journald.conf`.
-- **Healthcheck-related: monitor disk in admin diagnostics** — `df` of `/var/lib/docker` exposed in `/api/admin/diagnostics`.
+- **Minimum 250×250 CSS pixels** for the QR element; use a high-resolution QR library (`qrcode.react` with `size={256}`) and do not further scale down via CSS.
+- **Error correction level H** (30% recovery) accommodates slight phone camera angle or screen reflection.
+- **Test by scanning with the actual admin phone from normal distance** (arm's length) on the actual 7" display. Document the minimum distance.
+- **The auto-rotate countdown (60s) must be shown** so the admin knows how long they have to scan. Use a circular progress indicator around the QR.
 
-**Recovery:**
-- `docker compose down && docker system prune --volumes=false` cleans logs. Then add the limits and restart.
-
-**Severity:** Minor (catches operators who don't monitor; once limits are in place, never again).
-
-**Phase to address:** Ops Phase (Compose logging + Mosquitto config + journald), Admin Phase (diagnostics disk row).
+**Phase to address:**
+DEV-04 phase (frontend QR component). A hardware-in-the-loop test before shipping.
 
 ---
 
-### Pitfall 21: Single-record label rendered identically to a multi-record label
-
-**What goes wrong:**
-A label that owns exactly one record produces a `label_span` with one cube and a `sub_cube_interval` that's a single point. The UI renders the interval bar at zero width — invisible. The user sees a cube highlighted but no precision indicator, and thinks the system is broken.
-
-**Specific symptom:**
-- Search lands on a cube; the cube glows but no sub-cube bar appears.
-- For multi-record labels, the bar appears correctly.
-
-**Why it happens:**
-Interval rendering naively scales `(end - start) × cube_width`. For a zero-width or near-zero-width interval, the rendered element is invisible. Single-record labels are the edge case the implementation never sees in dev (where data is denser).
-
-**Warning signs:**
-- The CSV (3K records) has a tail of labels with a single record each.
-- The frontend `SubCubeBar.tsx` does not have an explicit single-point case.
-
-**Prevention:**
-- **Single-record labels render a tick mark** (vertical line with a small dot) at the exact position, not an interval bar (FEATURES.md Category 2 differentiator already calls this out).
-- **Interval-width threshold:** if `(end - start) < 0.02`, render as a tick. Otherwise render as a bar with rounded caps.
-- **Position-estimator returns `crosses_boundary: false, sub_cube_interval: {start: X, end: X}` for single-record cases**; frontend branches on width.
-- **Hypothesis property test:** for every label with `count(releases) == 1` in the seed CSV, `/api/locate` returns `sub_cube_interval.start == sub_cube_interval.end` (or a small fixed delta), and the frontend renders a visible tick.
-
-**Recovery:**
-- Add the tick render branch.
-
-**Severity:** Minor (small UX bug; high-frequency for labels with 1 record).
-
-**Phase to address:** Frontend Phase (SubCubeBar tick render).
-
----
-
-### Pitfall 22: Auto-suggested boundary midpoint picks an empty zone
-
-**What goes wrong:**
-The wizard's "auto-suggest boundary" feature (FEATURES.md Category 3 differentiator) takes two adjacent cubes' boundaries and proposes the midpoint catalog number. If the owner's collection has a long gap in catalog numbers (e.g., they own `BLP 4001-4050` and then `BLP 4500+`, nothing in between), the midpoint (`BLP 4275`) is a catalog number with zero records, and the suggested boundary is a phantom.
-
-**Specific symptom:**
-- Wizard suggests `BLP 4275` as a boundary; user accepts; next time someone searches `BLP 4150`, the position estimator interpolates against a phantom anchor and returns a wrong cube.
-
-**Why it happens:**
-The suggestion algorithm computes a midpoint in *catalog number space*, not in *collection density space*. For dense labels, this is fine. For sparse labels with gaps, it's wrong.
-
-**Warning signs:**
-- The `POST /api/admin/cubes/suggest` endpoint takes adjacent cube IDs and returns a catalog number without consulting `v_collection`.
-- Wizard does not show "this is between record X and record Y in your collection" alongside the suggestion.
-
-**Prevention:**
-- **Suggestion algorithm walks `v_collection`, not catalog-number space.** Given two adjacent cubes' last record and first record, suggest a midpoint *by index in the sorted collection*, not by string interpolation. The midpoint is *always* a real record (or, if there are an even number of records between, one of the two middle records).
-- **Wizard UI shows "this is between [record A] and [record B]"** alongside the suggested boundary value so the user has context.
-- **Suggestion is a hint, not a commit.** Wizard always shows a confirm step. The diff preview (FEATURES.md Category 3) is the safety net.
-
-**Recovery:**
-- If a phantom boundary is committed: admin opens history, reverts. Or runs the wizard for that cube only with the corrected algorithm.
-
-**Severity:** Minor (rare; depends on collection sparsity per label) but worth fixing once.
-
-**Phase to address:** Admin Phase (suggest endpoint algorithm), Frontend Phase (wizard context display).
-
----
-
-### Pitfall 23: Idle timer doesn't expire on the kiosk because nobody's idle
-
-**What goes wrong:**
-Kiosk admin session is opened on the touchscreen during a reshuffle. The owner walks back and forth to the shelves, occasionally touching the screen to update boundaries. From the SPA's perspective, the session is active (each touch counts). But if the owner is interrupted (phone call, dinner) and walks away mid-session, the kiosk shows the admin view to anyone passing by until natural idle timeout (5-10 min).
-
-**Specific symptom:**
-- Admin walks away; visiting child taps "delete all boundaries" before idle timeout fires.
-
-**Why it happens:**
-Sliding-window TTL refreshes on every request. For an actively-used session, "actively used" means "touched within idle threshold," which doesn't distinguish "owner actively editing" from "the screen is just on and a visitor leaned on it."
-
-**Warning signs:**
-- No physical proximity sensor.
-- Admin session length unlimited by anything other than idle.
-
-**Prevention:**
-- **Hard cap on admin session lifetime regardless of activity.** E.g., 30 minutes from login, even if continuously active. Forces re-PIN on long sessions; reduces window for an unattended admin view.
-- **Visible idle countdown in admin UI** (FEATURES.md Category 3 already prescribes this for the < 60 s warning).
-- **"Lock admin" button at the bottom of the admin view** — single tap re-shows PIN screen without logging out. Like a sleep button. Owner taps it before walking away.
-- **Tab visibility hidden → reduce TTL to 60 s.** When the SPA's `document.visibilityState` becomes `hidden` (kiosk's screen goes off, or browser tabs away), kick off a 60 s shorter countdown.
-
-**Recovery:**
-- Idle timeout fires; or owner taps Lock; or worst case, history table's append-only nature means destructive operations are undoable.
-
-**Severity:** Minor (single-operator home; the social risk is small but non-zero).
-
-**Phase to address:** Backend Phase (hard cap in session middleware), Frontend Phase (Lock button, visibility hidden listener).
-
----
-
-## Technical Debt Patterns
+## Technical Debt Patterns — v2.1 Additions
 
 | Shortcut | Immediate Benefit | Long-term Cost | When Acceptable |
 |---|---|---|---|
-| Skip the `v_collection` view, query `discogsography.releases` directly | One less Alembic migration, no view to maintain | Every upstream schema change is a multi-file sweep across GRUVAX. The "view as read-only contract surface" pattern (ARCHITECTURE.md Pattern 4) loses its value. Pitfall 5 recovery time goes from minutes to hours. | **Never.** The view is cheap; the discipline pays off the first time discogsography refactors. |
-| Skip CSRF middleware; rely on `SameSite=Lax` cookie | One less middleware to wire | Pitfall 13 is real on home LAN if any device on the LAN is ever compromised. CSRF on admin POST/PUT is table stakes. | **Never** for state-changing admin routes. Acceptable only for GET-only diagnostic endpoints (no state change → no CSRF surface). |
-| Skip the boundary cache; query `cube_boundaries` on every `/api/locate` | One less data structure | Pitfall 10 + estimator latency budget gone (32 rows fetched, parsed, sorted on every call) | **Never** in production. The cache is ~50 lines (ARCHITECTURE.md Pattern 3). |
-| Use Pydantic field names `id` everywhere instead of `release_id`/`collection_item_id` | Less typing | Pitfall 6 — silent confusion of identities | **Never** in API surfaces. Acceptable inside private functions where the type signature makes the meaning unambiguous. |
-| Single-cube per-request save in the wizard instead of bulk | Simpler endpoint | Pitfall 7 — partial-commit during interruption | **Never** for the wizard's commit step. Acceptable for the per-cube *single edit* endpoint that exists for the cube editor route. |
-| Hard-coded color defaults instead of configurable | Less data model surface | Pitfall 18 — accessibility miss | **Never** for the LED color path. Acceptable for very minor UI accents (focus rings, etc.). |
-| Use `box-shadow` for the cube glow because it looks pretty | Looks good in mockup | Pitfall 16 — frame budget on Pi | **Never** without testing on the Pi. Acceptable for non-animated chrome (cards at rest). |
-| Skip the in-app virtual keyboard, rely on squeekboard | One fewer component to build | Pitfall 4 — kiosk admin fallback non-functional | **Never** in v1. Acceptable only when labwc/labwc#2926 is officially closed-fixed and the fix has shipped in Raspberry Pi OS. |
-| Skip Idempotency-Key on admin bulk endpoint | Tiny endpoint simpler | Pitfall 7's safety net is gone; a flaky Wi-Fi double-tap on Save commits twice. | **Never** for state-changing admin endpoints. |
-| Use `--access-log` in production Uvicorn | One less custom logger | Pitfall 20 — log volume; AND Pitfall 9 isolation — every search shows up in access log, including search queries (privacy concern per FEATURES.md Category 9) | **Never** in production. Use structlog with explicit fields and suppress query bodies. |
-| Bind-mount the SPA build directory from host to container | Hot reload on file change | Pitfall 14 — volume permissions; and "what the image contains" diverges from "what runs" | Acceptable only in dev. Production: bake the SPA into the image. |
+| Store invite token in `?token=` query param | Simpler URL generation | Pitfall 24 — leaks in referrer and Uvicorn access log | **Never.** Use path segment + `Referrer-Policy: no-referrer`. |
+| Skip server-side single-use tracking for invite token | No extra table | Pitfall 25 — token replayable within TTL | **Never.** The `invite_tokens` table is 5 columns; the check is one query. |
+| Return `app_token_encrypted` in the profile API response | Easier to debug | Pitfall 26 — owner can decrypt member's PAT; privacy promise broken | **Never.** Return only `has_token: bool`. |
+| Accept invite token without validating against discogsography | Faster onboarding | Pitfall 27 — member pastes wrong/over-scoped PAT; first sync fails 24 hours later silently | **Never** without a validation round-trip. The discogsography call is < 200 ms. |
+| QR encodes the 4-digit PIN code directly | No extra table | Pitfall 28 — permanent credential visible to anyone with a camera | **Never.** Use a separate, short-lived nonce. |
+| Skip `profile_id` in `write_boundary` WHERE clause | Fewer query params | Pitfall 33 — cross-profile boundary corruption; silent data loss | **Never.** This is the v2.0 tech debt item; it must close before v2.1 boundary-editing features. |
+| Fan-out all SSE events to all clients | Simpler event bus | Pitfall 34 — wrong kiosk reacts to another profile's events; confusing UX | **Never** in multi-profile mode. Profile-scoped subscriptions are 10 lines of dict keying. |
+| Use `navigator.onLine` for offline detection | One line | Pitfall 35 — LAN-connected but server-unreachable shows no offline banner | **Never** as primary signal. Use SSE connectivity as primary. |
+| Store search history in `localStorage` | Survives page reload | Pitfall 31/40 — history leaks between kiosk visitors; privacy promise broken | **Never** for search history. `sessionStorage` or in-memory only. |
+| Log search query at INFO for debugging | Easier troubleshooting | Pitfall 30 — query text in Docker logs contradicts PRIV-01 | **Never** in production. Debug logging on a feature branch, removed before merge. |
 
 ---
 
-## Integration Gotchas
+## Integration Gotchas — v2.1 Additions
 
 | Integration | Common Mistake | Correct Approach |
 |---|---|---|
-| **discogsography Postgres** | `SELECT * FROM discogsography.releases r JOIN ...` directly in GRUVAX code | Define `gruvax.v_collection` view; application code reads only from the view (ARCHITECTURE.md Pattern 4). |
-| **discogsography Postgres** | Granting `gruvax_app` user `INSERT/UPDATE/DELETE` on discogsography tables "for future flexibility" | Grant `SELECT` only. Migration is the only way to widen access. (ARCHITECTURE.md grant pattern.) |
-| **discogsography FTS** | Building a separate `tsvector` on the GRUVAX side and indexing it | Use `releases.fts_vector` from discogsography (exposed via the view). If discogsography removes the column, GRUVAX builds a materialized view as fallback (ARCHITECTURE.md read-only contract table). |
-| **Mosquitto** | Publishing without `keep_alive` set; broker disconnects after default 60 s of silence | `aiomqtt.Client(..., keep_alive=30)` per STACK.md / ARCHITECTURE.md Pattern 1. |
-| **Mosquitto** | Setting `clean_start=True` and losing in-flight QoS 1 packets across reconnects | `clean_start=False, session_expiry_interval=86400` for persistent sessions (Context7-verified aiomqtt pattern). |
-| **Mosquitto** | Forgetting LWT (last-will-and-testament); future ESP32s can't detect a dead `gruvax-api` | Configure `will=aiomqtt.Will("gruvax/v1/server/hello", payload=b'{"alive": false}', retain=True)` (ARCHITECTURE.md Pattern 1). |
-| **Mosquitto** | Publishing every retained state on every API call, ballooning broker state | Only publish retained on `state/*` topics (the desired-state topics); commands (`illuminate`, `sub`, etc.) are non-retained (ARCHITECTURE.md topic design). |
-| **Postgres connection pool** | Letting SSE endpoint hold a connection for its lifetime | SSE endpoint depends only on the in-process event bus; no DB dependency (Pitfall 10). |
-| **Postgres connection pool** | Default pool size with no monitoring | Size the pool for `2× max concurrent SSE clients + 5`; expose `pool.size_used` in `/api/health` (Pitfall 10). |
-| **Alembic** | Running `alembic upgrade head` from application startup *and* CI without coordination → race when two containers boot | Migrate before container starts (entrypoint script runs `alembic upgrade head`, then `exec uvicorn ...`). Only one container should run migrations; use a Compose `init` container or just rely on the single-instance reality of this deployment. |
-| **Alembic** | Forgetting Alembic naming conventions on `Base.metadata` → unstable autogenerated migration filenames across machines | Set explicit naming convention on `MetaData` (STACK.md Alembic best practice). |
-| **discogsography sync timing** | Assuming sync is real-time | Surface sync staleness in admin diagnostics + kiosk banner (Pitfall 15). |
-| **discogsography release identifiers** | Using `id` interchangeably for `release_id` and `collection_item_id` | Always name fields explicitly; Pydantic models on every endpoint (Pitfall 6). |
-| **Chromium kiosk** | Snap-packaged Chromium (missing GPU integration) | apt-packaged Chromium with `--ozone-platform=wayland` (STACK.md). |
-| **Chromium kiosk** | `unclutter` for cursor hiding (X11 only) | Wayland cursor hiding via labwc config (STACK.md). |
-| **Chromium kiosk** | Auto-restart with no rate limit; restart loop drains the Pi | `systemd --user` unit with `StartLimitIntervalSec=120, StartLimitBurst=5` (Pitfall 9). |
-| **Chromium kiosk** | Letting compositor blank the screen → offline banner unreachable on touch | Black-screen-on-idle is an app-level concern (CSS+JS), not compositor-level (STACK.md). |
-| **squeekboard on-screen keyboard** | Assuming it works under labwc fullscreen Chromium | It doesn't (labwc#2926). Build in-app keypad (Pitfall 4). |
+| **Discogsography PAT validation** | Fire-and-forget storage; validate later | Synchronous validation call before storing; 422 if invalid or wrong scope |
+| **Discogsography PAT validation** | Timing out the validation silently, storing the token as-if valid | Return 503 to the invite form; member retries; never store an unvalidated token |
+| **Fernet token as invite link** | TTL of 24 hours "to give members time" | 30-minute TTL maximum; single-use DB check is the safety net, not TTL length |
+| **QR code nonce** | Generating nonce at page render time (React), not at API call time | Nonce generated server-side on `GET /api/devices/pair/qr` endpoint; React polls to refresh every 60s |
+| **TanStack Query offline** | `networkMode: 'offlineFirst'` pauses all queries during offline | `networkMode: 'always'` + SSE-driven manual invalidation; queries run but SSE-derived staleness controls when they refetch |
+| **SSE event bus** | `bus.broadcast(event)` to all subscribers | `bus.publish(event, profile_id=X)` → only queues subscribed to profile X receive it |
+| **structlog redaction** | Adding redaction as a per-callsite `query="<redacted>"` string | Processor in the pipeline that intercepts any log record with a `query` key and replaces the value; zero per-callsite discipline needed |
+| **Zustand persist** | `persist(store)` on the whole store | `persist(store, { partialize: (s) => ({ pendingChangeSet: s.pendingChangeSet }) })` — only wizard draft is persisted, never search history |
 
 ---
 
-## Performance Traps
-
-| Trap | Symptoms | Prevention | When It Breaks |
-|---|---|---|---|
-| **No debounce on type-ahead** | Server CPU climbs per keystroke; results lag | 100-150 ms debounce + `useDeferredValue` (FEATURES.md) | When the user types fast (every typer). |
-| **No boundary cache** | Locate latency variable; DB CPU climbs proportional to QPS | ARCHITECTURE.md Pattern 3 — load 32 rows into memory, invalidate on event | When `/api/locate` exceeds ~100 QPS (not realistic v1, but easy to forget) |
-| **`useTransition` and `useDeferredValue` not used in React 19** | Render frames blocked by setState during typeahead | React 19 + Compiler handles most of this; opt into `useDeferredValue` for the deferred query string | Visible at low end of Pi 5 capability when frame rates are tight |
-| **SSE without `ping=15`** | Proxies (if added later) kill the long-lived connection silently | `sse-starlette` default `ping=15` keeps the line warm (Context7-verified) | When any reverse proxy is introduced and not configured for SSE |
-| **`box-shadow` animations on 32 elements** | Frame drops during cube highlight choreography | Animate `transform`+`opacity` only; glow as separate layer with opacity (Pitfall 16) | On Pi 5 under Wayland during the "selection lands" moment |
-| **`Depends(get_db)` on SSE endpoint** | Pool exhaustion under multiple long-lived clients | SSE depends only on event bus, no DB (Pitfall 10) | After hours of kiosk uptime + admin sessions |
-| **Full collection scan for "did you mean"** | First search after deploy is slow | `pg_trgm` GIN index on `releases.label`/`releases.title` (FEATURES.md Category 1) | When the index is missing or hasn't been analyzed |
-| **Logging at DEBUG in production** | Disk fills, journald slows | LOG_LEVEL=info in prod; per-route filter on search endpoint (privacy) | Within weeks on a chatty service |
-| **Per-request connection in MQTT publish** | TCP setup adds 5-10 ms per illuminate call; Mosquitto sees connect/disconnect churn | Single long-lived `aiomqtt.Client` in lifespan (ARCHITECTURE.md Pattern 1) | Always — never use per-request MQTT clients |
-| **No `Idempotency-Key` on bulk save; user retries → double-commit** | Two `change_set_id` rows in history for one user action | Idempotency-Key header on all admin mutating endpoints (ARCHITECTURE.md) | First flaky Wi-Fi save during a wizard run |
-| **No keyset pagination on history list** | `OFFSET` queries get slower as history grows | Cursor-based pagination (ARCHITECTURE.md) | Around 1k history rows (years out) |
-| **Search returns 200 results when 20 suffice** | Frontend renders all rows; layout cost | `limit` default 20, max 50 (ARCHITECTURE.md) | Always — keep results bounded |
-| **Recently-pulled list in localStorage grows unbounded** | localStorage quota hit; SPA fails to mount on next load | Cap at 10 items (FEATURES.md Category 1) | After heavy use sessions |
-| **In-process event bus subscriber queue unbounded** | Slow SSE consumer backpressure → memory growth | `asyncio.Queue(maxsize=64)` with drop-on-full (ARCHITECTURE.md Pattern 2) | If a kiosk hangs but keeps the TCP connection open |
-
----
-
-## Security Mistakes
+## Security Mistakes — v2.1 Additions
 
 | Mistake | Risk | Prevention |
 |---|---|---|
-| **PIN compared with `==` instead of constant-time** | Timing attack reveals PIN | `secrets.compare_digest` on a hash comparison; never compare raw PINs (STACK.md). |
-| **PIN logged in any form** | DB leak → PIN leak | Login route logs `pin_attempt: redacted`; never log the digits; verify with structlog field filter. |
-| **PIN hash with `bcrypt` cost 4 for "fast tests"** | Brute force feasible | Argon2id with default `passlib` params; same config in tests (test slowness is fine — it's a single auth call per test). |
-| **No rate limit on `/api/admin/login`** | Brute force from any LAN device | 5 attempts per 5 minutes per IP, exponential backoff (ARCHITECTURE.md failure modes). |
-| **Session cookie without `HttpOnly`** | XSS reads session token | `HttpOnly=True, Secure=True, SameSite=Strict` on session cookie (ARCHITECTURE.md). |
-| **CSRF cookie HttpOnly** | SPA can't read it to add the header → no CSRF protection | CSRF cookie is *not* HttpOnly; session cookie *is* HttpOnly (double-submit pattern, ARCHITECTURE.md). |
-| **CSRF not enforced on admin mutating routes** | Cross-site request forgery from any LAN-shared device | Middleware enforces `X-CSRF-Token` header on `PUT/POST/PATCH/DELETE /api/admin/*` (Pitfall 13). |
-| **Mosquitto broker exposed to LAN with no auth** | Anyone on LAN can publish "all off" or arbitrary LED states | v1: no `ports:` mapping (broker Compose-internal only). Hardware milestone: `ports: ["1883:1883"]` bound to LAN interface AND username/password auth required (ARCHITECTURE.md v1 stub vs hardware milestone table). |
-| **Mosquitto username/password in plaintext in env var visible via `docker inspect`** | Inspect leaks credential | Use Docker secrets, or restrict `docker` socket to root, or accept the LAN-only blast radius. For v1 home LAN, env var in `.env` (gitignored) is the pragmatic call; rotate on any compromise. |
-| **Static-served frontend exposing source maps in production** | Code structure visible to anyone with kiosk URL | Vite config: `build.sourcemap = false` for production builds. |
-| **Search query body logged in plaintext** | Privacy floor breach (FEATURES.md Category 9) | Search endpoint logs `query: redacted` at INFO; only counts go to `gruvax.search_counters`. |
-| **PIN-reset path that doesn't require knowing the old PIN** | Account takeover from anyone with admin URL | "Change PIN" requires current PIN as confirmation (Pitfall 12). For "I forgot my PIN" — recovery is operator with shell access running an SQL update; not a UI feature. |
-| **Allowing search results to leak collection details to anyone on LAN** | Visiting devices on LAN can enumerate the collection | Acceptable per PROJECT.md (single-owner home LAN). Surface the fact in the README so future "extend to guest network" decisions are conscious; consider IP allowlist if the LAN spans untrusted Wi-Fi. |
-| **No revocation of sessions on PIN change** | Old session still works after rotation | PIN change endpoint sets `revoked_at` on all other sessions (Pitfall 12). |
-| **Long-lived session cookies persist after device loss** | Phone-out-of-pocket = open admin | Hard cap on session lifetime (Pitfall 23) + idle timeout. |
-| **MQTT broker accepts anonymous in dev `mosquitto.conf` and the dev config ships** | Production accepts anonymous publishes | `allow_anonymous false` in `mosquitto.conf`; password file required. Same config in dev. |
+| Invite token in URL query param | Referrer and access-log leakage of the token | Path segment + `Referrer-Policy: no-referrer`; suppress Uvicorn log for the invite path |
+| Reusable invite token (no single-use check) | Any link recipient can complete onboarding | `invite_tokens.used_at` checked server-side with `FOR UPDATE` |
+| `ProfileResponse` includes encrypted PAT field | Owner can decrypt member's PAT | Response schema includes only `has_token: bool` |
+| QR nonce not rate-limited | Brute-force nonce guessing (low feasibility but cheap to prevent) | 5 attempts / 5 minutes per IP on QR bind endpoint |
+| QR auto-rotation interval > 5 minutes | Camera-sniffed nonce remains valid longer | 60-second auto-rotate; old nonce invalidated immediately on rotation |
+| `write_boundary` WHERE clause missing `profile_id` | Cross-profile boundary write (silent) | `AND profile_id = :profile_id` in every UPDATE/DELETE; Postgres RLS as defense-in-depth |
+| "Reset kiosk" triggers server-side API call without auth | Unauthenticated server state mutation | Reset is client-side only; no API calls; guard: hidden during active admin session |
+| Search query text in structlog output | Query text in Docker logs; PRIV-01 promise broken | structlog pipeline processor redacts `query` field before emission |
+| Search history in `localStorage` | Persists across kiosk reboots and visitor changes | `sessionStorage` or in-memory Zustand state |
 
 ---
 
-## UX Pitfalls
+## "Looks Done But Isn't" Checklist — v2.1 Additions
 
-| Pitfall | User Impact | Better Approach |
-|---|---|---|
-| **No "no results" state** | User types something, sees blank space, doesn't know if it's loading or empty | Explicit "No matches for X" with sync-staleness hint (Pitfall 15) |
-| **Loading spinner < 300 ms** | Flicker more distracting than helpful | Show spinner only after 300 ms; render nothing for fast responses (FEATURES.md) |
-| **Cube highlighted but no sub-cube indicator for single-record labels** | User stares at the screen looking for the bar | Render tick for single-record (Pitfall 21) |
-| **Sub-cube bar at zero width** | Same as above | Same fix |
-| **Animation drama > 600 ms** | Feels slow even if the API was fast | Cap at 400 ms; interruptible (Pitfall 16) |
-| **Empty cube rendered identically to populated cube** | User confused about which cubes contain records | Distinct empty-state visual (FEATURES.md Category 2) |
-| **Reverse-lookup not supported ("what's in cube 18?")** | User points at a cube, can't ask the kiosk | Tap a cube → side panel shows first/last + sample (FEATURES.md Category 2 differentiator) |
-| **Search history visible across visitors** | Houseguest searches Y, owner sees on next visit | Session-scoped only; "Reset kiosk" button (FEATURES.md Category 9) |
-| **Tap target < 44pt** | Touchscreen frustration | All interactive elements ≥ 44pt (FEATURES.md Category 1 — Clear button) |
-| **Dark theme + bright lighting + fingerprint smears** | Unreadable in real-world conditions | Test in actual environment; high-contrast mode (Pitfall 17) |
-| **Color-only signaling (label-span vs primary)** | Color-blind users can't distinguish | Brightness + motion + color (Pitfall 18) |
-| **Idle screen blank with no way to wake** | Visitor touches screen, nothing happens for 2 seconds | Screen wakes on touch immediately; offline banner reachable through black screen |
-| **Admin session expires mid-wizard, work lost** | Wizard form resets to blank on re-login | Persist wizard state in localStorage; resume on next login (Pitfall 7) |
-| **Kiosk admin requires physical keyboard** | No keyboard available; squeekboard broken | In-app numeric keypad (Pitfall 4) |
-| **"Reset" / "Clear" semantics ambiguous** | User unsure if "Reset" wipes the boundary or just clears the form | Distinct labels: "Clear form" (UI only) vs "Reset to saved" (re-fetch) vs "Restore default" (per-cube empty) |
-| **Offline banner doesn't say "search disabled while offline"** | User keeps tapping the disabled input | Placeholder text changes to "Reconnecting…"; clear visual disabled state (FEATURES.md Category 6) |
-| **Reconnection success has no feedback** | User unsure if connection came back | Brief green tick / banner fade (FEATURES.md Category 6) |
-| **Wizard doesn't show progress** | User unsure how many cubes are left | Progress indicator ("Cube 5 of 32") in wizard header |
-| **No "find it again" affordance after closing the result** | User searches the same record three times in a row | Recently-pulled list (FEATURES.md Category 1 differentiator) |
-| **Admin diagnostics buried** | Operator never finds the sync-staleness indicator | Diagnostics is a top-level route under `/admin/diagnostics` (ARCHITECTURE.md route tree) |
-
----
-
-## "Looks Done But Isn't" Checklist
-
-Things that appear complete but are missing critical pieces.
-
-- [ ] **Search:** Often missing typo tolerance — verify `pg_trgm` extension installed AND GIN index built; test with a deliberately misspelled query.
-- [ ] **Position estimator:** Often missing single-record-label case — verify Hypothesis property "single-record label produces a tick, not a bar" passes.
-- [ ] **Position estimator:** Often missing multi-cube label-span case — verify a label with records spanning ≥2 cubes (use the seed CSV — Blue Note runs are the canonical case) produces `label_span.length >= 2`.
-- [ ] **Position estimator:** Often missing the "label not in any cube boundary" case — verify confidence=0 result, not a 500.
-- [ ] **Boundary save:** Often missing validation against `v_collection` — verify saving a `(label, catalog#)` that doesn't exist in the collection is rejected (or warned with a "force save" affordance gated by acknowledging Pitfall 2).
-- [ ] **Boundary save:** Often missing comparator-based first <= last check — verify `first_catalog > last_catalog` per the *normalized* comparator (not raw string) is rejected.
-- [ ] **Wizard:** Often missing atomic-bulk save — verify mid-wizard interruption leaves DB unchanged; only "Save reshuffle" mutates.
-- [ ] **Wizard:** Often missing resume-on-reload — verify reloading the page mid-wizard preserves `pendingChangeSet` from localStorage.
-- [ ] **CSV/YAML import:** Often missing per-row error reporting — verify a single bad row produces a clear error message AND blocks the whole import (no partial commit).
-- [ ] **CSV/YAML import:** Often missing dry-run preview — verify upload shows diff before committing.
-- [ ] **Admin auth:** Often missing CSRF — verify state-changing admin request with no `X-CSRF-Token` returns 403.
-- [ ] **Admin auth:** Often missing PIN rotation — verify admin Settings has "Change PIN" and changing revokes other sessions.
-- [ ] **Admin auth:** Often missing rate limiting on login — verify 6 wrong PIN attempts in a minute returns 429.
-- [ ] **Admin auth:** Often missing hard cap on session — verify a continuously-active session forces re-PIN after 30 min.
-- [ ] **Admin auth:** Often missing "Lock admin" button — verify the kiosk admin UI has a one-tap re-lock affordance.
-- [ ] **SSE:** Often missing `X-Accel-Buffering: no` header — verify the SSE response includes this header (curl -I).
-- [ ] **SSE:** Often missing 15 s ping — verify `sse-starlette` is configured with `ping=15` (default; check the configuration didn't get overridden).
-- [ ] **SSE:** Often missing reconnection-friendly headers — verify `Cache-Control: no-store` on SSE response.
-- [ ] **SSE:** Often missing graceful shutdown — verify `event: server_shutdown` is emitted on lifespan shutdown, and reconnects pick up `event: server_hello` on reboot.
-- [ ] **SSE:** Often missing pool-free implementation — verify the SSE endpoint does not pin a DB connection (use `psycopg_pool` stats to verify under load).
-- [ ] **MQTT publish:** Often missing fire-and-forget timeout — verify a stopped Mosquitto does NOT block `/api/illuminate` more than 250 ms.
-- [ ] **MQTT publish:** Often missing retained-state expiry — verify `gruvax/v1/leds/state/#` payloads have `message_expiry_interval` set.
-- [ ] **MQTT publish:** Often missing LWT — verify `mosquitto_sub -t 'gruvax/v1/server/hello' -v` shows `{"alive": true}` while gruvax-api is up.
-- [ ] **MQTT publish:** Often missing "all off" actually clearing retained — verify `POST /api/admin/leds/off` publishes empty retained payloads to each `state/{unit}/{row}/{col}`, not just an "off" command.
-- [ ] **MQTT publish:** Often missing per-environment topic prefix — verify dev and prod use distinct topic prefixes.
-- [ ] **MQTT auth:** Often missing `allow_anonymous false` — verify Mosquitto config rejects unauthenticated connections.
-- [ ] **MQTT auth:** Often missing per-device ACLs (hardware milestone only) — flag for that milestone.
-- [ ] **discogsography read-only contract:** Often missing the view — verify all SQL in GRUVAX references `gruvax.v_collection`, never `discogsography.releases` directly. Grep `discogsography\.` in `src/` should return zero hits (outside the migration that creates the view).
-- [ ] **discogsography read-only contract:** Often missing the grant — verify the `gruvax_app` Postgres role has only `SELECT` on discogsography schema.
-- [ ] **discogsography read-only contract:** Often missing the view-health probe — verify `/api/health` includes `discogsography_view_check`.
-- [ ] **Sync staleness:** Often missing UI surface — verify admin Diagnostics shows "last synced N hours ago" prominently.
-- [ ] **Sync staleness:** Often missing kiosk banner — verify kiosk shows banner if sync > 7 days old.
-- [ ] **Kiosk:** Often missing in-app keypad — verify the kiosk PIN entry works without an external keyboard.
-- [ ] **Kiosk:** Often missing systemd restart limits — verify the unit file has `StartLimitIntervalSec` and `StartLimitBurst`.
-- [ ] **Kiosk:** Often missing ssh + tty1 fallback — verify ssh works AND a USB keyboard at tty1 drops into a shell.
-- [ ] **Kiosk:** Often missing minimal-mode SPA bootstrap — verify if JS errors prevent SPA mount, the user sees a non-empty page with a recovery hint.
-- [ ] **Kiosk:** Often missing the auto-reload-on-build-hash-change — verify the kiosk picks up a new build within minutes of redeploy.
-- [ ] **Kiosk:** Often missing cache-headers correctness — verify `index.html` has `no-store`; hashed assets have `immutable`.
-- [ ] **Kiosk:** Often missing animation-on-Pi verification — verify frame times in the "selection lands" animation are < 16 ms p95 on the Pi.
-- [ ] **Kiosk:** Often missing real-environment screen evaluation — verify the design has been viewed at the actual kiosk position with actual lighting.
-- [ ] **Color settings:** Often missing color-blind preview — verify the picker shows a deuteranopia simulation.
-- [ ] **Color settings:** Often missing brightness-as-information — verify primary cube and label-span differ in brightness, not just hue.
-- [ ] **Idempotency:** Often missing on bulk admin endpoints — verify a duplicate `Idempotency-Key` does not double-commit.
-- [ ] **Offline:** Often missing connectivity detection logic — verify the offline banner appears within 30 s of `lux` becoming unreachable.
-- [ ] **Offline:** Often missing reconnection animation — verify a green tick / banner-fade appears on reconnect.
-- [ ] **Volumes:** Often missing first-boot test on fresh host — verify `docker compose up` on a host with no pre-existing volumes succeeds first try.
-- [ ] **Volumes:** Often missing log limits — verify Compose `logging.options.max-size` is set on each service.
-- [ ] **Logs:** Often missing access-log suppression in prod — verify `--access-log` is not passed in production Uvicorn args.
-- [ ] **Logs:** Often missing search-query redaction — verify search query content is not in logs.
+- [ ] **AUTH-02 invite flow:** Verify `GET /api/admin/profiles/{id}` response JSON contains no field with "token" or "encrypted" in key or value.
+- [ ] **AUTH-02 invite flow:** Verify posting the same invite token twice returns 410 on the second attempt.
+- [ ] **AUTH-02 invite flow:** Verify `POST /api/admin/invite/accept` with an invalid PAT (wrong scope) returns 422, not 200.
+- [ ] **AUTH-02 invite flow:** Verify `POST /api/admin/invite/generate` returns 409 if the target profile already has `has_token: true`.
+- [ ] **AUTH-02 invite flow:** Verify the invite accept page response includes `Referrer-Policy: no-referrer`.
+- [ ] **AUTH-02 invite flow:** Verify `docker logs gruvax-api | grep '/invite/'` shows `<redacted>` not the actual token.
+- [ ] **DEV-04 QR pairing:** Verify the QR encodes a URL, not a credential (grep the QR payload for any PIN or known secret).
+- [ ] **DEV-04 QR pairing:** Verify the QR nonce auto-rotates every 60 seconds (check that the previous nonce is rejected after rotation).
+- [ ] **DEV-04 QR pairing:** Verify posting the same QR nonce twice returns 410 on the second attempt.
+- [ ] **DEV-04 QR pairing:** Verify the QR bind endpoint returns 429 after 5 rapid attempts.
+- [ ] **DEV-04 QR pairing:** Verify both the QR path and 4-digit path use the same `complete_pairing` function and emit identical audit log entries.
+- [ ] **DEV-04 QR pairing:** Scan the QR with the actual admin phone from arm's length at the 7" kiosk display — must be readable without moving closer.
+- [ ] **OFF-01 offline:** Kill `gruvax-api`; verify the offline banner appears within 20 seconds (one SSE ping interval + buffer).
+- [ ] **OFF-01 offline:** While offline, verify search still returns results from cache; verify `navigator.onLine` is NOT the primary offline trigger.
+- [ ] **OFF-02 reconnect:** Restart `gruvax-api`; verify all kiosks reconnect within 30 seconds (SSE jitter distributes them).
+- [ ] **OFF-02 reconnect:** Verify SSE initial response includes a `retry:` field with jitter (not all clients use the same value).
+- [ ] **OFF-03 stale cache:** Reconnect after 90-second outage; verify a fresh data fetch is triggered; verify no optimistic updates are clobbered.
+- [ ] **PRIV-01 query privacy:** Run 5 searches; `docker logs gruvax-api | grep radiohead` (or any searched term) returns zero hits.
+- [ ] **PRIV-01 query privacy:** Verify Uvicorn access log is not active in production (`--no-access-log` in CMD).
+- [ ] **PRIV-02 session history:** Search for X; hard-reload Chromium (simulating kiosk reboot); verify X does not appear in recently-pulled list.
+- [ ] **PRIV-04 reset kiosk:** Click "reset kiosk" button; verify browser network tab shows zero API calls.
+- [ ] **PRIV-04 reset kiosk:** Verify "reset kiosk" button is hidden when an admin session is active.
+- [ ] **Tech debt DEV-02:** Subscribe two SSE clients to different profiles; trigger sync on profile A; verify profile B's client does NOT receive `collection_changed`.
+- [ ] **Tech debt write_boundary:** Create two profiles, write boundary for profile A cube (1,1), attempt write from profile B session for same cube (1,1); verify profile A's boundary is unchanged.
+- [ ] **SRCH-09 recently pulled:** Verify recently-pulled list is cleared by "reset kiosk"; verify it is NOT in `localStorage` (check `localStorage.getItem('recently-pulled')` is null).
+- [ ] **API-04 collection diff:** Verify the diff count is based on `discogs_added_at`, not `cache_added_at`; force a re-sync without adding Discogs records; verify diff count does not change.
 
 ---
 
-## Recovery Strategies
+## Phase-to-Pitfall Mapping — v2.1
 
-When pitfalls occur despite prevention, how to recover.
-
-| Pitfall | Recovery Cost | Recovery Steps |
-|---|---|---|
-| **1** Catalog comparator wrong | MEDIUM | Add normalization rule, add failing Hypothesis test, ship; admin "re-validate all boundaries" tool surfaces affected cubes. |
-| **2** Phantom boundary | LOW | Run wizard for affected cubes (diagnostics surfaces the list); auto-suggested midpoint based on `v_collection` indexing. |
-| **3** Retained-state ghosts | LOW (v1), MEDIUM (hardware milestone) | One-shot script publishes empty retained to each ghost topic; or delete `/mosquitto/data/mosquitto.db` for nuclear option. |
-| **4** Squeekboard breaks kiosk admin | LOW | Ship the in-app keypad as a hotfix; no data impact. |
-| **5** discogsography view breaks | LOW | One-line view migration; `alembic upgrade head`; redeploy. |
-| **6** release_id vs instance_id confusion | MEDIUM | Rename fields, add Pydantic models; frontend update; ship together. |
-| **7** Partial wizard commit | LOW | Admin reverts the partial change set in history view; runs wizard atomically. |
-| **8** SSE proxy buffering | LOW | Add response headers; if nginx, add `proxy_buffering off`; no data impact. |
-| **9** Chromium restart loop | LOW | Ssh to Pi; `systemctl --user stop kiosk-chromium`; fix root cause; restart. |
-| **10** Pool exhaustion | LOW | Restart gruvax-api; fix offending `Depends(get_db)`; redeploy. |
-| **11** Mosquitto volume lost | LOW (v1), MEDIUM (hardware) | v1: no impact. Hardware: republish-all admin button. |
-| **12** PIN exposure | LOW | Change PIN in admin Settings; sessions revoked automatically. |
-| **13** CSRF breach | LOW | Revert via history; rotate PIN; investigate. |
-| **14** Volume permissions | LOW | `chown` host path or recreate named volume; document in runbook. |
-| **15** Sync staleness UX | LOW | Add banner + diagnostics; force a sync in discogsography. |
-| **16** Pi animation jank | MEDIUM | Profile, simplify (animate transform+opacity only), retest on Pi. |
-| **17** Dark-theme fingerprint | LOW | Toggle high contrast mode; add screen protector. |
-| **18** Color-blind misread | LOW | Admin re-picks colors using color-blind preview. |
-| **19** Stale SPA cache | LOW | Hard-refresh; or wait for auto-reload-on-build-hash. |
-| **20** Log disk fill | LOW | `docker compose down && docker system prune --volumes=false`; add Compose logging limits; restart. |
-| **21** Single-record label tick missing | LOW | Add tick render branch in `SubCubeBar.tsx`. |
-| **22** Auto-suggested phantom boundary | LOW | Admin reverts; reshape suggest algorithm to walk `v_collection`. |
-| **23** Unattended admin session | LOW | Idle timeout fires; or history-revert any destructive action. |
-
----
-
-## Pitfall-to-Phase Mapping
-
-How roadmap phases should address these pitfalls. Phase names below are project-domain labels — exact phase identifiers belong to the roadmap.
-
-| Pitfall | Severity | Prevention Phase | Verification |
+| Pitfall | Severity | Owning Phase | Verification |
 |---|---|---|---|
-| **1** Catalog-number sort | Critical | Position-estimator Research → Backend Phase | Hypothesis property tests pass for the seed CSV's mixed-separator labels |
-| **2** Phantom boundaries | Critical | Backend Phase (validate endpoint) → Admin Phase (UI wires it) → Ops (periodic diagnostic) | Integration test: save a `(label, catalog#)` that's not in `v_collection` is rejected; `/api/admin/diagnostics` exposes `phantom_boundary_count` |
-| **3** MQTT retained-state ghosts | Critical | Backend Phase (publish wrapper) → Hardware Milestone (runbook) | `mosquitto_sub -t 'gruvax/v1/leds/state/#' -v` returns nothing after `POST /api/admin/leds/off` |
-| **4** Squeekboard / kiosk admin | Critical | UI Design / Frontend Phase | Manual: PIN entry on a clean Pi 5 + 7" works without external keyboard |
-| **5** discogsography schema change | Critical | Backend Phase (view-health probe) → Ops Phase (CI integration + pinning) | `/api/health` shows `discogsography_view_check: ok`; CI test passes on a current discogsography schema |
-| **6** release_id confusion | Critical | Backend Phase (Pydantic models) → Test Phase (two-copies fixture) | Integration test: synthetic CI dataset with duplicate release_id passes |
-| **7** Partial wizard commit | Major | Admin Phase (bulk endpoint + Idempotency-Key) → Frontend Phase (localStorage persist) | Manual: kill the page mid-wizard; reload preserves draft; DB unchanged |
-| **8** SSE proxy buffering | Major | Backend Phase (response headers) | Integration test: admin PUT → kiosk SSE event < 500 ms; verify `X-Accel-Buffering: no` header present |
-| **9** Chromium restart loop | Major | Kiosk Setup Phase (systemd + ssh + tty1) → Frontend Phase (minimal-mode bootstrap) | Manual: simulate a JS error; verify systemd backs off after 5 restarts; ssh works |
-| **10** Pool exhaustion | Major | Backend Phase (SSE endpoint pattern + pool stats in /health) | Load test: 5 SSE clients + 100 QPS search; `pool.size_used` stays < 80% |
-| **11** Mosquitto volume loss | Major | Ops Phase (Compose + Mosquitto config) → Hardware Milestone (republish-all button + tolerant firmware) | Test: `docker compose restart mosquitto`; verify retained state survives |
-| **12** PIN rotation | Major | Admin Phase (Change PIN endpoint + Settings UI) | Manual: change PIN; verify other sessions revoked; verify rate limit on login |
-| **13** CSRF on admin | Major | Backend Phase (CSRF middleware) → Test Phase (negative test) | Integration test: admin POST with session cookie but no `X-CSRF-Token` returns 403 |
-| **14** Volume permissions | Major | Ops Phase (Dockerfile + Compose review on fresh host) | Test: `docker compose up` on a fresh VM succeeds first try |
-| **15** Sync staleness UX | Major | Admin Phase (diagnostics) → Kiosk Phase (banner + no-results hint) | Manual: stop discogsography sync for 8 days; verify red diagnostics + kiosk banner |
-| **16** Pi animation jank | Major | Frontend Phase (animation design) → Hardware Setup Phase (Pi-side test) | Playwright frame-budget test on Pi 5: p95 frame time < 16 ms during "selection lands" |
-| **17** Fingerprint readability | Minor | UI Design Phase (real-conditions evaluation) → Hardware Setup Phase (screen protector) | Manual: review the kiosk at its mounting location with normal lighting |
-| **18** Color-blind safety | Minor | UI Design Phase (defaults + color-blind preview) → Backend Phase (brightness in settings) | Visual review of admin color picker; verify defaults pass deuteranopia simulation |
-| **19** Stale SPA cache | Minor | Backend Phase (StaticFiles cache headers) → Frontend Phase (build-hash auto-reload) | Manual: deploy a change; verify kiosk picks it up within minutes without hard-refresh |
-| **20** Log disk fill | Minor | Ops Phase (Compose logging + Mosquitto config + journald) | Manual: `du -sh /var/lib/docker/containers/*/` is bounded after a week |
-| **21** Single-record label tick | Minor | Frontend Phase (SubCubeBar) | Hypothesis test + visual: a single-record label renders a visible tick |
-| **22** Auto-suggested phantom | Minor | Admin Phase (suggest endpoint algorithm) → Frontend Phase (wizard context) | Unit test: suggest endpoint walks `v_collection`, returns a real record's catalog number |
-| **23** Unattended admin session | Minor | Backend Phase (hard cap) → Frontend Phase (Lock button + visibility listener) | Manual: open admin, walk away; verify hard cap fires at 30 min even with continuous activity |
-
----
-
-## Project / Process Pitfalls
-
-Distinct from technical pitfalls — these are about *what to build when* and how to avoid sinking time into the wrong slice.
-
-### P1: Over-engineering the boundary admin UX before the search loop works
-
-**What:** Investing weeks in the wizard / CSV / diff-preview before the search → locate → cube-highlight path is end-to-end demoable.
-
-**Why it bites:** Without the search loop, you have no way to validate that the data model (boundary semantics, sort order, label-span) actually answers the Core Value question. You can ship a beautiful admin UI for boundaries that *can't be queried correctly* and not realize until much later.
-
-**Prevention:** ARCHITECTURE.md's "Critical path to a demoable v1" (~6.5 days) gets a stub estimator behind the real `/api/locate` contract before any admin UX work. **Build the search loop end-to-end with a stub estimator first**; only then build the admin tools that populate the boundaries. The boundary data can be seeded from a hand-edited YAML during the search-first phase.
-
-**Severity:** Major.
-
----
-
-### P2: Building the position estimator without the real data
-
-**What:** Designing the algorithm using a synthetic dataset that doesn't reflect the real CSV's quirks (mixed case, mixed separators, single-record labels, sparse labels with gaps).
-
-**Why it bites:** The synthetic dataset is too clean. The real CSV has labels like `Twelve 002` vs `TWELVE 003` (PROJECT.md). An estimator that passes synthetic-data tests can fail on the real data the first day in production.
-
-**Prevention:**
-- Position-estimator research stream uses the local CSV (gitignored per PROJECT.md) for validation runs.
-- CI uses a *shape-matching* synthetic dataset (similar label distribution, similar format mix) — STACK.md prescribes this.
-- Hypothesis tests assert invariants that the real data must satisfy (e.g., "no two boundaries claim the same release").
-
-**Severity:** Major.
-
----
-
-### P3: Designing LED endpoints in a vacuum (without imagining the firmware)
-
-**What:** Locking the LED MQTT contract based on what's convenient for `gruvax-api` to publish, not what's reasonable for an ESP32 + WS2812B to consume.
-
-**Why it bites:** The hardware milestone implementor inherits an awkward contract — pixel ranges that don't map cleanly to physical strips, color formats that require firmware-side translation, retain semantics that fight the WS2812B's stateful nature. v1 ships LED endpoints that need a breaking change before hardware lands.
-
-**Prevention:**
-- ARCHITECTURE.md's MQTT topic design already pre-validates against recordShelf's contract and the ESP-WIFI-NEOPIXEL-CONTROL reference patterns (FEATURES.md sources).
-- Normalize `sub_cube_interval` as 0..1 (not pixel indices) so firmware owns the pixel count (ARCHITECTURE.md).
-- Use JSON payloads with a `schema` field so the contract can evolve incrementally (ARCHITECTURE.md).
-- Have a research artifact: "if I were the firmware, what messages would I want to receive?" Write a one-page mock firmware loop in pseudocode that consumes the contract. Adjust the contract if pseudocode is awkward.
-
-**Severity:** Major.
-
----
-
-### P4: Deferring offline behavior until too late
-
-**What:** Building the kiosk SPA assuming `lux` is always reachable; bolting on the offline banner at the end.
-
-**Why it bites:** The first time `lux` reboots after a Compose update, the kiosk shows a JS error screen for 30 seconds before the SPA realizes it's offline. Refresh logic, query-cache strategy, SSE reconnection all become hostile add-ons rather than first-class concerns.
-
-**Prevention:**
-- Build offline detection in the same phase as the SSE channel — they share the connectivity state machine (ARCHITECTURE.md Zustand store: `connectivity.sseConnected`).
-- TanStack Query stale-while-revalidate is the default, not an addition. Adopt early.
-- FEATURES.md flagged the service-worker cache as "RECONSIDER for v1" — decide in requirements phase rather than deferring forever.
-
-**Severity:** Minor (in the sense that it's recoverable, but adds friction if deferred).
-
----
-
-### P5: Scoping the screensaver in v1 by accident
-
-**What:** PROJECT.md is explicit: "Screensaver / browse / cover-art slideshow mode — black screen on idle for v1." But scope-creep pressure leads to "just a simple slideshow…"
-
-**Why it bites:** A slideshow adds: image caching, idle-state machine, screen blanking interaction, accessibility considerations, performance on the Pi, AND it interacts with the offline banner (what shows when offline-and-idle?). What looked like a Saturday-afternoon polish is a 2-week distraction.
-
-**Prevention:**
-- Treat PROJECT.md Out-of-Scope items as hard boundaries.
-- If pressure builds, *first* land a "v1.x backlog ticket with rationale" rather than start implementing.
-- The CSV is gitignored and `background/` is gitignored — physical reminders that the rich-media surface isn't the v1 target.
-
-**Severity:** Minor (process; the harm is opportunity cost).
-
----
-
-### P6: Treating discogsography as "free" when its schema is a moving target
-
-**What:** Assuming GRUVAX can rely on whatever discogsography ships, treating the read-only view as a permanent stable surface.
-
-**Why it bites:** discogsography is a separate project under active development by the same person. Schema changes will happen. Treating it as "free infrastructure" means GRUVAX has no protection.
-
-**Prevention:**
-- The `gruvax.v_collection` view is the contract surface (ARCHITECTURE.md Pattern 4).
-- discogsography is pinned to a specific tag in Compose (Pitfall 5).
-- The view-health probe runs at startup (Pitfall 5).
-- The "read-only contract" table in ARCHITECTURE.md documents exactly which columns GRUVAX depends on; that table is the spec for "what discogsography MUST keep."
-- Communicate the contract back upstream: open a GitHub discussion in discogsography ("GRUVAX depends on these columns") so the maintainer (the same person) has a written reminder.
-
-**Severity:** Major.
-
----
-
-### P7: Letting the position-estimator research stream block the rest of v1
-
-**What:** Treating "the algorithm isn't done" as a reason to delay the search UI, the admin tools, the LED endpoints.
-
-**Why it bites:** Per ARCHITECTURE.md, the algorithm is a research stream that can iterate indefinitely behind a fixed contract. If it's allowed to block other work, the demoable-in-6.5-days promise evaporates.
-
-**Prevention:**
-- ARCHITECTURE.md prescribes a stub estimator that returns plausible-but-trivial values behind the real contract.
-- All non-algorithm work depends on the *contract*, not the algorithm. The contract is fixed in week 1.
-- The algorithm gets its own quality bar (Hypothesis properties, golden tests, p95 latency) and ships when it meets the bar — independent of the rest of v1.
-
-**Severity:** Major (process).
+| **24** Invite token referrer/log leak | Critical | AUTH-02 (invite backend) | `docker logs` grep; `Referrer-Policy` header present |
+| **25** Invite token replay (no single-use) | Critical | AUTH-02 (invite backend) | Second POST returns 410 |
+| **26** Owner reads back member PAT | Critical | AUTH-02 (profile response schema) | Profile GET response contains no token field |
+| **27** Wrong/over-scoped PAT accepted | Critical | AUTH-02 (invite accept handler) | 422 on invalid/wrong-scope token |
+| **28** QR encodes credential not nonce | Critical | DEV-04 (QR implementation) | QR payload is a URL-with-nonce, not a secret |
+| **29** QR and PIN paths diverge in security | Critical | DEV-04 (shared `complete_pairing`) | Integration test matrix across both paths |
+| **30** Query text in structlog/logs | Critical | PRIV-01 | `docker logs` grep returns zero hits for search terms |
+| **31** Session history in localStorage | Critical | PRIV-02 | Hard-reload clears history; Zustand persist excludes it |
+| **32** Reset-kiosk as admin bypass | Critical | PRIV-04 | Network tab shows zero API calls on reset |
+| **33** `write_boundary` cross-profile write | Major | Tech-debt closure (Phase 6 or first boundary-touching phase) | Two-profile write-isolation integration test |
+| **34** SSE fan-out to wrong profile | Major | Tech-debt closure DEV-02 (Phase 6) | Profile-scoped SSE delivery test |
+| **35** `navigator.onLine` false connectivity | Major | OFF-01 | Kill server; offline banner appears within 20s |
+| **36** SSE reconnect storm | Major | OFF-02 | Restart server; clients spread across 30s window |
+| **37** Stale cache clobbers optimistic state | Major | OFF-03/API-04 | Reconnect after 90s outage; diff badge not spuriously re-shown |
+| **38** Invite overwrites existing PAT | Major | AUTH-02 | 409 on generate-invite for profile with `has_token: true` |
+| **39** QR nonce on HTTP LAN | Major | DEV-04 | Document decision A/B/C before implementation |
+| **40** Recently-pulled in localStorage | Minor | SRCH-09 | localStorage null check after reset |
+| **41** Diff count inflated by sync gap | Minor | API-04 | Diff based on `discogs_added_at`; re-sync test |
+| **42** Aggregate stats temporal inference | Minor | PRIV-03 | Documented scope decision in Key Decisions |
+| **43** QR code too small to scan | Minor | DEV-04 (frontend) | Hardware-in-the-loop phone scan test |
 
 ---
 
 ## Sources
 
-### Authoritative (Context7-verified)
+### Authoritative
+- [MDN: `navigator.onLine`](https://developer.mozilla.org/en-US/docs/Web/API/Navigator/onLine) — explicitly documents that `onLine` is `true` if connected to any network, not necessarily the target server. HIGH.
+- [MDN: Referer header privacy and security concerns](https://developer.mozilla.org/en-US/docs/Web/Privacy/Guides/Referer_header:_privacy_and_security_concerns) — token leakage via referrer; `Referrer-Policy: no-referrer` mitigation. HIGH.
+- [Cryptography.io Fernet docs](https://cryptography.io/en/latest/fernet/) — TTL parameter on `decrypt()`; URL-safe base64 encoding. HIGH.
+- [TanStack Query: Network Mode](https://tanstack.com/query/v4/docs/react/guides/network-mode) — `networkMode: 'always'` vs `'offlineFirst'`; `refetchOnReconnect` behavior. HIGH.
+- [TanStack Query: Important Defaults](https://tanstack.com/query/v4/docs/react/guides/important-defaults) — `refetchOnReconnect: true` default; staleTime semantics. HIGH.
+- [Uvicorn settings](https://www.uvicorn.org/settings/) — `--no-access-log` / `access_log=False` option. HIGH.
 
-- **`/empicano/aiomqtt`** — automatic reconnection, retained-message semantics, QoS 1/2 retransmit, persistent sessions with `clean_start=False` (HIGH confidence; verified during this research)
-- **`/sysid/sse-starlette`** — default 15 s ping, `X-Accel-Buffering: no` header recommendation, nginx config snippet (`proxy_buffering off; chunked_transfer_encoding off;`), `EventSource` client reconnection (HIGH confidence; verified during this research)
+### Comparative / Verified-with-multiple-sources
+- [PortSwigger: Cross-domain Referer leakage](https://portswigger.net/kb/issues/00500400_cross-domain-referer-leakage) — token leakage via referrer; prevention pattern. HIGH.
+- [natlas invite/reset token replay issue](https://github.com/natlas/natlas/issues/139) — real-world invite token replay vulnerability; single-use pattern required. HIGH (it's an open bug report).
+- [HackerOne Semrush report #342693](https://hackerone.com/reports/342693) — password-reset token leak via referrer; mirrors the invite-token risk. HIGH.
+- [TanStack Query optimistic update race discussion #7932](https://github.com/TanStack/query/discussions/7932) — reconnect racing optimistic updates; `cancelQueries` pitfall. MEDIUM.
+- [Cendyne.dev: Dual-Device Authorization with QR Codes](https://cendyne.dev/posts/2025-02-17-qr-code-login.html) — QR encodes opaque session reference not credential; server-side binding; TTL and single-use. HIGH.
+- [Multi-Tenant Leakage in SaaS (Medium/InstaTunnel)](https://medium.com/@instatunnel/multi-tenant-leakage-when-row-level-security-fails-in-saas-da25f40c788c) — async context leaks, missing WHERE clauses, RLS as defense-in-depth. MEDIUM.
+- [FastAPI multi-tenancy discussion #6056](https://github.com/fastapi/fastapi/discussions/6056) — SQLAlchemy tenant scoping patterns; missing profile_id pitfall. MEDIUM.
+- [Blocking FastAPI access logs (DEV Community)](https://dev.to/mukulsharma/taming-fastapi-access-logs-3idi) — custom LogFilter to suppress specific paths. MEDIUM.
 
-### Direct prior art / Domain references (via FEATURES.md research)
-
-- **recordShelf (Hackaday)** — RFID reliability failure mode → motivates the computed-boundary approach; informs LED contract patterns. MEDIUM (Hackaday writeup).
-- **DSpace batch metadata editing** — CSV-upload diff/preview pattern → informs Pitfall 7 prevention.
-- **Postgres pg_trgm "did you mean" guide (Viget)** — verified the typo-tolerant search approach; underlies prevention for Pitfall 1's "did you mean" hint, Pitfall 2's near-miss suggestion.
-
-### Stack & architecture references (via STACK.md / ARCHITECTURE.md)
-
-- **STACK.md** — squeekboard fullscreen bug (`labwc/labwc#2926`); Chromium kiosk supervision via `systemd --user`; passlib[argon2] for PIN hashing; pinned versions for `aiomqtt`, `sse-starlette`, FastAPI 0.136.x.
-- **ARCHITECTURE.md** — view-as-contract pattern (Pattern 4); boundary cache (Pattern 3); in-process event bus (Pattern 2); single MQTT client in lifespan (Pattern 1); history append-only (Pattern 5); compose volume + Mosquitto config; failure-mode table.
-- **FEATURES.md** — privacy floor (Category 9); sync staleness UX (Category 7); reshuffle wizard (Category 3); LED contract surface (Category 4); offline banner + service-worker reconsider (Category 6).
-- **PROJECT.md** — explicit v1 boundaries; CSV-gitignored constraint; single-PIN auth; deterministic ordering invariant.
-
-### Community / Issue trackers
-
-- **labwc/labwc#2926** — squeekboard fullscreen issue (HIGH confidence; it's an open bug, verified by reading the issue title in STACK.md sources).
-- **Raspberry Pi forums (kiosk patterns)** — labwc autostart + Chromium kiosk supervision community patterns (MEDIUM).
-
-### Confidence by category
-
-| Pitfall category | Confidence | Reason |
-|---|---|---|
-| 1 Position estimation | MEDIUM-HIGH | Algorithm is open; pitfalls describe contract-level dangers that hold regardless of algorithm choice. |
-| 2 Boundary table | HIGH | All anchored to PROJECT.md scope + ARCHITECTURE.md schema. |
-| 3 Discogs / discogsography | HIGH | View pattern is well-defined; failure modes documented in ARCHITECTURE.md. |
-| 4 Postgres / shared DB | HIGH | Well-trodden territory; specific to STACK.md/ARCHITECTURE.md choices. |
-| 5 Chromium kiosk | HIGH | Squeekboard bug verified; systemd patterns standard. |
-| 6 MQTT / LED stub | HIGH | Context7-verified aiomqtt semantics; topic design from ARCHITECTURE.md. |
-| 7 SSE / realtime | HIGH | Context7-verified sse-starlette headers + ping. |
-| 8 Auth / security | HIGH | Standard threat model for cookie-session apps; ARCHITECTURE.md prescribes double-submit. |
-| 9 Docker Compose / ops | HIGH | Boring infrastructure; specific to ARCHITECTURE.md compose example. |
-| 10 UX / human-at-kiosk | MEDIUM | UX research draws on general kiosk best practices; some accessibility points are well-supported, fingerprint observation is real-world. |
-| 11 Project / process | HIGH | Pitfalls anchored to ARCHITECTURE.md critical-path analysis. |
+### Project-specific anchors
+- **PROJECT.md v2.1 scope** — AUTH-02, DEV-04, API-04, SRCH-09, OFF-01..04, PRIV-01..04, tech-debt DEV-02, write_boundary.
+- **v1.0 PITFALLS.md Pitfall 30 / Technical Debt table** — "search query body logged in plaintext" already flagged; v2.1 PRIV-01 makes it a named requirement.
+- **v2.0 PROJECT.md audit `tech_debt`** — DEV-02 SSE immediacy and write_boundary profile scoping are the two flagged items.
+- **CON-pat-bearer-flow** — PAT shown plaintext once at mint; hash stored discogsography-side; GRUVAX stores Fernet-encrypted ciphertext. The invite flow must never expose the ciphertext to the owner.
+- **CON-rpi-binds-to-one-profile** — device binds to exactly one profile; QR nonce must bind to the same `pairing_codes` table as the 4-digit flow.
 
 ---
 
-*Pitfalls research for: GRUVAX — touchscreen kiosk + REST API + MQTT-stubbed LED layer for finding vinyl on Kallax shelves.*
-*Researched: 2026-05-18*
+*Pitfalls research for: GRUVAX v2.1 — Resilience + Privacy + UX Polish (invite-token security, QR pairing, offline UX, query privacy, v2.0 tech-debt closure).*
+*Researched: 2026-05-30*
