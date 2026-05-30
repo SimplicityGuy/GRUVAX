@@ -3,12 +3,12 @@ gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-User Collections
 status: executing
-last_updated: "2026-05-30T19:00:56.958Z"
+last_updated: "2026-05-30T19:08:11.185Z"
 last_activity: 2026-05-30
 progress:
   total_phases: 7
   completed_phases: 4
-  total_plans: 31
+  total_plans: 33
   completed_plans: 33
   percent: 57
 ---
@@ -21,7 +21,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 5 — Close v2.0 integration gaps (B-01 kiosk collection_changed listener + B-02 profile_id-null guard on search/locate)
+**Current Focus:** Phase 05 — close-v2-0-integration-gaps-kiosk-collection-changed-listene
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -29,10 +29,10 @@ progress:
 
 ## Current Position
 
-Phase: 5
-Plan: 2 plans (1 wave, parallel)
-Status: Plans created — ready to execute
-Last activity: 2026-05-30 -- Phase 5 added (v2.0 integration-gap closure) via /gsd-phase
+Phase: 05 (close-v2-0-integration-gaps-kiosk-collection-changed-listene) — EXECUTING
+Plan: 1 of 2
+Status: Executing Phase 05
+Last activity: 2026-05-30 -- Phase 05 execution started
 Resume file: .planning/phases/05-close-v2-0-integration-gaps-kiosk-collection-changed-listene/
 
 ## Performance Metrics (v2.0)

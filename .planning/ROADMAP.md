@@ -51,7 +51,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 - [x] **Phase 2: Multi-profile migration + profile manager** — Full `profiles` table with Fernet PAT storage; `profile_id` NOT NULL migration tightening the 5 per-profile data tables (the 2 global/infra tables keep nullable `profile_id`); per-profile caches + SSE channel; profile manager admin UI; browser session profile picker. (completed 2026-05-28)
 - [x] **Phase 3: Devices + pairing** — `devices` + `pairing_codes` schemas; HttpOnly fingerprint cookie; 4-digit code pairing flow A (5-min TTL, auto-reroll); devices admin UI with PENDING / PAIRED / REVOKED groupings. (completed 2026-05-29)
 - [x] **Phase 4: Sync polish + diagnostics** — Nightly background sync (24h @ 03:00 local default, configurable 24h/12h/6h/off); 401 reauth UI; per-profile diagnostics cards; soft-delete cache-purge background task; "Sync now" progress + completion toast. (completed 2026-05-30)
-- [ ] **Phase 5: Close v2.0 integration gaps** — ADDED 2026-05-30 (closure phase, like v1.0 Phase 10). Wires the SSE/session seams the milestone audit surfaced: B-01 kiosk `collection_changed` listener (stale results after nightly/manual sync) + B-02 `profile_id`-null guard on `/api/search` + `/api/locate` (422 before session bootstrap resolves the bound profile). Scope/warnings sourced from [`v2.0-MILESTONE-AUDIT.md`](./v2.0-MILESTONE-AUDIT.md).
+- [x] **Phase 5: Close v2.0 integration gaps** — ADDED 2026-05-30 (closure phase, like v1.0 Phase 10). Wires the SSE/session seams the milestone audit surfaced: B-01 kiosk `collection_changed` listener (stale results after nightly/manual sync) + B-02 `profile_id`-null guard on `/api/search` + `/api/locate` (422 before session bootstrap resolves the bound profile). Scope/warnings sourced from [`v2.0-MILESTONE-AUDIT.md`](./v2.0-MILESTONE-AUDIT.md). (completed 2026-05-30)
 
 ## Phase Details
 
@@ -219,7 +219,7 @@ Plans:
 | 2. Real Position Estimation | v1.0 | 11/10 | Complete    | 2026-05-29 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 7/6 | Complete    | 2026-05-29 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete    | 2026-05-30 |
-| 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
+| 5. Segment-Aware Position Precision | v1.0 | 2/2 | Complete   | 2026-05-30 |
 | 6. LED Contract over MQTT | v1.0 | 4/4 | Complete | 2026-05-24 |
 | 7. Wizards + Import/Export | v1.0 | 8/8 | Complete | 2026-05-24 |
 | 8. Observability + Deployment Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
@@ -238,11 +238,11 @@ Plans:
 **Goal:** Close the two cross-phase BLOCKERS from the v2.0 milestone audit so the milestone's end-to-end flows hold: the kiosk consumes the `collection_changed` SSE event (B-01 — live result refresh after nightly/manual sync, no manual reload), and `/api/search` + `/api/locate` tolerate an omitted `profile_id` by resolving the bound profile server-side while the frontend gates the fetch on a resolved profile (B-02 — no 422 before session bootstrap). Warnings W-01..W-04 are out of scope (tech debt).
 **Requirements**: API-02, SYN-01, SYN-02 (end-to-end restoration; satisfied at phase-level in P1/P2/P4, degraded by these blockers)
 **Depends on:** Phase 4
-**Plans:** 2 plans
+**Plans:** 2/2 plans complete
 
 Plans:
-- [ ] 05-01-PLAN.md — B-02 backend: make profile_id optional on /api/search + /api/locate with cookie-authoritative fallback (RED tests first)
-- [ ] 05-02-PLAN.md — B-01 kiosk collection_changed SSE listener + B-02 frontend search-enabled gate on boundProfileId (RED tests first)
+- [x] 05-01-PLAN.md — B-02 backend: make profile_id optional on /api/search + /api/locate with cookie-authoritative fallback (RED tests first)
+- [x] 05-02-PLAN.md — B-01 kiosk collection_changed SSE listener + B-02 frontend search-enabled gate on boundProfileId (RED tests first)
 
 ## Backlog
 
