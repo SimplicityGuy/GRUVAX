@@ -274,3 +274,147 @@ async def test_read_sync_cadence_fallback() -> None:
         f"_read_sync_cadence must return '24h' when no settings row exists, "
         f"got {result!r}"
     )
+
+
+# ── SYN-01: _startup_catchup_sweep ───────────────────────────────────────────
+
+
+@pytest.mark.asyncio
+async def test_startup_catchup_sweep_syncs_stale_profiles() -> None:
+    """_startup_catchup_sweep calls sync_profile for every stale profile returned
+    by the pool, in the order they are returned (ORDER BY created_at in SQL).
+
+    SYN-01 behaviors 1 & 2: The fake cursor returns two stale profile IDs (as the
+    real SQL would after applying the predicate). sync_profile must be called
+    exactly once per ID, in the same order, and not called for any ID that was not
+    returned by the cursor (i.e. the "not stale" path is excluded at the SQL level).
+    """
+    from gruvax.sync.nightly import _startup_catchup_sweep
+
+    stale_uuid_1 = "aaaaaaaa-0000-0000-0000-000000000001"
+    stale_uuid_2 = "aaaaaaaa-0000-0000-0000-000000000002"
+    fresh_uuid = "aaaaaaaa-0000-0000-0000-000000000099"  # not in cursor result
+
+    # Cursor returns only stale profiles (the SQL predicate filters out fresh ones)
+    stale_rows = [(stale_uuid_1,), (stale_uuid_2,)]
+    pool = _FakePool(stale_rows)
+
+    sync_calls: list[str] = []
+
+    async def _fake_sync(profile_id: str, app_state: Any) -> None:
+        sync_calls.append(profile_id)
+
+    app_state = MagicMock()
+
+    with patch("gruvax.sync.nightly.sync_profile", _fake_sync):
+        await _startup_catchup_sweep(pool=pool, app_state=app_state, cadence="24h")
+
+    assert sync_calls == [stale_uuid_1, stale_uuid_2], (
+        f"Expected sync_profile called for stale profiles in order "
+        f"[{stale_uuid_1!r}, {stale_uuid_2!r}], got {sync_calls!r}."
+    )
+    assert fresh_uuid not in sync_calls, (
+        f"Non-stale profile {fresh_uuid!r} must not be synced."
+    )
+
+
+@pytest.mark.asyncio
+async def test_startup_catchup_sweep_cadence_off_skips_all() -> None:
+    """When cadence == 'off', _startup_catchup_sweep returns immediately without
+    touching the pool or calling sync_profile.
+
+    SYN-01 behavior 4: cadence='off' is an early-return guard before any SQL.
+    """
+    from gruvax.sync.nightly import _startup_catchup_sweep
+
+    # Use a pool that has stale rows; if the sweep wrongly proceeds it will find them
+    stale_rows = [("bbbbbbbb-0000-0000-0000-000000000001",)]
+    pool = _FakePool(stale_rows)
+
+    sync_calls: list[str] = []
+
+    async def _fake_sync(profile_id: str, app_state: Any) -> None:
+        sync_calls.append(profile_id)
+
+    app_state = MagicMock()
+
+    with patch("gruvax.sync.nightly.sync_profile", _fake_sync):
+        await _startup_catchup_sweep(pool=pool, app_state=app_state, cadence="off")
+
+    assert sync_calls == [], (
+        f"When cadence='off', _startup_catchup_sweep must not call sync_profile. "
+        f"Got calls: {sync_calls!r}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_startup_catchup_sweep_revoked_profile_excluded() -> None:
+    """A revoked profile (app_token_revoked=TRUE) must not be synced during the
+    catch-up sweep, even if it is stale.
+
+    SYN-01 behavior 3: The SQL skip policy (app_token_revoked = FALSE) is applied
+    before rows reach the sweep. The fake cursor reflects that by NOT returning the
+    revoked profile's ID — this mirrors the contract between the SQL predicate and
+    the Python loop. sync_profile must not be called with the revoked UUID.
+    """
+    from gruvax.sync.nightly import _startup_catchup_sweep
+
+    eligible_uuid = "cccccccc-0000-0000-0000-000000000001"
+    revoked_uuid = "cccccccc-0000-0000-0000-000000000002"  # excluded by SQL
+
+    # Cursor returns only the eligible profile (SQL excluded the revoked one)
+    pool = _FakePool([(eligible_uuid,)])
+
+    sync_calls: list[str] = []
+
+    async def _fake_sync(profile_id: str, app_state: Any) -> None:
+        sync_calls.append(profile_id)
+
+    app_state = MagicMock()
+
+    with patch("gruvax.sync.nightly.sync_profile", _fake_sync):
+        await _startup_catchup_sweep(pool=pool, app_state=app_state, cadence="24h")
+
+    assert eligible_uuid in sync_calls, (
+        f"Eligible profile {eligible_uuid!r} must be synced."
+    )
+    assert revoked_uuid not in sync_calls, (
+        f"Revoked profile {revoked_uuid!r} must NOT be synced (skip policy)."
+    )
+
+
+@pytest.mark.asyncio
+async def test_startup_catchup_sweep_per_profile_isolation() -> None:
+    """If sync_profile raises for one profile, the sweep logs and continues to the
+    next profile — it must NOT abort early.
+
+    SYN-01 behavior 5: per-profile isolation. A failing profile must not prevent
+    subsequent profiles from being synced.
+    """
+    from gruvax.sync.nightly import _startup_catchup_sweep
+
+    failing_uuid = "dddddddd-0000-0000-0000-000000000001"
+    succeeding_uuid = "dddddddd-0000-0000-0000-000000000002"
+
+    pool = _FakePool([(failing_uuid,), (succeeding_uuid,)])
+
+    sync_calls: list[str] = []
+
+    async def _fake_sync(profile_id: str, app_state: Any) -> None:
+        sync_calls.append(profile_id)
+        if profile_id == failing_uuid:
+            raise RuntimeError("simulated sync failure for isolation test")
+
+    app_state = MagicMock()
+
+    with patch("gruvax.sync.nightly.sync_profile", _fake_sync):
+        # Must NOT raise — per-profile isolation swallows the RuntimeError
+        await _startup_catchup_sweep(pool=pool, app_state=app_state, cadence="24h")
+
+    assert failing_uuid in sync_calls, (
+        f"The failing profile {failing_uuid!r} should have been attempted."
+    )
+    assert succeeding_uuid in sync_calls, (
+        f"Succeeding profile {succeeding_uuid!r} must still be synced "
+        f"even after the previous profile raised. Got calls: {sync_calls!r}"
+    )
