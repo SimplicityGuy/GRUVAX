@@ -50,7 +50,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 - [x] **Phase 1: Walking skeleton — API client + single-profile sync** — Core Value end-to-end against one API-sourced collection; `v_collection` retired; positioning runs off the local `profile_collection` cache. (completed 2026-05-27)
 - [x] **Phase 2: Multi-profile migration + profile manager** — Full `profiles` table with Fernet PAT storage; `profile_id` NOT NULL migration tightening the 5 per-profile data tables (the 2 global/infra tables keep nullable `profile_id`); per-profile caches + SSE channel; profile manager admin UI; browser session profile picker. (completed 2026-05-28)
 - [x] **Phase 3: Devices + pairing** — `devices` + `pairing_codes` schemas; HttpOnly fingerprint cookie; 4-digit code pairing flow A (5-min TTL, auto-reroll); devices admin UI with PENDING / PAIRED / REVOKED groupings. (completed 2026-05-29)
-- [ ] **Phase 4: Sync polish + diagnostics** — Nightly background sync (24h @ 03:00 local default, configurable 24h/12h/6h/off); 401 reauth UI; per-profile diagnostics cards; soft-delete cache-purge background task; "Sync now" progress + completion toast.
+- [x] **Phase 4: Sync polish + diagnostics** — Nightly background sync (24h @ 03:00 local default, configurable 24h/12h/6h/off); 401 reauth UI; per-profile diagnostics cards; soft-delete cache-purge background task; "Sync now" progress + completion toast. (completed 2026-05-30)
 
 ## Phase Details
 
@@ -206,7 +206,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 04-03-PLAN.md — Frontend: kiosk ReauthBanner + admin re-auth badge + per-profile diagnostics cards (30s refetch) + Sync-now spinner/elapsed/toast + cadence select (SYN-02)
+- [x] 04-03-PLAN.md — Frontend: kiosk ReauthBanner + admin re-auth badge + per-profile diagnostics cards (30s refetch) + Sync-now spinner/elapsed/toast + cadence select (SYN-02)
 
 **UI hint**: yes
 
@@ -217,7 +217,7 @@ Plans:
 | 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
 | 2. Real Position Estimation | v1.0 | 11/10 | Complete    | 2026-05-29 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 7/6 | Complete    | 2026-05-29 |
-| 4. Realtime Live Updates | v1.0 | 3/4 | In Progress|  |
+| 4. Realtime Live Updates | v1.0 | 4/4 | Complete   | 2026-05-30 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
 | 6. LED Contract over MQTT | v1.0 | 4/4 | Complete | 2026-05-24 |
 | 7. Wizards + Import/Export | v1.0 | 8/8 | Complete | 2026-05-24 |
