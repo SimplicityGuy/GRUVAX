@@ -16,12 +16,17 @@
  */
 
 import React, { useCallback, useEffect, useRef, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import { el } from '../../lib/dom'
-import type { DiagnosticsData, LogEntry, SlowQueryEntry, TopSearchedRow } from '../../api/adminClient'
+import type { DiagnosticsData, LogEntry, ProfileDiagnosticEntry, SlowQueryEntry, TopSearchedRow } from '../../api/adminClient'
 import { getDiagnostics, resetStats } from '../../api/adminClient'
+import { ProfileDiagnosticsCard } from './ProfileDiagnosticsCard'
+import { formatRelativeTime, stalenessStatus } from '../../lib/time'
 import './Diagnostics.css'
 
 // ── Time formatting helpers ────────────────────────────────────────────────────
+
+// formatRelativeTime + stalenessStatus imported from lib/time (shared with ProfileDiagnosticsCard)
 
 function formatSyncAge(seconds: number | null): string {
   if (seconds === null || seconds === undefined) return '—'
@@ -31,24 +36,6 @@ function formatSyncAge(seconds: number | null): string {
   if (days === 0) return `${hours}h ago`
   if (hours === 0) return `${days}d ago`
   return `${days}d ${hours}h ago`
-}
-
-function stalenessStatus(seconds: number | null): 'ok' | 'stale' | 'outdated' {
-  if (seconds === null || seconds === undefined) return 'ok'
-  if (seconds > 14 * 86400) return 'outdated'
-  if (seconds > 3 * 86400) return 'stale'
-  return 'ok'
-}
-
-function formatRelativeTime(ts: number): string {
-  const nowMs = Date.now()
-  const diffMs = nowMs - ts * 1000
-  const diffSec = Math.floor(diffMs / 1000)
-  if (diffSec < 60) return `${diffSec}s ago`
-  const diffMin = Math.floor(diffSec / 60)
-  if (diffMin < 60) return `${diffMin} min ago`
-  const diffHr = Math.floor(diffMin / 60)
-  return `${diffHr}h ago`
 }
 
 function formatLastRefreshed(ts: Date | null): string {
@@ -442,6 +429,37 @@ function RecentLogsSection({ logs, loading }: RecentLogsSectionProps): React.Rea
   )
 }
 
+// ── Profiles Diagnostics Section (D4-15, D4-16) ──────────────────────────────
+
+interface ProfilesDiagnosticsSectionProps {
+  profiles: ProfileDiagnosticEntry[]
+  loading: boolean
+}
+
+function ProfilesDiagnosticsSection({
+  profiles,
+  loading,
+}: ProfilesDiagnosticsSectionProps): React.ReactElement {
+  return (
+    <section className="settings-section" aria-labelledby="profiles-diag-heading">
+      <h2 id="profiles-diag-heading" className="diag-profiles-heading">PROFILES</h2>
+      {loading ? (
+        <SectionSkeleton />
+      ) : profiles.length === 0 ? (
+        <p className="diag-empty-state">
+          No profiles yet. Create a profile to see sync diagnostics.
+        </p>
+      ) : (
+        <div className="diag-profiles-grid">
+          {profiles.map((p) => (
+            <ProfileDiagnosticsCard key={p.id} profile={p} />
+          ))}
+        </div>
+      )}
+    </section>
+  )
+}
+
 // ── Main Diagnostics Page ─────────────────────────────────────────────────────
 
 export function Diagnostics(): React.ReactElement {
@@ -450,6 +468,15 @@ export function Diagnostics(): React.ReactElement {
   const [error, setError] = useState<string | null>(null)
   const [lastRefreshed, setLastRefreshed] = useState<Date | null>(null)
   const [refreshing, setRefreshing] = useState(false)
+
+  // Per-profile diagnostics polling (D4-16): separate TanStack Query with 30s refetchInterval.
+  // Kept separate from the existing imperative load() to minimise refactor risk (PATTERNS §lower-risk).
+  // Background refetch shows NO spinner (UI-SPEC Interaction States).
+  const { data: profilesQueryData, isLoading: profilesLoading } = useQuery({
+    queryKey: ['admin', 'diagnostics'],
+    queryFn: getDiagnostics,
+    refetchInterval: 30_000,
+  })
 
   const load = useCallback(async () => {
     setRefreshing(true)
@@ -536,6 +563,10 @@ export function Diagnostics(): React.ReactElement {
         poolSizeMin={data?.pool.size_min ?? 0}
         phantomCount={data?.phantom_boundary_count ?? 0}
         loading={isLoading && !data}
+      />
+      <ProfilesDiagnosticsSection
+        profiles={profilesQueryData?.profiles ?? []}
+        loading={profilesLoading && !profilesQueryData}
       />
       <RecentLogsSection
         logs={data?.recent_logs ?? []}

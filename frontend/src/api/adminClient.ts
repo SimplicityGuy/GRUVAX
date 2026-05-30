@@ -616,6 +616,17 @@ export interface LogEntry {
   msg: string
 }
 
+/** Per-profile sync diagnostics entry (D4-15 — from GET /api/admin/diagnostics profiles[]). */
+export interface ProfileDiagnosticEntry {
+  id: string
+  display_name: string
+  last_sync_at: string | null
+  last_sync_status: 'ok' | 'failed' | 'in_progress' | null
+  last_sync_item_count: number | null
+  last_sync_error: string | null
+  app_token_revoked: boolean
+}
+
 /** The full diagnostics payload returned by GET /api/admin/diagnostics. */
 export interface DiagnosticsData {
   sync_age_seconds: number | null
@@ -628,6 +639,8 @@ export interface DiagnosticsData {
   }
   phantom_boundary_count: number
   recent_logs: LogEntry[]
+  /** Per-profile sync diagnostics (D4-15). */
+  profiles: ProfileDiagnosticEntry[]
 }
 
 /**

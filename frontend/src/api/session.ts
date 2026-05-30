@@ -23,6 +23,8 @@ export interface SessionData {
   device_id?: string | null
   /** True when the device fingerprint is bound to a profile (D3-03 routing rule). */
   is_device_paired?: boolean
+  /** True when the bound profile's PAT has been revoked (D4-08). */
+  needs_reauth?: boolean
 }
 
 /**

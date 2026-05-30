@@ -142,6 +142,8 @@ export interface AdminSettings {
   led_highlight_active_ttl_seconds?: number   // default 180s
   led_highlight_retain_mode?: boolean         // default false
   led_highlight_retain_ttl_seconds?: number   // default 900s
+  // Phase 4 — Sync cadence (D4-06)
+  sync_cadence?: '24h' | '12h' | '6h' | 'off'
 }
 
 /** Payload for PUT /api/admin/settings.
@@ -169,6 +171,8 @@ export interface AdminSettingsPut {
   led_highlight_active_ttl_seconds?: number
   led_highlight_retain_mode?: boolean
   led_highlight_retain_ttl_seconds?: number
+  // Phase 4 — Sync cadence (D4-06)
+  sync_cadence?: '24h' | '12h' | '6h' | 'off'
 }
 
 /** Payload for POST /api/admin/settings/pin — change PIN. */

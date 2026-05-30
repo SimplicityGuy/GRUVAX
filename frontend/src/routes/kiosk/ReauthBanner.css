@@ -1,0 +1,42 @@
+/**
+ * ReauthBanner — kiosk re-auth inline banner (Phase 4 / D4-08, D4-10).
+ *
+ * Nordic Grid design contract (04-UI-SPEC.md Surface 5):
+ * - Background: --gruvax-yellow
+ * - Text: --gruvax-blue-darker — 3.1:1 contrast on yellow at 18px (WCAG large text)
+ * - Font: Space Grotesk 18px weight 400 — matches staleness-bar exactly
+ * - Padding: --gruvax-space-3 (12px) vertical × --gruvax-space-4 (16px) horizontal
+ * - Full-width, border-radius: 0 (flush edge-to-edge — system-bar style)
+ * - Mount animation: reuses staleness-bar-enter keyframe from StalenessBar.css
+ * - role="alert" + aria-live="polite" on the element
+ * - NOT dismissible — persists while needs_reauth is true
+ *
+ * ENFORCEMENT: no hardcoded hex values — consume tokens only.
+ */
+
+.reauth-banner {
+  background: var(--gruvax-yellow);
+  color: var(--gruvax-blue-darker);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-lg);   /* 18px — accessibility floor for yellow-on-dark */
+  font-weight: 400;
+  line-height: var(--gruvax-leading-normal);
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  width: 100%;
+  border-radius: 0;
+
+  /* Mount animation: shares the staleness-bar-enter keyframe (defined in StalenessBar.css) */
+  overflow: hidden;
+  max-height: 48px;
+  opacity: 1;
+  animation: staleness-bar-enter var(--gruvax-duration-base) var(--gruvax-ease-decelerate) both;
+}
+
+/* Ensure the SVG icon color inherits from the container (--gruvax-blue-darker via currentColor) */
+.reauth-banner svg {
+  flex-shrink: 0;
+  color: inherit;
+}

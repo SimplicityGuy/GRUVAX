@@ -508,6 +508,66 @@
   line-height: var(--gruvax-leading-normal);
 }
 
+/* ── Profiles diagnostics section (D4-15) ──────────────────────────────── */
+
+/* PROFILES heading: Barlow Condensed 24px 700 (NOT .diag-heading which is 900) */
+.diag-profiles-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md); /* 24px */
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  line-height: var(--gruvax-leading-tight);
+  margin: 0;
+}
+
+/* Grid of profile cards: CSS Grid, gap var(--gruvax-space-5) */
+.diag-profiles-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: var(--gruvax-space-5); /* 24px */
+  margin-top: var(--gruvax-space-4);
+}
+
+/* Individual profile diagnostic card */
+.diag-profile-card {
+  background: var(--gruvax-off-white);
+  border-radius: var(--gruvax-radius-lg);
+  box-shadow: var(--gruvax-shadow-sm);
+  padding: var(--gruvax-space-4); /* 16px */
+}
+
+/* Card header: name + badge side-by-side */
+.diag-profile-card-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--gruvax-space-2);
+  margin-bottom: var(--gruvax-space-3);
+  flex-wrap: wrap;
+}
+
+/* Profile name inside card header: Barlow Condensed 16px 700 --gruvax-blue */
+.diag-profile-name {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  color: var(--gruvax-blue);
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  line-height: var(--gruvax-leading-tight);
+}
+
+/* Last error cell: Space Grotesk 14px muted, truncated */
+.diag-profile-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  word-break: break-all;
+}
+
 /* ── Load error state ───────────────────────────────────────────────────── */
 
 .diag-load-error {
