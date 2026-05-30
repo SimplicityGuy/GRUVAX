@@ -5894,3 +5894,82 @@
   margin: 0;
   line-height: var(--gruvax-leading-normal);
 }
+
+/* ── Phase 4: ProfileDrawer re-auth notice (D4-07) ───────────────────────── */
+
+.profile-reauth-notice {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  background: color-mix(in srgb, var(--gruvax-error) 8%, transparent);
+  border-left: 3px solid var(--gruvax-error);
+  border-radius: var(--gruvax-radius-sm);
+  margin-bottom: var(--gruvax-space-3);
+}
+
+.profile-reauth-notice-badge {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display);
+  text-transform: uppercase;
+  color: var(--gruvax-error);
+  line-height: var(--gruvax-leading-tight);
+}
+
+.profile-reauth-notice-text {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+}
+
+/* ── Phase 4: Settings sync cadence select (D4-06) ──────────────────────── */
+
+.settings-select {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-text-primary);
+  background: var(--gruvax-white);
+  border: 1px solid var(--gruvax-border-default);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-3);
+  min-height: 44px; /* touch target floor */
+  width: min(200px, 100%);
+  cursor: pointer;
+}
+
+.settings-select:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.settings-cadence-saved {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-success);
+  line-height: var(--gruvax-leading-normal);
+  animation: cadence-saved-fade 2s var(--gruvax-ease-standard) forwards;
+}
+
+.settings-cadence-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px */
+  color: var(--gruvax-error);
+  line-height: var(--gruvax-leading-normal);
+}
+
+.settings-sub-label {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm); /* 14px — NOT 12px per 4-size cap */
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  margin: var(--gruvax-space-1) 0 0;
+}
+
+@keyframes cadence-saved-fade {
+  0% { opacity: 1; }
+  80% { opacity: 1; }
+  100% { opacity: 0; }
+}

@@ -96,6 +96,8 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
   const [profileId, setProfileId] = useState<string | null>(initialProfile?.id ?? null)
   const [isSaving, setIsSaving] = useState(false)
   const [syncSuccess, setSyncSuccess] = useState(false)
+  // D4-17: track sync start time for the elapsed-seconds counter in SyncProgressSection
+  const [syncStartedAt, setSyncStartedAt] = useState<number | null>(null)
 
   // Focus trap: focus first focusable element on mount
   useEffect(() => {
@@ -152,10 +154,12 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
       handledSyncStatusRef.current = 'ok'
       setConnectState('idle') // eslint-disable-line react-hooks/set-state-in-effect
       setSyncSuccess(true)
+      setSyncStartedAt(null) // D4-17: clear elapsed counter on terminal
       handleSyncCompleteStable(polledProfile.last_sync_item_count)
     } else if (status === 'failed') {
       handledSyncStatusRef.current = 'failed'
       setConnectState('idle')
+      setSyncStartedAt(null) // D4-17: clear elapsed counter on terminal
       setSaveError('Sync failed. Tap Sync Now to try again.')
     }
   }, [polledProfile, connectState, handleSyncCompleteStable])
@@ -186,6 +190,7 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
       // On success: transition to SYNCING (connect endpoint already kicked full sync)
       handledSyncStatusRef.current = null // reset so next terminal state is handled
       setConnectState('syncing')
+      setSyncStartedAt(Date.now()) // D4-17: record sync start for elapsed counter
       setPatValue('')
     } catch (err) {
       setConnectState('idle')
@@ -255,6 +260,7 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
     try {
       await syncAdminProfile(profileId)
       setConnectState('syncing')
+      setSyncStartedAt(Date.now()) // D4-17: record sync start for elapsed counter
     } catch {
       setSaveError('Could not trigger sync. Try again in a moment.')
     }
@@ -330,6 +336,16 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
             </div>
           )}
 
+          {/* ── RE-AUTH REQUIRED: badge above PAT section (D4-07, D4-09) ─── */}
+          {profileStatus === 're-auth-required' && drawerMode === 'view' && !isSyncing && (
+            <div className="profile-reauth-notice" role="alert">
+              <span className="profile-reauth-notice-badge">RE-AUTH REQUIRED</span>
+              <span className="profile-reauth-notice-text">
+                Connection was rejected. Use ROTATE PAT to restore syncing.
+              </span>
+            </div>
+          )}
+
           {/* ── PENDING or ROTATE: PAT input ──────────────────────────────── */}
           {profileId !== null &&
             (profileStatus === 'pending' || drawerMode === 'rotate') &&
@@ -378,6 +394,7 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
           {isSyncing && (
             <SyncProgressSection
               itemCount={polledProfile?.last_sync_item_count}
+              syncStartedAt={syncStartedAt}
             />
           )}
 

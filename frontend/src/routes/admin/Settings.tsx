@@ -62,6 +62,13 @@ export function Settings() {
   // Phase 6 (06-04): All-off and diagnostic action status messages
   const [ledsActionMsg, setLedsActionMsg] = useState('')
 
+  // Phase 4: Sync cadence (D4-06)
+  type CadenceValue = '24h' | '12h' | '6h' | 'off'
+  const [syncCadence, setSyncCadence] = useState<CadenceValue>('24h')
+  type CadenceSaveStatus = 'idle' | 'saved' | 'error'
+  const [cadenceStatus, setCadenceStatus] = useState<CadenceSaveStatus>('idle')
+  const [cadenceError, setCadenceError] = useState('')
+
   // Phase 7: BACKUP & RESTORE section state (BAK-02)
   type BackupImportStatus = 'idle' | 'applying' | 'success' | 'error'
   const [backupImportStatus, setBackupImportStatus] = useState<BackupImportStatus>('idle')
@@ -86,6 +93,8 @@ export function Settings() {
         if (s.led_highlight_active_ttl_seconds !== undefined) setLedHighlightTtl(s.led_highlight_active_ttl_seconds)
         if (s.led_highlight_retain_mode !== undefined) setLedRetainMode(s.led_highlight_retain_mode)
         if (s.led_highlight_retain_ttl_seconds !== undefined) setLedRetainTtl(s.led_highlight_retain_ttl_seconds)
+        // Phase 4: sync cadence (D4-06)
+        if (s.sync_cadence) setSyncCadence(s.sync_cadence)
       })
       .catch(() => {/* proceed with defaults */})
   }, [])
@@ -106,6 +115,22 @@ export function Settings() {
     } catch {
       setSettingsStatus('error')
       setSettingsError('Failed to save settings. Please try again.')
+    }
+  }
+
+  // Phase 4: Auto-save cadence onChange (D4-06)
+  const handleSaveCadence = async (value: CadenceValue) => {
+    setSyncCadence(value)     // optimistic update
+    setCadenceStatus('idle')
+    setCadenceError('')
+    try {
+      await putAdminSettings({ sync_cadence: value })
+      setCadenceStatus('saved')
+      // Fade "Saved" after 2s via CSS animation; reset state after 2.5s
+      setTimeout(() => setCadenceStatus('idle'), 2500)
+    } catch {
+      setCadenceStatus('error')
+      setCadenceError('Could not save. Try again.')
     }
   }
 
@@ -347,6 +372,37 @@ export function Settings() {
         >
           {settingsStatus === 'saving' ? 'SAVING…' : 'SAVE SETTINGS'}
         </button>
+      </section>
+
+      {/* ── Sync cadence (Phase 4, D4-06) ──────────────────────────────────── */}
+      <section className="settings-section" aria-labelledby="cadence-heading">
+        <h2 id="cadence-heading" className="settings-heading">SYNC</h2>
+
+        <div className="settings-field">
+          <label className="settings-label" htmlFor="sync-cadence">
+            SYNC CADENCE
+          </label>
+          <select
+            id="sync-cadence"
+            className="settings-select"
+            value={syncCadence}
+            onChange={(e) => { void handleSaveCadence(e.target.value as CadenceValue) }}
+          >
+            <option value="24h">Every 24 hours</option>
+            <option value="12h">Every 12 hours</option>
+            <option value="6h">Every 6 hours</option>
+            <option value="off">Off</option>
+          </select>
+          <p className="settings-sub-label">
+            Syncs run at 03:00, 15:00 (12h), 09:00/21:00 (6h) server time.
+          </p>
+          {cadenceStatus === 'saved' && (
+            <p className="settings-cadence-saved" role="status">Saved</p>
+          )}
+          {cadenceStatus === 'error' && (
+            <p className="settings-cadence-error" role="alert">{cadenceError}</p>
+          )}
+        </div>
       </section>
 
       {/* ── LEDs (Phase 6, LED-04, LED-05, D-18, D-19) ─────────────────────── */}
