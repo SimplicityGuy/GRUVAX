@@ -238,10 +238,11 @@ Plans:
 **Goal:** Close the two cross-phase BLOCKERS from the v2.0 milestone audit so the milestone's end-to-end flows hold: the kiosk consumes the `collection_changed` SSE event (B-01 — live result refresh after nightly/manual sync, no manual reload), and `/api/search` + `/api/locate` tolerate an omitted `profile_id` by resolving the bound profile server-side while the frontend gates the fetch on a resolved profile (B-02 — no 422 before session bootstrap). Warnings W-01..W-04 are out of scope (tech debt).
 **Requirements**: API-02, SYN-01, SYN-02 (end-to-end restoration; satisfied at phase-level in P1/P2/P4, degraded by these blockers)
 **Depends on:** Phase 4
-**Plans:** 0 plans
+**Plans:** 2 plans
 
 Plans:
-- [ ] TBD (run /gsd-plan-phase 5 to break down)
+- [ ] 05-01-PLAN.md — B-02 backend: make profile_id optional on /api/search + /api/locate with cookie-authoritative fallback (RED tests first)
+- [ ] 05-02-PLAN.md — B-01 kiosk collection_changed SSE listener + B-02 frontend search-enabled gate on boundProfileId (RED tests first)
 
 ## Backlog
 
