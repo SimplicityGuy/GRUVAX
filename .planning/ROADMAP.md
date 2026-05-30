@@ -201,8 +201,8 @@ Plans:
 
 **Wave 1** *(blocked on Wave 0 completion; parallel — disjoint files)*
 
-- [ ] 04-01-PLAN.md — Backend sync autonomy: nightly `_sync_loop()` + DST `next_fire_after()` + startup catch-up & purge sweeps + `sync.cadence` setting + soft-delete purge + `needs_reauth` on `GET /api/session` + D4-09/D4-07 verify (SYN-01, SYN-02)
-- [ ] 04-02-PLAN.md — `GET /api/admin/diagnostics` per-profile `profiles[]` section (SYN-02)
+- [x] 04-01-PLAN.md — Backend sync autonomy: nightly `_sync_loop()` + DST `next_fire_after()` + startup catch-up & purge sweeps + `sync.cadence` setting + soft-delete purge + `needs_reauth` on `GET /api/session` + D4-09/D4-07 verify (SYN-01, SYN-02)
+- [x] 04-02-PLAN.md — `GET /api/admin/diagnostics` per-profile `profiles[]` section (SYN-02)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -217,7 +217,7 @@ Plans:
 | 1. First Search → Cube Highlight | v1.0 | 11/11 | Complete    | 2026-05-27 |
 | 2. Real Position Estimation | v1.0 | 11/10 | Complete    | 2026-05-29 |
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 7/6 | Complete    | 2026-05-29 |
-| 4. Realtime Live Updates | v1.0 | 1/4 | In Progress|  |
+| 4. Realtime Live Updates | v1.0 | 3/4 | In Progress|  |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
 | 6. LED Contract over MQTT | v1.0 | 4/4 | Complete | 2026-05-24 |
 | 7. Wizards + Import/Export | v1.0 | 8/8 | Complete | 2026-05-24 |
