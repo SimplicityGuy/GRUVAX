@@ -148,9 +148,11 @@ async def test_skip_policy() -> None:
     already applied by the SQL), then assert sync_profile is called exactly for
     those UUIDs and NOT for the revoked/in_progress ones.
 
-    The test patches the _sync_loop to run exactly one iteration by raising
-    asyncio.CancelledError after the first pass, which the loop does not catch
-    (CancelledError is BaseException, not Exception).
+    The loop is sleep-FIRST (it sleeps until the next scheduled fire, then syncs),
+    so we let the first asyncio.sleep (the scheduling sleep) return normally,
+    allow the single sync pass to run, then raise asyncio.CancelledError on the
+    SECOND sleep to stop the loop after exactly one pass. CancelledError is a
+    BaseException (not Exception), so the loop does not swallow it.
     """
     import asyncio
 
@@ -170,14 +172,16 @@ async def test_skip_policy() -> None:
     async def _fake_sync(profile_id: str, app_state: Any) -> None:
         sync_calls.append(profile_id)
 
-    # Patch next_fire_after to return "now + 0s" so the loop fires immediately,
-    # and asyncio.sleep to raise CancelledError after one iteration.
+    # Sleep-first loop: first sleep (scheduling) returns so the sync pass runs;
+    # second sleep (next iteration's scheduling sleep) raises to stop the loop.
     sleep_calls = 0
 
     async def _fake_sleep(seconds: float) -> None:
         nonlocal sleep_calls
         sleep_calls += 1
-        raise asyncio.CancelledError("stop after one pass")
+        if sleep_calls >= 2:
+            raise asyncio.CancelledError("stop after one sync pass")
+        return None
 
     app_state = MagicMock()
 

@@ -128,16 +128,19 @@ async def _sync_loop(pool: Any, app_state: Any) -> None:
     try/except Exception (NOT BaseException so CancelledError propagates cleanly
     on uvicorn SIGTERM, per Pitfall 1 in 04-RESEARCH).
 
-    Loop structure (wake → sync → sleep):
+    Loop structure (sleep → sync, scheduled-fire ordering):
       1. Read current cadence from settings (re-read each tick for live config).
       2. If "off": park for 60s and continue (no sync).
-      3. Fetch eligible profiles and sync each one.
-      4. Compute next fire time and sleep until then.
+      3. Compute the next scheduled fire time and sleep until then.
+      4. On wake (i.e. at the scheduled wall-clock time) fetch eligible profiles
+         and sync each one.
 
-    This wake→sync→sleep ordering means the first iteration runs a sync pass
-    before sleeping.  The startup_catchup_sweep runs before this task is
-    registered, so the first nightly pass and the catch-up pass are never
-    double-counted.
+    This sleep→sync ordering means the loop does NOT sync on startup — it only
+    fires at the scheduled wall-clock time (03:00 etc., D4-01).  Staleness at boot
+    is the responsibility of the separate _startup_catchup_sweep (D4-02), which
+    runs before this task is registered.  Keeping the routine loop sleep-first
+    avoids a full re-sync of every profile on each process restart (rate-limit
+    safety) and prevents the loop from racing unrelated in-flight requests.
 
     Cadence (D4-03):
       24h → fires at 03:00
@@ -158,8 +161,26 @@ async def _sync_loop(pool: Any, app_state: Any) -> None:
                 await asyncio.sleep(60)
                 continue
 
-            # Fetch non-deleted, non-revoked, non-in_progress profiles (D4-04 skip policy).
-            # Parameterized SQL only — no f-strings (bandit B608).
+            # Sleep-FIRST: compute the next scheduled fire time and sleep until it.
+            # The loop must NOT sync on startup (D4-01) — boot-time staleness is
+            # handled by _startup_catchup_sweep (D4-02). Compute next fire from the
+            # cadence's hour list (D4-03).
+            fire_hours = _CADENCE_FIRE_HOURS.get(cadence, [3])
+            now = now_local()
+            next_fire = min(next_fire_after(now, h) for h in fire_hours)
+            sleep_secs = (next_fire - now).total_seconds()
+
+            logger.info(
+                "nightly_sync: cadence=%s next_fire=%s sleep_secs=%.0f",
+                cadence,
+                next_fire.isoformat(),
+                sleep_secs,
+            )
+            await asyncio.sleep(max(sleep_secs, 1))
+
+            # Woke at the scheduled time → run the sync pass for eligible profiles.
+            # Re-fetch under the skip policy (D4-04): non-deleted, non-revoked,
+            # non-in_progress. Parameterized SQL only — no f-strings (bandit B608).
             async with pool.connection() as conn, conn.cursor() as cur:
                 await cur.execute(
                     "SELECT id::text FROM gruvax.profiles "
@@ -177,21 +198,6 @@ async def _sync_loop(pool: Any, app_state: Any) -> None:
                 except Exception as exc:
                     # Per-profile isolation: log + continue (never abort the loop).
                     logger.warning("nightly_sync: profile=%s FAILED: %s", pid, exc)
-
-            # Compute next fire time from the cadence's hour list (D4-03).
-            fire_hours = _CADENCE_FIRE_HOURS.get(cadence, [3])
-            now = now_local()
-            next_fires = [next_fire_after(now, h) for h in fire_hours]
-            next_fire = min(next_fires)
-            sleep_secs = (next_fire - now).total_seconds()
-
-            logger.info(
-                "nightly_sync: cadence=%s next_fire=%s sleep_secs=%.0f",
-                cadence,
-                next_fire.isoformat(),
-                sleep_secs,
-            )
-            await asyncio.sleep(max(sleep_secs, 1))
 
         except asyncio.CancelledError:
             logger.info("nightly_sync: loop cancelled (shutdown)")
