@@ -168,7 +168,7 @@ export function KioskView() {
   } = useQuery({
     queryKey: ['search', debouncedQuery, boundProfileId],
     queryFn: () => searchCollection(debouncedQuery, 10, boundProfileId ?? undefined),
-    enabled: debouncedQuery.trim().length > 0,
+    enabled: !!boundProfileId && debouncedQuery.trim().length > 0,
     staleTime: 30_000,
   })
 
@@ -331,6 +331,15 @@ export function KioskView() {
     // server_shutdown: server going down → mark disconnected (auto-reconnect handles it)
     es.addEventListener('server_shutdown', () => {
       useGruvaxStore.getState().setSseConnected(false)
+    })
+
+    // collection_changed: nightly/manual sync completed → invalidate search results + resync
+    // grid (B-01: SYN-01 Flow 4 + SYN-02 staleness-refresh). No payload from publisher
+    // (profile_sync.py:356 sends bus.publish('collection_changed') with no data), so use
+    // the simple no-e form like server_hello — no try/catch needed (no JSON.parse, T-05-04 accept).
+    es.addEventListener('collection_changed', () => {
+      void queryClient.invalidateQueries({ queryKey: ['search'] })
+      resync()
     })
 
     // Cleanup: close the connection on unmount (the ONLY es.close() call — Pitfall 4)
