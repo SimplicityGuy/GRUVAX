@@ -425,6 +425,37 @@
   cursor: not-allowed;
 }
 
+.settings-btn-secondary {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm, 16px);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-display, 0.14em);
+  text-transform: uppercase;
+  color: var(--gruvax-blue);
+  background: transparent;
+  border: 1px solid var(--gruvax-blue);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-5);
+  min-height: 48px;
+  cursor: pointer;
+  width: 100%;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.settings-btn-secondary:hover:not(:disabled) {
+  background: var(--gruvax-blue-light);
+}
+
+.settings-btn-secondary:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
+.settings-btn-secondary:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
 /* ── FillBar ─────────────────────────────────────────────────────────────── */
 
 .fill-bar-track {
