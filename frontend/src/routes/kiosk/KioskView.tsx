@@ -477,7 +477,11 @@ export function KioskView() {
   }, [animationToken])
 
   const searchResults = searchData?.items ?? []
+  // showNoResults: only true once a search was actually permitted to run (WR-04).
+  // Without the !!boundProfileId guard, a user who types before the profile
+  // is bound sees a spurious "no results" flash while the query is disabled.
   const showNoResults =
+    !!boundProfileId &&
     debouncedQuery.trim().length > 0 &&
     !isFetching &&
     searchResults.length === 0 &&
