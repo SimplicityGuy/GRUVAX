@@ -33,7 +33,7 @@ vi.mock('../../api/client', async (importOriginal) => {
       sub_cube_interval: null,
       confidence: 0.8,
     }),
-    searchCollection: vi.fn().mockResolvedValue({ results: [], total: 0, took_ms: 1, did_you_mean: null }),
+    searchCollection: vi.fn().mockResolvedValue({ items: [], took_ms: 1, did_you_mean: null }),
   }
 })
 
