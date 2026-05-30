@@ -31,7 +31,7 @@
 
 ### Sync (SYN)
 
-- [ ] **SYN-01** — Three sync trigger modes: on profile connect (synchronous `per_page=1` test sync → captures `user_id` → kicks off full async sync), manual "Sync now" admin button (PIN-gated, progress UI + completion toast), nightly background scheduler (`asyncio.create_task` in lifespan, 03:00 local default, cadence configurable: 24h / 12h / 6h / off)
+- [x] **SYN-01** — Three sync trigger modes: on profile connect (synchronous `per_page=1` test sync → captures `user_id` → kicks off full async sync), manual "Sync now" admin button (PIN-gated, progress UI + completion toast), nightly background scheduler (`asyncio.create_task` in lifespan, 03:00 local default, cadence configurable: 24h / 12h / 6h / off)
 - [x] **SYN-02** — Staleness redefinition from `max(v_collection.synced_at)` to per-profile `now() - profiles.last_sync_at`; v1.0 Phase 8 thresholds (3d/14d) carry over verbatim; banner per-kiosk-view per-profile
 
 ### Devices + pairing (DEV)
