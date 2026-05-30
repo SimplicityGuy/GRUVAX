@@ -33,24 +33,26 @@ Stack: Python 3.13 + FastAPI 0.136 + psycopg 3.2 async + SQLAlchemy 2.0 async + 
 
 **External prereq:** discogsography v2 ships the contract for production use — `app_tokens` table + catalog# verification/exposure + `require_app_token` dependency + scoped settings UI (briefed at `background/discogsography-v2-app-tokens-brief.md`, gitignored). GRUVAX's v2.0 code was built and verified against a canonical in-process fake-discogsography contract fixture; wiring to the live discogsography API is a deployment-time step once their contract artifact at `docs/specs/v2-gruvax-integration.md` lands.
 
-## Next Milestone: v2.1 — Resilience + Privacy + UX polish (Planned)
+## Current Milestone: v2.1 — Resilience + Privacy + UX polish
 
-Fresh requirements to be defined via `/gsd-new-milestone`. Candidate scope already parked in the v2.0 requirements archive and backlog:
+**Goal:** Harden GRUVAX for real household use — let members connect their own collections without the owner handling tokens, make pairing and offline behavior robust, lock down query/history privacy, and polish the shelf-overview UX — while closing v2.0's carried-forward tech debt.
+
+**Target features:**
 
 - **Per-profile self-connect PAT** (AUTH-02 — invite-token model; member pastes own token, owner never sees it)
-- **OAuth2 device-authorization grant** (AUTH-01 — no PAT crosses the household) — currently slotted v2.2
-- **QR-code RPi pairing** (DEV-04 — kiosk shows QR, admin scans on phone)
-- **Collection diff highlighting** (API-04 — "5 new records since last sync")
-- **9 SPIDR-deferred v1 reqs** — SRCH-09 (recently-pulled list), OFF-01..04 (offline/reconnect UX), PRIV-01..04 (session-only history, no server query text, aggregate-only stats, no-PIN reset-kiosk)
+- **QR-code RPi pairing presented alongside the 4-digit PIN** (DEV-04 — kiosk shows both; admin scans on phone *or* types the code)
+- **Collection diff highlighting** (API-04 — "N new records since last sync")
+- **Recently-pulled list** (SRCH-09 — SPIDR-deferred from v1)
+- **Offline / reconnect UX** (OFF-01..04 — SPIDR-deferred from v1)
+- **Privacy** (PRIV-01..04 — session-only history, no server-side query text, aggregate-only stats, no-PIN reset-kiosk)
+- **Shelf-overview mini-Kallax fill/occupancy** (UX polish — promoted from backlog 999.1; `LocatorHeader` mini 4×4 shows per-cube `is_empty`/`fill_level` from `GET /api/admin/cubes`)
 - **v2.0 tech-debt closure** — DEV-02 SSE-immediate kiosk switch/revoke listeners; `profile_id` in the `write_boundary` WHERE clause before any multi-profile boundary-editing UI
 
-**Deferred (NOT in v2.0):**
+**Phase numbering:** continues the global sequence (v2.1 starts at Phase 6).
 
-- **Per-profile self-connect PAT** (invite-token model so members paste own token, owner never sees it) → v2.1
-- **OAuth2 device-authorization grant** (no PAT crosses the household) → v2.2
-- **QR-code RPi pairing** (kiosk shows QR, admin scans on phone) → v2.1
-- **9 SPIDR-deferred v1 reqs** (SRCH-09, OFF-01..04, PRIV-01..04) → v2.1 resilience + privacy milestone
-- **Phase 999.1** (shelf-overview mini-Kallax cube fill/occupancy) → Backlog
+**Deferred / out of scope for v2.1:**
+
+- **OAuth2 device-authorization grant** (AUTH-01 — no PAT crosses the household) → v2.2
 - **Phase 999.2** (LED party / sound-reactive modes) → Backlog (gated on hardware milestone)
 - **Real LED hardware end-to-end** (ESP32 + WS2812B firmware) → Independent hardware milestone
 
@@ -143,4 +145,4 @@ This document evolves at phase transitions and milestone boundaries.
 5. REQUIREMENTS.md regenerated fresh for the next milestone
 
 ---
-*Last updated: 2026-05-30 after v2.0 milestone close. v2.0 Multi-User Collections shipped with 5 phases, 35 plans, +96k LOC across 516 files, 12/12 active requirements satisfied (AUTH-01 deferred to v2.2); audit `tech_debt` (no blockers). v1.0 MVP shipped 2026-05-26 with 10 phases, 50 plans, ~36k LOC, 75/75 in-scope requirements satisfied. Next: v2.1 (resilience + privacy + UX polish) — define fresh requirements via `/gsd-new-milestone`. Archives: [`milestones/v2.0-ROADMAP.md`](./milestones/v2.0-ROADMAP.md), [`milestones/v2.0-REQUIREMENTS.md`](./milestones/v2.0-REQUIREMENTS.md), [`milestones/v2.0-MILESTONE-AUDIT.md`](./milestones/v2.0-MILESTONE-AUDIT.md); v1.0: [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMAP.md), [`milestones/v1.0-REQUIREMENTS.md`](./milestones/v1.0-REQUIREMENTS.md). Project history: [`MILESTONES.md`](./MILESTONES.md).*
+*Last updated: 2026-05-30 — v2.1 (Resilience + Privacy + UX polish) started. Scope: AUTH-02 self-connect PAT, DEV-04 QR+PIN pairing, API-04 collection diff, SRCH-09 recently-pulled, OFF-01..04 offline UX, PRIV-01..04 privacy, shelf-overview fill (ex-999.1), v2.0 tech-debt closure (DEV-02, write_boundary scoping). Phase numbering continues from Phase 6. Defining requirements next. — v2.0 Multi-User Collections shipped 2026-05-30 (5 phases, 35 plans, +96k LOC across 516 files, 12/12 active reqs; AUTH-01 deferred to v2.2; audit `tech_debt`). v1.0 MVP shipped 2026-05-26 (10 phases, 50 plans, ~36k LOC, 75/75 in-scope reqs). Archives: [`milestones/v2.0-ROADMAP.md`](./milestones/v2.0-ROADMAP.md), [`milestones/v2.0-REQUIREMENTS.md`](./milestones/v2.0-REQUIREMENTS.md), [`milestones/v2.0-MILESTONE-AUDIT.md`](./milestones/v2.0-MILESTONE-AUDIT.md); v1.0: [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMAP.md), [`milestones/v1.0-REQUIREMENTS.md`](./milestones/v1.0-REQUIREMENTS.md). Project history: [`MILESTONES.md`](./MILESTONES.md).*
