@@ -33,7 +33,7 @@ stopped_at: Phase 05 complete (2/2) — ready to discuss Phase 999.1
 Phase: 999.1
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-05-30 -- Phase 05 execution started
+Last activity: 2026-05-30 -- Completed quick task 260530-j7t: style unstyled LED-action buttons (.settings-btn-secondary)
 Resume file: .planning/phases/05-close-v2-0-integration-gaps-kiosk-collection-changed-listene/
 
 ## Performance Metrics (v2.0)
@@ -132,6 +132,7 @@ To be resolved during plan-phase or as the discogsography agent reports:
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260530-j7t | Style unstyled LED-action buttons (ALL OFF / RUN DIAGNOSTIC) — add missing `.settings-btn-secondary` CSS rule (surfaced in Phase 3 UAT) | 2026-05-30 | c9bd90e | [260530-j7t-style-unstyled-led-action-buttons-add-se](./quick/260530-j7t-style-unstyled-led-action-buttons-add-se/) |
 | 260526-d6s | fix WR-04: contiguity error should render original-cased label, not casefolded (doc-only — fix already on main in 3598c22) | 2026-05-26 | aee5967 | [260526-d6s-fix-wr-04-contiguity-error-should-render](./quick/260526-d6s-fix-wr-04-contiguity-error-should-render/) |
 | 260524-sd6 | Reconcile gruvax vs gruvax_app Postgres role naming (canonical: gruvax) | 2026-05-25 | 250f7b9 | [260524-sd6-reconcile-gruvax-vs-gruvax-app-postgres-](./quick/260524-sd6-reconcile-gruvax-vs-gruvax-app-postgres-/) |
 | 260522-u48 | Rename docker compose service gruvax-api → api (container gruvax-api-1) | 2026-05-23 | b753bd2 | [260522-u48-rename-docker-compose-service-gruvax-api](./quick/260522-u48-rename-docker-compose-service-gruvax-api/) |
