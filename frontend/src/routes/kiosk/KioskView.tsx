@@ -5,8 +5,10 @@ import { fetchCubesWithFill, fetchUnits, locateRelease, searchCollection } from 
 import type { CubeRef } from '../../api/types'
 import { useGruvaxStore, type ShimmerCube } from '../../state/store'
 import { useSessionStore } from '../../state/sessionStore'
+import { getSession } from '../../api/session'
 import { CubeContentsPanel } from './CubeContentsPanel'
 import { EmptyCollectionState } from './EmptyCollectionState'
+import { ReauthBanner } from './ReauthBanner'
 import { ResultsList } from './ResultsList'
 import { ShelfLayoutNotConfigured } from './ShelfLayoutNotConfigured'
 import { SearchBox } from './SearchBox'
@@ -14,6 +16,7 @@ import { ShelfGrid } from './ShelfGrid'
 import { ShelfLabel } from './ShelfLabel'
 import { StalenessBar } from './StalenessBar'
 import { SwitchProfileButton } from './SwitchProfileButton'
+import './ReauthBanner.css'
 import './StalenessBar.css'
 import './kiosk.css'
 
@@ -83,6 +86,25 @@ export function KioskView() {
     staleTime: 60_000,
     refetchInterval: 60_000,
   })
+
+  // Session re-auth polling (D4-08): low-frequency refetch so a freshly-revoked PAT
+  // surfaces the ReauthBanner within ≤5 min without a manual reload.
+  // Uses the same getSession() function as App.tsx bootstrap; stores result locally
+  // so the kiosk can derive needs_reauth without extending the Zustand store shape.
+  const setSession = useSessionStore((s) => s.setSession)
+  const { data: sessionData } = useQuery({
+    queryKey: ['session'],
+    queryFn: async () => {
+      const data = await getSession()
+      // Keep the session store in sync so bound profile ID stays current
+      setSession(data)
+      return data
+    },
+    staleTime: 4 * 60_000,       // 4 min — treat as fresh for 4 min
+    refetchInterval: 5 * 60_000, // re-poll every 5 min (D4-08 ≤5 min requirement)
+    refetchOnWindowFocus: true,
+  })
+
 
   // Build a Set<"unitId-row-col"> of empty cubes for O(1) lookup in ShelfGrid
   const emptyCubes = useMemo<Set<string>>(() => {
@@ -457,6 +479,13 @@ export function KioskView() {
   // last_sync_status is not 'completed'/'ok' (never successfully synced).
   // This is distinct from "search returned no matches" (NoResultsRow).
   const boundProfile = profiles.find((p) => p.id === boundProfileId) ?? null
+
+  // Derive needs_reauth: prefer server's authoritative needs_reauth field (D4-08);
+  // fall back to reading app_token_revoked from the bound profile in the session store.
+  const needsReauth =
+    sessionData?.needs_reauth ??
+    (boundProfile?.app_token_revoked ?? false)
+
   const isEmptyCollection =
     boundProfile != null &&
     (boundProfile.last_sync_item_count == null || boundProfile.last_sync_item_count === 0) &&
@@ -501,6 +530,11 @@ export function KioskView() {
         {/* Staleness banner (OBS-06, D-01) — above the grid, never overlaying it.
             Hidden when offline (health null) or sync_age <= 14d. */}
         <StalenessBar syncAgeSeconds={healthData?.sync_age_seconds ?? null} />
+
+        {/* Re-auth banner (D4-08, D4-10): non-blocking, appears when bound profile's
+            PAT is revoked. CRITICAL: search input, cube grid, and all kiosk
+            interactivity remain live — this banner is purely informational. */}
+        {needsReauth && <ReauthBanner profileName={boundProfile?.display_name} />}
 
         {/* Plan 09 / D-12: shelf layout not configured affordance.
             Shown when a selected result IS in the collection (HTTP 200 locate)
