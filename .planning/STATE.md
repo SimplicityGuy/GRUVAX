@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-User Collections
-status: ready_to_plan
-last_updated: 2026-05-30T02:10:58.658Z
-last_activity: 2026-05-29
+status: planning
+last_updated: "2026-05-30T18:13:51.949Z"
+last_activity: 2026-05-30
 progress:
-  total_phases: 6
-  completed_phases: 3
+  total_phases: 7
+  completed_phases: 4
   total_plans: 31
   completed_plans: 33
-  percent: 50
-stopped_at: Phase 04 complete (4/4) — ready to discuss Phase 999.1
+  percent: 57
 ---
 
 # State: GRUVAX
@@ -22,7 +21,7 @@ stopped_at: Phase 04 complete (4/4) — ready to discuss Phase 999.1
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 999.1 — shelf overview mini kallax shows per cube fill/occupancy (backlog)
+**Current Focus:** Phase 5 — Close v2.0 integration gaps (B-01 kiosk collection_changed listener + B-02 profile_id-null guard on search/locate)
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -30,11 +29,11 @@ stopped_at: Phase 04 complete (4/4) — ready to discuss Phase 999.1
 
 ## Current Position
 
-Phase: 999.1
+Phase: 5
 Plan: Not started
 Status: Ready to plan
-Last activity: 2026-05-29 -- Phase 04 execution started
-Resume file: .planning/phases/04-sync-polish-diagnostics/04-UI-SPEC.md
+Last activity: 2026-05-30 -- Phase 5 added (v2.0 integration-gap closure) via /gsd-phase
+Resume file: .planning/phases/05-close-v2-0-integration-gaps-kiosk-collection-changed-listene/
 
 ## Performance Metrics (v2.0)
 
@@ -71,6 +70,7 @@ Resume file: .planning/phases/04-sync-polish-diagnostics/04-UI-SPEC.md
 - **2026-05-26** — v1.0 archived. 10 phases, 50 plans, ~36k LOC. Phase 5 (Segment-Aware Position Precision) and Phase 10 (Close Milestone Gaps) were INSERTED during execution; both shipped clean. See `.planning/milestones/v1.0-ROADMAP.md` for the full archive.
 - Phase 5 inserted after Phase 4 (v1.0): Segment-Aware Position Precision — true integer insert; bumped LED→6, Wizards→7, Observability→8.
 - Phase 10 added (integer append) at end of v1.0: Close Milestone Gaps — INT-A SSE payload shape + INT-B undo re-derive/publish + traceability reconcile.
+- Phase 5 added: Close v2.0 integration gaps — B-01 kiosk collection_changed SSE listener + B-02 profile_id-null guard on search/locate. Integer append (closure phase, like v1.0 Phase 10). Sourced from v2.0-MILESTONE-AUDIT.md (gaps_found: 2 blockers).
 
 ### Decisions Made
 

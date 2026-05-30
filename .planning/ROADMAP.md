@@ -51,6 +51,7 @@ Phase numbering RESET — these are the v2.0 phases starting at Phase 1, not a c
 - [x] **Phase 2: Multi-profile migration + profile manager** — Full `profiles` table with Fernet PAT storage; `profile_id` NOT NULL migration tightening the 5 per-profile data tables (the 2 global/infra tables keep nullable `profile_id`); per-profile caches + SSE channel; profile manager admin UI; browser session profile picker. (completed 2026-05-28)
 - [x] **Phase 3: Devices + pairing** — `devices` + `pairing_codes` schemas; HttpOnly fingerprint cookie; 4-digit code pairing flow A (5-min TTL, auto-reroll); devices admin UI with PENDING / PAIRED / REVOKED groupings. (completed 2026-05-29)
 - [x] **Phase 4: Sync polish + diagnostics** — Nightly background sync (24h @ 03:00 local default, configurable 24h/12h/6h/off); 401 reauth UI; per-profile diagnostics cards; soft-delete cache-purge background task; "Sync now" progress + completion toast. (completed 2026-05-30)
+- [ ] **Phase 5: Close v2.0 integration gaps** — ADDED 2026-05-30 (closure phase, like v1.0 Phase 10). Wires the SSE/session seams the milestone audit surfaced: B-01 kiosk `collection_changed` listener (stale results after nightly/manual sync) + B-02 `profile_id`-null guard on `/api/search` + `/api/locate` (422 before session bootstrap resolves the bound profile). Scope/warnings sourced from [`v2.0-MILESTONE-AUDIT.md`](./v2.0-MILESTONE-AUDIT.md).
 
 ## Phase Details
 
@@ -228,8 +229,19 @@ Plans:
 | 2. Multi-profile migration + profile manager | v2.0 | 0/8 | Planned (6 waves) | — |
 | 3. Devices + pairing | v2.0 | 0/6 | Planned (5 waves) | — |
 | 4. Sync polish + diagnostics | v2.0 | 0/4 | Planned (3 waves) | — |
+| 5. Close v2.0 integration gaps (B-01 + B-02) | v2.0 | 0/0 | Planned | — |
 | 999.1. Shelf-overview mini-Kallax fill/occupancy | Backlog | 0/0 | Captured | — |
 | 999.2. LED "party" + "sound-reactive" modes | Backlog | 0/0 | Captured | — |
+
+### Phase 5: Close v2.0 integration gaps: kiosk collection_changed listener (B-01) + profile_id-null guard on search/locate (B-02)
+
+**Goal:** [To be planned]
+**Requirements**: TBD
+**Depends on:** Phase 4
+**Plans:** 0 plans
+
+Plans:
+- [ ] TBD (run /gsd-plan-phase 5 to break down)
 
 ## Backlog
 
