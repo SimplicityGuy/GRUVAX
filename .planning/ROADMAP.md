@@ -52,6 +52,10 @@ Full v2.0 phase details: [`milestones/v2.0-ROADMAP.md`](./milestones/v2.0-ROADMA
 
 Fresh requirements to be defined via `/gsd-new-milestone`. Candidate scope parked in [`milestones/v2.0-REQUIREMENTS.md`](./milestones/v2.0-REQUIREMENTS.md) "Future Requirements" + the Backlog below: AUTH-02 (self-connect PAT), DEV-04 (QR pairing), API-04 (collection diff), SRCH-09 / OFF-01..04 / PRIV-01..04 (SPIDR-deferred), plus v2.0 tech-debt closure (DEV-02 SSE listeners; `write_boundary` profile scoping).
 
+**Committed scope** (promoted from backlog 2026-05-30 — gets a Phase number when `/gsd-new-milestone` builds the v2.1 roadmap):
+
+- **Shelf-overview mini-Kallax fill/occupancy** (was 999.1) — UX polish. Admin ShelfBinList `LocatorHeader` mini 4×4 Kallax should show per-cube fill/occupancy at a glance (fill shade or occupied/empty) instead of uniform dim tiles. Data already exists: `GET /api/admin/cubes` returns `is_empty` + `fill_level` per cube. Relates to Phase 5 (segment editor) + CUBE-05 empty-cube desaturated state. Artifacts: `.planning/phases/999.1-shelf-overview-mini-kallax-shows-per-cube-fill-occupancy/`.
+
 ## Progress
 
 | Phase | Milestone | Plans | Status | Completed |
@@ -71,29 +75,12 @@ Fresh requirements to be defined via `/gsd-new-milestone`. Candidate scope parke
 | 3. Devices + pairing | v2.0 | 7/7 | Complete | 2026-05-29 |
 | 4. Sync polish + diagnostics | v2.0 | 4/4 | Complete | 2026-05-30 |
 | 5. Close v2.0 integration gaps (B-01 + B-02) | v2.0 | 2/2 | Complete | 2026-05-30 |
-| 999.1. Shelf-overview mini-Kallax fill/occupancy | Backlog | 0/0 | Captured | — |
+| Shelf-overview mini-Kallax fill/occupancy (was 999.1) | v2.1 | 0/0 | Committed | — |
 | 999.2. LED "party" + "sound-reactive" modes | Backlog | 0/0 | Captured | — |
 
 ## Backlog
 
-### Phase 999.1: Shelf-overview mini-Kallax shows per-cube fill/occupancy (BACKLOG)
-
-**Goal:** [Captured for future planning]
-**Requirements:** TBD
-**Plans:** 0 plans
-
-On the admin **ShelfBinList** screen ("EDIT SHELF {letter}", route `/admin/cubes/:unit`),
-the `LocatorHeader` mini 4×4 Kallax overview renders every cube as a uniform empty/dim
-tile, so it conveys nothing about the shelf's contents. It should show per-cube
-fill/occupancy at a glance — e.g. a fill-level shade or occupied-vs-empty state per cube
-(and/or a shelf-level fill summary). Data already exists: `GET /api/admin/cubes` returns
-`is_empty` and `fill_level` per cube. Cosmetic/discoverability enhancement; not blocking.
-Relates to Phase 5 (segment editor) and the CUBE-05 empty-cube desaturated state in the
-design language.
-
-Plans:
-
-- [ ] TBD (promote with `/gsd-review-backlog` when ready)
+> **999.1 promoted 2026-05-30** → committed to v2.1 scope (see the v2.1 Planned section above).
 
 ### Phase 999.2: LED "party" mode + "sound-reactive" mode (BACKLOG)
 
