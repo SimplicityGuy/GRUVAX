@@ -2,7 +2,9 @@
 
 Query parameters:
   - ``release_id``:  Integer Discogs release ID (T-01-09: typed param, 422 on non-int).
-  - ``profile_id``:  Profile UUID validated against gruvax_browse_binding cookie (D2-04).
+  - ``profile_id``:  Profile UUID; optional — defaults to the bound profile from the
+                     gruvax_browse_binding cookie (D2-04, B-02).  When supplied,
+                     validated against the cookie (403 profile_mismatch on mismatch).
 
 Response (HTTP 200): Locked LocateResult JSON contract (D-10/D-11/D-12):
   ``{release_id, primary_cube, label_span, sub_cube_interval, confidence,
@@ -29,11 +31,13 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request
 from fastapi.responses import JSONResponse
+from starlette import status
 
 from gruvax.api.deps import (
     get_pool,
     get_segment_cache_for_profile,
     get_snapshot_for_profile,
+    resolve_profile_from_request,
 )
 from gruvax.db.queries import get_release_for_locate, increment_selection_count
 from gruvax.estimator.algorithm import locate
@@ -75,20 +79,23 @@ def _sub_interval_to_dict(si: SubInterval) -> dict[str, Any]:
 async def locate_endpoint(
     request: Request,
     release_id: int,
-    profile_id: str = Query(),
+    profile_id: str | None = Query(default=None),
     pool: Any = Depends(get_pool),
-    segment_cache: SegmentCache = Depends(get_segment_cache_for_profile),  # 400/403 (D2-04)
-    snapshot: CollectionSnapshot = Depends(get_snapshot_for_profile),  # 400/403 (D2-04)
 ) -> JSONResponse:
     """Return the locked LocateResult for a release scoped to a profile.
 
-    The profile_id query parameter is validated against the gruvax_browse_binding
-    session cookie (D2-04): 400 if unbound, 403 if mismatch.  Uses the profile's
-    per-profile segment_cache and snapshot for position estimation (CPU-only, POS-03).
+    The profile_id query parameter is optional; defaults to the bound profile from the
+    gruvax_browse_binding cookie (D2-04, B-02).  When omitted, the authoritative profile
+    is resolved via resolve_profile_from_request (cookie/device authoritative): 400 if
+    unbound, 403 if device_unknown/device_revoked.  When supplied, the resolved profile
+    must match the supplied value (403 profile_mismatch on mismatch).
+
+    Uses the profile's per-profile segment_cache and snapshot for position estimation
+    (CPU-only, POS-03).
 
     Args:
         release_id: Discogs release ID (integer; 422 on non-integer T-01-09).
-        profile_id: Profile UUID (required; validated against browse cookie, D2-04).
+        profile_id: Profile UUID (optional; defaults to cookie-bound profile, D2-04/B-02).
 
     Returns:
         HTTP 200 with the LocateResult JSON on success (including no-boundary case).
@@ -103,7 +110,34 @@ async def locate_endpoint(
     # OBS-05: measure request-total from handler entry (locate is CPU-only, POS-03).
     t0 = time.perf_counter()
 
-    record = await get_release_for_locate(pool, release_id, profile_id)
+    # B-02: resolve the authoritative profile from the request (cookie/device wins).
+    # resolve_profile_from_request raises 400 session_unbound or 403 device_unknown/
+    # device_revoked automatically — these propagate as HTTP errors.
+    resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
+
+    if profile_id is None:
+        # Omitted-param path (B-02): use the cookie-authoritative resolved profile.
+        effective_profile_id = resolved_profile_id
+    else:
+        # Supplied-param path: preserve D2-04 mismatch check exactly.
+        if resolved_profile_id != profile_id:
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail={"type": "profile_mismatch"},
+            )
+        effective_profile_id = profile_id
+
+    # Resolve the per-profile segment_cache and snapshot for position estimation.
+    # Calling the deps directly with the effective UUID — their internal mismatch checks
+    # pass because effective_profile_id == resolved_profile_id.
+    segment_cache: SegmentCache = await get_segment_cache_for_profile(
+        effective_profile_id, request, pool
+    )
+    snapshot: CollectionSnapshot = await get_snapshot_for_profile(
+        effective_profile_id, request, pool
+    )
+
+    record = await get_release_for_locate(pool, release_id, effective_profile_id)
 
     if record is None:
         # 404 path — do NOT increment selection_count (D-04: only successful locates count).
