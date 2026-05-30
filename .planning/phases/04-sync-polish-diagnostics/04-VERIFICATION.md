@@ -1,9 +1,11 @@
 ---
 phase: 04-sync-polish-diagnostics
-verified: 2026-05-29T00:00:00Z
-status: human_needed
+verified: 2026-05-30T00:00:00Z
+status: passed
 score: 5/5
 overrides_applied: 0
+uat_run: 2026-05-30
+uat_result: "4/5 human items PASS live + 1 code-verified (Sync-now spinner/toast — no live discogsography); SC2 profiles-list re-auth badge gap found during UAT and fixed (see 04-HUMAN-UAT.md Gaps)."
 human_verification:
   - test: "Open the admin UI, connect a profile, set a PAT, revoke the PAT in discogsography, then wait or manually trigger 'Sync now'. Confirm the RE-AUTH REQUIRED badge appears in the profile list/drawer and the NEEDS-REAUTH indicator appears when visiting GET /api/session."
     expected: "Profile list shows red RE-AUTH REQUIRED badge; kiosk session returns needs_reauth: true; kiosk renders ReauthBanner inline below StalenessBar."
