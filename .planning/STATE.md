@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-User Collections
-status: executing
-last_updated: "2026-05-30T19:08:11.185Z"
+status: ready_to_plan
+last_updated: 2026-05-30T19:38:04.503Z
 last_activity: 2026-05-30
 progress:
   total_phases: 7
   completed_phases: 4
   total_plans: 33
-  completed_plans: 33
+  completed_plans: 35
   percent: 57
+stopped_at: Phase 05 complete (2/2) — ready to discuss Phase 999.1
 ---
 
 # State: GRUVAX
@@ -21,7 +22,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 05 — close-v2-0-integration-gaps-kiosk-collection-changed-listene
+**Current Focus:** Phase 999.1 — shelf overview mini kallax shows per cube fill/occupancy (backlog)
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -29,9 +30,9 @@ progress:
 
 ## Current Position
 
-Phase: 05 (close-v2-0-integration-gaps-kiosk-collection-changed-listene) — EXECUTING
-Plan: 1 of 2
-Status: Executing Phase 05
+Phase: 999.1
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-30 -- Phase 05 execution started
 Resume file: .planning/phases/05-close-v2-0-integration-gaps-kiosk-collection-changed-listene/
 
