@@ -59,6 +59,12 @@ from gruvax.mqtt.client import connect_mqtt, disconnect_mqtt
 from gruvax.mqtt.lifecycle import HighlightRegistry, cancel_and_revert_all
 from gruvax.mqtt.publishers import publish_ambient
 from gruvax.settings import settings
+from gruvax.sync.nightly import (
+    _read_sync_cadence,
+    _startup_catchup_sweep,
+    _startup_purge_sweep,
+    _sync_loop,
+)
 
 
 if TYPE_CHECKING:
@@ -355,6 +361,38 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
 
     _state_task.add_done_callback(_log_state_task_exc)
     logger.info("all_profiles_state background refresh task scheduled (60s cadence)")
+
+    # ── 1d. Nightly sync scheduler — startup sweeps + loop (Phase 4 / SYN-01) ──
+    # Order (D4-11): one-shot sweeps run BEFORE registering the loop task so the
+    # sweeps' results are visible in logs as distinct startup phases.
+    #
+    # Step 1: read cadence for catch-up threshold.
+    _nightly_cadence = await _read_sync_cadence(pool)
+    #
+    # Step 2: catch-up sweep — sync any non-revoked profiles staler than the
+    # cadence (D4-02). Sequentially per profile; same skip policy as the loop.
+    await _startup_catchup_sweep(pool, app.state, _nightly_cadence)
+    #
+    # Step 3: purge sweep — remove profile_collection rows for soft-deleted
+    # profiles that were never purged at delete-time (D4-11/D4-12). Separate
+    # from catch-up: independently testable, visible as distinct startup phase.
+    await _startup_purge_sweep(pool)
+    #
+    # Step 4: register the nightly loop (CR-01 strong-ref pattern, same as
+    # _state_task above so the GC cannot cancel the task mid-flight).
+    _sync_task = asyncio.create_task(_sync_loop(pool, app.state))
+    app.state.background_tasks.add(_sync_task)
+    _sync_task.add_done_callback(app.state.background_tasks.discard)
+
+    def _log_sync_task_exc(t: asyncio.Task) -> None:  # type: ignore[type-arg]
+        if not t.cancelled() and t.exception() is not None:
+            logger.warning(
+                "nightly_sync background task exited unexpectedly: %s",
+                t.exception(),
+            )
+
+    _sync_task.add_done_callback(_log_sync_task_exc)
+    logger.info("nightly_sync background task scheduled (cadence=%s)", _nightly_cadence)
 
     # Publish ambient baseline for every cube — best-effort.  Never blocks startup.
     # Guard: only attempt when MQTT is connected (degraded mode → mqtt is None).

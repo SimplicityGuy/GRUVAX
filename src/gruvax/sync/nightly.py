@@ -225,7 +225,6 @@ async def _startup_catchup_sweep(
         return
 
     cadence_hours = {"24h": 24, "12h": 12, "6h": 6}.get(cadence, 24)
-    threshold_interval = f"{cadence_hours} hours"
 
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
@@ -234,9 +233,9 @@ async def _startup_catchup_sweep(
             "  AND app_token_revoked = FALSE "
             "  AND (last_sync_status IS NULL OR last_sync_status != 'in_progress') "
             "  AND (last_sync_at IS NULL "
-            "       OR last_sync_at < NOW() - INTERVAL %s) "
+            "       OR last_sync_at < NOW() - (%s * INTERVAL '1 hour')) "
             "ORDER BY created_at",
-            (threshold_interval,),
+            (cadence_hours,),
         )
         stale_ids = [row[0] for row in await cur.fetchall()]
 

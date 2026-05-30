@@ -98,7 +98,7 @@ async def client(db_pool) -> AsyncIterator[AsyncClient]:  # type: ignore[no-unty
         ) as ac,
     ):
         # Seed PIN via the app's live DB pool
-        pool = manager.app.state.db_pool
+        pool = app.state.db_pool
         async with pool.connection() as conn:
             await conn.execute(
                 "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
