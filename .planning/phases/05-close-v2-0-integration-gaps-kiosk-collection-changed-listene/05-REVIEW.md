@@ -15,7 +15,13 @@ findings:
   warning: 4
   info: 3
   total: 7
-status: issues_found
+status: resolved
+fixes_applied:
+  applied: 2026-05-30
+  scope: "Critical + Warning (4 warnings)"
+  warnings_fixed: 4   # WR-01 037413b, WR-02 0088072, WR-03 fbeda50, WR-04 e38fc22
+  info_deferred: 3    # IN-01/02/03 (Info, out of --fix default scope)
+  verification: "backend 35 passed + ruff + mypy --strict clean; frontend 6 passed + tsc clean"
 ---
 
 # Phase 5: Code Review Report
