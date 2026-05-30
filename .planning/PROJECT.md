@@ -10,26 +10,39 @@ Type artist, title, label, or catalog number → see the right cube (and a sub-c
 
 ## Current State
 
-**Shipped:** v1.0 MVP (2026-05-26) — see [MILESTONES.md](./MILESTONES.md#v10-mvp-shipped-2026-05-26) for the full breakdown.
+**Shipped:** v2.0 Multi-User Collections (2026-05-30) on top of v1.0 MVP (2026-05-26) — see [MILESTONES.md](./MILESTONES.md) for the full breakdown of both.
 
-The end-to-end search → cube highlight loop ships and is verified. Owner can sign in (PIN), enter and edit boundaries with diff-preview + undo, run guided setup and reshuffle wizards, and import/export boundaries + LED settings. The segment-aware estimator (Phase 5) supersedes the original §4.1 interpolation behind the same `LocateResult` contract, so multi-label bins resolve precisely. The LED contract over MQTT is fully wired and validated against an internal Mosquitto broker — hardware (ESP32 + WS2812B) drops into the contract without API changes. Observability (`/api/health`, `/api/version`, `/admin/diagnostics`, kiosk staleness banner), GitHub Actions CI (Alembic round-trip + p95 SLO gate), and Compose log limits + healthchecks all land.
+**v2.0** re-architected GRUVAX off discogsography's `gruvax.v_collection` cross-schema read and onto its **HTTP API** with per-user scoped PATs. Positioning, search, and `/api/locate` now run off a local `profile_collection` cache populated by a staging-swap sync (advisory lock + `COPY` + atomic swap). Multiple owner-managed **profiles** each have their own collection cache, boundaries, segments, settings, LED config, stats, per-profile SSE channel, and staleness — with cross-profile leakage impossible by construction. Headless RPi kiosks **pair to a profile** via a 4-digit code (<30s, confirmed by hardware UAT) and persist the binding across reboot. Sync runs **nightly** (DST-safe, configurable cadence) with 401 re-auth surfacing on kiosk + admin, per-profile diagnostics cards, and a Sync-now progress/toast path. All v1.0 SLOs and CI invariants (Alembic round-trip, p95 search ≤ 200 ms / locate ≤ 50 ms) carry over, parameterized per profile. 12/12 active requirements satisfied; audit `tech_debt` (no blockers — documented debt in DEV-02 SSE immediacy + `write_boundary` profile scoping).
 
-Codebase at v1.0 close: ~36k LOC across `src/`, `frontend/src/`, `tests/`. Stack: Python 3.13 + FastAPI 0.136 + psycopg 3.2 async + SQLAlchemy 2.0 async + Alembic 1.18 on the backend; React 19 + Vite 8 + TanStack Query + Zustand + GSAP on the frontend; eclipse-mosquitto:latest for the MQTT broker; Docker Compose for deployment; Raspberry Pi OS Trixie + labwc + Chromium for the kiosk.
+**v1.0** delivered the end-to-end search → cube highlight loop: PIN admin with boundary entry/edit (diff-preview + undo), setup/reshuffle wizards, import/export, the segment-aware estimator (Phase 5) behind the locked `LocateResult` contract, the LED contract over MQTT (hardware-stubbed), and the full observability + CI + Compose-hardening stack.
 
-## Current Milestone: v2.0 Multi-User Collections
+Stack: Python 3.13 + FastAPI 0.136 + psycopg 3.2 async + SQLAlchemy 2.0 async + Alembic 1.18 + httpx/stamina + Fernet (PAT-at-rest) + structlog on the backend; React 19 + Vite 8 + TanStack Query + Zustand + GSAP on the frontend; eclipse-mosquitto:latest for the MQTT broker; Docker Compose for deployment; Raspberry Pi OS Trixie + labwc + Chromium for the kiosk.
 
-**Goal:** Re-architect GRUVAX from direct-DB reads of discogsography to an HTTP-API integration with per-user collection authorization (scoped PATs), enabling multiple household members to each have their own collection on their own RPi kiosks, with one central GRUVAX server holding all profiles.
+## Shipped Milestone: v2.0 Multi-User Collections (2026-05-30)
 
-**Target features (13 reqs in scope, walking-skeleton-first):**
+**Goal (achieved):** Re-architect GRUVAX from direct-DB reads of discogsography to an HTTP-API integration with per-user collection authorization (scoped PATs), enabling multiple household members to each have their own collection on their own RPi kiosks, with one central GRUVAX server holding all profiles.
+
+**Delivered (13 reqs in scope, walking-skeleton-first):**
 
 - **P1 — Walking skeleton** — API client (httpx + paged + 401/403/429/5xx retry) + single-profile sync (staging-swap with advisory lock); retire `gruvax.v_collection` and the read-only Postgres grant; positioning runs off the local `profile_collection` cache; staleness reads `profiles.last_sync_at` (single profile).
 - **P2 — Multi-profile** — Full `profiles` table with Fernet-encrypted PAT storage; `profile_id NOT NULL` migration across 7 v1 tables (`cube_boundaries`, `segments`, `change_log`, `change_sets`, `settings`, `record_stats`, `ambient_baseline`); profile manager admin UI; browser session profile picker with auto-bind on 1-profile-only; per-profile SSE channel.
 - **P3 — Devices + pairing** — `devices` + `pairing_codes` schemas; HttpOnly fingerprint cookie; 4-digit code pairing flow (5-min TTL, auto-reroll on expiry, reuses v1 in-app numeric keypad); devices admin UI with pending/paired/revoked groupings + drawer (rename/change-profile/unbind/revoke).
 - **P4 — Polish** — Nightly background sync (24h @ 03:00 local default, configurable 24h/12h/6h/off); 401 reauth UI (profile-list badge + kiosk inline banner); per-profile `/admin/diagnostics` cards; profile soft-delete cache-purge background task; "Sync now" progress + completion toast.
 
-**Status:** Phases 1–5 complete (2026-05-30). Phase 5 (closure phase) wired the two SSE/session seams the milestone audit surfaced: B-01 — the kiosk now consumes `collection_changed` so search results refresh live after nightly/manual sync; and B-02 — `/api/search` + `/api/locate` accept an omitted `profile_id`, resolving the cookie-authoritative bound profile (was a 422 before session bootstrap), while preserving D2-04 validation exactly (400 session_unbound, 403 profile_mismatch — no cross-profile leak). API-02, SYN-01, SYN-02 restored end-to-end.
+**Status:** ✅ Shipped 2026-05-30 — 5 phases, 35 plans, all verified. Phase 5 (closure phase) wired the two SSE/session seams the milestone audit surfaced: B-01 — the kiosk now consumes `collection_changed` so search results refresh live after nightly/manual sync; and B-02 — `/api/search` + `/api/locate` accept an omitted `profile_id`, resolving the cookie-authoritative bound profile (was a 422 before session bootstrap), while preserving D2-04 validation exactly (400 session_unbound, 403 profile_mismatch — no cross-profile leak). API-02, SYN-01, SYN-02 restored end-to-end. Audit `tech_debt` (no blockers).
 
-**External prereq (out of milestone, in flight):** discogsography v2 ships first — `app_tokens` table + catalog# verification/exposure + `require_app_token` dependency + scoped settings UI. Briefed at `background/discogsography-v2-app-tokens-brief.md` (gitignored). GRUVAX P1 does not start until discogsography ships the contract artifact at `docs/specs/v2-gruvax-integration.md` in their repo.
+**External prereq:** discogsography v2 ships the contract for production use — `app_tokens` table + catalog# verification/exposure + `require_app_token` dependency + scoped settings UI (briefed at `background/discogsography-v2-app-tokens-brief.md`, gitignored). GRUVAX's v2.0 code was built and verified against a canonical in-process fake-discogsography contract fixture; wiring to the live discogsography API is a deployment-time step once their contract artifact at `docs/specs/v2-gruvax-integration.md` lands.
+
+## Next Milestone: v2.1 — Resilience + Privacy + UX polish (Planned)
+
+Fresh requirements to be defined via `/gsd-new-milestone`. Candidate scope already parked in the v2.0 requirements archive and backlog:
+
+- **Per-profile self-connect PAT** (AUTH-02 — invite-token model; member pastes own token, owner never sees it)
+- **OAuth2 device-authorization grant** (AUTH-01 — no PAT crosses the household) — currently slotted v2.2
+- **QR-code RPi pairing** (DEV-04 — kiosk shows QR, admin scans on phone)
+- **Collection diff highlighting** (API-04 — "5 new records since last sync")
+- **9 SPIDR-deferred v1 reqs** — SRCH-09 (recently-pulled list), OFF-01..04 (offline/reconnect UX), PRIV-01..04 (session-only history, no server query text, aggregate-only stats, no-PIN reset-kiosk)
+- **v2.0 tech-debt closure** — DEV-02 SSE-immediate kiosk switch/revoke listeners; `profile_id` in the `write_boundary` WHERE clause before any multi-profile boundary-editing UI
 
 **Deferred (NOT in v2.0):**
 
@@ -102,7 +115,14 @@ Codebase at v1.0 close: ~36k LOC across `src/`, `frontend/src/`, `tests/`. Stack
 | Nordic Grid design language (Phase 5 onward) | Kallax-cube-as-UI-atom design system unifies kiosk + admin + diagrams + favicons under tokens. | ✓ Good — admin Diagnostics page in Phase 8 used it verbatim |
 | LED color choices are admin-configurable, not hard-coded | Colors in earlier discussions (purple for label-span, etc.) were suggestions only; admin should be able to tune. | ✓ Good — shipped in Phase 6 with `/admin/settings` color/brightness controls |
 | Vertical MVP slicing (every phase end-to-end user-observable) | No horizontal infrastructure-only phases — every phase ships something the owner can use. | ✓ Good — kept the project shippable at every checkpoint |
-| Closure phase pattern for milestone-audit gaps (Phase 10) | When an audit surfaces cross-phase seams that no single per-phase verification can catch, absorb them in a single closure phase rather than retrofitting earlier phases. | ✓ Good — INT-A + INT-B + traceability reconcile landed cleanly in 3 plans |
+| Closure phase pattern for milestone-audit gaps (Phase 10) | When an audit surfaces cross-phase seams that no single per-phase verification can catch, absorb them in a single closure phase rather than retrofitting earlier phases. | ✓ Good — INT-A + INT-B + traceability reconcile landed cleanly in 3 plans; reused as v2.0 Phase 5 |
+| (v2.0) HTTP API + scoped PAT replaces `v_collection` cross-schema read | Per-user authorization needs a real token boundary, not a shared DB grant; `v_collection` couldn't express per-member collections. | ✓ Good — `v_collection` + grant fully retired (migration 0009); positioning runs off a local `profile_collection` cache |
+| (v2.0) Local `profile_collection` cache via staging-swap sync | Keep API latency off the search hot path and preserve the v1.0 p95 SLOs. | ✓ Good — advisory-lock + `COPY` + atomic swap; SLOs held under the parameterized CI gate |
+| (v2.0) Fernet-encrypted PAT at rest + structlog secret redactor + stdin-only rotation CLI | Never store or log a plaintext token; rotation must not leak via shell history. | ✓ Good — no plaintext token in DB or logs |
+| (v2.0) Per-profile cache / bus / SSE channel keyed by `profile_id` | Cross-profile data isolation should be structural, not enforced by filters scattered through handlers. | ✓ Good — cross-profile leakage impossible by construction (OOS-04 satisfied) |
+| (v2.0) Sequential cross-repo coordination; build against a fake-discogsography contract fixture | Avoid contract drift between GRUVAX and discogsography; let each ship on its own clock. | ✓ Good — all 5 phases verified against the canonical fixture; live wiring is a deployment step |
+| (v2.0) 4-digit code pairing (flow A), reusing the v1 in-app numeric keypad | Headless RPi needs a pairing path with no keyboard; QR adds a camera dependency. | ✓ Good — <30s end-to-end confirmed by hardware UAT; QR deferred to v2.1 |
+| (v2.0) DST-safe in-process nightly scheduler (`asyncio.create_task` in lifespan) | No external cron/scheduler for a single-host home-LAN deployment. | ✓ Good — `next_fire_after()` DST handling; cadence configurable + persisted |
 
 ## Evolution
 
@@ -123,4 +143,4 @@ This document evolves at phase transitions and milestone boundaries.
 5. REQUIREMENTS.md regenerated fresh for the next milestone
 
 ---
-*Last updated: 2026-05-30 — Phase 5 (v2.0 integration-gap closure) complete. Originally written 2026-05-26 at v2.0 milestone kickoff. v1.0 MVP shipped 2026-05-26 with 10 phases, 50 plans, ~36k LOC, 75/75 in-scope requirements satisfied (9 SPIDR-deferred items formally relocated to v2/Backlog). v2.0 introduces multi-user collections via discogsography's HTTP API + scoped PATs (13 reqs across 4 phases; phase numbering reset per `--reset-phase-numbers`). Full v1.0 archive: [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMAP.md), [`milestones/v1.0-REQUIREMENTS.md`](./milestones/v1.0-REQUIREMENTS.md), [`milestones/v1.0-MILESTONE-AUDIT.md`](./milestones/v1.0-MILESTONE-AUDIT.md). Project history: [`MILESTONES.md`](./MILESTONES.md).*
+*Last updated: 2026-05-30 after v2.0 milestone close. v2.0 Multi-User Collections shipped with 5 phases, 35 plans, +96k LOC across 516 files, 12/12 active requirements satisfied (AUTH-01 deferred to v2.2); audit `tech_debt` (no blockers). v1.0 MVP shipped 2026-05-26 with 10 phases, 50 plans, ~36k LOC, 75/75 in-scope requirements satisfied. Next: v2.1 (resilience + privacy + UX polish) — define fresh requirements via `/gsd-new-milestone`. Archives: [`milestones/v2.0-ROADMAP.md`](./milestones/v2.0-ROADMAP.md), [`milestones/v2.0-REQUIREMENTS.md`](./milestones/v2.0-REQUIREMENTS.md), [`milestones/v2.0-MILESTONE-AUDIT.md`](./milestones/v2.0-MILESTONE-AUDIT.md); v1.0: [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMAP.md), [`milestones/v1.0-REQUIREMENTS.md`](./milestones/v1.0-REQUIREMENTS.md). Project history: [`MILESTONES.md`](./MILESTONES.md).*

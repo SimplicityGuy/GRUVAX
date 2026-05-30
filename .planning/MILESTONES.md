@@ -1,5 +1,65 @@
 # Milestones
 
+## v2.0 Multi-User Collections (Shipped: 2026-05-30)
+
+**Timeline:** 2026-05-26 → 2026-05-30 (5 days)
+**Phases:** 5 (1, 2, 3, 4, 5) — all complete and verified
+**Plans:** 35 plans, 35 SUMMARY.md files
+**Code:** +96,155 / −1,688 across 516 files (Python 3.13 + TypeScript/React 19)
+**Git range:** `545fb45` (`feat(01-00)` wave-0 scaffolding) → `854fa3c` (audit close prep); 169 commits, 25 `feat(`
+**Quick tasks completed during milestone:** 1 (260530-j7t — LED-action button styling)
+**Audit:** `tech_debt` (no blockers; 12/12 active requirements satisfied; all governance gaps resolved) — see [`milestones/v2.0-MILESTONE-AUDIT.md`](./milestones/v2.0-MILESTONE-AUDIT.md)
+
+### North-star outcome
+
+> Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms.
+
+The Core Value loop is preserved through a full re-architecture: positioning, search, and `/api/locate` now run off a local `profile_collection` cache populated from discogsography's **HTTP API** (scoped PAT) instead of the retired `gruvax.v_collection` cross-schema read. The p95 SLOs (`/api/search` ≤ 200 ms, `/api/locate` ≤ 50 ms) hold under the v1.0 Phase 8 CI benchmark gate, now parameterized per profile. For a single-profile deployment every end-to-end flow is wired clean.
+
+### Key accomplishments by phase
+
+- **Phase 1 — Walking skeleton (API client + single-profile sync).** `httpx` + `stamina` `DiscogsographyClient` with locked 401/403/429/5xx/network retry semantics; Fernet PAT-at-rest + structlog secret redactor; canonical in-process fake-discogsography FastAPI fixture shared by tests *and* the Compose sibling service. Alembic 0009 lands `profiles` + `profile_collection`, drops `v_collection` and revokes the read-only grant (clean round-trip). `sync_profile()` staging-swap (advisory lock + psycopg3 `COPY FROM STDIN` TEMP table + atomic DELETE/INSERT/UPDATE + inline cache refresh). PIN-gated manual sync endpoint + `gruvax-set-pat` / `gruvax-sync` CLIs. `/api/health` three-state HTTP-probe rewire; Compose boots a fake-discogsography sibling + one-shot idempotent init-sync container.
+- **Phase 2 — Multi-profile migration + profile manager.** Migration 0010 tightens `profile_id NOT NULL` on the 5 per-profile data tables (4 composite PKs; the 2 global/infra tables stay nullable), backfilling v1 data to the deterministic default profile (clean round-trip). Per-profile cache / bus / state registries + per-profile resolution deps; per-profile SSE channel `/api/events/{profile_id}` (cross-profile leakage impossible by construction). Browse-binding session (`GET /api/session` bootstrap + auto-bind + independent cookie). Profile CRUD + connect/rotate-PAT + 202+poll sync + soft-delete eviction. Profile-manager admin UI (PROFILES tab, status badges, bottom-sheet drawer with poll-until-terminal SYNCING → CONNECTED auto-transition + toast); kiosk "shelf layout not set up yet" affordance for zero-boundary profiles.
+- **Phase 3 — Devices + pairing.** Migration 0011 (`devices` + `pairing_codes` + partial-unique indexes); HttpOnly + SameSite=Strict fingerprint cookie persistent across reboot. 4-digit code pairing flow A (5-min TTL, auto-reroll, `consumed_at` one-shot guard); atomic PIN-gated rate-limited bind; device-aware resolution + per-request revoke guard; profile soft-delete detaches bound devices. Devices admin UI (PENDING / PAIRED / REVOKED groupings + per-device drawer: rename / change-profile / unbind / revoke) + NumericKeypad bind. Pi provisioning artifacts (`start-kiosk.sh` + systemd unit) + Playwright reboot-persistence test. <30s end-to-end pairing confirmed via hardware UAT 2026-05-30.
+- **Phase 4 — Sync polish + diagnostics.** DST-safe nightly `_sync_loop()` (03:00 local default; cadence 24h/12h/6h/off, persisted) + startup catch-up & purge sweeps; `needs_reauth` on `GET /api/session` (401 surfaces within ≤24h, immediate on manual sync). Soft-delete cache-purge background task that preserves audit lineage. Per-profile `/admin/diagnostics` cards (Nordic Grid typography, 30s refetch). Kiosk ReauthBanner + admin re-auth badge + Sync-now spinner/elapsed/completion toast + cadence select.
+- **Phase 5 — Close v2.0 integration gaps (INSERTED — audit-driven closure).** B-01: kiosk now consumes the `collection_changed` SSE event so search results refresh live after nightly/manual sync (no manual reload). B-02: `/api/search` + `/api/locate` accept an omitted `profile_id`, resolving the cookie-authoritative bound profile server-side (was a 422 before session bootstrap) while preserving D2-04 validation exactly (400 session_unbound, 403 profile_mismatch — no cross-profile leak); frontend gates the fetch on a resolved `boundProfileId`. API-02, SYN-01, SYN-02 restored end-to-end.
+
+### Key decisions
+
+| Decision | Outcome |
+|----------|---------|
+| Re-architect from `v_collection` cross-schema reads to discogsography **HTTP API** + scoped PATs | ✓ Good — clean per-user authorization boundary; `v_collection` and its grant fully retired in migration 0009 |
+| Local `profile_collection` cache as the positioning/search source (staging-swap sync) | ✓ Good — SLOs preserved off in-memory + local-table reads; API latency kept off the hot path |
+| Fernet-encrypted PAT at rest + structlog secret redactor | ✓ Good — no plaintext token in DB or logs; stdin-only `gruvax-set-pat` rotation |
+| Per-profile cache/bus/SSE channel keyed by `profile_id` | ✓ Good — cross-profile data leakage impossible by construction (OOS-04 satisfied structurally) |
+| Sequential cross-repo coordination (discogsography v2 ships before GRUVAX P1) | ✓ Good — built against a canonical fake-discogsography contract fixture; no stub drift |
+| 4-digit code pairing flow A (reuses v1 in-app numeric keypad) | ✓ Good — <30s end-to-end confirmed via hardware UAT; QR/scan deferred to v2.1 |
+| DST-safe `next_fire_after()` nightly scheduler via `asyncio.create_task` in lifespan | ✓ Good — no cron/external scheduler; cadence configurable + persisted |
+| Closure-phase pattern for milestone-audit seams (Phase 5, as v1.0 did with Phase 10) | ✓ Good — B-01 + B-02 absorbed in 2 plans rather than retrofitting earlier phases |
+
+### Tech debt carried forward (documented, non-blocking)
+
+- **DEV-02 SSE immediacy** — `device_reassigned` / `device_revoked` SSE events are published but have no `KioskView.tsx` consumer; kiosk profile switch / revocation recovery happens via the 5-min session poll, not the immediate SSE reload that 03-VERIFICATION SC3 over-claimed. WARNING for multi-profile; harmless for single-profile. Follow-up: add the two listeners.
+- **`write_boundary` profile scoping** — the boundary UPDATE has no `profile_id` in its WHERE clause. Safe today (admin boundary editing is default-profile-only in v2.0) but structurally unsound before any multi-profile boundary-editing UI ships (PROF-04 forward-looking).
+- **`boundary_changed` SSE fan-out** — publishes only to the default profile's SSE bus (P1-compat alias); non-default-profile kiosks don't receive admin boundary edits via SSE. Default-profile-only is in v2.0 scope.
+- **Doc drift (cosmetic)** — stale `collection_changed` "no payload" comment (KioskView.tsx:340); unreachable `get_event_bus` 503-path docstring (deps.py); a mislabeled test-evidence attribution in 05-VERIFICATION truth #6.
+
+### Deferred (not in v2.0)
+
+- **AUTH-01** — OAuth2 device-authorization grant → v2.2
+- **AUTH-02 / DEV-04 / API-04 / SRCH-09 / OFF-01..04 / PRIV-01..04** — v2.1 resilience + privacy + UX-polish milestone
+- **PROF-05 / PROF-06 / API-05** — v2.x power-user features
+- **Real LED hardware end-to-end** (ESP32 + WS2812B firmware) + 6 Phase 6 MQTT wire-level checkpoints → independent hardware milestone
+- **Phase 999.1** (shelf-overview mini-Kallax fill/occupancy) + **Phase 999.2** (LED party / sound-reactive) → Backlog
+
+### Audit trail
+
+- Pre-close audit: [`milestones/v2.0-MILESTONE-AUDIT.md`](./milestones/v2.0-MILESTONE-AUDIT.md) (re-audit post-Phase-5; `gaps_found` → `tech_debt` after B-01/B-02 closure + governance resolution)
+- Archived roadmap: [`milestones/v2.0-ROADMAP.md`](./milestones/v2.0-ROADMAP.md)
+- Archived requirements: [`milestones/v2.0-REQUIREMENTS.md`](./milestones/v2.0-REQUIREMENTS.md) (13 in scope: 12 satisfied + 1 deferred; 5 external discogsography prereqs tracked separately)
+
+---
+
 ## v1.0 MVP (Shipped: 2026-05-26)
 
 **Timeline:** 2026-05-17 → 2026-05-26 (10 days)

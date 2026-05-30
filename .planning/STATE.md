@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.0
 milestone_name: Multi-User Collections
-status: ready_to_plan
-last_updated: 2026-05-30T19:38:04.503Z
+status: Awaiting next milestone
+last_updated: "2026-05-30T23:02:03.072Z"
 last_activity: 2026-05-30
 progress:
-  total_phases: 7
-  completed_phases: 4
-  total_plans: 33
+  total_phases: 5
+  completed_phases: 5
+  total_plans: 35
   completed_plans: 35
-  percent: 57
-stopped_at: Phase 05 complete (2/2) — ready to discuss Phase 999.1
+  percent: 100
 ---
 
 # State: GRUVAX
@@ -22,31 +21,30 @@ stopped_at: Phase 05 complete (2/2) — ready to discuss Phase 999.1
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 999.1 — shelf overview mini kallax shows per cube fill/occupancy (backlog)
+**Current Focus:** v2.0 shipped (2026-05-30). Planning next milestone — v2.1 Resilience + Privacy + UX polish (run `/gsd-new-milestone`).
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
-**Granularity:** standard (4 phases planned; ~17 plans across P1–P4 per the refined spec's estimate)
+**Granularity:** standard
 
 ## Current Position
 
-Phase: 999.1
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-30 -- Completed quick task 260530-j7t: style unstyled LED-action buttons (.settings-btn-secondary)
-Resume file: .planning/phases/05-close-v2-0-integration-gaps-kiosk-collection-changed-listene/
+Phase: Milestone v2.0 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-05-30 — Milestone v2.0 completed and archived
 
 ## Performance Metrics (v2.0)
 
 | Metric | Value |
 |--------|-------|
 | v2.0 active requirements | 12 |
-| Requirements mapped to phases | 12 / 12 (100%) |
-| Deferred (not in P1–P4) | 1 (AUTH-01 → v2.2) |
+| Requirements satisfied | 12 / 12 (100%) |
+| Deferred (not in v2.0) | 1 (AUTH-01 → v2.2) |
 | External prereqs (discogsography) | 5 (DGS-EXT-01..05) |
-| Phases planned | 4 |
-| Plans complete | 0 |
-| Phases shipped | 0 |
+| Phases shipped | 5 / 5 |
+| Plans complete | 35 |
+| Audit | tech_debt (no blockers) |
 
 ### Historical (v1.0, shipped 2026-05-26)
 
@@ -59,11 +57,10 @@ Resume file: .planning/phases/05-close-v2-0-integration-gaps-kiosk-collection-ch
 
 ## Accumulated Context
 
-### Pending Todos
+### Pending Todos (carried into next milestone)
 
-- [ ] DGS-PREREQ closes (external — discogsography v2 ships `app_tokens` + catalog# exposure + contract artifact)
-- [ ] User approves v2.0 ROADMAP.md (P1–P4)
-- [ ] Once DGS-PREREQ closes: read `docs/specs/v2-gruvax-integration.md` from discogsography repo; reconcile any contract drift; run `/gsd-discuss-phase 1`
+- [ ] **Deployment-time:** wire the live discogsography API once their v2 contract artifact (`docs/specs/v2-gruvax-integration.md`) lands; reconcile any drift against the fake-discogsography fixture GRUVAX built against.
+- [ ] **v2.0 tech debt (non-blocking):** add `device_reassigned` / `device_revoked` SSE listeners to `KioskView.tsx` (DEV-02 immediacy); add `profile_id` to the `write_boundary` UPDATE WHERE clause before any multi-profile boundary-editing UI ships.
 
 ### Roadmap Evolution
 
@@ -108,25 +105,15 @@ Resume file: .planning/phases/05-close-v2-0-integration-gaps-kiosk-collection-ch
 - **Endpoint tests use `dependency_overrides`, not `patch`** — FastAPI resolves `Depends(require_admin)` by function reference at route registration.
 - **Closure phase pattern (v1.0 Phase 10)** — when an audit surfaces cross-phase seams that no single per-phase verification can catch, absorb them in a single closure phase rather than retrofitting earlier phases.
 
-### Open Questions
+### Open Questions (resolved at v2.0 close; confirm against the live discogsography contract at deploy time)
 
-To be resolved during plan-phase or as the discogsography agent reports:
-
-- **Catalog# exposure outcome (HIGH risk)** — discogsography agent's verification spike determines whether their P1 is small (already exposed) or larger (missing column + Discogs ingestion update). User to be informed when known.
-- **`user_id` location in the discogsography collection envelope** — header or top-level field; TBD by discogsography agent; surfaces in their `docs/specs/v2-gruvax-integration.md` artifact.
-- **Fingerprint cookie persistence across RPi reboot** — Chromium with `--user-data-dir` on persistent storage should preserve cookies. Verify during P3 implementation.
-- **Cookie storage on iOS Safari** (browser session profile-picker path) — Safari restricts cross-site cookies. Same-site is fine since all traffic is to `gruvax.lan`; verify nonetheless.
-- **Discogsography API rate limits in practice** — full sync of 3,000 items at `per_page=200` = 15 requests; manual "Sync all profiles now" hitting 4 profiles back-to-back ~ 60 requests in <1 min. Check against the rate-limit policy in the contract artifact.
-
-### Active Todos
-
-- [ ] DGS-PREREQ ships (external)
-- [ ] User approves v2.0 ROADMAP.md
-- [ ] Run `/gsd-discuss-phase 1` once DGS-PREREQ closes
+- **Fingerprint cookie persistence across RPi reboot** — RESOLVED: confirmed via Phase 3 Playwright reboot-persistence test + hardware UAT 2026-05-30.
+- **Catalog# exposure / `user_id` envelope location / API rate limits** — modeled in the fake-discogsography contract fixture GRUVAX built against; re-verify against the real discogsography artifact (`docs/specs/v2-gruvax-integration.md`) when wiring the live API at deploy time.
+- **Cookie storage on iOS Safari** (browser session profile-picker path) — same-site only (all traffic to `gruvax.lan`); spot-check on real hardware.
 
 ### Blockers
 
-**DGS-PREREQ (external)** — GRUVAX P1 cannot start until discogsography ships the contract artifact at `docs/specs/v2-gruvax-integration.md`. Briefed at `background/discogsography-v2-app-tokens-brief.md` (gitignored). The discogsography agent session is in flight.
+None. (The pre-execution `DGS-PREREQ` external gate is no longer a blocker for the *milestone* — GRUVAX's v2.0 code was built and verified against a canonical fake-discogsography contract fixture. Wiring the live discogsography API is a deployment-time task tracked under Pending Todos.)
 
 ### Quick Tasks Completed
 
@@ -145,15 +132,14 @@ To be resolved during plan-phase or as the discogsography agent reports:
 
 ## Session Continuity
 
-**Last activity:** 2026-05-30
-**Prev:** 2026-05-26 (v1.0 milestone archived: Phases 1–10, 50 plans, 10 days, ~36k LOC. 9 SPIDR-deferred reqs relocated to v2/Backlog. v2.0 milestone created via `/gsd-new-milestone v2.0 --reset-phase-numbers`. ROADMAP/REQUIREMENTS/STATE rewritten for v2.0 P1–P4 with 12 active reqs mapped 100%; AUTH-01 deferred to v2.2.)
-**Prev2:** 2026-05-25 (Phase 10 Plan 03 COMPLETE — traceability/count reconcile (docs-only). v1.0 internal consistency achieved: 84 total = 75 satisfied + 9 deferred.)
-**Next action:** /clear then /gsd-execute-phase 5
+**Last activity:** 2026-05-30 — v2.0 milestone closed and archived (5 phases, 35 plans; tag v2.0). ROADMAP/REQUIREMENTS/audit archived to `milestones/v2.0-*`; REQUIREMENTS.md removed (fresh for next milestone); PROJECT.md evolved; RETROSPECTIVE.md updated.
+**Prev:** 2026-05-30 (Phase 5 closure complete — B-01 + B-02 wired; milestone re-audit `gaps_found` → `tech_debt`).
+**Prev2:** 2026-05-26 (v1.0 milestone archived; v2.0 milestone created via `--reset-phase-numbers`.)
+**Next action:** /clear then /gsd-new-milestone
 
 ---
 *State initialized: 2026-05-19 with roadmap creation. v2.0 milestone reset: 2026-05-26.*
 
 ## Operator Next Steps
 
-- Wait for DGS-PREREQ closure (discogsography v2 in flight)
-- Once DGS-PREREQ closes: read the contract artifact, reconcile drift, run `/gsd-discuss-phase 1`
+- Start the next milestone with /gsd-new-milestone
