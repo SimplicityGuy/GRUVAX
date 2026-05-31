@@ -129,7 +129,14 @@ def profile_b(db_pool) -> Any:  # type: ignore[no-untyped-def]
             "  SET first_label = EXCLUDED.first_label, "
             "      first_catalog = EXCLUDED.first_catalog, "
             "      updated_at = now()",
-            (b_uuid, _SHARED_UNIT, _SHARED_ROW, _SHARED_COL, _B_SENTINEL_LABEL, _B_SENTINEL_CATALOG),
+            (
+                b_uuid,
+                _SHARED_UNIT,
+                _SHARED_ROW,
+                _SHARED_COL,
+                _B_SENTINEL_LABEL,
+                _B_SENTINEL_CATALOG,
+            ),
         )
         conn.commit()
 
@@ -309,9 +316,7 @@ async def test_unbound_admin_write_returns_400(live_server) -> None:  # type: ig
 
     # Build cookie dict with ONLY the session and CSRF cookies, NO browse-binding.
     session_only_cookies = {
-        k: v
-        for k, v in auth["cookies"].items()
-        if k not in (BROWSE_BINDING_COOKIE,)
+        k: v for k, v in auth["cookies"].items() if k not in (BROWSE_BINDING_COOKIE,)
     }
 
     async with httpx.AsyncClient(base_url=live_server) as ac:
@@ -328,8 +333,7 @@ async def test_unbound_admin_write_returns_400(live_server) -> None:  # type: ig
         )
 
     assert res.status_code == 400, (
-        f"Expected 400 session_unbound for unbound admin write, "
-        f"got {res.status_code}: {res.text}"
+        f"Expected 400 session_unbound for unbound admin write, got {res.status_code}: {res.text}"
     )
     body = res.json()
     detail = body.get("detail", body)
@@ -422,7 +426,7 @@ async def test_boundary_changed_fans_out_per_profile(
             ) as check_stream,
         ):
             b_channel_status = check_stream.status_code
-    except (httpx.TimeoutException, httpx.RemoteProtocolError):
+    except httpx.TimeoutException, httpx.RemoteProtocolError:
         pass  # timeout reading body is fine — we only care about the status line
 
     assert b_channel_status == 200, (
@@ -461,7 +465,7 @@ async def test_boundary_changed_fans_out_per_profile(
                     if "boundary_changed" in line:
                         received_by_a.append(line)
                         return
-        except (httpx.TimeoutException, httpx.RemoteProtocolError):
+        except httpx.TimeoutException, httpx.RemoteProtocolError:
             a_ready.set()
 
     async def stream_b() -> None:
@@ -484,7 +488,7 @@ async def test_boundary_changed_fans_out_per_profile(
                     if "boundary_changed" in line:
                         received_by_b.append(line)
                         return
-        except (httpx.TimeoutException, httpx.RemoteProtocolError):
+        except httpx.TimeoutException, httpx.RemoteProtocolError:
             b_ready.set()
 
     task_a = asyncio.create_task(stream_a())
@@ -570,7 +574,7 @@ async def test_admin_editing_fans_out_per_profile(
             ) as check_stream,
         ):
             b_channel_status_2 = check_stream.status_code
-    except (httpx.TimeoutException, httpx.RemoteProtocolError):
+    except httpx.TimeoutException, httpx.RemoteProtocolError:
         pass
 
     assert b_channel_status_2 == 200, (
@@ -607,7 +611,7 @@ async def test_admin_editing_fans_out_per_profile(
                     if "admin_editing" in line:
                         received_by_a.append(line)
                         return
-        except (httpx.TimeoutException, httpx.RemoteProtocolError):
+        except httpx.TimeoutException, httpx.RemoteProtocolError:
             a_ready.set()
 
     async def stream_b() -> None:
@@ -630,7 +634,7 @@ async def test_admin_editing_fans_out_per_profile(
                     if "admin_editing" in line:
                         received_by_b.append(line)
                         return
-        except (httpx.TimeoutException, httpx.RemoteProtocolError):
+        except httpx.TimeoutException, httpx.RemoteProtocolError:
             b_ready.set()
 
     task_a = asyncio.create_task(stream_a())
@@ -643,7 +647,10 @@ async def test_admin_editing_fans_out_per_profile(
     await asyncio.sleep(0.05)
 
     # POST /api/admin/editing with browse-binding bound to profile A.
-    payload = {"cube_ids": [{"unit": _SHARED_UNIT, "row": _SHARED_ROW, "col": _SHARED_COL}], "editing": True}
+    payload = {
+        "cube_ids": [{"unit": _SHARED_UNIT, "row": _SHARED_ROW, "col": _SHARED_COL}],
+        "editing": True,
+    }
     async with httpx.AsyncClient(base_url=live_server) as ac:
         edit_res = await ac.post(
             "/api/admin/editing",
