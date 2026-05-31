@@ -565,6 +565,12 @@ def _compute_movement_counts(
     # For the proposed (after) state: we cannot re-derive without writing to DB
     # (Pitfall A), so we use the current count as an approximation.
     # The actual post-commit count will be computed by the live SegmentCache.
+    #
+    # IN-01: records_after / delta / fill_level_after are a current-snapshot
+    # approximation, not a projected post-commit value.  delta is therefore
+    # structurally 0 for every dry-run call.  The frontend already labels these
+    # fields with "(approx.)" to surface this semantics to the user; no API
+    # contract change is needed here.
     records_after = records_before  # approximation; real diff computed post-commit
 
     return [
