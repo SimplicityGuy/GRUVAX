@@ -167,6 +167,7 @@ async def get_admin_cubes(
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> dict[str, Any]:
     """Return all cubes with fill levels.
 
@@ -174,18 +175,23 @@ async def get_admin_cubes(
     Uses SegmentCache to count records per bin (no last_* range needed).
     Values > 1.0 mean overstuffed.  0 for is_empty cubes.
 
+    Phase 6 (CR-03): scoped to the resolved profile_id from get_write_target so
+    only the requesting admin's cubes are returned (no cross-profile row leakage).
+
     Response: ``{cubes: [{unit_id, row, col, is_empty, fill_level,
                            first_label, first_catalog}, ...]}``
     """
+    profile_id, _ = _write_target
     nominal_capacity = _get_nominal_capacity(request)
 
     sql = """
 SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
+WHERE profile_id = %s::uuid
 ORDER BY unit_id, row, col
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql)
+        await cur.execute(sql, (profile_id,))
         rows_raw = await cur.fetchall()
         cols_meta = [desc[0] for desc in (cur.description or [])]
 
@@ -216,23 +222,29 @@ async def get_cube_boundary(
     col: int = Path(ge=0),
     pool: Any = Depends(get_pool),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> dict[str, Any]:
     """Return one cube's current boundary values.
 
     Phase 5: returns only cut-point columns (first_label, first_catalog, is_empty).
     last_label / last_catalog are no longer stored in cube_boundaries (SEG-01).
 
+    Phase 6 (CR-03): scoped to the resolved profile_id from get_write_target so
+    the admin sees only their profile's row, not another profile's row at the same
+    physical coordinate.
+
     Response: ``{unit_id, row, col, first_label, first_catalog, is_empty}``
 
     HTTP 404 if no cube exists for the given coordinates.
     """
+    profile_id, _ = _write_target
     sql = """
 SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
-WHERE unit_id = %s AND row = %s AND col = %s
+WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql, (unit_id, row, col))
+        await cur.execute(sql, (profile_id, unit_id, row, col))
         row_raw = await cur.fetchone()
         cols_meta = [desc[0] for desc in (cur.description or [])]
 
@@ -279,11 +291,17 @@ async def put_cube_boundary(
     first_catalog = body.first_catalog or ""
 
     # ── Step 1: Phantom check (skipped when force=True) ──────────────────────
+    # CR-01: pass resolved profile_id so validation targets the same profile
+    # as the write, not the default profile.
     if not body.is_empty and not body.force:
-        first_exists = await cube_exact_match(pool, first_label, first_catalog)
+        first_exists = await cube_exact_match(
+            pool, first_label, first_catalog, profile_id=profile_id
+        )
 
         if not first_exists:
-            near_misses = await find_boundary_near_misses(pool, first_label, first_catalog)
+            near_misses = await find_boundary_near_misses(
+                pool, first_label, first_catalog, profile_id=profile_id
+            )
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
@@ -395,6 +413,7 @@ async def validate_boundary(
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> JSONResponse:
     """Dry-run boundary validation — NO DB write.
 
@@ -408,7 +427,12 @@ async def validate_boundary(
     Returns HTTP 200 with valid=True + movement_counts when all checks pass.
 
     This endpoint performs NO INSERT/UPDATE/DELETE (T-03-14, ADMN-07).
+
+    WR-01 (Phase 6 CR fix): profile_id resolved via get_write_target so phantom
+    checks and near-miss lookups are scoped to the same profile as the matching
+    commit path — preview and commit now agree.
     """
+    profile_id, _ = _write_target
     nominal_capacity = _get_nominal_capacity(request)
 
     results: list[dict[str, Any]] = []
@@ -435,11 +459,16 @@ async def validate_boundary(
         first_catalog = edit.first_catalog or ""
 
         # ── Step 1: Phantom check (skipped when force=True) ──────────────────
+        # WR-01: pass resolved profile_id so preview and commit share one scope.
         if not edit.force:
-            first_exists = await cube_exact_match(pool, first_label, first_catalog)
+            first_exists = await cube_exact_match(
+                pool, first_label, first_catalog, profile_id=profile_id
+            )
 
             if not first_exists:
-                near_misses = await find_boundary_near_misses(pool, first_label, first_catalog)
+                near_misses = await find_boundary_near_misses(
+                    pool, first_label, first_catalog, profile_id=profile_id
+                )
                 results.append(
                     {
                         "unit_id": edit.unit_id,
@@ -729,11 +758,17 @@ async def bulk_write_cubes(
         first_catalog = edit.first_catalog or ""
 
         # Phantom check (skipped when force=True)
+        # CR-01: pass resolved profile_id so validation targets the same profile
+        # as the write, not the default profile.
         if not edit.force:
-            first_exists = await cube_exact_match(pool, first_label, first_catalog)
+            first_exists = await cube_exact_match(
+                pool, first_label, first_catalog, profile_id=profile_id
+            )
 
             if not first_exists:
-                near_misses = await find_boundary_near_misses(pool, first_label, first_catalog)
+                near_misses = await find_boundary_near_misses(
+                    pool, first_label, first_catalog, profile_id=profile_id
+                )
                 return JSONResponse(
                     status_code=status.HTTP_400_BAD_REQUEST,
                     content={
