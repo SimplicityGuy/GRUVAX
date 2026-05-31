@@ -44,7 +44,7 @@
 
 ### Data Integrity & Tech-Debt Closure
 
-- [ ] **DATA-01**: `write_boundary` is **scoped by `profile_id`** in its WHERE clause (cross-profile write isolation), and `boundary_changed` SSE fan-out is **per-profile** (not default-profile-only). **Load-bearing — must land before any multi-profile boundary-editing UI.**
+- [x] **DATA-01**: `write_boundary` is **scoped by `profile_id`** in its WHERE clause (cross-profile write isolation), and `boundary_changed` SSE fan-out is **per-profile** (not default-profile-only). **Load-bearing — must land before any multi-profile boundary-editing UI.**
 
 ## Out of Scope
 
@@ -72,7 +72,7 @@
 
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | Phase 6 | Pending |
+| DATA-01 | Phase 6 | Complete |
 | DEV-05 | Phase 6 | Pending |
 | AUTH-02 | Phase 7 | Pending |
 | API-04 | Phase 7 | Pending |

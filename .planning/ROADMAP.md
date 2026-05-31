@@ -52,7 +52,7 @@ Full v2.0 phase details: [`milestones/v2.0-ROADMAP.md`](./milestones/v2.0-ROADMA
 
 Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next integer). Hardens GRUVAX for real household use: closes v2.0 tech debt, enables member self-connect PAT, adds QR pairing, enforces query privacy, delivers offline/reconnect UX, and polishes the shelf overview.
 
-- [ ] **Phase 6: Safe Boundaries + Live Device Lifecycle** — write_boundary profile-scoped; kiosk reacts to revoke/reassign live via SSE.
+- [x] **Phase 6: Safe Boundaries + Live Device Lifecycle** — write_boundary profile-scoped; kiosk reacts to revoke/reassign live via SSE. (completed 2026-05-31)
 - [ ] **Phase 7: Member Self-Connect + Collection Diff** — invite-token flow (member pastes own PAT); "N new records" badge after sync; migration 0012 folded in.
 - [ ] **Phase 8: QR Pairing + Privacy + Recently-Pulled** — QR alongside 4-digit PIN; session-only history; no-PIN kiosk reset; structlog query redaction.
 - [ ] **Phase 9: Offline + Reconnect UX** — offline banner (SSE-authoritative); degraded mode; auto-reconnect with backoff+jitter; stale-data refresh on reconnect.
@@ -79,7 +79,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-  - [ ] 06-03-PLAN.md — DATA-01 verification: two-profile boundary isolation + unbound-400 + 0-row-404 + per-profile boundary_changed & admin_editing fan-out tests (Wave 2)
+  - [x] 06-03-PLAN.md — DATA-01 verification: two-profile boundary isolation + unbound-400 + 0-row-404 + per-profile boundary_changed & admin_editing fan-out tests (Wave 2)
 
 **UI hint**: no
 
@@ -154,7 +154,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
-| 6. LED Contract over MQTT | v1.0 | 2/3 | In Progress|  |
+| 6. LED Contract over MQTT | v1.0 | 3/3 | Complete   | 2026-05-31 |
 | 7. Wizards + Import/Export | v1.0 | 8/8 | Complete | 2026-05-24 |
 | 8. Observability + Deployment Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
