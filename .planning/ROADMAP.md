@@ -72,7 +72,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 **Plans**: 3 plans (2 waves)
   - [ ] 06-01-PLAN.md — DATA-01: profile-scope write_boundary + 6 call sites + per-profile SSE fan-out (Wave 1)
   - [ ] 06-02-PLAN.md — DEV-05: kiosk SSE device_revoked/device_reassigned handlers + unified 403 + Nordic-Grid notice/banner (Wave 1)
-  - [ ] 06-03-PLAN.md — DATA-01 verification: two-profile boundary isolation + unbound-400 + 0-row-404 + per-profile fan-out tests (Wave 2)
+  - [ ] 06-03-PLAN.md — DATA-01 verification: two-profile boundary isolation + unbound-400 + 0-row-404 + per-profile boundary_changed & admin_editing fan-out tests (Wave 2)
 **UI hint**: no
 
 ### Phase 7: Member Self-Connect + Collection Diff
