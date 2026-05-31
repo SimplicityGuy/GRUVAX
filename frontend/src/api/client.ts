@@ -36,10 +36,10 @@ async function check403Revoke(res: Response): Promise<Response> {
         throw new Error('device_revoked')
       }
     } catch (err) {
-      // Re-throw device_revoked errors; swallow JSON parse failures (malformed body)
-      if (err instanceof Error && err.message === 'device_revoked') {
-        throw err
-      }
+      // Re-throw the intentional revoke signal AND any unexpected error;
+      // only swallow a malformed-JSON 403 body (e.g. an HTML error page from a proxy).
+      if (!(err instanceof SyntaxError)) throw err
+      console.debug('check403Revoke: 403 body was not JSON; passing through', err)
     }
   }
   return res
