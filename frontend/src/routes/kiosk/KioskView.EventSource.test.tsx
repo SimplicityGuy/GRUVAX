@@ -146,7 +146,23 @@ beforeEach(() => {
   // Reset locateRelease and searchCollection mock call counts
   vi.mocked(locateRelease).mockClear()
   vi.mocked(searchCollection).mockClear()
-  vi.mocked(getSession).mockClear()
+  // Provide a default getSession mock so the session polling query doesn't error
+  vi.mocked(getSession).mockResolvedValue({
+    profile_count: 1,
+    bound_profile_id: TEST_PROFILE_ID,
+    profiles: [
+      {
+        id: TEST_PROFILE_ID,
+        display_name: 'Test Profile',
+        last_sync_at: null,
+        last_sync_status: 'completed',
+        last_sync_item_count: 100,
+        app_token_revoked: false,
+      },
+    ],
+    is_device_paired: true,
+    needs_reauth: false,
+  })
   // Reset lifecycle state
   useSessionStore.setState({ revokePending: false, reassignBanner: null })
 })
@@ -292,13 +308,13 @@ describe('KioskView EventSource consumer', () => {
       needs_reauth: false,
     }
 
-    vi.mocked(getSession).mockResolvedValueOnce(REASSIGNED_SESSION)
-
     const qc = makeQueryClient()
     const es = await renderKioskAndFlush(qc)
 
-    // Clear initial state
+    // Clear initial state and override getSession to return the reassigned session
+    // (the polling query has already consumed the default mock during render)
     useSessionStore.setState({ reassignBanner: null })
+    vi.mocked(getSession).mockResolvedValue(REASSIGNED_SESSION)
 
     await act(async () => {
       es.dispatchEvent('device_reassigned', { device_id: 'test-device-id' })
@@ -320,6 +336,15 @@ describe('KioskView EventSource consumer', () => {
   it('search query is disabled when boundProfileId is null (B-02)', async () => {
     // Override session store: unbound state (no profile bound yet — session bootstrap pending)
     useSessionStore.setState({ profileCount: 0, boundProfileId: null, profiles: [] })
+    // Ensure getSession also returns an unbound session so the polling query doesn't
+    // overwrite boundProfileId to a non-null value during the test
+    vi.mocked(getSession).mockResolvedValue({
+      profile_count: 0,
+      bound_profile_id: null,
+      profiles: [],
+      is_device_paired: false,
+      needs_reauth: false,
+    })
 
     const qc = makeQueryClient()
     // Spy on the mocked searchCollection to assert it is NOT called
