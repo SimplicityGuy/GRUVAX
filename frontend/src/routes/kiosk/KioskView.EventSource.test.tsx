@@ -11,6 +11,10 @@
  * Test 4: boundary_changed with NO selection does NOT call locateRelease (D-05 guard)
  *
  * Tests 3 and 4 are RED until Task 2 wires the re-locate in KioskView.tsx.
+ *
+ * Phase 6 additions (06-02):
+ * Test D-05-a: device_revoked SSE event sets revokePending via triggerRevoke() (D-06)
+ * Test D-08-a: device_reassigned SSE event calls getSession + setSession + setReassignBanner
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render } from '@testing-library/react'
@@ -37,8 +41,18 @@ vi.mock('../../api/client', async (importOriginal) => {
   }
 })
 
+// Mock getSession for device_reassigned test (D-08, D-09)
+vi.mock('../../api/session', async (importOriginal) => {
+  const real = await importOriginal<typeof import('../../api/session')>()
+  return {
+    ...real,
+    getSession: vi.fn(),
+  }
+})
+
 // Import after vi.mock so we get the mocked version
 import { locateRelease, searchCollection } from '../../api/client'
+import { getSession } from '../../api/session'
 import { useSessionStore } from '../../state/sessionStore'
 
 const TEST_PROFILE_ID = '00000000-0000-0000-0000-000000000001'
@@ -132,6 +146,25 @@ beforeEach(() => {
   // Reset locateRelease and searchCollection mock call counts
   vi.mocked(locateRelease).mockClear()
   vi.mocked(searchCollection).mockClear()
+  // Provide a default getSession mock so the session polling query doesn't error
+  vi.mocked(getSession).mockResolvedValue({
+    profile_count: 1,
+    bound_profile_id: TEST_PROFILE_ID,
+    profiles: [
+      {
+        id: TEST_PROFILE_ID,
+        display_name: 'Test Profile',
+        last_sync_at: null,
+        last_sync_status: 'completed',
+        last_sync_item_count: 100,
+        app_token_revoked: false,
+      },
+    ],
+    is_device_paired: true,
+    needs_reauth: false,
+  })
+  // Reset lifecycle state
+  useSessionStore.setState({ revokePending: false, reassignBanner: null })
 })
 
 afterEach(() => {
@@ -238,10 +271,80 @@ describe('KioskView EventSource consumer', () => {
     expect(calledKeys).toContainEqual(['search'])   // RED until B-01 listener is added
   })
 
+  // Phase 6 (D-06): device_revoked SSE event sets revokePending via triggerRevoke()
+  // RED until Task 2 adds the device_revoked addEventListener in KioskView.tsx.
+  it('device_revoked SSE event sets revokePending = true (D-06)', async () => {
+    useSessionStore.setState({ revokePending: false })
+    const qc = makeQueryClient()
+    const es = await renderKioskAndFlush(qc)
+
+    await act(async () => {
+      es.dispatchEvent('device_revoked', { device_id: 'test-device-id' })
+    })
+
+    // The SSE handler must call useSessionStore.getState().triggerRevoke()
+    // (the SAME signal the 403 path uses — App.tsx is the single handler, D-06)
+    expect(useSessionStore.getState().revokePending).toBe(true)
+  })
+
+  // Phase 6 (D-08, D-09): device_reassigned SSE event calls getSession + sets reassignBanner
+  // RED until Task 2 adds the device_reassigned addEventListener in KioskView.tsx.
+  it('device_reassigned SSE event calls getSession + sets reassignBanner (D-08, D-09)', async () => {
+    const NEW_PROFILE_ID = '00000000-0000-0000-0000-000000000099'
+    const REASSIGNED_SESSION = {
+      profile_count: 1,
+      bound_profile_id: NEW_PROFILE_ID,
+      profiles: [
+        {
+          id: NEW_PROFILE_ID,
+          display_name: 'New Profile',
+          last_sync_at: null,
+          last_sync_status: 'completed',
+          last_sync_item_count: 50,
+          app_token_revoked: false,
+        },
+      ],
+      is_device_paired: true,
+      needs_reauth: false,
+    }
+
+    const qc = makeQueryClient()
+    const es = await renderKioskAndFlush(qc)
+
+    // Clear initial state and override getSession to return the reassigned session
+    // (the polling query has already consumed the default mock during render)
+    useSessionStore.setState({ reassignBanner: null })
+    vi.mocked(getSession).mockResolvedValue(REASSIGNED_SESSION)
+
+    await act(async () => {
+      es.dispatchEvent('device_reassigned', { device_id: 'test-device-id' })
+    })
+
+    // Wait for async getSession resolution
+    await act(async () => {
+      await new Promise((r) => setTimeout(r, 50))
+    })
+
+    // getSession must have been called
+    expect(getSession).toHaveBeenCalled()
+
+    // reassignBanner must be set to the new profile's display_name (D-09)
+    expect(useSessionStore.getState().reassignBanner).toBe('New Profile')
+  })
+
   // B-02 frontend: search query must be disabled when boundProfileId is null
   it('search query is disabled when boundProfileId is null (B-02)', async () => {
     // Override session store: unbound state (no profile bound yet — session bootstrap pending)
     useSessionStore.setState({ profileCount: 0, boundProfileId: null, profiles: [] })
+    // Ensure getSession also returns an unbound session so the polling query doesn't
+    // overwrite boundProfileId to a non-null value during the test
+    vi.mocked(getSession).mockResolvedValue({
+      profile_count: 0,
+      bound_profile_id: null,
+      profiles: [],
+      is_device_paired: false,
+      needs_reauth: false,
+    })
 
     const qc = makeQueryClient()
     // Spy on the mocked searchCollection to assert it is NOT called

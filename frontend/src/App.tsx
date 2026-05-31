@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useState } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes, useNavigate } from 'react-router'
 import { AdminShell } from './routes/admin/AdminShell'
@@ -15,6 +15,7 @@ import { ShelfBinList } from './routes/admin/ShelfBinList'
 import { Wizard } from './routes/admin/Wizard'
 import { KioskView } from './routes/kiosk/KioskView'
 import { PairView } from './routes/kiosk/PairView'
+import { RevokeNotice } from './routes/kiosk/DeviceLifecycle'
 import { ProfilePicker } from './routes/ProfilePicker'
 import { getSession } from './api/session'
 import { useSessionStore } from './state/sessionStore'
@@ -56,11 +57,27 @@ const queryClient = new QueryClient({
  * the session store. If the response has no bound_profile_id (unbound), redirect
  * to /select. Single-profile auto-bind is handled server-side — the SPA only
  * redirects when truly unbound after the server has had its chance to auto-bind.
+ *
+ * Phase 6 (06-02 / D-06): global terminal-revoke handler.
+ * Subscribes to revokePending from sessionStore. When it becomes true (from either
+ * SSE device_revoked or a 403 device_revoked from any in-flight call), shows the
+ * RevokeNotice overlay, then after ~2.5s calls clearBoundProfile() (nulls
+ * boundProfileId → KioskView SSE cleanup closes the old EventSource, D-07),
+ * navigates to /pair, and calls resetRevoke() so a future re-pair can revoke again.
+ * This is the SINGLE terminal-revoke handler — it runs at App level, not inside
+ * KioskView, so it fires even if KioskView is not mounted (D-06).
  */
 function AppInner() {
   const navigate = useNavigate()
   const setSession = useSessionStore((s) => s.setSession)
+  const revokePending = useSessionStore((s) => s.revokePending)
+  const clearBoundProfile = useSessionStore((s) => s.clearBoundProfile)
+  const resetRevoke = useSessionStore((s) => s.resetRevoke)
 
+  // Local state: show revoke notice before navigating
+  const [showRevokeNotice, setShowRevokeNotice] = useState(false)
+
+  // Session bootstrap effect
   useEffect(() => {
     getSession()
       .then((data) => {
@@ -92,26 +109,51 @@ function AppInner() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
+  // Global terminal-revoke handler (D-06, T-06-06).
+  // Runs at App level — mount-independent of KioskView.
+  // Fires from SSE device_revoked event AND 403 device_revoked intercept in client.ts;
+  // triggerRevoke() is idempotent so whichever arrives first wins — one notice, one navigation.
+  useEffect(() => {
+    if (!revokePending) return
+
+    setShowRevokeNotice(true)
+
+    const timer = setTimeout(() => {
+      // clearBoundProfile() nulls boundProfileId → KioskView SSE effect cleanup
+      // closes the old EventSource (the effect's return() => es.close() path, D-07).
+      clearBoundProfile()
+      void navigate('/pair', { replace: true })
+      resetRevoke()
+      setShowRevokeNotice(false)
+    }, 2500)
+
+    return () => clearTimeout(timer)
+  }, [revokePending, clearBoundProfile, navigate, resetRevoke])
+
   return (
-    <Routes>
-      <Route path="/" element={<KioskView />} />
-      <Route path="/pair" element={<PairView />} />
-      <Route path="/select" element={<ProfilePicker />} />
-      <Route path="/admin" element={<AdminShell />}>
-        <Route index element={<Settings />} />
-        <Route path="settings" element={<Settings />} />
-        <Route path="profiles" element={<ProfilesManager />} />
-        <Route path="devices" element={<DevicesManager />} />
-        <Route path="cubes" element={<CubesGrid />} />
-        <Route path="cubes/:unit" element={<ShelfBinList />} />
-        <Route path="cubes/:unit/:row/:col" element={<BinWidthEditor />} />
-        <Route path="history" element={<HistoryView />} />
-        <Route path="wizard" element={<Wizard />} />
-        <Route path="wizard/done" element={<ConfirmationRoute />} />
-        <Route path="import" element={<Import />} />
-        <Route path="diagnostics" element={<Diagnostics />} />
-      </Route>
-    </Routes>
+    <>
+      {/* Terminal-revoke overlay — rendered above all routes (D-06) */}
+      {showRevokeNotice && <RevokeNotice />}
+      <Routes>
+        <Route path="/" element={<KioskView />} />
+        <Route path="/pair" element={<PairView />} />
+        <Route path="/select" element={<ProfilePicker />} />
+        <Route path="/admin" element={<AdminShell />}>
+          <Route index element={<Settings />} />
+          <Route path="settings" element={<Settings />} />
+          <Route path="profiles" element={<ProfilesManager />} />
+          <Route path="devices" element={<DevicesManager />} />
+          <Route path="cubes" element={<CubesGrid />} />
+          <Route path="cubes/:unit" element={<ShelfBinList />} />
+          <Route path="cubes/:unit/:row/:col" element={<BinWidthEditor />} />
+          <Route path="history" element={<HistoryView />} />
+          <Route path="wizard" element={<Wizard />} />
+          <Route path="wizard/done" element={<ConfirmationRoute />} />
+          <Route path="import" element={<Import />} />
+          <Route path="diagnostics" element={<Diagnostics />} />
+        </Route>
+      </Routes>
+    </>
   )
 }
 

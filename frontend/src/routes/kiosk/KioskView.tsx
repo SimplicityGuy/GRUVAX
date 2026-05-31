@@ -7,6 +7,7 @@ import { useGruvaxStore, type ShimmerCube } from '../../state/store'
 import { useSessionStore } from '../../state/sessionStore'
 import { getSession } from '../../api/session'
 import { CubeContentsPanel } from './CubeContentsPanel'
+import { ReassignBanner } from './DeviceLifecycle'
 import { EmptyCollectionState } from './EmptyCollectionState'
 import { ReauthBanner } from './ReauthBanner'
 import { ResultsList } from './ResultsList'
@@ -16,6 +17,7 @@ import { ShelfGrid } from './ShelfGrid'
 import { ShelfLabel } from './ShelfLabel'
 import { StalenessBar } from './StalenessBar'
 import { SwitchProfileButton } from './SwitchProfileButton'
+import './DeviceLifecycle.css'
 import './ReauthBanner.css'
 import './StalenessBar.css'
 import './kiosk.css'
@@ -342,6 +344,36 @@ export function KioskView() {
       resync()
     })
 
+    // device_revoked: admin revoked this device → signal the SINGLE terminal-revoke handler
+    // in App.tsx via the idempotent triggerRevoke() (D-06, T-06-06).
+    // No local teardown/navigation here — App.tsx's useEffect on revokePending owns it.
+    // The cleanup return () => es.close() below is still the ONLY es.close() call (Pitfall 4);
+    // clearBoundProfile() sets boundProfileId to null → the effect re-runs and skips opening,
+    // closing the EventSource via the normal cleanup path (D-07, T-06-05).
+    es.addEventListener('device_revoked', () => {
+      useSessionStore.getState().triggerRevoke()
+    })
+
+    // device_reassigned: this device was moved to a different profile by admin (D-08, D-09).
+    // Payload carries only device_id — never trust the payload for profile info (T-06-07).
+    // 1. Re-fetch GET /api/session (authoritative source for the new profile binding).
+    // 2. setSession(data) updates boundProfileId → the SSE effect re-runs and opens a
+    //    new EventSource for the new profile channel (no manual open needed).
+    // 3. Derive the new display_name from the authoritative session response (D-09).
+    // 4. setReassignBanner(name) → KioskView renders the "MOVED TO <name>" banner (D-08).
+    // 5. Invalidate grid query keys so the new profile's collection loads immediately.
+    es.addEventListener('device_reassigned', () => {
+      void getSession().then((data) => {
+        useSessionStore.getState().setSession(data)
+        const newName = data.profiles.find((p) => p.id === data.bound_profile_id)?.display_name
+        useSessionStore.getState().setReassignBanner(newName ?? null)
+        // Invalidate kiosk-owned query keys so the new profile's collection loads
+        void queryClient.invalidateQueries({ queryKey: ['units'] })
+        void queryClient.invalidateQueries({ queryKey: ['cubes'] })
+        void queryClient.invalidateQueries({ queryKey: ['search'] })
+      })
+    })
+
     // Cleanup: close the connection on unmount (the ONLY es.close() call — Pitfall 4)
     return () => {
       es.close()
@@ -543,6 +575,11 @@ export function KioskView() {
         {/* Staleness banner (OBS-06, D-01) — above the grid, never overlaying it.
             Hidden when offline (health null) or sync_age <= 14d. */}
         <StalenessBar syncAgeSeconds={healthData?.sync_age_seconds ?? null} />
+
+        {/* Reassign banner (D-08): "MOVED TO <Profile>" on device_reassigned SSE.
+            Rendered from sessionStore.reassignBanner; auto-dismissed after ~2.5s
+            inside the component. No prop needed — reads from store. */}
+        <ReassignBanner />
 
         {/* Re-auth banner (D4-08, D4-10): non-blocking, appears when bound profile's
             PAT is revoked. CRITICAL: search input, cube grid, and all kiosk
