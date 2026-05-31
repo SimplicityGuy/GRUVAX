@@ -74,8 +74,8 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 
 **Wave 1**
 
-  - [ ] 06-01-PLAN.md — DATA-01: profile-scope write_boundary + 6 call sites + per-profile SSE fan-out (Wave 1)
-  - [ ] 06-02-PLAN.md — DEV-05: kiosk SSE device_revoked/device_reassigned handlers + unified 403 + Nordic-Grid notice/banner (Wave 1)
+  - [x] 06-01-PLAN.md — DATA-01: profile-scope write_boundary + 6 call sites + per-profile SSE fan-out (Wave 1)
+  - [x] 06-02-PLAN.md — DEV-05: kiosk SSE device_revoked/device_reassigned handlers + unified 403 + Nordic-Grid notice/banner (Wave 1)
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -154,7 +154,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 | 3. Admin Loop (PIN + Manual Entry + Undo) | v1.0 | 5/5 | Complete | 2026-05-21 |
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
-| 6. LED Contract over MQTT | v1.0 | 4/4 | Complete | 2026-05-24 |
+| 6. LED Contract over MQTT | v1.0 | 2/3 | In Progress|  |
 | 7. Wizards + Import/Export | v1.0 | 8/8 | Complete | 2026-05-24 |
 | 8. Observability + Deployment Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
