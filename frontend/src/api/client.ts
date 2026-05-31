@@ -1,14 +1,49 @@
 import type { CubeContentsResponse, CubesWithFillResponse } from './cubeTypes'
 import type { CubesResponse, LocateResult, SearchResponse, UnitsResponse } from './types'
+import { useSessionStore } from '../state/sessionStore'
 
 /**
  * Fetch wrappers for the GRUVAX backend API.
  *
  * In dev, Vite proxies /api → localhost:8000 (vite.config.ts).
  * In production, FastAPI serves the built SPA and /api routes from the same origin.
+ *
+ * Phase 6 (06-02): shared 403 device_revoked intercept (D-06, T-06-06).
+ * When any fetch returns HTTP 403 and the JSON body has detail.type === 'device_revoked',
+ * this module calls useSessionStore.getState().triggerRevoke() (mount-independent —
+ * no React component needs to be mounted) and throws Error('device_revoked').
+ * The App.tsx global revoke effect consumes revokePending as the SINGLE handler.
  */
 
 const BASE = ''
+
+/**
+ * Shared 403 device_revoked check — called by every fetch wrapper after a non-ok response.
+ *
+ * Reads the JSON body; if detail.type === 'device_revoked', fires the revoke signal
+ * (mount-independent) and throws Error('device_revoked').
+ *
+ * Returns the original response so the caller can continue its own error handling
+ * if this check does not throw.
+ */
+async function check403Revoke(res: Response): Promise<Response> {
+  if (res.status === 403) {
+    try {
+      const body = await res.json() as { detail?: { type?: string } }
+      if (body?.detail?.type === 'device_revoked') {
+        // Fire mount-independent revoke signal — even if no component is mounted (D-06)
+        useSessionStore.getState().triggerRevoke()
+        throw new Error('device_revoked')
+      }
+    } catch (err) {
+      // Re-throw device_revoked errors; swallow JSON parse failures (malformed body)
+      if (err instanceof Error && err.message === 'device_revoked') {
+        throw err
+      }
+    }
+  }
+  return res
+}
 
 export async function searchCollection(
   q: string,
@@ -20,6 +55,7 @@ export async function searchCollection(
   const params = new URLSearchParams(paramObj)
   const res = await fetch(`${BASE}/api/search?${params}`)
   if (!res.ok) {
+    await check403Revoke(res)
     throw new Error(`Search failed: ${res.status}`)
   }
   return res.json() as Promise<SearchResponse>
@@ -31,6 +67,7 @@ export async function locateRelease(releaseId: number, profileId?: string): Prom
   const params = new URLSearchParams(paramObj)
   const res = await fetch(`${BASE}/api/locate?${params}`)
   if (!res.ok) {
+    await check403Revoke(res)
     if (res.status === 404) {
       throw new Error('release_not_in_collection')
     }
@@ -42,6 +79,7 @@ export async function locateRelease(releaseId: number, profileId?: string): Prom
 export async function fetchUnits(): Promise<UnitsResponse> {
   const res = await fetch(`${BASE}/api/units`)
   if (!res.ok) {
+    await check403Revoke(res)
     throw new Error(`Units fetch failed: ${res.status}`)
   }
   return res.json() as Promise<UnitsResponse>
@@ -50,6 +88,7 @@ export async function fetchUnits(): Promise<UnitsResponse> {
 export async function fetchCubes(): Promise<CubesResponse> {
   const res = await fetch(`${BASE}/api/cubes`)
   if (!res.ok) {
+    await check403Revoke(res)
     throw new Error(`Cubes fetch failed: ${res.status}`)
   }
   return res.json() as Promise<CubesResponse>
@@ -64,6 +103,7 @@ export async function fetchCubes(): Promise<CubesResponse> {
 export async function fetchCubesWithFill(): Promise<CubesWithFillResponse> {
   const res = await fetch(`${BASE}/api/cubes`)
   if (!res.ok) {
+    await check403Revoke(res)
     throw new Error(`Cubes fetch failed: ${res.status}`)
   }
   return res.json() as Promise<CubesWithFillResponse>
@@ -84,6 +124,7 @@ export async function fetchCubeContents(
 ): Promise<CubeContentsResponse> {
   const res = await fetch(`${BASE}/api/cubes/${unitId}/${row}/${col}`)
   if (!res.ok) {
+    await check403Revoke(res)
     if (res.status === 404) throw new Error('cube_not_found')
     throw new Error(`Cube contents fetch failed: ${res.status}`)
   }
@@ -108,6 +149,7 @@ export async function illuminateRecord(result: LocateResult): Promise<void> {
     body: JSON.stringify(result),
   })
   if (!res.ok) {
+    await check403Revoke(res)
     throw new Error(`Illuminate failed: ${res.status}`)
   }
 }

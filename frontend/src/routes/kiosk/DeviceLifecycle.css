@@ -1,0 +1,111 @@
+/**
+ * DeviceLifecycle.css — Nordic Grid styles for device lifecycle overlays (Phase 6, 06-02).
+ *
+ * ENFORCEMENT: zero hardcoded hex values — all colors via CSS custom properties.
+ * Design tokens sourced from design/gruvax-design-tokens.css.
+ *
+ * Components:
+ *   .device-revoke-overlay  — full-screen terminal-revoke backdrop
+ *   .device-revoke-card     — centered content card within the overlay
+ *   .device-revoke-heading  — ALL-CAPS Barlow Condensed heading
+ *   .device-revoke-body     — sentence-case Space Grotesk instruction text
+ *   .device-reassign-banner — top banner "MOVED TO <profile>" (yellow background)
+ */
+
+/* ─── RevokeNotice ─────────────────────────────────────────────────────────── */
+
+.device-revoke-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: var(--gruvax-z-modal);
+  background: var(--gruvax-blue);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  /* LED-physics enter: spring in from slight scale-down */
+  animation: device-revoke-enter var(--gruvax-duration-enter) var(--gruvax-ease-spring) both;
+}
+
+@keyframes device-revoke-enter {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+.device-revoke-card {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-5);
+  padding: var(--gruvax-space-8) var(--gruvax-space-7);
+  text-align: center;
+  max-width: 480px;
+}
+
+.device-revoke-icon {
+  color: var(--gruvax-yellow);
+  opacity: 0.9;
+  /* LED glow on the icon */
+  filter: drop-shadow(0 0 12px var(--gruvax-yellow-glow));
+}
+
+.device-revoke-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-xl);
+  font-weight: 900;
+  letter-spacing: var(--gruvax-tracking-display);
+  color: var(--gruvax-off-white);
+  margin: 0;
+  line-height: var(--gruvax-leading-tight);
+  text-transform: uppercase;
+}
+
+.device-revoke-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-lg);
+  font-weight: 400;
+  color: var(--gruvax-blue-light);
+  margin: 0;
+  line-height: var(--gruvax-leading-relaxed);
+}
+
+/* ─── ReassignBanner ───────────────────────────────────────────────────────── */
+
+.device-reassign-banner {
+  background: var(--gruvax-yellow);
+  color: var(--gruvax-blue-darker);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  width: 100%;
+  border-radius: 0;
+
+  /* Mount animation: reuses staleness-bar-enter keyframe from StalenessBar.css */
+  overflow: hidden;
+  max-height: 48px;
+  opacity: 1;
+  animation: staleness-bar-enter var(--gruvax-duration-base) var(--gruvax-ease-decelerate) both;
+}
+
+.device-reassign-icon {
+  flex-shrink: 0;
+  color: inherit;
+}
+
+.device-reassign-text {
+  font-family: var(--gruvax-font-display);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+}
