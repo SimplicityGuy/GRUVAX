@@ -21,6 +21,24 @@ import pytest_asyncio
 from gruvax.app import create_app
 
 
+# Browse-binding cookie value (D-02 fail-loud contract).  Admin write routes now
+# require get_write_target to resolve a per-profile session; the default profile
+# UUID is the value read verbatim from this cookie (sessions.py:42).
+_DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+_BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
+
+
+def _with_browse_binding(cookies) -> dict:  # type: ignore[no-untyped-def]
+    """Merge the default-profile browse-binding cookie into an httpx Cookies object.
+
+    Returns a plain dict suitable for ``cookies=`` on any write request so that
+    get_write_target resolves without raising 400 session_unbound (D-02).
+    """
+    merged = dict(cookies)
+    merged[_BROWSE_BINDING_COOKIE] = _DEFAULT_PROFILE_UUID
+    return merged
+
+
 @pytest_asyncio.fixture(scope="module")
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan."""
@@ -56,7 +74,7 @@ async def test_phantom_blocked(client) -> None:  # type: ignore[no-untyped-def]
             "is_empty": False,
             "force": False,
         },
-        cookies=login_res.cookies,
+        cookies=_with_browse_binding(login_res.cookies),
         headers={"X-CSRF-Token": csrf_token or ""},
     )
     assert response.status_code == 400, (
@@ -92,7 +110,7 @@ async def test_phantom_force_save(client) -> None:  # type: ignore[no-untyped-de
             "is_empty": False,
             "force": True,  # bypass phantom check; no last_* comparator in Phase 5
         },
-        cookies=login_res.cookies,
+        cookies=_with_browse_binding(login_res.cookies),
         headers={"X-CSRF-Token": csrf_token or ""},
     )
     # Must succeed: phantom check bypassed by force=True, no last_* validation in cut-point model
@@ -113,7 +131,7 @@ async def test_phantom_force_save(client) -> None:  # type: ignore[no-untyped-de
             "is_empty": False,
             "force": True,  # restore; BLP 4001 IS in collection but force ensures idempotent
         },
-        cookies=login_res.cookies,
+        cookies=_with_browse_binding(login_res.cookies),
         headers={"X-CSRF-Token": csrf_token or ""},
     )
 
@@ -140,7 +158,7 @@ async def test_near_misses_returned(client) -> None:  # type: ignore[no-untyped-
             "is_empty": False,
             "force": False,
         },
-        cookies=login_res.cookies,
+        cookies=_with_browse_binding(login_res.cookies),
         headers={"X-CSRF-Token": csrf_token or ""},
     )
     assert response.status_code == 400, (
@@ -229,7 +247,7 @@ async def test_single_cube_put_writes_history(client, db_pool) -> None:  # type:
             "is_empty": False,
             "force": True,  # bypass phantom check; cut-point model has no last_* comparator
         },
-        cookies=login_res.cookies,
+        cookies=_with_browse_binding(login_res.cookies),
         headers={"X-CSRF-Token": csrf_token},
     )
     if response.status_code == 404:

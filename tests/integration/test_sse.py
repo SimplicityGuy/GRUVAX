@@ -96,13 +96,19 @@ async def _login(base_url: str) -> dict[str, str]:
     Mirrors the conftest admin_session fixture inline — we can't depend on
     the module-scope conftest admin_session from a module-scope fixture that
     uses a different client shape.
+
+    Merges the browse-binding cookie (D-02 fail-loud contract) so that admin
+    write requests resolve the per-profile session required by get_write_target.
     """
     async with httpx.AsyncClient(base_url=base_url) as ac:
         res = await ac.post("/api/admin/login", json={"pin": "0000"})
         if res.status_code != 200:
             return {}
         csrf = res.cookies.get("gruvax_csrf") or ""
-        return {"cookies": dict(res.cookies), "csrf_token": csrf}
+        cookies = dict(res.cookies)
+        # Bind the default profile so get_write_target resolves without session_unbound (D-02).
+        cookies[BROWSE_BINDING_COOKIE] = DEFAULT_PROFILE_UUID
+        return {"cookies": cookies, "csrf_token": csrf}
 
 
 @pytest.mark.asyncio(loop_scope="session")

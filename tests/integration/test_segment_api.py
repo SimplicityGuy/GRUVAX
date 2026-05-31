@@ -77,12 +77,19 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
 
 
 async def _login(client) -> dict:  # type: ignore[no-untyped-def]
-    """Helper: log in and return cookies + csrf token dict."""
+    """Helper: log in and return cookies + csrf token dict.
+
+    Merges the browse-binding cookie (D-02 fail-loud contract) so that admin
+    write requests resolve the per-profile session required by get_write_target.
+    """
     res = await client.post("/api/admin/login", json={"pin": "0000"})
     if res.status_code != 200:
         return {}
+    cookies = dict(res.cookies)
+    # Bind the default profile so get_write_target resolves without session_unbound (D-02).
+    cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
     return {
-        "cookies": res.cookies,
+        "cookies": cookies,
         "csrf_token": res.cookies.get("gruvax_csrf") or "",
     }
 
@@ -772,16 +779,21 @@ async def test_cut_publishes_correct_payload(db_pool) -> None:  # type: ignore[n
     ``app.dependency_overrides`` before ``LifespanManager`` starts (the module-scoped
     ``client`` fixture hides the app object, so we can't inject overrides into it).
 
-    This test is RED until segments.py is fixed (Task 2).
+    Plan 06-01 (D-04): admin write routes now use get_write_target (not get_event_bus)
+    to resolve the per-profile bus. Override get_write_target to inject the SpyEventBus.
     """
-    from gruvax.api.deps import get_event_bus
+    from gruvax.api.deps import get_write_target
+
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
 
     await _seed_test_pin(db_pool)
     await load_boundaries_fresh()
 
     spy = _SpyEventBus()
     app = create_app()
-    app.dependency_overrides[get_event_bus] = lambda: spy
+    # Override get_write_target (not get_event_bus) — routes resolve per-profile bus
+    # from event_bus_registry, not from app.state.event_bus (Plan 06-01 / D-04).
+    app.dependency_overrides[get_write_target] = lambda: (_DEFAULT_PROFILE_UUID, spy)
     try:
         async with (
             LifespanManager(app) as manager,
@@ -802,7 +814,7 @@ async def test_cut_publishes_correct_payload(db_pool) -> None:  # type: ignore[n
                 f"Expected 200 from PUT cut, got {response.status_code}: {response.text}"
             )
     finally:
-        app.dependency_overrides.pop(get_event_bus, None)
+        app.dependency_overrides.pop(get_write_target, None)
 
     # Assert the event was published
     assert len(spy.published) >= 1, "Expected at least one boundary_changed publish"
@@ -838,16 +850,20 @@ async def test_overrides_publishes_correct_payload(db_pool) -> None:  # type: ig
       - NO top-level ``type`` key
 
     Uses a fresh ASGI client with SpyEventBus installed before lifespan starts.
-    This test is RED until segments.py is fixed (Task 2).
+    Plan 06-01 (D-04): override get_write_target (not get_event_bus) to inject spy.
     """
-    from gruvax.api.deps import get_event_bus
+    from gruvax.api.deps import get_write_target
+
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
 
     await _seed_test_pin(db_pool)
     await load_boundaries_fresh()
 
     spy = _SpyEventBus()
     app = create_app()
-    app.dependency_overrides[get_event_bus] = lambda: spy
+    # Override get_write_target (not get_event_bus) — routes resolve per-profile bus
+    # from event_bus_registry, not from app.state.event_bus (Plan 06-01 / D-04).
+    app.dependency_overrides[get_write_target] = lambda: (_DEFAULT_PROFILE_UUID, spy)
     try:
         async with (
             LifespanManager(app) as manager,
@@ -879,7 +895,7 @@ async def test_overrides_publishes_correct_payload(db_pool) -> None:  # type: ig
                 f"Expected 200 from POST overrides, got {response.status_code}: {response.text}"
             )
     finally:
-        app.dependency_overrides.pop(get_event_bus, None)
+        app.dependency_overrides.pop(get_write_target, None)
 
     # Assert the event was published
     assert len(spy.published) >= 1, "Expected at least one boundary_changed publish"
@@ -918,18 +934,22 @@ async def test_insert_cut_publishes_correct_payload(db_pool) -> None:  # type: i
       - NO top-level ``type`` key
 
     Uses a fresh ASGI client with SpyEventBus installed before lifespan starts.
-    This test is RED until segments.py is fixed (Task 2).
     Cleanup: reverts the insert via boundary_history DELETE + re-seed so the
     suite remains order-independent on the shared dev DB.
+    Plan 06-01 (D-04): override get_write_target (not get_event_bus) to inject spy.
     """
-    from gruvax.api.deps import get_event_bus
+    from gruvax.api.deps import get_write_target
+
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
 
     await _seed_test_pin(db_pool)
     await load_boundaries_fresh()
 
     spy = _SpyEventBus()
     app = create_app()
-    app.dependency_overrides[get_event_bus] = lambda: spy
+    # Override get_write_target (not get_event_bus) — routes resolve per-profile bus
+    # from event_bus_registry, not from app.state.event_bus (Plan 06-01 / D-04).
+    app.dependency_overrides[get_write_target] = lambda: (_DEFAULT_PROFILE_UUID, spy)
     change_set_id: str | None = None
     try:
         async with (
@@ -959,7 +979,7 @@ async def test_insert_cut_publishes_correct_payload(db_pool) -> None:  # type: i
             )
             change_set_id = response.json().get("change_set_id")
     finally:
-        app.dependency_overrides.pop(get_event_bus, None)
+        app.dependency_overrides.pop(get_write_target, None)
 
     # Assert the event was published
     assert len(spy.published) >= 1, "Expected at least one boundary_changed publish"

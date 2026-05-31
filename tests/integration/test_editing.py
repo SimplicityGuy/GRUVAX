@@ -116,7 +116,10 @@ async def _login(base_url: str) -> dict[str, str]:
         if res.status_code != 200:
             return {}
         csrf = res.cookies.get("gruvax_csrf") or ""
-        return {"cookies": dict(res.cookies), "csrf_token": csrf}
+        cookies = dict(res.cookies)
+        # Bind the default profile so get_write_target resolves without session_unbound (D-02).
+        cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
+        return {"cookies": cookies, "csrf_token": csrf}
 
 
 @pytest.mark.asyncio(loop_scope="session")

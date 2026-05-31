@@ -42,12 +42,19 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
 
 
 async def _login(client) -> dict:  # type: ignore[no-untyped-def]
-    """Helper: log in and return cookies + csrf token dict."""
+    """Helper: log in and return cookies + csrf token dict.
+
+    Merges the browse-binding cookie (D-02 fail-loud contract) so that admin
+    write requests resolve the per-profile session required by get_write_target.
+    """
     res = await client.post("/api/admin/login", json={"pin": "0000"})
     if res.status_code != 200:
         return {}
+    cookies = dict(res.cookies)
+    # Bind the default profile so get_write_target resolves without session_unbound (D-02).
+    cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
     return {
-        "cookies": res.cookies,
+        "cookies": cookies,
         "csrf_token": res.cookies.get("gruvax_csrf") or "",
     }
 

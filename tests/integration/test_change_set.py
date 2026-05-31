@@ -39,12 +39,19 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
 
 
 async def _login(client) -> dict:  # type: ignore[no-untyped-def]
-    """Helper: log in and return cookies + csrf token dict."""
+    """Helper: log in and return cookies + csrf token dict.
+
+    Merges the browse-binding cookie (D-02 fail-loud contract) so that admin
+    write requests resolve the per-profile session required by get_write_target.
+    """
     res = await client.post("/api/admin/login", json={"pin": "0000"})
     if res.status_code != 200:
         return {}
+    cookies = dict(res.cookies)
+    # Bind the default profile so get_write_target resolves without session_unbound (D-02).
+    cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
     return {
-        "cookies": res.cookies,
+        "cookies": cookies,
         "csrf_token": res.cookies.get("gruvax_csrf") or "",
     }
 
@@ -428,7 +435,9 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
         login_res = await ac.post("/api/admin/login", json={"pin": "0000"})
         if login_res.status_code != 200:
             pytest.skip("Login not implemented — skipping re-derive test")
-        auth_cookies = login_res.cookies
+        # Merge the browse-binding cookie so get_write_target resolves without 400 (D-02).
+        auth_cookies = dict(login_res.cookies)
+        auth_cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
         csrf_token = login_res.cookies.get("gruvax_csrf") or ""
 
         # Step 1: Record current SegmentCache state for cube (1, 0, 1).
@@ -544,7 +553,7 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
       (avoids polluting the module-scoped client fixture and ensures we capture only
       the events from this test's revert call).
 
-      1. Override get_event_bus with a SpyEventBus that records publish() calls.
+      1. Override get_write_target with a SpyEventBus that records publish() calls.
       2. Make a bulk write to cube (2, 0, 1) to create a change_set_id.
       3. Call the revert endpoint.
       4. Assert the SpyEventBus recorded a boundary_changed event with:
@@ -556,7 +565,7 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
 
     This test is RED before the INT-B fix in history.py (revert never publishes).
     """
-    from gruvax.api.deps import get_event_bus
+    from gruvax.api.deps import get_write_target
 
     class SpyEventBus:
         """Records all bus.publish() calls for assertion."""
@@ -569,14 +578,17 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
 
     spy = SpyEventBus()
 
-    def _spy_get_event_bus() -> SpyEventBus:
-        return spy
+    _DEFAULT_PROFILE_UUID_CHANGESET = "00000000-0000-0000-0000-000000000001"
+
+    def _spy_get_write_target() -> tuple[str, SpyEventBus]:
+        # Returns (profile_id, spy_bus) — matches the get_write_target return type.
+        # Plan 06-01 (D-04): admin write routes use get_write_target, not get_event_bus.
+        return _DEFAULT_PROFILE_UUID_CHANGESET, spy
 
     # Seed the test PIN so login works in the fresh app instance.
     from gruvax.auth.pin import hash_pin
 
     test_pin_hash = hash_pin("0000")
-    _DEFAULT_PROFILE_UUID_CHANGESET = "00000000-0000-0000-0000-000000000001"
     async with db_pool.connection() as conn:
         await conn.execute(
             "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
@@ -590,7 +602,9 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
     from gruvax.app import create_app
 
     app = create_app()
-    app.dependency_overrides[get_event_bus] = _spy_get_event_bus
+    # Override get_write_target (not get_event_bus) — routes resolve per-profile bus
+    # from event_bus_registry, not from app.state.event_bus (Plan 06-01 / D-04).
+    app.dependency_overrides[get_write_target] = _spy_get_write_target
 
     try:
         async with (
@@ -604,7 +618,9 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
             login_res = await ac.post("/api/admin/login", json={"pin": "0000"})
             if login_res.status_code != 200:
                 pytest.skip("Login not implemented — skipping publish test")
-            auth_cookies = login_res.cookies
+            # Merge the browse-binding cookie so get_write_target resolves without 400 (D-02).
+            auth_cookies = dict(login_res.cookies)
+            auth_cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
             csrf_token = login_res.cookies.get("gruvax_csrf") or ""
 
             # Make a bulk write to cube (2, 0, 1) — creates a change_set.
@@ -655,7 +671,7 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
             new_change_set_id = revert_body.get("change_set_id")
             assert new_change_set_id, "Revert must return its own change_set_id"
     finally:
-        app.dependency_overrides.pop(get_event_bus, None)
+        app.dependency_overrides.pop(get_write_target, None)
 
     # Assert the SpyEventBus captured a boundary_changed event from the revert.
     # Without the INT-B fix, revert never calls bus.publish(), so spy.published is empty.
