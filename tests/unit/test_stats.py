@@ -354,8 +354,10 @@ async def test_phantom_boundary_count_is_per_profile_scoped(db_pool) -> None:  #
     # Synthetic values — must not exist in profile_collection for either profile.
     _PHANTOM_LABEL = "__IN03_PHANTOM_LABEL__"
     _PHANTOM_CATALOG = "__IN03_PHANTOM_CAT__"
-    # Use a high unit_id + row/col unlikely to conflict with the seeded set.
-    _UNIT_ID = 9999
+    # unit_id must satisfy the cube_boundaries → units(id) FK; 1 is a seeded unit.
+    # The PK is (profile_id, unit_id, row, col), so profile B's row at (1, 3, 3)
+    # cannot collide with profile A's seeded boundaries.
+    _UNIT_ID = 1
     _ROW = 3
     _COL = 3
 
