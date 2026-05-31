@@ -97,7 +97,7 @@ def _ensure_gruvax_secret_key() -> None:
             key_val = settings.GRUVAX_SECRET_KEY.get_secret_value()  # type: ignore[attr-defined]
             if key_val:
                 os.environ["GRUVAX_SECRET_KEY"] = key_val
-        except AttributeError, Exception:
+        except Exception:
             # Fall back to generating a fresh key for the session.
             os.environ["GRUVAX_SECRET_KEY"] = Fernet.generate_key().decode()
     yield  # type: ignore[misc]

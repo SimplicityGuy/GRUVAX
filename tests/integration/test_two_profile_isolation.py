@@ -426,7 +426,7 @@ async def test_boundary_changed_fans_out_per_profile(
             ) as check_stream,
         ):
             b_channel_status = check_stream.status_code
-    except httpx.TimeoutException, httpx.RemoteProtocolError:
+    except (httpx.TimeoutException, httpx.RemoteProtocolError):
         pass  # timeout reading body is fine — we only care about the status line
 
     assert b_channel_status == 200, (
@@ -465,7 +465,7 @@ async def test_boundary_changed_fans_out_per_profile(
                     if "boundary_changed" in line:
                         received_by_a.append(line)
                         return
-        except httpx.TimeoutException, httpx.RemoteProtocolError:
+        except (httpx.TimeoutException, httpx.RemoteProtocolError):
             a_ready.set()
 
     async def stream_b() -> None:
@@ -488,7 +488,7 @@ async def test_boundary_changed_fans_out_per_profile(
                     if "boundary_changed" in line:
                         received_by_b.append(line)
                         return
-        except httpx.TimeoutException, httpx.RemoteProtocolError:
+        except (httpx.TimeoutException, httpx.RemoteProtocolError):
             b_ready.set()
 
     task_a = asyncio.create_task(stream_a())
@@ -574,7 +574,7 @@ async def test_admin_editing_fans_out_per_profile(
             ) as check_stream,
         ):
             b_channel_status_2 = check_stream.status_code
-    except httpx.TimeoutException, httpx.RemoteProtocolError:
+    except (httpx.TimeoutException, httpx.RemoteProtocolError):
         pass
 
     assert b_channel_status_2 == 200, (
@@ -611,7 +611,7 @@ async def test_admin_editing_fans_out_per_profile(
                     if "admin_editing" in line:
                         received_by_a.append(line)
                         return
-        except httpx.TimeoutException, httpx.RemoteProtocolError:
+        except (httpx.TimeoutException, httpx.RemoteProtocolError):
             a_ready.set()
 
     async def stream_b() -> None:
@@ -634,7 +634,7 @@ async def test_admin_editing_fans_out_per_profile(
                     if "admin_editing" in line:
                         received_by_b.append(line)
                         return
-        except httpx.TimeoutException, httpx.RemoteProtocolError:
+        except (httpx.TimeoutException, httpx.RemoteProtocolError):
             b_ready.set()
 
     task_a = asyncio.create_task(stream_a())

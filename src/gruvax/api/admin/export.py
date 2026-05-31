@@ -182,11 +182,11 @@ def _decode_settings_value(raw: Any) -> Any:
         # JSON integer
         try:
             return int(stripped)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             pass
         # JSON float
         try:
             return float(stripped)
-        except ValueError, TypeError:
+        except (ValueError, TypeError):
             pass
     return raw

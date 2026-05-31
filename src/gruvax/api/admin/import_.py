@@ -720,7 +720,7 @@ async def import_settings(
         elif dotted_key in _BRIGHTNESS_KEYS:
             try:
                 int_value = int(value)
-            except TypeError, ValueError:
+            except (TypeError, ValueError):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={
@@ -755,7 +755,7 @@ async def import_settings(
             elif dotted_key in _INT_KEYS:
                 try:
                     int_val = int(value)
-                except TypeError, ValueError:
+                except (TypeError, ValueError):
                     logger.warning("Skipping invalid integer for %s", dotted_key)
                     continue
                 json_value = str(int_val)

@@ -693,7 +693,7 @@ async def test_sse_device_revoked(live_server) -> None:  # type: ignore[no-untyp
                         if "device_revoked" in line:
                             received_events.append(line)
                             return
-            except httpx.TimeoutException, httpx.RemoteProtocolError:
+            except (httpx.TimeoutException, httpx.RemoteProtocolError):
                 sse_ready.set()
 
         sse_task = asyncio.create_task(subscribe_sse())
@@ -809,7 +809,7 @@ async def test_sse_device_reassigned(live_server) -> None:  # type: ignore[no-un
                         if "device_reassigned" in line:
                             received_events.append(line)
                             return
-            except httpx.TimeoutException, httpx.RemoteProtocolError:
+            except (httpx.TimeoutException, httpx.RemoteProtocolError):
                 sse_ready.set()
 
         sse_task = asyncio.create_task(subscribe_profile_a_sse())
