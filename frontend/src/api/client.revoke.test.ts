@@ -42,14 +42,14 @@ afterEach(() => {
 
 describe('client.ts 403 device_revoked intercept', () => {
   it('sets revokePending=true on 403 with detail.type=device_revoked', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce(REVOKE_403)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(REVOKE_403)
 
     await expect(searchCollection('blue note')).rejects.toThrow('device_revoked')
     expect(useSessionStore.getState().revokePending).toBe(true)
   })
 
   it('does NOT set revokePending on a 403 with a different detail.type', async () => {
-    vi.spyOn(global, 'fetch').mockResolvedValueOnce(OTHER_403)
+    vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(OTHER_403)
 
     await expect(searchCollection('blue note')).rejects.toThrow()
     // revokePending must stay false — other 403s are not device_revoked
