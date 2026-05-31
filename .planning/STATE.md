@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Resilience + Privacy + UX polish
-status: executing
-last_updated: "2026-05-31T05:21:30.956Z"
+status: ready_to_plan
+last_updated: 2026-05-31T22:23:37.490Z
 last_activity: 2026-05-31
 progress:
   total_phases: 6
@@ -11,6 +11,7 @@ progress:
   total_plans: 3
   completed_plans: 3
   percent: 17
+stopped_at: Phase 06 complete (3/3) — ready to discuss Phase 7
 ---
 
 # State: GRUVAX
@@ -21,7 +22,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 06 — safe-boundaries-live-device-lifecycle
+**Current Focus:** Phase 7 — member self connect + collection diff
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -29,9 +30,9 @@ progress:
 
 ## Current Position
 
-Phase: 06 (safe-boundaries-live-device-lifecycle) — COMPLETE
-Plan: 3 of 3 (all plans complete)
-Status: Phase 06 complete — 3/3 plans delivered
+Phase: 7
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-05-31 -- Phase 06 Plan 03 (two-profile isolation tests) complete
 
 ```

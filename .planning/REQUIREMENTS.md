@@ -14,7 +14,7 @@
 ### Devices & Pairing
 
 - [ ] **DEV-04**: The kiosk pairing screen presents a **QR code alongside** the existing 4-digit PIN. The admin can scan the QR on a phone (opens the bind page prefilled with the current code) **or** type the code — both paths call the same bind endpoint. The QR re-renders when the pairing code auto-rerolls. The QR encodes a bind **URL carrying an opaque short-TTL code**, never a credential.
-- [ ] **DEV-05**: The kiosk reflects device **switch / revoke live via SSE** — a re-bind or revoke takes effect without a manual reload (closes the v2.0 DEV-02 SSE-immediacy tech debt). On revoke (403 terminal), the kiosk reverts to the profile-picker / pairing screen.
+- [x] **DEV-05**: The kiosk reflects device **switch / revoke live via SSE** — a re-bind or revoke takes effect without a manual reload (closes the v2.0 DEV-02 SSE-immediacy tech debt). On revoke (403 terminal), the kiosk reverts to the profile-picker / pairing screen.
 
 ### Sync & Collection
 
@@ -73,7 +73,7 @@
 | Requirement | Phase | Status |
 |-------------|-------|--------|
 | DATA-01 | Phase 6 | Complete |
-| DEV-05 | Phase 6 | Pending |
+| DEV-05 | Phase 6 | Complete |
 | AUTH-02 | Phase 7 | Pending |
 | API-04 | Phase 7 | Pending |
 | DEV-04 | Phase 8 | Pending |
