@@ -1,6 +1,6 @@
 # Roadmap: GRUVAX
 
-**Created:** 2026-05-19 (v1.0) — extended 2026-05-26 (v2.0 kickoff)
+**Created:** 2026-05-19 (v1.0) — extended 2026-05-26 (v2.0 kickoff) — extended 2026-05-30 (v2.1 kickoff)
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
 ## Core Value (north star for every phase)
@@ -11,7 +11,7 @@
 
 - ✅ **v1.0 MVP** — Phases 1–10 (shipped 2026-05-26) — see [`milestones/v1.0-ROADMAP.md`](./milestones/v1.0-ROADMAP.md) and [`MILESTONES.md`](./MILESTONES.md#v10-mvp-shipped-2026-05-26)
 - ✅ **v2.0 Multi-User Collections** — Phases 1–5 (shipped 2026-05-30) — see [`milestones/v2.0-ROADMAP.md`](./milestones/v2.0-ROADMAP.md) and [`MILESTONES.md`](./MILESTONES.md#v20-multi-user-collections-shipped-2026-05-30)
-- 📋 **v2.1 Resilience + Privacy + UX polish** — Phases TBD (planned) — define fresh requirements via `/gsd-new-milestone`
+- 🚧 **v2.1 Resilience + Privacy + UX polish** — Phases 6–10 (in progress)
 
 ## Phases
 
@@ -48,13 +48,79 @@ Full v2.0 phase details: [`milestones/v2.0-ROADMAP.md`](./milestones/v2.0-ROADMA
 
 </details>
 
-### 📋 v2.1 Resilience + Privacy + UX polish (Planned)
+### 🚧 v2.1 Resilience + Privacy + UX polish (In Progress)
 
-Fresh requirements to be defined via `/gsd-new-milestone`. Candidate scope parked in [`milestones/v2.0-REQUIREMENTS.md`](./milestones/v2.0-REQUIREMENTS.md) "Future Requirements" + the Backlog below: AUTH-02 (self-connect PAT), DEV-04 (QR pairing), API-04 (collection diff), SRCH-09 / OFF-01..04 / PRIV-01..04 (SPIDR-deferred), plus v2.0 tech-debt closure (DEV-02 SSE listeners; `write_boundary` profile scoping).
+Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next integer). Hardens GRUVAX for real household use: closes v2.0 tech debt, enables member self-connect PAT, adds QR pairing, enforces query privacy, delivers offline/reconnect UX, and polishes the shelf overview.
 
-**Committed scope** (promoted from backlog 2026-05-30 — gets a Phase number when `/gsd-new-milestone` builds the v2.1 roadmap):
+- [ ] **Phase 6: Safe Boundaries + Live Device Lifecycle** — write_boundary profile-scoped; kiosk reacts to revoke/reassign live via SSE.
+- [ ] **Phase 7: Member Self-Connect + Collection Diff** — invite-token flow (member pastes own PAT); "N new records" badge after sync; migration 0012 folded in.
+- [ ] **Phase 8: QR Pairing + Privacy + Recently-Pulled** — QR alongside 4-digit PIN; session-only history; no-PIN kiosk reset; structlog query redaction.
+- [ ] **Phase 9: Offline + Reconnect UX** — offline banner (SSE-authoritative); degraded mode; auto-reconnect with backoff+jitter; stale-data refresh on reconnect.
+- [ ] **Phase 10: Shelf Fill-Overview** — mini-Kallax fill/occupancy in `LocatorHeader`; milestone close.
 
-- **Shelf-overview mini-Kallax fill/occupancy** (was 999.1) — UX polish. Admin ShelfBinList `LocatorHeader` mini 4×4 Kallax should show per-cube fill/occupancy at a glance (fill shade or occupied/empty) instead of uniform dim tiles. Data already exists: `GET /api/admin/cubes` returns `is_empty` + `fill_level` per cube. Relates to Phase 5 (segment editor) + CUBE-05 empty-cube desaturated state. Artifacts: `.planning/phases/999.1-shelf-overview-mini-kallax-shows-per-cube-fill-occupancy/`.
+## Phase Details
+
+### Phase 6: Safe Boundaries + Live Device Lifecycle
+**Goal**: The kiosk reflects device revoke/reassign immediately via SSE, and boundary writes are scoped to the correct profile — making multi-profile boundary editing safe.
+**Depends on**: Nothing (v2.1 foundation — must go first)
+**Requirements**: DATA-01, DEV-05
+**Success Criteria** (what must be TRUE):
+  1. When the admin revokes a kiosk device, the kiosk navigates to the pairing screen within one SSE ping interval (no manual reload required).
+  2. When the admin reassigns a kiosk to a different profile, the kiosk re-binds and shows the new profile's collection live.
+  3. A boundary edit on profile A cannot modify profile B's cube for the same physical position (verified by two-profile integration test).
+  4. The `boundary_changed` SSE event is delivered only to SSE clients subscribed to the affected profile's bus (not broadcast to all profiles).
+**Plans**: TBD
+**UI hint**: no
+
+### Phase 7: Member Self-Connect + Collection Diff
+**Goal**: A household member can connect their own Discogs collection to a profile without the owner ever seeing their PAT; after each sync the kiosk and admin show how many new records arrived.
+**Depends on**: Phase 6 (SSE bus correctness ensures `collection_changed` diff payload reaches the right kiosk)
+**Requirements**: AUTH-02, API-04
+**Open decisions (resolve at plan time)**: Invite-redeem TLS posture on LAN; `first_seen_at` vs `arrived_at` column naming; discogsography CI fixture must support a `limit=1` PAT-validation call.
+**Success Criteria** (what must be TRUE):
+  1. Owner generates a time-limited invite link for a profile; the link can be shared via iMessage/email; the owner's admin UI shows only `has_token: true/false`, never the raw or encrypted token.
+  2. Member opens the invite link, pastes their own discogsography PAT into the form, and submits; the profile connects and an initial sync starts — all without the owner taking any further action.
+  3. Submitting the same invite link a second time returns a clear "already redeemed" error (single-use enforced).
+  4. After any sync (nightly or manual), the admin diagnostics card and kiosk `collection_changed` SSE payload include an `item_count_delta` showing how many records are new since the previous sync.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 8: QR Pairing + Privacy + Recently-Pulled
+**Goal**: The kiosk pairing screen offers a scannable QR code alongside the 4-digit PIN; search history never persists beyond the current session; a no-PIN "Reset kiosk" button clears the local session; query text never appears in server logs.
+**Depends on**: Phase 6 (DEV-05 SSE consumer wired before QR adds a second pairing path)
+**Requirements**: DEV-04, PRIV-01, PRIV-02, PRIV-03, PRIV-04, SRCH-09
+**Open decisions (resolve at plan time)**: QR HTTP-vs-HTTPS on LAN (Pitfall 39 — recommend Option A: HTTP + 60-second nonce rotation + single-use, documented as a Key Decision).
+**Success Criteria** (what must be TRUE):
+  1. The kiosk pairing screen displays a QR code next to the 4-digit PIN; the admin can scan it on a phone and complete pairing without typing — and both paths call the same `complete_pairing()` function and emit identical audit log entries.
+  2. The recently-pulled chip list clears on browser session end, on kiosk reboot, and when the owner taps "Reset kiosk" — it does not survive a hard Chromium restart.
+  3. Tapping "Reset kiosk" (visible only when no admin session is active) clears the local session client-side only with zero API calls.
+  4. Running `docker logs gruvax-api | grep <any-search-term>` returns zero hits after a search (structlog query redaction + Uvicorn access-log disabled confirmed by CI test).
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 9: Offline + Reconnect UX
+**Goal**: When the GRUVAX server is unreachable the kiosk shows a clear offline banner (driven by SSE state, not `navigator.onLine`), preserves the last locate result, then auto-reconnects with backoff and refreshes stale data on success.
+**Depends on**: Phase 6 (DEV-05 SSE consumer handles device-revoked 403 as terminal state, required for correct offline terminal-revoke path)
+**Requirements**: OFF-01, OFF-02, OFF-03, OFF-04
+**Open decisions (resolve at plan time)**: TanStack Query `networkMode: 'always'` (PITFALLS reasoning overrides STACK recommendation — prevents reconnect storm; Pitfall 36).
+**Success Criteria** (what must be TRUE):
+  1. Stopping `gruvax-api` causes the offline banner to appear on the kiosk within one SSE ping interval (~15–20 s); `navigator.onLine` alone does not trigger it.
+  2. While offline, the last locate result and cube highlight remain visible; the search input is disabled with a clear "Offline" affordance.
+  3. When `gruvax-api` restarts, all kiosks reconnect and the offline banner clears within 30 seconds; reconnects are spread over a jitter window (no simultaneous thundering herd).
+  4. On successful reconnect, stale search and boundary data is refreshed (TanStack Query invalidation on `server_hello`); any diff badge that was dismissed stays dismissed.
+**Plans**: TBD
+**UI hint**: yes
+
+### Phase 10: Shelf Fill-Overview
+**Goal**: The admin ShelfBinList `LocatorHeader` mini 4×4 Kallax shows per-cube fill/occupancy at a glance, giving the owner an instant visual of how full each bin is without opening the full boundary editor.
+**Depends on**: Phase 6 (write_boundary profile-scoping ensures fill data is correctly isolated per profile before it is visualized)
+**Requirements**: UX-01
+**Success Criteria** (what must be TRUE):
+  1. The `LocatorHeader` mini-Kallax renders each cube shaded by fill level (`is_empty` cubes in the CUBE-05 desaturated state, filled cubes proportionally lit) using existing design tokens — no hardcoded hex values.
+  2. The fill shading updates live after a sync (TanStack Query invalidation on `collection_changed`) without a page reload.
+  3. An empty cube and a full cube are visually distinct at a glance on the 7" kiosk display.
+**Plans**: TBD
+**UI hint**: yes
 
 ## Progress
 
@@ -75,12 +141,14 @@ Fresh requirements to be defined via `/gsd-new-milestone`. Candidate scope parke
 | 3. Devices + pairing | v2.0 | 7/7 | Complete | 2026-05-29 |
 | 4. Sync polish + diagnostics | v2.0 | 4/4 | Complete | 2026-05-30 |
 | 5. Close v2.0 integration gaps (B-01 + B-02) | v2.0 | 2/2 | Complete | 2026-05-30 |
-| Shelf-overview mini-Kallax fill/occupancy (was 999.1) | v2.1 | 0/0 | Committed | — |
+| 6. Safe Boundaries + Live Device Lifecycle | v2.1 | 0/TBD | Not started | — |
+| 7. Member Self-Connect + Collection Diff | v2.1 | 0/TBD | Not started | — |
+| 8. QR Pairing + Privacy + Recently-Pulled | v2.1 | 0/TBD | Not started | — |
+| 9. Offline + Reconnect UX | v2.1 | 0/TBD | Not started | — |
+| 10. Shelf Fill-Overview | v2.1 | 0/TBD | Not started | — |
 | 999.2. LED "party" + "sound-reactive" modes | Backlog | 0/0 | Captured | — |
 
 ## Backlog
-
-> **999.1 promoted 2026-05-30** → committed to v2.1 scope (see the v2.1 Planned section above).
 
 ### Phase 999.2: LED "party" mode + "sound-reactive" mode (BACKLOG)
 

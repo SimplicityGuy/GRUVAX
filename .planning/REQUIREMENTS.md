@@ -60,41 +60,39 @@
 
 ## Open Decisions (resolve at discuss/plan time, before the owning phase)
 
-| Decision | Recommendation | Owning REQ |
-|----------|----------------|-----------|
-| QR pairing over HTTP vs HTTPS on the home LAN | HTTP + 60s rotating single-use nonce (proportionate to home threat model); document in Key Decisions | DEV-04 |
-| Invite-redeem posts the member PAT over plaintext HTTP on LAN | Document as a runbook note; TLS optional for home LAN | AUTH-02 |
-| New-record cache column name: `arrived_at` vs `first_seen_at` (avoid clash with Discogs `date_added`) | `first_seen_at` (GRUVAX-cache arrival, distinct from Discogs date) | API-04 |
-| TanStack Query `networkMode` for reconnect | `'always'` (prevents reconnect-triggered refetch storm; PITFALLS overrides STACK here) | OFF-03 |
-| Discogsography contract: token-validation call during invite redeem + diff support in CI fixture | Confirm fake-discogsography fixture supports a `limit=1` validation call | AUTH-02, API-04 |
+| Decision | Recommendation | Owning Phase |
+|----------|----------------|-------------|
+| QR pairing over HTTP vs HTTPS on the home LAN | HTTP + 60s rotating single-use nonce (proportionate to home threat model); document in Key Decisions | Phase 8 (DEV-04) |
+| Invite-redeem posts the member PAT over plaintext HTTP on LAN | Document as a runbook note; TLS optional for home LAN | Phase 7 (AUTH-02) |
+| New-record cache column name: `arrived_at` vs `first_seen_at` (avoid clash with Discogs `date_added`) | `first_seen_at` (GRUVAX-cache arrival, distinct from Discogs date) | Phase 7 (API-04) |
+| TanStack Query `networkMode` for reconnect | `'always'` (prevents reconnect-triggered refetch storm; PITFALLS overrides STACK here) | Phase 9 (OFF-03) |
+| Discogsography contract: token-validation call during invite redeem + diff support in CI fixture | Confirm fake-discogsography fixture supports a `limit=1` validation call | Phase 7 (AUTH-02, API-04) |
 
 ## Traceability
 
-Populated during roadmap creation (Step 10). v2.1 phases continue from Phase 6.
-
 | Requirement | Phase | Status |
 |-------------|-------|--------|
-| DATA-01 | TBD | Pending |
-| DEV-05 | TBD | Pending |
-| AUTH-02 | TBD | Pending |
-| API-04 | TBD | Pending |
-| DEV-04 | TBD | Pending |
-| SRCH-09 | TBD | Pending |
-| OFF-01 | TBD | Pending |
-| OFF-02 | TBD | Pending |
-| OFF-03 | TBD | Pending |
-| OFF-04 | TBD | Pending |
-| PRIV-01 | TBD | Pending |
-| PRIV-02 | TBD | Pending |
-| PRIV-03 | TBD | Pending |
-| PRIV-04 | TBD | Pending |
-| UX-01 | TBD | Pending |
+| DATA-01 | Phase 6 | Pending |
+| DEV-05 | Phase 6 | Pending |
+| AUTH-02 | Phase 7 | Pending |
+| API-04 | Phase 7 | Pending |
+| DEV-04 | Phase 8 | Pending |
+| PRIV-01 | Phase 8 | Pending |
+| PRIV-02 | Phase 8 | Pending |
+| PRIV-03 | Phase 8 | Pending |
+| PRIV-04 | Phase 8 | Pending |
+| SRCH-09 | Phase 8 | Pending |
+| OFF-01 | Phase 9 | Pending |
+| OFF-02 | Phase 9 | Pending |
+| OFF-03 | Phase 9 | Pending |
+| OFF-04 | Phase 9 | Pending |
+| UX-01 | Phase 10 | Pending |
 
 **Coverage:**
 - v2.1 requirements: 15 total
-- Mapped to phases: 0 (roadmapper to map)
-- Unmapped: 15 ⚠️ (resolved after roadmap creation)
+- Mapped to phases: 15 / 15 (100%) ✓
+- Unmapped: 0
 
 ---
 *Requirements defined: 2026-05-30*
-*Last updated: 2026-05-30 after v2.1 requirements definition*
+*Last updated: 2026-05-30 — traceability table filled after roadmap creation*

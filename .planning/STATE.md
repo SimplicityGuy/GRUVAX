@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Resilience + Privacy + UX polish
-status: planning
-last_updated: "2026-05-30T23:29:13.792Z"
+status: roadmap_created
+last_updated: "2026-05-30"
 last_activity: 2026-05-30
 progress:
-  total_phases: 0
+  total_phases: 5
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
@@ -21,7 +21,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** v2.0 shipped (2026-05-30). Planning next milestone — v2.1 Resilience + Privacy + UX polish (run `/gsd-new-milestone`).
+**Current Focus:** v2.1 roadmap created (5 phases, Phases 6–10). Ready for `/gsd:plan-phase 6`.
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -29,12 +29,25 @@ progress:
 
 ## Current Position
 
-Phase: Not started (defining requirements)
+Phase: 6 — Safe Boundaries + Live Device Lifecycle (not started)
 Plan: —
-Status: Defining requirements
-Last activity: 2026-05-30 — Milestone v2.1 started
+Status: Roadmap created; awaiting phase planning
+Last activity: 2026-05-30 — v2.1 roadmap created (Phases 6–10, 15 requirements mapped 100%)
 
-## Performance Metrics (v2.0)
+```
+v2.1 Progress: [          ] 0% (0/5 phases)
+```
+
+## Performance Metrics (v2.1)
+
+| Metric | Value |
+|--------|-------|
+| v2.1 requirements | 15 |
+| Requirements mapped | 15 / 15 (100%) |
+| Phases planned | 5 (Phases 6–10) |
+| Plans complete | 0 |
+
+### Historical (v2.0, shipped 2026-05-30)
 
 | Metric | Value |
 |--------|-------|
@@ -57,20 +70,35 @@ Last activity: 2026-05-30 — Milestone v2.1 started
 
 ## Accumulated Context
 
-### Pending Todos (carried into next milestone)
+### Pending Todos (active)
 
-- [ ] **Deployment-time:** wire the live discogsography API once their v2 contract artifact (`docs/specs/v2-gruvax-integration.md`) lands; reconcile any drift against the fake-discogsography fixture GRUVAX built against.
-- [ ] **v2.0 tech debt (non-blocking):** add `device_reassigned` / `device_revoked` SSE listeners to `KioskView.tsx` (DEV-02 immediacy); add `profile_id` to the `write_boundary` UPDATE WHERE clause before any multi-profile boundary-editing UI ships.
+- [ ] **Phase 6 prerequisite:** Grep-verify ALL `write_boundary` call sites in `src/gruvax/admin/cubes.py` before the Phase 6 PR merges — there must be exactly one caller per admin write path, and each must pass `profile_id` from the resolved session.
+- [ ] **Phase 7 prerequisite (open decision):** Confirm discogsography CI fixture supports a `limit=1` PAT-validation call (AUTH-02 integration tests require this before CI can run without network access).
+- [ ] **Phase 7 prerequisite (open decision):** Decide invite-redeem TLS posture on LAN (document as runbook note; TLS optional for home LAN but required if API ever extends beyond home LAN).
+- [ ] **Phase 7 prerequisite (open decision):** Settle `first_seen_at` vs `arrived_at` column naming for `profiles.prev_sync_item_count` companion before migration 0012 is written. Research recommends `first_seen_at`.
+- [ ] **Phase 8 prerequisite (open decision):** Resolve QR HTTP-vs-HTTPS on LAN (Pitfall 39). Research recommends Option A — HTTP + 60-second nonce rotation + single-use — documented as a Key Decision before DEV-04 implementation starts.
+- [ ] **Phase 9 prerequisite (open decision):** Confirm TanStack Query `networkMode: 'always'` (not `'offlineFirst'`) — PITFALLS reasoning overrides STACK recommendation; prevents reconnect storm (Pitfall 36).
+- [ ] **Deployment-time:** Wire the live discogsography API once their v2 contract artifact (`docs/specs/v2-gruvax-integration.md`) lands; reconcile any drift against the fake-discogsography fixture.
 
 ### Roadmap Evolution
 
-- **2026-05-26** — v2.0 milestone created. Phase numbering RESET via `--reset-phase-numbers`. 4 phases (P1: walking skeleton; P2: multi-profile; P3: devices + pairing; P4: sync polish + diagnostics). 12 active reqs mapped 100% across P1–P4. AUTH-01 deferred to v2.2.
-- **2026-05-26** — v1.0 archived. 10 phases, 50 plans, ~36k LOC. Phase 5 (Segment-Aware Position Precision) and Phase 10 (Close Milestone Gaps) were INSERTED during execution; both shipped clean. See `.planning/milestones/v1.0-ROADMAP.md` for the full archive.
-- Phase 5 inserted after Phase 4 (v1.0): Segment-Aware Position Precision — true integer insert; bumped LED→6, Wizards→7, Observability→8.
-- Phase 10 added (integer append) at end of v1.0: Close Milestone Gaps — INT-A SSE payload shape + INT-B undo re-derive/publish + traceability reconcile.
-- Phase 5 added: Close v2.0 integration gaps — B-01 kiosk collection_changed SSE listener + B-02 profile_id-null guard on search/locate. Integer append (closure phase, like v1.0 Phase 10). Sourced from v2.0-MILESTONE-AUDIT.md (gaps_found: 2 blockers).
+- **2026-05-30** — v2.1 roadmap created. Phase numbering CONTINUES from v2.0 (global sequence: v2.1 starts at Phase 6). 5 phases (P6: Safe Boundaries + Live Device Lifecycle; P7: Member Self-Connect + Collection Diff; P8: QR Pairing + Privacy + Recently-Pulled; P9: Offline + Reconnect UX; P10: Shelf Fill-Overview). 15 v2.1 requirements mapped 100% across P6–P10.
+- **2026-05-30** — v2.0 archived. 5 phases, 35 plans. Phase 5 (Close v2.0 integration gaps) inserted as closure phase. See `milestones/v2.0-ROADMAP.md`.
+- **2026-05-26** — v2.0 milestone created. Phase numbering RESET for v2.0 (started at Phase 1). 4 phases planned; Phase 5 inserted as closure phase during execution.
+- **2026-05-26** — v1.0 archived. 10 phases, 50 plans. Phase 5 (Segment-Aware Position Precision) and Phase 10 (Close Milestone Gaps) were INSERTED during execution.
 
 ### Decisions Made
+
+#### v2.1 (new)
+
+- **Phase numbering continues global sequence (D1)** — v2.1 starts at Phase 6, not Phase 1. No reset. The global phase counter is now at 10 (v2.1 will end at Phase 10).
+- **Migration 0012 folded into Phase 7 (D2)** — `invite_redemptions` table + `profiles.prev_sync_item_count` column are delivered as part of the AUTH-02 + API-04 feature phase, not a standalone schema-only phase (MVP mode: every phase must be user-observable).
+- **DATA-01 + DEV-05 are Phase 6 (D3)** — non-negotiable ordering constraint from research. `write_boundary` cross-profile corruption is a latent data-integrity hazard; kiosk SSE missing `device_revoked`/`device_reassigned` handlers block offline terminal-revoke. Both are pure code changes (no migration).
+- **SRCH-09 ships with PRIV-01..04 in Phase 8 (D4)** — they share `sessionStorage` semantics and the "Reset kiosk" button; the reset action must clear the recently-pulled list atomically.
+- **DEV-04 ships with privacy cluster in Phase 8 (D5)** — QR pairing is frontend-only and independent; grouping with the kiosk UX hardening phase avoids a single-requirement phase.
+- **OFF-01..04 are Phase 9 (D6)** — offline UX depends on Phase 6's SSE consumer fixes (DEV-05 terminal-revoke path) and is naturally its own end-to-end user-observable capability.
+- **UX-01 is Phase 10 (D7)** — shelf fill-overview depends on Phase 6's `write_boundary` fix (fill data must be profile-scoped correctly before visualization); serves as milestone-closing polish phase.
+- **TanStack Query `networkMode: 'always'` (D8)** — PITFALLS reasoning overrides STACK recommendation; prevents thundering-herd reconnect storm (Pitfall 36). Confirmed as the correct configuration for this SSE-driven app.
 
 #### v2.0 (carried from refined spec + roadmapper)
 
@@ -83,7 +111,7 @@ Last activity: 2026-05-30 — Milestone v2.1 started
 - **Open profile picker on LAN — no PIN for read-only browsing (R7)** — PIN still gates admin actions.
 - **9 SPIDR-deferred v1 reqs stay deferred (R8)** — SRCH-09, OFF-01..04, PRIV-01..04 → v2.1 resilience + privacy milestone.
 - **Walking-skeleton-first phase ordering (R9)** — vertical MVP slicing carries from v1.0.
-- **Reset phase numbering to P1–P4 (R10)** — each milestone gets its own phase namespace.
+- **Reset phase numbering to P1–P4 (R10)** — v2.0 used its own namespace; v2.1 continues the global sequence from 6.
 - **PROF-02 not split** — Profile manager admin UI maps to P2 (CRUD + status badges); P4 polish ("Sync now" progress + 401 re-auth badge + per-profile diagnostics cards) is covered by SYN-01 + SYN-02 in P4 without splitting PROF-02 into a second REQ row.
 
 #### v1.0 (carried for project-wide context)
@@ -95,7 +123,7 @@ Last activity: 2026-05-30 — Milestone v2.1 started
 - **Boundary cache + SSE invalidation** — cache loads at startup (Phase 1), invalidates on `boundary_changed` events (Phase 4 wires SSE). v2.0 P2 fans this out per-profile.
 - **In-app numeric keypad** mitigates labwc/squeekboard #2926 (Pitfall 4) — built in v1.0 Phase 3; v2.0 P3 reuses it for the 4-digit pairing code admin entry.
 - **MVP boundary seed via fixture** — Phase 1 uses a committed CSV/YAML fixture (no PII).
-- **Stack pinned** — Python 3.13, FastAPI 0.136.x, psycopg 3.2 async, SQLAlchemy 2.0 async, Alembic 1.18.x, sse-starlette 2.x, aiomqtt 3.x, eclipse-mosquitto:latest, React 19 + Vite 8 + Tailwind + GSAP + Framer Motion, Raspberry Pi OS Trixie + labwc + Chromium kiosk.
+- **Stack pinned** — Python 3.13, FastAPI 0.136.x, psycopg 3.2 async, SQLAlchemy 2.0 async, Alembic 1.18.x, sse-starlette 2.x, aiomqtt 3.x, eclipse-mosquitto:latest, React 19 + Vite 8 + Tailwind + GSAP + Framer Motion, Raspberry Pi OS Trixie + labwc + Chromium kiosk. v2.1 adds `react-qr-code` 2.0.21 (frontend only).
 - **search_path set via connect event listener** (not execute-before-configure) — prevents Alembic autobegin bug.
 - **alembic_version in public schema** (version_table_schema="public") — prevents DROP SCHEMA gruvax cascade from deleting version row.
 - **psycopg_pool configure callback** must leave connection in IDLE state.
@@ -105,7 +133,14 @@ Last activity: 2026-05-30 — Milestone v2.1 started
 - **Endpoint tests use `dependency_overrides`, not `patch`** — FastAPI resolves `Depends(require_admin)` by function reference at route registration.
 - **Closure phase pattern (v1.0 Phase 10)** — when an audit surfaces cross-phase seams that no single per-phase verification can catch, absorb them in a single closure phase rather than retrofitting earlier phases.
 
-### Open Questions (resolved at v2.0 close; confirm against the live discogsography contract at deploy time)
+### Open Questions (v2.1 — resolve at plan time)
+
+- **QR HTTP vs HTTPS (Pitfall 39):** Must decide before DEV-04 implementation (Phase 8). Research recommends Option A: HTTP + 60-second nonce rotation + single-use + documented as a Key Decision.
+- **Invite-redeem TLS posture:** POST sends member PAT in plaintext over HTTP on home LAN. Acceptable for home LAN; document in runbook. Required if ever exposed beyond home LAN.
+- **`first_seen_at` vs `arrived_at` column name:** For `profiles.prev_sync_item_count` companion (if a per-row timestamp ever added). Current v2.1 uses scalar `prev_sync_item_count` only — decide if/when per-row timestamps needed.
+- **Discogsography test double in CI:** AUTH-02 PAT validation calls discogsography's collection API. VCR cassette or mock HTTP client must be in place before Phase 7 CI can run without network access.
+
+### Open Questions (v2.0 — resolved; confirm at deploy time)
 
 - **Fingerprint cookie persistence across RPi reboot** — RESOLVED: confirmed via Phase 3 Playwright reboot-persistence test + hardware UAT 2026-05-30.
 - **Catalog# exposure / `user_id` envelope location / API rate limits** — modeled in the fake-discogsography contract fixture GRUVAX built against; re-verify against the real discogsography artifact (`docs/specs/v2-gruvax-integration.md`) when wiring the live API at deploy time.
@@ -113,7 +148,7 @@ Last activity: 2026-05-30 — Milestone v2.1 started
 
 ### Blockers
 
-None. (The pre-execution `DGS-PREREQ` external gate is no longer a blocker for the *milestone* — GRUVAX's v2.0 code was built and verified against a canonical fake-discogsography contract fixture. Wiring the live discogsography API is a deployment-time task tracked under Pending Todos.)
+None.
 
 ### Quick Tasks Completed
 
@@ -132,14 +167,10 @@ None. (The pre-execution `DGS-PREREQ` external gate is no longer a blocker for t
 
 ## Session Continuity
 
-**Last activity:** 2026-05-30 — v2.0 milestone closed and archived (5 phases, 35 plans; tag v2.0). ROADMAP/REQUIREMENTS/audit archived to `milestones/v2.0-*`; REQUIREMENTS.md removed (fresh for next milestone); PROJECT.md evolved; RETROSPECTIVE.md updated.
-**Prev:** 2026-05-30 (Phase 5 closure complete — B-01 + B-02 wired; milestone re-audit `gaps_found` → `tech_debt`).
-**Prev2:** 2026-05-26 (v1.0 milestone archived; v2.0 milestone created via `--reset-phase-numbers`.)
-**Next action:** /clear then /gsd-new-milestone
+**Last activity:** 2026-05-30 — v2.1 roadmap created (5 phases, Phases 6–10, 15 requirements mapped 100%). ROADMAP.md updated with v2.1 Phase Details section; STATE.md initialized for v2.1; REQUIREMENTS.md traceability table filled.
+**Prev:** 2026-05-30 — v2.0 milestone closed and archived (5 phases, 35 plans; tag v2.0). ROADMAP/REQUIREMENTS/audit archived to `milestones/v2.0-*`; REQUIREMENTS.md removed (fresh for next milestone); PROJECT.md evolved; RETROSPECTIVE.md updated.
+**Prev2:** 2026-05-30 — Phase 5 closure complete — B-01 + B-02 wired; milestone re-audit `gaps_found` → `tech_debt`.
+**Next action:** `/gsd:plan-phase 6`
 
 ---
-*State initialized: 2026-05-19 with roadmap creation. v2.0 milestone reset: 2026-05-26.*
-
-## Operator Next Steps
-
-- Start the next milestone with /gsd-new-milestone
+*State initialized: 2026-05-19 with roadmap creation. v2.0 milestone reset: 2026-05-26. v2.1 roadmap: 2026-05-30.*
