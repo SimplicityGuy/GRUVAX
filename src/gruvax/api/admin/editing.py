@@ -56,8 +56,8 @@ class EditingPayload(BaseModel):
 @router.post("/editing")
 async def signal_editing(
     body: EditingPayload,
-    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> JSONResponse:
     """Fan-out admin_editing event — no DB write, no state stored.
 

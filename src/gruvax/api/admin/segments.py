@@ -196,8 +196,8 @@ async def put_bin_cut(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> JSONResponse:
     """Update the cut point for a bin.
 
@@ -343,8 +343,8 @@ async def set_bin_overrides(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> JSONResponse:
     """Set per-label physical-width overrides for a bin.
 
@@ -479,8 +479,8 @@ async def insert_cut(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> JSONResponse:
     """Insert a new cut point after (after_unit_id, after_row, after_col).
 

@@ -90,8 +90,8 @@ async def revert_change_set(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> JSONResponse:
     """Conflict-aware revert of a change-set (D-11, D-12, ADMN-09).
 

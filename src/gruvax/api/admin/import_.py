@@ -154,8 +154,8 @@ async def import_boundaries(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, str] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> JSONResponse:
     """Atomic CSV/YAML boundary import with optional dry_run preview (ADMN-05, D-09, D-11, BAK-01).
 

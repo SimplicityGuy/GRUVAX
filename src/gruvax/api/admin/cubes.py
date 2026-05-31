@@ -256,8 +256,8 @@ async def put_cube_boundary(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> JSONResponse:
     """Validate and (when valid) update a cube boundary.
 
@@ -684,8 +684,8 @@ async def bulk_write_cubes(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> JSONResponse:
     """Atomic bulk commit of all pending cube boundary edits (D-10, ADMN-09).
 
