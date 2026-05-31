@@ -1216,6 +1216,7 @@ async def get_phantom_boundary_count(
 SELECT COUNT(*)
 FROM gruvax.cube_boundaries cb
 WHERE cb.is_empty = FALSE
+  AND cb.profile_id = %s::uuid
   AND NOT EXISTS (
       SELECT 1 FROM gruvax.profile_collection v
       WHERE v.profile_id = %s::uuid
@@ -1224,7 +1225,7 @@ WHERE cb.is_empty = FALSE
   )
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql, (profile_id,))
+        await cur.execute(sql, (profile_id, profile_id))
         row = await cur.fetchone()
     return int(row[0]) if row else 0
 

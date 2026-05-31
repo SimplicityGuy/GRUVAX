@@ -333,6 +333,96 @@ async def test_phantom_boundary_count_returns_int(db_pool) -> None:  # type: ign
     assert result >= 0, f"Phantom count must be non-negative, got {result}"
 
 
+@pytest.mark.asyncio(loop_scope="session")
+async def test_phantom_boundary_count_is_per_profile_scoped(db_pool) -> None:  # type: ignore[no-untyped-def]
+    """get_phantom_boundary_count counts only the requested profile's boundaries.
+
+    IN-03: the outer cube_boundaries scan must be filtered by profile_id so a
+    phantom boundary belonging to profile B is not counted against profile A.
+
+    Strategy:
+    - Create a second profile (B).
+    - Insert a non-empty cube boundary for profile B whose (first_label,
+      first_catalog) pair is guaranteed absent from B's profile_collection
+      (synthetic values that can never appear in a real collection).
+    - Read the count for profile A (default) and for profile B.
+    - Assert that profile A's count is unaffected by B's phantom boundary, and
+      that profile B reports exactly the 1 phantom row we inserted.
+    - Teardown: delete the inserted boundary row and soft-delete profile B.
+    """
+    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+    # Synthetic values — must not exist in profile_collection for either profile.
+    _PHANTOM_LABEL = "__IN03_PHANTOM_LABEL__"
+    _PHANTOM_CATALOG = "__IN03_PHANTOM_CAT__"
+    # Use a high unit_id + row/col unlikely to conflict with the seeded set.
+    _UNIT_ID = 9999
+    _ROW = 3
+    _COL = 3
+
+    # ── Create profile B ──────────────────────────────────────────────────────
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "INSERT INTO gruvax.profiles "
+            "(display_name, app_token_encrypted, app_token_revoked, last_sync_status) "
+            "VALUES ('IN03-test', %s::bytea, TRUE, NULL) "
+            "RETURNING id::text",
+            (b"",),
+        )
+        row = await cur.fetchone()
+        await conn.commit()
+
+    assert row is not None, "profile B INSERT failed"
+    profile_b: str = row[0]
+
+    try:
+        # Capture profile A's phantom count before any insertion.
+        count_a_before = await get_phantom_boundary_count(db_pool, profile_id=_DEFAULT_PROFILE_UUID)
+
+        # Insert a phantom boundary row for profile B.
+        async with db_pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "INSERT INTO gruvax.cube_boundaries "
+                "(profile_id, unit_id, row, col, first_label, first_catalog, is_empty) "
+                "VALUES (%s::uuid, %s, %s, %s, %s, %s, FALSE) "
+                "ON CONFLICT (profile_id, unit_id, row, col) DO UPDATE "
+                "  SET first_label = EXCLUDED.first_label, "
+                "      first_catalog = EXCLUDED.first_catalog, "
+                "      is_empty = FALSE",
+                (profile_b, _UNIT_ID, _ROW, _COL, _PHANTOM_LABEL, _PHANTOM_CATALOG),
+            )
+            await conn.commit()
+
+        # Profile A's count must be unchanged — B's phantom must not bleed through.
+        count_a_after = await get_phantom_boundary_count(db_pool, profile_id=_DEFAULT_PROFILE_UUID)
+        assert count_a_after == count_a_before, (
+            f"IN-03 regression: profile A phantom count changed from {count_a_before} to "
+            f"{count_a_after} after inserting a boundary for profile B. "
+            f"The outer cube_boundaries scan is not scoped to the requested profile_id."
+        )
+
+        # Profile B must count exactly 1 phantom (the row we just inserted).
+        count_b = await get_phantom_boundary_count(db_pool, profile_id=profile_b)
+        assert count_b == 1, (
+            f"IN-03: expected 1 phantom for profile B, got {count_b}. "
+            f"The synthetic (label, catalog) pair should never appear in profile_collection."
+        )
+
+    finally:
+        # Teardown: remove the inserted boundary row and soft-delete profile B.
+        async with db_pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(
+                "DELETE FROM gruvax.cube_boundaries "
+                "WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s",
+                (profile_b, _UNIT_ID, _ROW, _COL),
+            )
+            await cur.execute(
+                "UPDATE gruvax.profiles SET deleted_at = now() "
+                "WHERE id = %s::uuid AND deleted_at IS NULL",
+                (profile_b,),
+            )
+            await conn.commit()
+
+
 # ── reset_record_stats ─────────────────────────────────────────────────────────
 
 
