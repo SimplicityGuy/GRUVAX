@@ -11,12 +11,12 @@ These are static source-inspection tests that FAIL before Task 2 and PASS after.
 
 from __future__ import annotations
 
+from pathlib import Path
 import re
 
 
 def _read_src(path: str) -> str:
-    with open(path) as f:
-        return f.read()
+    return Path(path).read_text()
 
 
 ADMIN_FILES = {
@@ -103,10 +103,7 @@ class TestGetWriteTargetCount:
         )
 
     def test_total_get_write_target_count_at_least_7(self) -> None:
-        total = sum(
-            _read_src(p).count("Depends(get_write_target)")
-            for p in ADMIN_FILES.values()
-        )
+        total = sum(_read_src(p).count("Depends(get_write_target)") for p in ADMIN_FILES.values())
         assert total >= 7, (
             f"Total Depends(get_write_target) calls across admin files must be >= 7, got {total}"
         )

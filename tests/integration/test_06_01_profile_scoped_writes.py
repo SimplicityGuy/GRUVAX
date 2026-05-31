@@ -28,9 +28,7 @@ class TestWriteBoundarySignature:
         from gruvax.db.queries import write_boundary
 
         sig = inspect.signature(write_boundary)
-        assert "profile_id" in sig.parameters, (
-            "write_boundary must have a profile_id parameter"
-        )
+        assert "profile_id" in sig.parameters, "write_boundary must have a profile_id parameter"
 
     def test_write_boundary_returns_int_annotation(self) -> None:
         from gruvax.db.queries import write_boundary
@@ -41,11 +39,11 @@ class TestWriteBoundarySignature:
 
             hints = typing.get_type_hints(write_boundary)
         except Exception:
-            pass
+            hints = {}
         # At minimum the annotation must not be None — we check that the function
         # has been updated to return int (rowcount).  A return annotation of None
         # means the original signature is still in place.
-        ret = hints.get("return", None)
+        ret = hints.get("return")
         assert ret is not None and ret is not type(None), (
             "write_boundary must be annotated to return int (rowcount), not None"
         )
@@ -73,9 +71,7 @@ class TestGetWriteTargetExists:
 
     def test_get_write_target_has_request_param(self) -> None:
         sig = inspect.signature(get_write_target)
-        assert "request" in sig.parameters, (
-            "get_write_target must accept a 'request' parameter"
-        )
+        assert "request" in sig.parameters, "get_write_target must accept a 'request' parameter"
 
 
 # ── Integration-level behaviour tests (require running app + DB) ─────────────
@@ -111,9 +107,7 @@ async def test_put_cube_boundary_no_session_returns_400(db_pool) -> None:  # typ
         # PUT with admin session but WITHOUT browse-binding cookie
         # We pass only the session + csrf cookies, NOT gruvax_profile_id
         session_cookies = {
-            k: v
-            for k, v in login_res.cookies.items()
-            if k in ("gruvax_session", "gruvax_csrf")
+            k: v for k, v in login_res.cookies.items() if k in ("gruvax_session", "gruvax_csrf")
         }
 
         response = await ac.put(
@@ -152,9 +146,7 @@ async def test_write_boundary_sql_contains_profile_id(db_pool) -> None:  # type:
     from gruvax.db import queries
 
     src = insp.getsource(queries.write_boundary)
-    assert "profile_id" in src, (
-        "write_boundary source must mention profile_id"
-    )
+    assert "profile_id" in src, "write_boundary source must mention profile_id"
     # The WHERE clause pattern check
     assert "profile_id = %s" in src or "profile_id=%s" in src, (
         "write_boundary WHERE clause must contain 'profile_id = %s'"
