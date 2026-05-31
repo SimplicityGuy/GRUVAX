@@ -616,10 +616,9 @@ async def fetch_current_boundary(
     not contain those keys.  boundary_history still stores prev_last_* /
     new_last_* as nullable audit columns; callers pass None for new_last_*.
 
-    Phase 6 (DATA-01): profile_id added to WHERE clause so reads are scoped to
-    the resolved profile.  Defaults to None for backward-compatible call sites;
-    when profile_id is supplied it is included in WHERE, otherwise the legacy
-    unscoped path is used (T-06-01 mitigation).
+    Phase 6 (DATA-01): profile_id is required for all admin write/read paths.
+    Passing None raises ValueError so callers on the admin path cannot silently
+    scan all profiles (WR-03 — explicit contract, safe default).
 
     Args:
         conn:       Open psycopg async connection (inside a transaction).
@@ -627,25 +626,22 @@ async def fetch_current_boundary(
         row:        Cube row index.
         col:        Cube column index.
         profile_id: UUID string of the profile to scope the read to (DATA-01).
-                    When supplied, only the matching profile's row is returned.
+                    Raises ValueError when None to prevent unscoped all-profile reads.
 
     Returns:
         Dict with boundary fields or None if the cube does not exist.
     """
-    if profile_id is not None:
-        sql = """
+    if profile_id is None:
+        raise ValueError(
+            "fetch_current_boundary: profile_id is required (WR-03). "
+            "Pass the resolved profile_id from get_write_target."
+        )
+    sql = """
 SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
 WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
 """
-        params: tuple[Any, ...] = (profile_id, unit_id, row, col)
-    else:
-        sql = """
-SELECT unit_id, row, col, first_label, first_catalog, is_empty
-FROM gruvax.cube_boundaries
-WHERE unit_id = %s AND row = %s AND col = %s
-"""
-        params = (unit_id, row, col)
+    params: tuple[Any, ...] = (profile_id, unit_id, row, col)
     async with conn.cursor() as cur:
         await cur.execute(sql, params)
         row_raw = await cur.fetchone()
@@ -674,9 +670,9 @@ async def write_boundary(
     cube_boundaries.  The UPDATE no longer touches those columns; they are
     now derived by SegmentCache from the next cube's cut point.
 
-    Phase 6 (DATA-01): profile_id added to WHERE clause (T-06-01 mitigation).
-    Returns the affected-row count (int) so callers can detect 0-row writes
-    (D-10) and abort bulk transactions (D-11).
+    Phase 6 (DATA-01): profile_id is required on all admin write paths.
+    Passing None raises ValueError to prevent unscoped multi-profile writes
+    (WR-03 — explicit contract, safe default).
 
     Args:
         conn:          Open psycopg async connection (inside a transaction).
@@ -687,30 +683,23 @@ async def write_boundary(
         first_catalog: New cut-point catalog number (None only when is_empty=True).
         is_empty:      Whether the cube is empty.
         profile_id:    UUID string of the profile to scope the write to (DATA-01).
-                       When supplied, the UPDATE WHERE includes profile_id = %s.
+                       Raises ValueError when None to prevent unscoped writes.
 
     Returns:
         Number of rows affected (0 if the cube does not exist for this profile).
     """
-    if profile_id is not None:
-        sql = """
+    if profile_id is None:
+        raise ValueError(
+            "write_boundary: profile_id is required (WR-03). "
+            "Pass the resolved profile_id from get_write_target."
+        )
+    sql = """
 UPDATE gruvax.cube_boundaries
 SET first_label = %s, first_catalog = %s,
     is_empty = %s
 WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
 """
-        params: tuple[Any, ...] = (
-            first_label, first_catalog, is_empty, profile_id, unit_id, row, col
-        )
-    else:
-        sql = """
-UPDATE gruvax.cube_boundaries
-SET first_label = %s, first_catalog = %s,
-    is_empty = %s
-WHERE unit_id = %s AND row = %s AND col = %s
-"""
-        params = (first_label, first_catalog, is_empty, unit_id, row, col)
-
+    params: tuple[Any, ...] = (first_label, first_catalog, is_empty, profile_id, unit_id, row, col)
     async with conn.cursor() as cur:
         await cur.execute(sql, params)
         return cur.rowcount if cur.rowcount is not None else 0
@@ -864,15 +853,18 @@ WHERE created_at < now() - INTERVAL '24 hours'
 
 async def list_change_sets(
     pool: AsyncConnectionPool,
+    profile_id: str,
 ) -> list[dict[str, Any]]:
     """Return change-sets from boundary_history grouped by change_set_id.
 
     Returns newest-first ordered by the MAX changed_at per change-set.
+    Scoped to the given profile_id (WR-02 — prevents cross-profile history leakage).
     Includes source, cube_count, and the representative changed_at timestamp.
     All SQL uses %s placeholders (T-03-24).
 
     Args:
-        pool: Open psycopg AsyncConnectionPool.
+        pool:       Open psycopg AsyncConnectionPool.
+        profile_id: UUID of the profile to scope the query to (WR-02, DATA-01).
 
     Returns:
         List of dicts with keys change_set_id, source, changed_at, cube_count.
@@ -884,12 +876,13 @@ SELECT
     MAX(changed_at) AS changed_at,
     COUNT(*) AS cube_count
 FROM gruvax.boundary_history
+WHERE profile_id = %s::uuid
 GROUP BY change_set_id, source
 ORDER BY MAX(changed_at) DESC
 LIMIT 100
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql)
+        await cur.execute(sql, (profile_id,))
         rows_raw = await cur.fetchall()
         cols_meta = [desc[0] for desc in (cur.description or [])]
     result: list[dict[str, Any]] = []
@@ -905,15 +898,19 @@ LIMIT 100
 async def fetch_change_set_rows(
     pool: AsyncConnectionPool,
     change_set_id: str,
+    profile_id: str,
 ) -> list[dict[str, Any]]:
     """Return all boundary_history rows for a given change_set_id.
 
+    Scoped to the given profile_id (WR-02 — prevents a revert from acting on
+    a change-set belonging to a different profile at the same UUID).
     Used by the revert handler to know which cubes to restore.
     All SQL uses %s placeholders (T-03-24).
 
     Args:
         pool:          Open psycopg AsyncConnectionPool.
         change_set_id: UUID of the change-set to fetch.
+        profile_id:    UUID of the profile to scope the query to (WR-02, DATA-01).
 
     Returns:
         List of dicts with full history row fields.
@@ -926,11 +923,11 @@ SELECT
     new_first_label, new_first_catalog, new_last_label, new_last_catalog, new_is_empty,
     changed_by, changed_at, source
 FROM gruvax.boundary_history
-WHERE change_set_id = %s::uuid
+WHERE change_set_id = %s::uuid AND profile_id = %s::uuid
 ORDER BY id
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql, (change_set_id,))
+        await cur.execute(sql, (change_set_id, profile_id))
         rows_raw = await cur.fetchall()
         cols_meta = [desc[0] for desc in (cur.description or [])]
     result: list[dict[str, Any]] = []
@@ -948,9 +945,12 @@ async def has_newer_changes(
     row: int,
     col: int,
     original_changed_at: Any,
+    profile_id: str,
 ) -> bool:
     """Return True if a newer boundary_history row exists for this cube.
 
+    Scoped to the given profile_id (WR-02 — prevents cross-profile conflict
+    false-positives where a newer edit on a different profile triggers a skip).
     Used by the revert handler to detect conflicts (D-12, Pitfall D).
     A conflict means a newer change-set has modified this cube since the
     change-set being reverted was written — reverting it would silently
@@ -964,18 +964,20 @@ async def has_newer_changes(
         row:                Cube row index.
         col:                Cube column index.
         original_changed_at: The changed_at timestamp of the history row being reverted.
+        profile_id:         UUID of the profile to scope the conflict check to (WR-02).
 
     Returns:
-        True if a newer boundary_history row exists for this (unit, row, col).
+        True if a newer boundary_history row exists for this (unit, row, col, profile).
     """
     sql = """
 SELECT 1 FROM gruvax.boundary_history
 WHERE unit_id = %s AND row = %s AND col = %s
   AND changed_at > %s
+  AND profile_id = %s::uuid
 LIMIT 1
 """
     async with conn.cursor() as cur:
-        await cur.execute(sql, (unit_id, row, col, original_changed_at))
+        await cur.execute(sql, (unit_id, row, col, original_changed_at, profile_id))
         row_raw = await cur.fetchone()
     return row_raw is not None
 
