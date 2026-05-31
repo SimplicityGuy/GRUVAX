@@ -2,11 +2,11 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Resilience + Privacy + UX polish
-status: roadmap_created
-last_updated: "2026-05-30"
-last_activity: 2026-05-30
+status: planning
+last_updated: "2026-05-31T02:59:48.391Z"
+last_activity: 2026-05-30 — v2.1 roadmap created (5 phases, Phases 6–10, 15 requirements mapped 100%). ROADMAP.md updated with v2.1 Phase Details section; STATE.md initialized for v2.1; REQUIREMENTS.md traceability table filled.
 progress:
-  total_phases: 5
+  total_phases: 6
   completed_phases: 0
   total_plans: 0
   completed_plans: 0
