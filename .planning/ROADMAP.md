@@ -61,67 +61,87 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 ## Phase Details
 
 ### Phase 6: Safe Boundaries + Live Device Lifecycle
+
 **Goal**: The kiosk reflects device revoke/reassign immediately via SSE, and boundary writes are scoped to the correct profile — making multi-profile boundary editing safe.
 **Depends on**: Nothing (v2.1 foundation — must go first)
 **Requirements**: DATA-01, DEV-05
 **Success Criteria** (what must be TRUE):
+
   1. When the admin revokes a kiosk device, the kiosk navigates to the pairing screen within one SSE ping interval (no manual reload required).
   2. When the admin reassigns a kiosk to a different profile, the kiosk re-binds and shows the new profile's collection live.
   3. A boundary edit on profile A cannot modify profile B's cube for the same physical position (verified by two-profile integration test).
-  4. The `boundary_changed` SSE event is delivered only to SSE clients subscribed to the affected profile's bus (not broadcast to all profiles).
-**Plans**: 3 plans (2 waves)
+  4. The `boundary_changed` SSE event is delivered only to SSE clients subscribed to the affected profile's bus (not broadcast to all profiles).**Plans**: 3 plans (2 waves)
+
+**Wave 1**
+
   - [ ] 06-01-PLAN.md — DATA-01: profile-scope write_boundary + 6 call sites + per-profile SSE fan-out (Wave 1)
   - [ ] 06-02-PLAN.md — DEV-05: kiosk SSE device_revoked/device_reassigned handlers + unified 403 + Nordic-Grid notice/banner (Wave 1)
+
+**Wave 2** *(blocked on Wave 1 completion)*
+
   - [ ] 06-03-PLAN.md — DATA-01 verification: two-profile boundary isolation + unbound-400 + 0-row-404 + per-profile boundary_changed & admin_editing fan-out tests (Wave 2)
+
 **UI hint**: no
 
 ### Phase 7: Member Self-Connect + Collection Diff
+
 **Goal**: A household member can connect their own Discogs collection to a profile without the owner ever seeing their PAT; after each sync the kiosk and admin show how many new records arrived.
 **Depends on**: Phase 6 (SSE bus correctness ensures `collection_changed` diff payload reaches the right kiosk)
 **Requirements**: AUTH-02, API-04
 **Open decisions (resolve at plan time)**: Invite-redeem TLS posture on LAN; `first_seen_at` vs `arrived_at` column naming; discogsography CI fixture must support a `limit=1` PAT-validation call.
 **Success Criteria** (what must be TRUE):
+
   1. Owner generates a time-limited invite link for a profile; the link can be shared via iMessage/email; the owner's admin UI shows only `has_token: true/false`, never the raw or encrypted token.
   2. Member opens the invite link, pastes their own discogsography PAT into the form, and submits; the profile connects and an initial sync starts — all without the owner taking any further action.
   3. Submitting the same invite link a second time returns a clear "already redeemed" error (single-use enforced).
   4. After any sync (nightly or manual), the admin diagnostics card and kiosk `collection_changed` SSE payload include an `item_count_delta` showing how many records are new since the previous sync.
+
 **Plans**: TBD
 **UI hint**: yes
 
 ### Phase 8: QR Pairing + Privacy + Recently-Pulled
+
 **Goal**: The kiosk pairing screen offers a scannable QR code alongside the 4-digit PIN; search history never persists beyond the current session; a no-PIN "Reset kiosk" button clears the local session; query text never appears in server logs.
 **Depends on**: Phase 6 (DEV-05 SSE consumer wired before QR adds a second pairing path)
 **Requirements**: DEV-04, PRIV-01, PRIV-02, PRIV-03, PRIV-04, SRCH-09
 **Open decisions (resolve at plan time)**: QR HTTP-vs-HTTPS on LAN (Pitfall 39 — recommend Option A: HTTP + 60-second nonce rotation + single-use, documented as a Key Decision).
 **Success Criteria** (what must be TRUE):
+
   1. The kiosk pairing screen displays a QR code next to the 4-digit PIN; the admin can scan it on a phone and complete pairing without typing — and both paths call the same `complete_pairing()` function and emit identical audit log entries.
   2. The recently-pulled chip list clears on browser session end, on kiosk reboot, and when the owner taps "Reset kiosk" — it does not survive a hard Chromium restart.
   3. Tapping "Reset kiosk" (visible only when no admin session is active) clears the local session client-side only with zero API calls.
   4. Running `docker logs gruvax-api | grep <any-search-term>` returns zero hits after a search (structlog query redaction + Uvicorn access-log disabled confirmed by CI test).
+
 **Plans**: TBD
 **UI hint**: yes
 
 ### Phase 9: Offline + Reconnect UX
+
 **Goal**: When the GRUVAX server is unreachable the kiosk shows a clear offline banner (driven by SSE state, not `navigator.onLine`), preserves the last locate result, then auto-reconnects with backoff and refreshes stale data on success.
 **Depends on**: Phase 6 (DEV-05 SSE consumer handles device-revoked 403 as terminal state, required for correct offline terminal-revoke path)
 **Requirements**: OFF-01, OFF-02, OFF-03, OFF-04
 **Open decisions (resolve at plan time)**: TanStack Query `networkMode: 'always'` (PITFALLS reasoning overrides STACK recommendation — prevents reconnect storm; Pitfall 36).
 **Success Criteria** (what must be TRUE):
+
   1. Stopping `gruvax-api` causes the offline banner to appear on the kiosk within one SSE ping interval (~15–20 s); `navigator.onLine` alone does not trigger it.
   2. While offline, the last locate result and cube highlight remain visible; the search input is disabled with a clear "Offline" affordance.
   3. When `gruvax-api` restarts, all kiosks reconnect and the offline banner clears within 30 seconds; reconnects are spread over a jitter window (no simultaneous thundering herd).
   4. On successful reconnect, stale search and boundary data is refreshed (TanStack Query invalidation on `server_hello`); any diff badge that was dismissed stays dismissed.
+
 **Plans**: TBD
 **UI hint**: yes
 
 ### Phase 10: Shelf Fill-Overview
+
 **Goal**: The admin ShelfBinList `LocatorHeader` mini 4×4 Kallax shows per-cube fill/occupancy at a glance, giving the owner an instant visual of how full each bin is without opening the full boundary editor.
 **Depends on**: Phase 6 (write_boundary profile-scoping ensures fill data is correctly isolated per profile before it is visualized)
 **Requirements**: UX-01
 **Success Criteria** (what must be TRUE):
+
   1. The `LocatorHeader` mini-Kallax renders each cube shaded by fill level (`is_empty` cubes in the CUBE-05 desaturated state, filled cubes proportionally lit) using existing design tokens — no hardcoded hex values.
   2. The fill shading updates live after a sync (TanStack Query invalidation on `collection_changed`) without a page reload.
   3. An empty cube and a full cube are visually distinct at a glance on the 7" kiosk display.
+
 **Plans**: TBD
 **UI hint**: yes
 

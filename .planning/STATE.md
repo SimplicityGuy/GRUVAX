@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Resilience + Privacy + UX polish
-status: planning
-last_updated: "2026-05-31T02:59:48.391Z"
-last_activity: 2026-05-30 — v2.1 roadmap created (5 phases, Phases 6–10, 15 requirements mapped 100%). ROADMAP.md updated with v2.1 Phase Details section; STATE.md initialized for v2.1; REQUIREMENTS.md traceability table filled.
+status: executing
+last_updated: "2026-05-31T03:35:30.507Z"
+last_activity: 2026-05-31
 progress:
   total_phases: 6
   completed_phases: 0
-  total_plans: 0
+  total_plans: 3
   completed_plans: 0
   percent: 0
 ---
@@ -31,8 +31,8 @@ progress:
 
 Phase: 6 — Safe Boundaries + Live Device Lifecycle (not started)
 Plan: —
-Status: Roadmap created; awaiting phase planning
-Last activity: 2026-05-30 — v2.1 roadmap created (Phases 6–10, 15 requirements mapped 100%)
+Status: Ready to execute
+Last activity: 2026-05-31 -- Phase 06 planning complete
 
 ```
 v2.1 Progress: [          ] 0% (0/5 phases)
@@ -167,7 +167,7 @@ None.
 
 ## Session Continuity
 
-**Last activity:** 2026-05-30 — v2.1 roadmap created (5 phases, Phases 6–10, 15 requirements mapped 100%). ROADMAP.md updated with v2.1 Phase Details section; STATE.md initialized for v2.1; REQUIREMENTS.md traceability table filled.
+**Last activity:** 2026-05-31
 **Prev:** 2026-05-30 — v2.0 milestone closed and archived (5 phases, 35 plans; tag v2.0). ROADMAP/REQUIREMENTS/audit archived to `milestones/v2.0-*`; REQUIREMENTS.md removed (fresh for next milestone); PROJECT.md evolved; RETROSPECTIVE.md updated.
 **Prev2:** 2026-05-30 — Phase 5 closure complete — B-01 + B-02 wired; milestone re-audit `gaps_found` → `tech_debt`.
 **Next action:** `/gsd:plan-phase 6`
