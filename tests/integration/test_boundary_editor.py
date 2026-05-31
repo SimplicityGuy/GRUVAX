@@ -183,6 +183,8 @@ async def test_validate_no_db_write(client) -> None:  # type: ignore[no-untyped-
 
     csrf_token = login_res.cookies.get("gruvax_csrf")
 
+    # WR-01 (Phase 6 CR fix): validate_boundary now requires a bound session (get_write_target)
+    # so phantom checks are scoped to the resolved profile, matching the commit path.
     response = await client.post(
         "/api/admin/cubes/validate",
         json={
@@ -197,7 +199,7 @@ async def test_validate_no_db_write(client) -> None:  # type: ignore[no-untyped-
                 }
             ]
         },
-        cookies=login_res.cookies,
+        cookies=_with_browse_binding(login_res.cookies),
         headers={"X-CSRF-Token": csrf_token or ""},
     )
     # If the endpoint exists, it must return 200 with movement_counts and NOT write to DB
