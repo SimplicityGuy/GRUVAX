@@ -77,9 +77,9 @@ from gruvax.api.admin.validation import validate_contiguity
 from gruvax.api.deps import (
     get_boundary_cache,
     get_collection_snapshot,
-    get_event_bus,
     get_pool,
     get_segment_cache,
+    get_write_target,
     require_admin,
 )
 from gruvax.db.queries import (
@@ -101,7 +101,6 @@ if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryCache
     from gruvax.estimator.collection_snapshot import CollectionSnapshot
     from gruvax.estimator.segment_cache import SegmentCache
-    from gruvax.events.bus import EventBus
 
 
 logger = logging.getLogger(__name__)
@@ -155,7 +154,7 @@ async def import_boundaries(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    bus: EventBus = Depends(get_event_bus),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, str] = Depends(require_admin),
 ) -> JSONResponse:
     """Atomic CSV/YAML boundary import with optional dry_run preview (ADMN-05, D-09, D-11, BAK-01).
@@ -197,6 +196,8 @@ async def import_boundaries(
 
     Idempotency-Key header (commit path only): same semantics as cubes/bulk.
     """
+    profile_id, bus = _write_target
+
     # ── 1. Read + size cap (runs before dry_run branching — both paths capped) ─
     content = await request.body()
     if len(content) > _MAX_UPLOAD_BYTES:
@@ -496,13 +497,15 @@ async def import_boundaries(
 
     async with pool.connection() as conn, conn.transaction():
         for edit in all_edits:
-            # Capture previous boundary for history audit
-            prev = await fetch_current_boundary(conn, edit.unit_id, edit.row, edit.col)
+            # Capture previous boundary for history audit — scoped to resolved profile.
+            prev = await fetch_current_boundary(
+                conn, edit.unit_id, edit.row, edit.col, profile_id=profile_id
+            )
 
             new_first_label = edit.first_label if not edit.is_empty else None
             new_first_catalog = edit.first_catalog if not edit.is_empty else None
 
-            await write_boundary(
+            rows_affected = await write_boundary(
                 conn,
                 edit.unit_id,
                 edit.row,
@@ -510,7 +513,19 @@ async def import_boundaries(
                 new_first_label,
                 new_first_catalog,
                 edit.is_empty,
+                profile_id=profile_id,
             )
+            # D-11: 0-row write inside transaction aborts the whole change-set.
+            if rows_affected == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "type": "boundary_not_found",
+                        "unit_id": edit.unit_id,
+                        "row": edit.row,
+                        "col": edit.col,
+                    },
+                )
 
             await write_history_row(
                 conn,
@@ -523,6 +538,7 @@ async def import_boundaries(
                 new_first_catalog,
                 edit.is_empty,
                 source=source,  # 'csv' or 'yaml' (D-04, T-07-01)
+                profile_id=profile_id,
             )
 
         # Upsert segment_overrides for entries with overrides (Pitfall 4 — inside txn).

@@ -40,9 +40,9 @@ from fastapi.responses import JSONResponse
 from gruvax.api.deps import (
     get_boundary_cache,
     get_collection_snapshot,
-    get_event_bus,
     get_pool,
     get_segment_cache,
+    get_write_target,
     require_admin,
 )
 from gruvax.db.queries import (
@@ -58,7 +58,6 @@ if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryCache
     from gruvax.estimator.collection_snapshot import CollectionSnapshot
     from gruvax.estimator.segment_cache import SegmentCache
-    from gruvax.events.bus import EventBus
 
 
 logger = logging.getLogger(__name__)
@@ -91,7 +90,7 @@ async def revert_change_set(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    bus: EventBus = Depends(get_event_bus),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Conflict-aware revert of a change-set (D-11, D-12, ADMN-09).
@@ -117,6 +116,8 @@ async def revert_change_set(
 
     HTTP 404 if the change_set_id is not found in boundary_history.
     """
+    profile_id, bus = _write_target
+
     # Fetch all history rows for this change-set
     rows = await fetch_change_set_rows(pool, change_set_id)
     if not rows:
@@ -162,7 +163,7 @@ async def revert_change_set(
             has_cut_point = bool(prev_first_label and prev_first_catalog)
             prev_is_empty = prev_is_empty_raw or not has_cut_point
 
-            await write_boundary(
+            rows_affected = await write_boundary(
                 conn,
                 unit_id,
                 row_idx,
@@ -170,7 +171,20 @@ async def revert_change_set(
                 prev_first_label,
                 prev_first_catalog,
                 prev_is_empty,
+                profile_id=profile_id,
             )
+            # D-10: 0-row write means the cube doesn't exist for this profile.
+            # Inside the transaction — aborts the whole revert atomically (D-11).
+            if rows_affected == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "type": "boundary_not_found",
+                        "unit_id": unit_id,
+                        "row": row_idx,
+                        "col": col_idx,
+                    },
+                )
 
             # Record the inverse change in history (source='revert').
             # The "prev" for this revert row is the *current* (new_*) values.
@@ -191,6 +205,7 @@ async def revert_change_set(
                 prev_first_catalog,
                 prev_is_empty,
                 source="revert",
+                profile_id=profile_id,
             )
 
             reverted.append(

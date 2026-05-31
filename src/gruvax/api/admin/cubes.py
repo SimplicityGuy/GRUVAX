@@ -52,9 +52,9 @@ from gruvax.api.admin.validation import validate_contiguity
 from gruvax.api.deps import (
     get_boundary_cache,
     get_collection_snapshot,
-    get_event_bus,
     get_pool,
     get_segment_cache,
+    get_write_target,
     require_admin,
 )
 from gruvax.db.queries import (
@@ -75,7 +75,6 @@ if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryCache
     from gruvax.estimator.collection_snapshot import CollectionSnapshot
     from gruvax.estimator.segment_cache import SegmentCache
-    from gruvax.events.bus import EventBus
 
 
 logger = logging.getLogger(__name__)
@@ -257,7 +256,7 @@ async def put_cube_boundary(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    bus: EventBus = Depends(get_event_bus),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Validate and (when valid) update a cube boundary.
@@ -275,6 +274,7 @@ async def put_cube_boundary(
     so the frontend can distinguish phantom errors without unwrapping a nested
     ``detail`` object.
     """
+    profile_id, bus = _write_target
     first_label = body.first_label or ""
     first_catalog = body.first_catalog or ""
 
@@ -303,16 +303,16 @@ async def put_cube_boundary(
     new_first_catalog = first_catalog or None
 
     async with pool.connection() as conn, conn.transaction():
-        # Capture prev_* before overwriting (history audit) — also the existence check.
-        prev = await fetch_current_boundary(conn, unit_id, row, col)
+        # Capture prev_* before overwriting (history audit) — scoped to resolved profile.
+        prev = await fetch_current_boundary(conn, unit_id, row, col, profile_id=profile_id)
         if prev is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"type": "cube_not_found", "unit_id": unit_id, "row": row, "col": col},
             )
 
-        # Write new boundary (cut-point shape: first_label, first_catalog, is_empty only)
-        await write_boundary(
+        # Write new boundary scoped to resolved profile (T-06-01; DATA-01).
+        rows_affected = await write_boundary(
             conn,
             unit_id,
             row,
@@ -320,20 +320,27 @@ async def put_cube_boundary(
             new_first_label,
             new_first_catalog,
             body.is_empty,
+            profile_id=profile_id,
         )
+        # 0-row write means the cube doesn't exist for this profile (D-10).
+        if rows_affected == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"type": "boundary_not_found", "unit_id": unit_id, "row": row, "col": col},
+            )
 
-        # Fetch the updated row for the response
+        # Fetch the updated row for the response (scoped to resolved profile).
         write_sql = """
 SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
-WHERE unit_id = %s AND row = %s AND col = %s
+WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
 """
         async with conn.cursor() as cur:
-            await cur.execute(write_sql, (unit_id, row, col))
+            await cur.execute(write_sql, (profile_id, unit_id, row, col))
             updated = await cur.fetchone()
             cols_meta = [desc[0] for desc in (cur.description or [])]
 
-        # Append to boundary_history with the shared change_set_id (CR-02).
+        # Append to boundary_history with the shared change_set_id and resolved profile.
         await write_history_row(
             conn,
             change_set_id,
@@ -345,6 +352,7 @@ WHERE unit_id = %s AND row = %s AND col = %s
             new_first_catalog,
             body.is_empty,
             source="manual",
+            profile_id=profile_id,
         )
     # transaction commits atomically on exiting the conn.transaction() context.
 
@@ -676,7 +684,7 @@ async def bulk_write_cubes(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    bus: EventBus = Depends(get_event_bus),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Atomic bulk commit of all pending cube boundary edits (D-10, ADMN-09).
@@ -704,6 +712,8 @@ async def bulk_write_cubes(
     Returns:
       ``{change_set_id: str, applied: int}``
     """
+    profile_id, bus = _write_target
+
     # ── Idempotency short-circuit (Pitfall 7) ────────────────────────────────
     idempotency_key = request.headers.get("Idempotency-Key")
     if idempotency_key:
@@ -746,14 +756,16 @@ async def bulk_write_cubes(
 
     async with pool.connection() as conn, conn.transaction():
         for edit in body.updates:
-            # Capture prev_* before overwriting (history audit)
-            prev = await fetch_current_boundary(conn, edit.unit_id, edit.row, edit.col)
+            # Capture prev_* before overwriting (history audit) — scoped to resolved profile.
+            prev = await fetch_current_boundary(
+                conn, edit.unit_id, edit.row, edit.col, profile_id=profile_id
+            )
 
             # Write new boundary values (cut-point shape: first_* + is_empty only)
             new_first_label = edit.first_label if not edit.is_empty else None
             new_first_catalog = edit.first_catalog if not edit.is_empty else None
 
-            await write_boundary(
+            rows_affected = await write_boundary(
                 conn,
                 edit.unit_id,
                 edit.row,
@@ -761,9 +773,21 @@ async def bulk_write_cubes(
                 new_first_label,
                 new_first_catalog,
                 edit.is_empty,
+                profile_id=profile_id,
             )
+            # D-11: if any cube affects 0 rows, raise INSIDE the transaction to abort all.
+            if rows_affected == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={
+                        "type": "boundary_not_found",
+                        "unit_id": edit.unit_id,
+                        "row": edit.row,
+                        "col": edit.col,
+                    },
+                )
 
-            # Append to boundary_history with shared change_set_id
+            # Append to boundary_history with shared change_set_id + resolved profile.
             await write_history_row(
                 conn,
                 change_set_id,
@@ -775,6 +799,7 @@ async def bulk_write_cubes(
                 new_first_catalog,
                 edit.is_empty,
                 source=body.source,  # Phase 7: use caller-supplied source (D-15, T-07-01)
+                profile_id=profile_id,
             )
 
         # Store idempotency key inside transaction (atomic with writes)
