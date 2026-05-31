@@ -604,6 +604,7 @@ async def fetch_current_boundary(
     unit_id: int,
     row: int,
     col: int,
+    profile_id: str | None = None,
 ) -> dict[str, Any] | None:
     """Read the current boundary row for a cube using an existing connection.
 
@@ -615,22 +616,38 @@ async def fetch_current_boundary(
     not contain those keys.  boundary_history still stores prev_last_* /
     new_last_* as nullable audit columns; callers pass None for new_last_*.
 
+    Phase 6 (DATA-01): profile_id added to WHERE clause so reads are scoped to
+    the resolved profile.  Defaults to None for backward-compatible call sites;
+    when profile_id is supplied it is included in WHERE, otherwise the legacy
+    unscoped path is used (T-06-01 mitigation).
+
     Args:
-        conn:    Open psycopg async connection (inside a transaction).
-        unit_id: Cube unit ID.
-        row:     Cube row index.
-        col:     Cube column index.
+        conn:       Open psycopg async connection (inside a transaction).
+        unit_id:    Cube unit ID.
+        row:        Cube row index.
+        col:        Cube column index.
+        profile_id: UUID string of the profile to scope the read to (DATA-01).
+                    When supplied, only the matching profile's row is returned.
 
     Returns:
         Dict with boundary fields or None if the cube does not exist.
     """
-    sql = """
+    if profile_id is not None:
+        sql = """
+SELECT unit_id, row, col, first_label, first_catalog, is_empty
+FROM gruvax.cube_boundaries
+WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
+"""
+        params: tuple[Any, ...] = (profile_id, unit_id, row, col)
+    else:
+        sql = """
 SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
 WHERE unit_id = %s AND row = %s AND col = %s
 """
+        params = (unit_id, row, col)
     async with conn.cursor() as cur:
-        await cur.execute(sql, (unit_id, row, col))
+        await cur.execute(sql, params)
         row_raw = await cur.fetchone()
         if row_raw is None:
             return None
@@ -646,7 +663,8 @@ async def write_boundary(
     first_label: str | None,
     first_catalog: str | None,
     is_empty: bool,
-) -> None:
+    profile_id: str | None = None,
+) -> int:
     """Update a cube's boundary values using an existing connection.
 
     Used inside a transaction — the caller is responsible for commit.
@@ -656,6 +674,10 @@ async def write_boundary(
     cube_boundaries.  The UPDATE no longer touches those columns; they are
     now derived by SegmentCache from the next cube's cut point.
 
+    Phase 6 (DATA-01): profile_id added to WHERE clause (T-06-01 mitigation).
+    Returns the affected-row count (int) so callers can detect 0-row writes
+    (D-10) and abort bulk transactions (D-11).
+
     Args:
         conn:          Open psycopg async connection (inside a transaction).
         unit_id:       Cube unit ID.
@@ -664,17 +686,34 @@ async def write_boundary(
         first_label:   New cut-point label (None only when is_empty=True).
         first_catalog: New cut-point catalog number (None only when is_empty=True).
         is_empty:      Whether the cube is empty.
+        profile_id:    UUID string of the profile to scope the write to (DATA-01).
+                       When supplied, the UPDATE WHERE includes profile_id = %s.
+
+    Returns:
+        Number of rows affected (0 if the cube does not exist for this profile).
     """
-    sql = """
+    if profile_id is not None:
+        sql = """
+UPDATE gruvax.cube_boundaries
+SET first_label = %s, first_catalog = %s,
+    is_empty = %s
+WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
+"""
+        params: tuple[Any, ...] = (
+            first_label, first_catalog, is_empty, profile_id, unit_id, row, col
+        )
+    else:
+        sql = """
 UPDATE gruvax.cube_boundaries
 SET first_label = %s, first_catalog = %s,
     is_empty = %s
 WHERE unit_id = %s AND row = %s AND col = %s
 """
-    await conn.execute(
-        sql,
-        (first_label, first_catalog, is_empty, unit_id, row, col),
-    )
+        params = (first_label, first_catalog, is_empty, unit_id, row, col)
+
+    async with conn.cursor() as cur:
+        await cur.execute(sql, params)
+        return cur.rowcount if cur.rowcount is not None else 0
 
 
 async def write_history_row(

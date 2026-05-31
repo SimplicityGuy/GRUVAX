@@ -61,9 +61,9 @@ from gruvax.api.admin.validation import (
 from gruvax.api.deps import (
     get_boundary_cache,
     get_collection_snapshot,
-    get_event_bus,
     get_pool,
     get_segment_cache,
+    get_write_target,
     require_admin,
 )
 from gruvax.db.queries import (
@@ -82,7 +82,6 @@ if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryCache
     from gruvax.estimator.collection_snapshot import CollectionSnapshot
     from gruvax.estimator.segment_cache import SegmentCache
-    from gruvax.events.bus import EventBus
 
 
 logger = logging.getLogger(__name__)
@@ -197,7 +196,7 @@ async def put_bin_cut(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    bus: EventBus = Depends(get_event_bus),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Update the cut point for a bin.
@@ -209,6 +208,7 @@ async def put_bin_cut(
 
     Returns 400 with phantom/near_misses on phantom rejection, 200 on success.
     """
+    profile_id, bus = _write_target
     first_label = body.first_label.strip()
     first_catalog = body.first_catalog.strip()
 
@@ -266,14 +266,22 @@ async def put_bin_cut(
     change_set_id = str(_uuid.uuid4())
 
     async with pool.connection() as conn, conn.transaction():
-        prev = await fetch_current_boundary(conn, unit_id, row, col)
+        prev = await fetch_current_boundary(conn, unit_id, row, col, profile_id=profile_id)
         if prev is None:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail={"type": "cube_not_found", "unit_id": unit_id, "row": row, "col": col},
             )
 
-        await write_boundary(conn, unit_id, row, col, first_label, first_catalog, is_empty=False)
+        rows_affected = await write_boundary(
+            conn, unit_id, row, col, first_label, first_catalog, is_empty=False,
+            profile_id=profile_id
+        )
+        if rows_affected == 0:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"type": "boundary_not_found", "unit_id": unit_id, "row": row, "col": col},
+            )
 
         await write_history_row(
             conn,
@@ -286,6 +294,7 @@ async def put_bin_cut(
             first_catalog,
             new_is_empty=False,
             source="manual",
+            profile_id=profile_id,
         )
 
     # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
@@ -334,7 +343,7 @@ async def set_bin_overrides(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    bus: EventBus = Depends(get_event_bus),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Set per-label physical-width overrides for a bin.
@@ -351,6 +360,7 @@ async def set_bin_overrides(
 
     Response: ``{applied: int, cleared: int}`` (counts of upserted / deleted rows).
     """
+    _profile_id, bus = _write_target
     idempotency_key: str | None = request.headers.get("Idempotency-Key")
 
     # ── Idempotency replay check ──────────────────────────────────────────────
@@ -469,7 +479,7 @@ async def insert_cut(
     cache: BoundaryCache = Depends(get_boundary_cache),
     segment_cache: SegmentCache = Depends(get_segment_cache),
     snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    bus: EventBus = Depends(get_event_bus),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Insert a new cut point after (after_unit_id, after_row, after_col).
@@ -488,6 +498,7 @@ async def insert_cut(
     Returns 400 with specific error types on each failure condition.
     HTTP 404 if (after_unit_id, after_row, after_col) is not a known cube.
     """
+    profile_id, bus = _write_target
     new_first_label = body.new_first_label.strip()
     new_first_catalog = body.new_first_catalog.strip()
     after_uid = body.after_unit_id
@@ -646,8 +657,15 @@ async def insert_cut(
 
     async with pool.connection() as conn, conn.transaction():
         for uid, r, c, fl, fc, ie in cascade_cubes:
-            prev = await fetch_current_boundary(conn, uid, r, c)
-            await write_boundary(conn, uid, r, c, fl, fc, ie)
+            prev = await fetch_current_boundary(conn, uid, r, c, profile_id=profile_id)
+            rows_affected = await write_boundary(
+                conn, uid, r, c, fl, fc, ie, profile_id=profile_id
+            )
+            if rows_affected == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND,
+                    detail={"type": "boundary_not_found", "unit_id": uid, "row": r, "col": c},
+                )
             await write_history_row(
                 conn,
                 change_set_id,
@@ -659,6 +677,7 @@ async def insert_cut(
                 fc,
                 new_is_empty=ie,
                 source="cut_insert",
+                profile_id=profile_id,
             )
             affected_cubes.append({"unit": uid, "row": r, "col": c})
 

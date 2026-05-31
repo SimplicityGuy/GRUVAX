@@ -14,17 +14,13 @@ Security:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
-from gruvax.api.deps import get_event_bus, require_admin
-
-
-if TYPE_CHECKING:
-    from gruvax.events.bus import EventBus
+from gruvax.api.deps import get_write_target, require_admin
 
 
 logger = logging.getLogger(__name__)
@@ -60,7 +56,7 @@ class EditingPayload(BaseModel):
 @router.post("/editing")
 async def signal_editing(
     body: EditingPayload,
-    bus: EventBus = Depends(get_event_bus),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
     """Fan-out admin_editing event — no DB write, no state stored.
@@ -68,7 +64,12 @@ async def signal_editing(
     Phase 4 seam (D-01, RTM-04): debounced ~300ms by the admin client;
     server fans out immediately so the kiosk shimmer is low-latency.
     The bus drops on QueueFull (slow clients) — safe for a heartbeat.
+
+    Phase 6 (D-04 / 06-01): retargeted to per-profile bus via get_write_target
+    so an admin editing profile A does not shimmer cubes on profile B's kiosks.
+    No DB write; no 0-row check needed (bus retarget only).
     """
+    _profile_id, bus = _write_target
     await bus.publish("admin_editing", body.model_dump())
     logger.debug(
         "admin_editing published: cube_ids=%s editing=%s",

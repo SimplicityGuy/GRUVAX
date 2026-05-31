@@ -395,6 +395,59 @@ async def get_bus_for_profile(
     return bus
 
 
+async def get_write_target(
+    request: Request,
+    pool: Any = Depends(get_pool),
+) -> tuple[str, Any]:
+    """FastAPI dependency: resolve (profile_id, per-profile EventBus) for admin write routes.
+
+    Phase 6 (DATA-01 / 06-01): replaces ``get_event_bus`` on every admin boundary-write
+    route so that:
+      - The resolved profile_id scopes every DB write (T-06-01 WHERE clause).
+      - The per-profile bus is used for boundary_changed / admin_editing fan-out
+        instead of the default app.state.event_bus (T-06-03 SSE leakage fix).
+
+    Calls ``resolve_profile_from_request`` and propagates its errors verbatim
+    (D-02 — no default-profile fallback):
+      HTTP 400 session_unbound  — no fingerprint cookie AND no browse-binding cookie.
+      HTTP 403 device_unknown   — fingerprint present but no matching device row.
+      HTTP 403 device_revoked   — fingerprint maps to a revoked device.
+
+    After resolving the profile_id:
+      HTTP 503 registry_not_ready — event_bus_registry missing from app.state.
+      HTTP 404 profile_not_found  — profile_id key absent from registry (deleted profile).
+
+    Returns:
+        ``(profile_id_str, per_profile_bus)`` — the same bus used by
+        ``get_bus_for_profile`` for read-only SSE consumers (D-04).
+
+    Usage::
+
+        @router.put("/cubes/{unit_id}/{row}/{col}/boundary")
+        async def put_cube_boundary(
+            ...
+            profile_id_and_bus: tuple[str, EventBus] = Depends(get_write_target),
+            _admin: dict[str, Any] = Depends(require_admin),
+        ) -> JSONResponse:
+            profile_id, bus = profile_id_and_bus
+            ...
+    """
+    profile_id, _ = await resolve_profile_from_request(request, pool)
+    registry: dict[str, Any] | None = getattr(request.app.state, "event_bus_registry", None)
+    if registry is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="Event bus registry not ready",
+        )
+    bus: Any = registry.get(str(profile_id))
+    if bus is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "profile_not_found"},
+        )
+    return profile_id, bus
+
+
 async def require_admin(
     request: Request,
     pool: Any = Depends(get_pool),
