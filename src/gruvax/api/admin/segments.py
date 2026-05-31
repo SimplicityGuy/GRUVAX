@@ -213,10 +213,16 @@ async def put_bin_cut(
     first_catalog = body.first_catalog.strip()
 
     # ── Phantom check (skipped when force=True) ──────────────────────────────
+    # CR-01: pass resolved profile_id so validation targets the same profile
+    # as the write, not the default profile.
     if not body.force:
-        first_exists = await cube_exact_match(pool, first_label, first_catalog)
+        first_exists = await cube_exact_match(
+            pool, first_label, first_catalog, profile_id=profile_id
+        )
         if not first_exists:
-            near_misses = await find_boundary_near_misses(pool, first_label, first_catalog)
+            near_misses = await find_boundary_near_misses(
+                pool, first_label, first_catalog, profile_id=profile_id
+            )
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
@@ -274,8 +280,14 @@ async def put_bin_cut(
             )
 
         rows_affected = await write_boundary(
-            conn, unit_id, row, col, first_label, first_catalog, is_empty=False,
-            profile_id=profile_id
+            conn,
+            unit_id,
+            row,
+            col,
+            first_label,
+            first_catalog,
+            is_empty=False,
+            profile_id=profile_id,
         )
         if rows_affected == 0:
             raise HTTPException(
@@ -360,7 +372,7 @@ async def set_bin_overrides(
 
     Response: ``{applied: int, cleared: int}`` (counts of upserted / deleted rows).
     """
-    _profile_id, bus = _write_target
+    profile_id, bus = _write_target
     idempotency_key: str | None = request.headers.get("Idempotency-Key")
 
     # ── Idempotency replay check ──────────────────────────────────────────────
@@ -396,9 +408,9 @@ async def set_bin_overrides(
     applied = 0
     cleared = 0
 
-    # Admin segment writes operate on the default profile (P1-compat path;
-    # per-profile segment editor deferred to Phase 3).
-    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+    # CR-02: use the resolved profile_id (from get_write_target) for both the
+    # DELETE and the INSERT ON CONFLICT.  The old stub hardcoded DEFAULT_PROFILE_UUID
+    # which silently wrote profile B's overrides into profile A's rows.
     async with pool.connection() as conn, conn.transaction():
         for ov in body.overrides:
             if ov.fraction is None:
@@ -408,9 +420,7 @@ DELETE FROM gruvax.segment_overrides
 WHERE profile_id = %s::uuid
   AND unit_id = %s AND row = %s AND col = %s AND lower(label) = lower(%s)
 """
-                result = await conn.execute(
-                    sql_del, (_DEFAULT_PROFILE_UUID, unit_id, row, col, ov.label)
-                )
+                result = await conn.execute(sql_del, (profile_id, unit_id, row, col, ov.label))
                 if result.rowcount and result.rowcount > 0:
                     cleared += 1
             else:
@@ -422,7 +432,7 @@ ON CONFLICT (profile_id, unit_id, row, col, label)
 DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()
 """
                 await conn.execute(
-                    sql_upsert, (_DEFAULT_PROFILE_UUID, unit_id, row, col, ov.label, ov.fraction)
+                    sql_upsert, (profile_id, unit_id, row, col, ov.label, ov.fraction)
                 )
                 applied += 1
 
@@ -439,8 +449,8 @@ DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()
         await cleanup_idempotency(conn)
 
     # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
-    # Reload overrides from segment_overrides table for this bin (and others)
-    # We approximate by keeping existing overrides + merging the new ones.
+    # CR-02: re-read is scoped to the resolved profile_id so overrides from other
+    # profiles are not folded into this profile's SegmentCache.
     cache.invalidate()
     try:
         await cache.load(pool)
@@ -451,9 +461,10 @@ DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()
             sql_overrides = """
 SELECT unit_id, row, col, label, fraction
 FROM gruvax.segment_overrides
+WHERE profile_id = %s::uuid
 """
             async with conn2.cursor() as cur:
-                await cur.execute(sql_overrides)
+                await cur.execute(sql_overrides, (profile_id,))
                 override_rows = await cur.fetchall()
         for uid, r, c, lbl, frac in override_rows:
             new_overrides[(int(uid), int(r), int(c), str(lbl))] = float(frac)
@@ -506,10 +517,16 @@ async def insert_cut(
     after_col = body.after_col
 
     # ── Phantom check ─────────────────────────────────────────────────────────
+    # CR-01: pass resolved profile_id so validation targets the same profile
+    # as the write, not the default profile.
     if not body.force:
-        first_exists = await cube_exact_match(pool, new_first_label, new_first_catalog)
+        first_exists = await cube_exact_match(
+            pool, new_first_label, new_first_catalog, profile_id=profile_id
+        )
         if not first_exists:
-            near_misses = await find_boundary_near_misses(pool, new_first_label, new_first_catalog)
+            near_misses = await find_boundary_near_misses(
+                pool, new_first_label, new_first_catalog, profile_id=profile_id
+            )
             return JSONResponse(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 content={
@@ -658,9 +675,7 @@ async def insert_cut(
     async with pool.connection() as conn, conn.transaction():
         for uid, r, c, fl, fc, ie in cascade_cubes:
             prev = await fetch_current_boundary(conn, uid, r, c, profile_id=profile_id)
-            rows_affected = await write_boundary(
-                conn, uid, r, c, fl, fc, ie, profile_id=profile_id
-            )
+            rows_affected = await write_boundary(conn, uid, r, c, fl, fc, ie, profile_id=profile_id)
             if rows_affected == 0:
                 raise HTTPException(
                     status_code=status.HTTP_404_NOT_FOUND,
@@ -682,6 +697,8 @@ async def insert_cut(
             affected_cubes.append({"unit": uid, "row": r, "col": c})
 
     # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
+    # CR-02: re-read is scoped to the resolved profile_id so overrides from other
+    # profiles are not folded into this profile's SegmentCache.
     cache.invalidate()
     try:
         await cache.load(pool)
@@ -691,9 +708,10 @@ async def insert_cut(
             sql_overrides = """
 SELECT unit_id, row, col, label, fraction
 FROM gruvax.segment_overrides
+WHERE profile_id = %s::uuid
 """
             async with conn2.cursor() as cur:
-                await cur.execute(sql_overrides)
+                await cur.execute(sql_overrides, (profile_id,))
                 override_rows = await cur.fetchall()
         for uid_o, r_o, c_o, lbl_o, frac_o in override_rows:
             new_overrides[(int(uid_o), int(r_o), int(c_o), str(lbl_o))] = float(frac_o)

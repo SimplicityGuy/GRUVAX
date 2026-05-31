@@ -248,13 +248,17 @@ async def import_boundaries(
     file_index: dict[tuple[int, int, int], Any] = {(e.unit_id, e.row, e.col): e for e in entries}
 
     # Fetch full address space + committed cut-point columns in one SELECT.
+    # CR-03: scoped to the resolved profile_id so the address space is the admin's
+    # profile's boundaries, not a mix of all profiles.
     # current_index is used for both the G3 phantom skip (step 6) and the
     # dry_run diff-preview (W5: omit unchanged cubes from diff_preview).
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
             "SELECT unit_id, row, col, first_label, first_catalog, is_empty"
             " FROM gruvax.cube_boundaries"
-            " ORDER BY unit_id, row, col"
+            " WHERE profile_id = %s::uuid"
+            " ORDER BY unit_id, row, col",
+            (profile_id,),
         )
         all_addresses_raw = await cur.fetchall()
 
@@ -365,9 +369,15 @@ async def import_boundaries(
         first_catalog = edit.first_catalog or ""
 
         # Phantom check (force is always False for imports — no user override)
-        first_exists = await cube_exact_match(pool, first_label, first_catalog)
+        # CR-01: pass resolved profile_id so validation targets the same profile
+        # as the write, not the default profile.
+        first_exists = await cube_exact_match(
+            pool, first_label, first_catalog, profile_id=profile_id
+        )
         if not first_exists:
-            near_misses = await find_boundary_near_misses(pool, first_label, first_catalog)
+            near_misses = await find_boundary_near_misses(
+                pool, first_label, first_catalog, profile_id=profile_id
+            )
             phantom_errors.append(
                 {
                     "unit_id": edit.unit_id,
@@ -542,8 +552,8 @@ async def import_boundaries(
             )
 
         # Upsert segment_overrides for entries with overrides (Pitfall 4 — inside txn).
-        # Admin import operates on the default profile (P1-compat path; composite PK).
-        _IMPORT_DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+        # CR-02: use the resolved profile_id so overrides land in the correct profile's
+        # rows, not the hardcoded default profile.
         for entry in entries:
             if entry.overrides and not entry.is_empty:
                 for label, fraction in entry.overrides.items():
@@ -554,7 +564,7 @@ async def import_boundaries(
                         " ON CONFLICT (profile_id, unit_id, row, col, label)"
                         " DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()",
                         (
-                            _IMPORT_DEFAULT_PROFILE_UUID,
+                            profile_id,
                             entry.unit_id,
                             entry.row,
                             entry.col,

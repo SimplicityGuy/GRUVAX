@@ -70,15 +70,20 @@ async def get_history(
     request: Request,
     pool: Any = Depends(get_pool),
     _admin: dict[str, Any] = Depends(require_admin),
+    _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> dict[str, Any]:
     """Return all change-sets from boundary_history, newest-first.
 
     Groups rows by change_set_id and returns one entry per change-set with
     source, MAX(changed_at), and cube_count.
 
+    WR-02 (Phase 6 CR fix): scoped to the resolved profile_id so history from
+    other profiles is not mixed in.
+
     Response: ``{history: [{change_set_id, source, changed_at, cube_count}, ...]}``
     """
-    change_sets = await list_change_sets(pool)
+    profile_id, _ = _write_target
+    change_sets = await list_change_sets(pool, profile_id=profile_id)
     return {"history": change_sets}
 
 
@@ -118,8 +123,8 @@ async def revert_change_set(
     """
     profile_id, bus = _write_target
 
-    # Fetch all history rows for this change-set
-    rows = await fetch_change_set_rows(pool, change_set_id)
+    # Fetch all history rows for this change-set — scoped to resolved profile (WR-02).
+    rows = await fetch_change_set_rows(pool, change_set_id, profile_id=profile_id)
     if not rows:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -137,8 +142,11 @@ async def revert_change_set(
             col_idx = int(hist["col"])
             original_changed_at = hist["changed_at"]
 
-            # Conflict check: is there a newer history row for this cube?
-            conflict = await has_newer_changes(conn, unit_id, row_idx, col_idx, original_changed_at)
+            # Conflict check: scoped to resolved profile (WR-02 — prevents cross-profile
+            # false conflicts where a newer edit on a different profile triggers a skip).
+            conflict = await has_newer_changes(
+                conn, unit_id, row_idx, col_idx, original_changed_at, profile_id=profile_id
+            )
             if conflict:
                 skipped.append(
                     {
@@ -233,10 +241,15 @@ async def revert_change_set(
             # A revert may touch multiple bins, and admin-set width overrides must
             # be preserved.  Re-reading from gruvax.segment_overrides is the same
             # approach used by segments.py::set_bin_overrides and insert_cut.
+            # CR-02: scoped to the resolved profile_id to prevent cross-profile
+            # override contamination.
             overrides: dict[tuple[int, int, int, str], float] = {}
             async with pool.connection() as conn2, conn2.cursor() as cur2:
                 await cur2.execute(
-                    "SELECT unit_id, row, col, label, fraction FROM gruvax.segment_overrides"
+                    "SELECT unit_id, row, col, label, fraction"
+                    " FROM gruvax.segment_overrides"
+                    " WHERE profile_id = %s::uuid",
+                    (profile_id,),
                 )
                 override_rows = await cur2.fetchall()
             for uid_o, r_o, c_o, lbl_o, frac_o in override_rows:
