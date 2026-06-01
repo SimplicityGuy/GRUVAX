@@ -1,10 +1,11 @@
 ---
 phase: 8
 slug: qr-pairing-privacy-recently-pulled
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-01
+reviewed_at: 2026-06-01
 ---
 
 # Phase 8 — UI Design Contract
