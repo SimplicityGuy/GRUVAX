@@ -2,8 +2,8 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Resilience + Privacy + UX polish
-status: ready_to_plan
-last_updated: 2026-05-31T22:23:37.490Z
+status: planning
+last_updated: "2026-06-01T00:28:25.494Z"
 last_activity: 2026-05-31
 progress:
   total_phases: 6
@@ -11,7 +11,6 @@ progress:
   total_plans: 3
   completed_plans: 3
   percent: 17
-stopped_at: Phase 06 complete (3/3) — ready to discuss Phase 7
 ---
 
 # State: GRUVAX
