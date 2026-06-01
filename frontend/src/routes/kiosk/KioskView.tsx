@@ -1,15 +1,21 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import gsap from 'gsap'
+import { RotateCcw } from 'lucide-react'
 import { fetchCubesWithFill, fetchUnits, locateRelease, searchCollection } from '../../api/client'
 import type { CubeRef } from '../../api/types'
 import { useGruvaxStore, type ShimmerCube } from '../../state/store'
 import { useSessionStore } from '../../state/sessionStore'
+import { useAdminStore } from '../../state/adminStore'
+import { useRecentlyPulledStore } from '../../state/recentlyPulledStore'
+import { useIdleTimer } from '../../hooks/useIdleTimer'
 import { getSession } from '../../api/session'
 import { CubeContentsPanel } from './CubeContentsPanel'
 import { ReassignBanner } from './DeviceLifecycle'
 import { EmptyCollectionState } from './EmptyCollectionState'
 import { ReauthBanner } from './ReauthBanner'
+import { RecentlyPulledStrip } from './RecentlyPulledStrip'
+import { ResetConfirmDialog } from './ResetConfirmDialog'
 import { ResultsList } from './ResultsList'
 import { ShelfLayoutNotConfigured } from './ShelfLayoutNotConfigured'
 import { SearchBox } from './SearchBox'
@@ -42,6 +48,10 @@ export function KioskView() {
   const shimmerExpiresAt = useGruvaxStore((s) => s.shimmerExpiresAt)
   // Phase 2 / D2-04: session store for bound profile
   const boundProfileId = useSessionStore((s) => s.boundProfileId)
+  // Phase 8 / PRIV-04 / D-10: admin login state — Reset button hidden when logged in
+  const isLoggedIn = useAdminStore((s) => s.isLoggedIn)
+  // Phase 8 / PRIV-04 / D-11: Reset confirm dialog visibility
+  const [showResetConfirm, setShowResetConfirm] = useState(false)
   const profiles = useSessionStore((s) => s.profiles)
   const queryClient = useQueryClient()
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -55,6 +65,39 @@ export function KioskView() {
   // dismissed — so it reopens automatically on the next keystroke (new query)
   // and collapses after a pick, without a set-state-in-effect.
   const [dismissedQuery, setDismissedQuery] = useState<string | null>(null)
+
+  // Phase 8 / SRCH-09 / D-05: read selectedResult for chip strip — only added on successful locate
+  const selectedResult = useGruvaxStore((s) => s.selectedResult)
+
+  // Phase 8 / SRCH-09 / D-05: add to recently-pulled strip when a successful locate lands.
+  // Guard: only when selectedResult is non-null AND primaryCube is non-null (real cube highlight).
+  // Typo/no-result searches never enter the list (D-05 — enforced by the primaryCube guard).
+  useEffect(() => {
+    if (selectedResult !== null && highlight.primaryCube !== null) {
+      useRecentlyPulledStore.getState().addItem({
+        release_id: selectedResult.release_id,
+        title: selectedResult.title,
+        primary_artist: selectedResult.primary_artist,
+        catalog_number: selectedResult.catalog_number,
+      })
+    }
+    // React to animationToken so the effect fires on every locate, including re-locates
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [animationToken])
+
+  // Phase 8 / PRIV-04 / D-09: Reset handler — client-side only, zero API calls (L-05)
+  const handleReset = () => {
+    clearSearch()
+    useRecentlyPulledStore.getState().clear()
+    setShowResetConfirm(false)
+  }
+
+  // Phase 8 / D-14/D-15: 15-minute idle timeout — clears search + chips to resting screen.
+  // Device stays paired; bound profile stays selected (client-side only).
+  useIdleTimer(15 * 60 * 1000, () => {
+    clearSearch()
+    useRecentlyPulledStore.getState().clear()
+  })
 
   // Loading indicator state — shown only after >300ms in flight (SRCH-05)
   const [showLoading, setShowLoading] = useState(false)
@@ -645,6 +688,10 @@ export function KioskView() {
           <ShelfLayoutNotConfigured />
         )}
 
+        {/* Phase 8 / SRCH-09 / D-08: recently-pulled chip strip — below search, above shelf.
+            Returns null when empty (no reserved space in layout). */}
+        <RecentlyPulledStrip />
+
         {/* Shelf area — N×(4×4) grid — shelfAreaRef for GSAP selector scope */}
         <div className="shelf-area" ref={shelfAreaRef}>
           {sortedUnits.map((unit, idx) => (
@@ -698,6 +745,29 @@ export function KioskView() {
 
       {/* D2-09: persistent Switch-profile corner button (2+ profiles only) */}
       <SwitchProfileButton />
+
+      {/* Phase 8 / PRIV-04 / D-10 / D-12: Reset kiosk button — subtle, fixed bottom-right.
+          Hidden when admin is logged in (client-side only — per-browser isLoggedIn, NOT a server flag).
+          Zero API calls on confirm — client-only clearSearch() + clear() (L-05 / D-09). */}
+      {!isLoggedIn && (
+        <button
+          type="button"
+          className="kiosk-reset-btn"
+          onClick={() => setShowResetConfirm(true)}
+          aria-label="Reset kiosk"
+        >
+          <RotateCcw size={14} aria-hidden="true" />
+          <span>RESET KIOSK</span>
+        </button>
+      )}
+
+      {/* Phase 8 / D-11: confirm dialog before wiping — focus-trapped alertdialog */}
+      {showResetConfirm && (
+        <ResetConfirmDialog
+          onConfirm={handleReset}
+          onCancel={() => setShowResetConfirm(false)}
+        />
+      )}
     </div>
   )
 }

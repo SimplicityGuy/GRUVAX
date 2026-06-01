@@ -1077,6 +1077,255 @@
   to   { opacity: 1; }
 }
 
+/* ── Phase 8: Recently-pulled chip strip (Surface 2 / D-08 / SRCH-09) ───────── */
+
+/*
+ * Horizontal strip rendered below the search/result area when at least one
+ * record has been located in this session (returns null when empty — D-08).
+ *
+ * Layout: label row + scrollable chip row.
+ * Tokens only — no hardcoded hex (CLAUDE.md constraint).
+ */
+
+.recently-pulled-strip {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-2);
+  margin-bottom: var(--gruvax-space-4);
+}
+
+/* "RECENTLY PULLED" label — Barlow Condensed 700, ALL CAPS, wide tracking */
+.recently-pulled-strip__label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-tight);
+}
+
+/* Horizontal chip row — scrollable on overflow (touchscreen swipe) */
+.recently-pulled-strip__chips {
+  display: flex;
+  flex-direction: row;
+  gap: var(--gruvax-space-2);
+  overflow-x: auto;
+  padding-bottom: var(--gruvax-space-1);
+  scrollbar-width: thin;
+  scrollbar-color: var(--gruvax-border-faint) transparent;
+  scroll-snap-type: x mandatory;
+}
+
+/* ── Recently-pulled chip (Surface 2 / D-06) ─────────────────────────────────
+ *
+ * Two-line chip:
+ *   Line 1: "{primary_artist} – {title}" (Space Grotesk 13px, --gruvax-text-secondary)
+ *   Line 2: catalog_number in DM Mono (--gruvax-font-mono, --gruvax-text-muted)
+ *
+ * Touch target: min 44px height (WCAG 2.5.5).
+ */
+
+.recently-pulled-chip {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  flex-shrink: 0;
+  min-height: 44px;
+  padding: var(--gruvax-space-2) var(--gruvax-space-3);
+  background: var(--gruvax-off-white);
+  border: 1px solid var(--gruvax-border-faint);
+  border-radius: var(--gruvax-radius-md);
+  cursor: pointer;
+  text-align: left;
+  scroll-snap-align: start;
+  transition:
+    background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+    border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  max-width: 200px;
+}
+
+.recently-pulled-chip:hover {
+  background: var(--gruvax-blue-faint);
+  border-color: var(--gruvax-border-light);
+}
+
+.recently-pulled-chip:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+/* Line 1: artist – title (Space Grotesk 13px, truncated) */
+.recently-pulled-chip__primary {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 176px;
+}
+
+/* Line 2: catalog number in DM Mono */
+.recently-pulled-chip__catalog {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-tight);
+  white-space: nowrap;
+}
+
+/* ── Phase 8: Reset kiosk button (Surface 3 / D-10 / D-12) ──────────────────
+ *
+ * Subtle / low-emphasis fixed corner button (D-12): RotateCcw icon + "RESET KIOSK".
+ * Visible ONLY when !adminStore.isLoggedIn (D-10 — per-browser client-side check).
+ *
+ * At rest: --gruvax-text-faint (unobtrusive — "low emphasis" as specified in D-12).
+ * On hover/focus: --gruvax-error (destructive action cue).
+ * Min 44px touch target (WCAG 2.5.5).
+ */
+
+.kiosk-reset-btn {
+  position: fixed;
+  bottom: calc(var(--gruvax-space-5) + 56px);
+  right: var(--gruvax-space-5);
+  z-index: var(--gruvax-z-overlay);
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-1);
+  background: transparent;
+  color: var(--gruvax-text-faint);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  border: none;
+  border-radius: var(--gruvax-radius-pill);
+  padding: var(--gruvax-space-2) var(--gruvax-space-3);
+  min-height: 44px;
+  min-width: 44px;
+  cursor: pointer;
+  transition: color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.kiosk-reset-btn:hover {
+  color: var(--gruvax-error);
+}
+
+.kiosk-reset-btn:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+  color: var(--gruvax-error);
+}
+
+/* ── Phase 8: Reset kiosk confirm dialog (Surface 4 / D-11) ─────────────────
+ *
+ * Adapted from switch-confirm-* (SwitchProfileConfirm).
+ * role="alertdialog", focus trap, Cancel-first focus.
+ * Class prefix: kiosk-reset-dialog-*
+ * Tokens only — no hardcoded hex.
+ */
+
+.kiosk-reset-dialog-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: calc(var(--gruvax-z-overlay) + 1);
+  background: var(--gruvax-overlay-scrim);
+}
+
+.kiosk-reset-dialog-modal {
+  position: fixed;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  z-index: calc(var(--gruvax-z-overlay) + 2);
+  background: var(--gruvax-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-lg);
+  box-shadow: var(--gruvax-shadow-lg);
+  padding: var(--gruvax-space-5);
+  max-width: 320px;
+  width: calc(100vw - var(--gruvax-space-7));
+  animation: confirm-spring var(--gruvax-duration-fast) var(--gruvax-ease-spring) both;
+}
+
+/* "Reset kiosk?" heading */
+.kiosk-reset-dialog-heading {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  font-weight: 700;
+  color: var(--gruvax-text-primary);
+  line-height: var(--gruvax-leading-tight);
+  margin: 0 0 var(--gruvax-space-2) 0;
+}
+
+/* "This clears your recent searches. Your device stays connected." */
+.kiosk-reset-dialog-body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0 0 var(--gruvax-space-4) 0;
+}
+
+/* Button row */
+.kiosk-reset-dialog-actions {
+  display: flex;
+  gap: var(--gruvax-space-3);
+  flex-wrap: wrap;
+}
+
+/* Base button style */
+.kiosk-reset-dialog-btn {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-3) var(--gruvax-space-5);
+  min-height: 44px;
+  cursor: pointer;
+  border: none;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+/* CLEAR AND RESET — destructive, error color */
+.kiosk-reset-dialog-btn--confirm {
+  background: var(--gruvax-error);
+  color: var(--gruvax-white);
+}
+
+.kiosk-reset-dialog-btn--confirm:hover {
+  opacity: 0.9;
+}
+
+.kiosk-reset-dialog-btn--confirm:focus-visible {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 2px;
+}
+
+/* KEEP RECENT SEARCHES — dismiss, muted */
+.kiosk-reset-dialog-btn--dismiss {
+  background: transparent;
+  color: var(--gruvax-text-muted);
+}
+
+.kiosk-reset-dialog-btn--dismiss:hover {
+  background: var(--gruvax-blue-faint);
+}
+
+.kiosk-reset-dialog-btn--dismiss:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
+}
+
 /* ── Empty collection state (Surface 7 / D2-03) ─────────────────────────── */
 
 /*
