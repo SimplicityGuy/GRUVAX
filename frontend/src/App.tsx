@@ -17,6 +17,7 @@ import { KioskView } from "./routes/kiosk/KioskView";
 import { PairView } from "./routes/kiosk/PairView";
 import { RevokeNotice } from "./routes/kiosk/DeviceLifecycle";
 import { ProfilePicker } from "./routes/ProfilePicker";
+import { RedeemPage } from "./routes/redeem/RedeemPage";
 import { getSession } from "./api/session";
 import { useSessionStore } from "./state/sessionStore";
 
@@ -46,6 +47,7 @@ const queryClient = new QueryClient({
  *   /admin/wizard/done          → ConfirmationRoute (post-commit confirmation, D-15)
  *   /admin/import               → Import (stub — 07-05 replaces with real page)
  *   /admin/diagnostics          → Diagnostics (OBS-05/06/07 — phase 08-04)
+ *   /redeem/:code               → RedeemPage (public member invite redemption — Phase 7 / AUTH-02)
  *
  * Design tokens are imported in main.tsx (single entry point).
  */
@@ -95,11 +97,12 @@ function AppInner() {
         // Single-profile auto-bind is server-side — server sets the cookie and
         // returns bound_profile_id in the same response, so we only redirect here
         // when the response genuinely has no binding.
-        // Exemption: /pair is always allowed (device pairing flow).
+        // Exemption: /pair and /redeem/* are always allowed (pairing + invite redemption flows).
         if (
           !data.bound_profile_id &&
           currentPath !== "/pair" &&
-          !currentPath.startsWith("/admin")
+          !currentPath.startsWith("/admin") &&
+          !currentPath.startsWith("/redeem")
         ) {
           void navigate("/select", { replace: true });
         }
@@ -136,6 +139,7 @@ function AppInner() {
         <Route path="/" element={<KioskView />} />
         <Route path="/pair" element={<PairView />} />
         <Route path="/select" element={<ProfilePicker />} />
+        <Route path="/redeem/:code" element={<RedeemPage />} />
         <Route path="/admin" element={<AdminShell />}>
           <Route index element={<Settings />} />
           <Route path="settings" element={<Settings />} />

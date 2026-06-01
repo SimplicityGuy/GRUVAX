@@ -1,0 +1,38 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 200" width="200" height="200" role="img">
+  <title>GRUVAX icon mark</title>
+  <desc>GRUVAX standalone icon mark. White ground, blue border, 4×4 Kallax grid with yellow LED cells. Used for app icons, avatar, and small-format contexts.</desc>
+
+  <!-- Background -->
+  <rect width="200" height="200" fill="#FFFFFF"/>
+
+  <!-- Blue border -->
+  <rect x="8" y="8" width="184" height="184" fill="none" stroke="#0051A2" stroke-width="14"/>
+
+  <!-- ── Grid: 4×4 · 28px cells · 5px gaps · origin (37, 37) ── -->
+  <!-- Columns x: 37 · 70 · 103 · 136 -->
+  <!-- Rows    y: 37 · 70 · 103 · 136 -->
+
+  <!-- Dim cells -->
+  <rect x="37"  y="37"  width="28" height="28" rx="3" fill="#D8E8F5"/>
+  <rect x="70"  y="37"  width="28" height="28" rx="3" fill="#D8E8F5"/>
+  <rect x="136" y="37"  width="28" height="28" rx="3" fill="#D8E8F5"/>
+  <rect x="37"  y="70"  width="28" height="28" rx="3" fill="#D8E8F5"/>
+  <rect x="136" y="70"  width="28" height="28" rx="3" fill="#D8E8F5"/>
+  <rect x="136" y="103" width="28" height="28" rx="3" fill="#D8E8F5"/>
+  <rect x="37"  y="136" width="28" height="28" rx="3" fill="#D8E8F5"/>
+  <rect x="70"  y="136" width="28" height="28" rx="3" fill="#D8E8F5"/>
+  <rect x="103" y="136" width="28" height="28" rx="3" fill="#D8E8F5"/>
+  <rect x="136" y="136" width="28" height="28" rx="3" fill="#D8E8F5"/>
+
+  <!-- Lit cells -->
+  <rect x="103" y="37"  width="28" height="28" rx="3" fill="#FFDA00"/>
+  <rect x="103" y="70"  width="28" height="28" rx="3" fill="#FFDA00"/>
+  <rect x="37"  y="103" width="28" height="28" rx="3" fill="#FFDA00"/>
+  <rect x="70"  y="103" width="28" height="28" rx="3" fill="#FFDA00"/>
+  <rect x="103" y="103" width="28" height="28" rx="3" fill="#FFDA00"/>
+
+  <!-- Vinyl cell [row 1, col 1] · center (84, 84) -->
+  <circle cx="84" cy="84" r="14" fill="none" stroke="#0051A2" stroke-width="2.5"/>
+  <circle cx="84" cy="84" r="4"  fill="#0051A2"/>
+
+</svg>

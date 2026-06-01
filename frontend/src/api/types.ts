@@ -391,6 +391,12 @@ export interface AdminProfile {
   last_sync_item_count: number | null
   app_token_revoked: boolean
   status: ProfileStatus
+  /** Phase 7 (API-04): true when an encrypted PAT is stored for this profile. */
+  has_token: boolean
+  /** Phase 7 (API-04): number of new records from the most recent non-initial sync. */
+  last_new_record_count: number
+  /** Phase 7 (API-04): true when the most recent sync was the profile's initial import. */
+  last_sync_is_initial: boolean
 }
 
 /** Response from GET /api/admin/profiles. */
@@ -409,4 +415,25 @@ export interface RenameProfilePayload {
 /** Payload for POST /api/admin/profiles/{id}/connect or /rotate. */
 export interface ConnectPatPayload {
   pat: string
+}
+
+// ── Phase 7: Invite code + redeem types (plan 07-03) ─────────────────────────
+
+/** Info returned by GET /api/invite-codes/{code} (public, no auth). */
+export interface InviteCodeInfo {
+  display_name: string
+  expires_at: string   // ISO-8601 UTC
+}
+
+/** Response from POST /api/admin/profiles/{id}/invite (owner, PIN-gated). */
+export interface GeneratedInvite {
+  code: string
+  url: string
+  expires_at: string  // ISO-8601 UTC
+}
+
+/** Response from POST /api/invite-codes/{code}/redeem (public, no auth). */
+export interface RedeemResult {
+  status: 'connected'
+  profile_id: string
 }
