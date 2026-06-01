@@ -47,6 +47,9 @@ export function KioskView() {
   const [debouncedQuery, setDebouncedQuery] = useState('')
   // Cube-tap state for the contents panel (CUBE-09, D-14)
   const [tappedCube, setTappedCube] = useState<CubeRef | null>(null)
+  // Phase 7 (API-04): new-records pill state — set on collection_changed with count > 0;
+  // cleared/replaced on the next collection_changed event (D-08).
+  const [newRecordState, setNewRecordState] = useState<{ count: number; isInitial: boolean } | null>(null)
   // The query whose results the user explicitly dismissed (by selecting a row).
   // The dropdown is derived as open when there is a query that hasn't been
   // dismissed — so it reopens automatically on the next keystroke (new query)
@@ -336,12 +339,38 @@ export function KioskView() {
     })
 
     // collection_changed: nightly/manual sync completed → invalidate search results + resync
-    // grid (B-01: SYN-01 Flow 4 + SYN-02 staleness-refresh). No payload from publisher
-    // (profile_sync.py:356 sends bus.publish('collection_changed') with no data), so use
-    // the simple no-e form like server_hello — no try/catch needed (no JSON.parse, T-05-04 accept).
-    es.addEventListener('collection_changed', () => {
+    // grid (B-01: SYN-01 Flow 4 + SYN-02 staleness-refresh).
+    // Phase 7 (API-04): payload now carries { profile_id, new_record_count, is_initial_import }.
+    // Parsed defensively (backward-compatible with old no-data publisher — T-07-16 / T-05-04).
+    // Only the CLEANUP return is allowed to call es.close() — no es.close() here (Pitfall 4).
+    es.addEventListener('collection_changed', (e: MessageEvent) => {
       void queryClient.invalidateQueries({ queryKey: ['search'] })
       resync()
+      // T-07-16: defensive parse — gracefully degrade if payload is empty or malformed.
+      try {
+        if (e.data && typeof e.data === 'string' && e.data.trim()) {
+          const payload = JSON.parse(e.data) as {
+            profile_id?: string
+            new_record_count?: number
+            is_initial_import?: boolean
+          }
+          // Only show the pill for the bound profile (per-profile fan-out guard).
+          const currentBoundId = useSessionStore.getState().boundProfileId
+          if (payload.profile_id && currentBoundId && payload.profile_id !== currentBoundId) {
+            return
+          }
+          const count = typeof payload.new_record_count === 'number' ? payload.new_record_count : 0
+          const isInitial = typeof payload.is_initial_import === 'boolean' ? payload.is_initial_import : false
+          if (count > 0) {
+            setNewRecordState({ count, isInitial })
+          } else {
+            // Next sync with 0 new records clears the pill (D-08)
+            setNewRecordState(null)
+          }
+        }
+      } catch {
+        // Graceful degrade: parse failure means no pill update — do NOT close es (T-07-16)
+      }
     })
 
     // device_revoked: admin revoked this device → signal the SINGLE terminal-revoke handler
@@ -571,6 +600,28 @@ export function KioskView() {
             />
           )}
         </div>
+
+        {/* Phase 7 (API-04): new-records pill — yellow, below search, above grid.
+            Shown when newRecordState.count > 0; clears/replaces on next collection_changed (D-08).
+            Enter: opacity 0→1 via CSS animation (--gruvax-duration-base 250ms).
+            No manual dismiss button — persists until next sync (D-08). */}
+        {newRecordState && newRecordState.count > 0 && (
+          <div
+            className="kiosk-new-records-pill"
+            role="status"
+            aria-live="polite"
+            aria-label={
+              newRecordState.isInitial
+                ? `Imported ${newRecordState.count} records`
+                : `${newRecordState.count} new records since last sync`
+            }
+          >
+            {newRecordState.isInitial
+              ? `IMPORTED ${newRecordState.count.toLocaleString('en-US')} RECORDS`
+              : `${newRecordState.count.toLocaleString('en-US')} NEW RECORDS`
+            }
+          </div>
+        )}
 
         {/* Staleness banner (OBS-06, D-01) — above the grid, never overlaying it.
             Hidden when offline (health null) or sync_age <= 14d. */}

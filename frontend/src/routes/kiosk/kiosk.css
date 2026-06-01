@@ -1041,6 +1041,42 @@
   margin: 0;
 }
 
+/* ── Phase 7 (API-04): new-records pill ─────────────────────────────────── */
+
+/*
+ * Yellow pill shown below the search box after a sync that finds new records.
+ * D-08: persists until the next collection_changed SSE event replaces it.
+ * No manual dismiss. Role="status" aria-live="polite" for screen readers.
+ *
+ * Color: --gruvax-yellow bg, --gruvax-blue-darker text (≥18px — satisfies 3.1:1 constraint).
+ * Font: Barlow Condensed 700 18px — large text satisfies yellow-on-blue a11y rule.
+ * Enter: opacity 0→1 (--gruvax-duration-base 250ms, --gruvax-ease-decelerate).
+ * Cleared from layout automatically when newRecordState is null (no reserved space).
+ */
+
+.kiosk-new-records-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  background: var(--gruvax-yellow);
+  color: var(--gruvax-blue-darker);
+  border-radius: var(--gruvax-radius-pill);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-body-lg); /* 18px — satisfies yellow-on-blue 3.1:1 for large text */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  line-height: var(--gruvax-leading-tight);
+  margin-bottom: var(--gruvax-space-4);
+  /* Enter: opacity fade-in */
+  animation: pill-appear var(--gruvax-duration-base) var(--gruvax-ease-decelerate) both;
+}
+
+@keyframes pill-appear {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
 /* ── Empty collection state (Surface 7 / D2-03) ─────────────────────────── */
 
 /*

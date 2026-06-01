@@ -1,0 +1,274 @@
+/*
+ * RedeemPage.css — public member invite-code redemption page.
+ *
+ * Mobile-first (390px baseline). Centered card, max-width 480px.
+ * Design tokens only — no hardcoded hex (CLAUDE.md constraint).
+ *
+ * Token reference: design/gruvax-design-tokens.css
+ */
+
+/* ── Page wrapper ──────────────────────────────────────────────────────────── */
+
+.redeem-page {
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  min-height: 100dvh;
+  padding: var(--gruvax-space-7) var(--gruvax-space-5);
+  background-color: var(--gruvax-white);
+  box-sizing: border-box;
+}
+
+@media (max-width: 389px) {
+  .redeem-page {
+    padding: var(--gruvax-space-7) var(--gruvax-space-4);
+  }
+}
+
+/* ── Card ─────────────────────────────────────────────────────────────────── */
+
+.redeem-card {
+  width: 100%;
+  max-width: 480px;
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-5);
+  opacity: 0;
+  animation: redeem-fade-in var(--gruvax-duration-base) var(--gruvax-ease-decelerate) forwards;
+}
+
+.redeem-card--success {
+  align-items: center;
+  text-align: center;
+  animation: redeem-fade-in var(--gruvax-duration-slow) var(--gruvax-ease-decelerate) forwards;
+}
+
+@keyframes redeem-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+
+/* ── Logo ─────────────────────────────────────────────────────────────────── */
+
+.redeem-logo {
+  width: 48px;
+  height: 48px;
+  display: block;
+}
+
+/* ── Loading state ────────────────────────────────────────────────────────── */
+
+.redeem-loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 200px;
+}
+
+.redeem-loading__spinner {
+  color: var(--gruvax-blue);
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── Headings ─────────────────────────────────────────────────────────────── */
+
+.redeem-heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md);
+  font-weight: 900;
+  line-height: var(--gruvax-leading-tight);
+  letter-spacing: var(--gruvax-tracking-display);
+  color: var(--gruvax-blue);
+  margin: 0;
+}
+
+.redeem-success__heading {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-md);
+  font-weight: 900;
+  line-height: var(--gruvax-leading-tight);
+  letter-spacing: var(--gruvax-tracking-display);
+  color: var(--gruvax-success);
+  margin: 0;
+}
+
+/* ── Body text ────────────────────────────────────────────────────────────── */
+
+.redeem-instruction {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  font-weight: 400;
+  line-height: var(--gruvax-leading-normal);
+  color: var(--gruvax-text-secondary);
+  margin: 0;
+}
+
+.redeem-success__body {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  font-weight: 400;
+  line-height: var(--gruvax-leading-normal);
+  color: var(--gruvax-text-secondary);
+  margin: 0;
+}
+
+/* ── Discogs link ──────────────────────────────────────────────────────────── */
+
+.redeem-discogs-link {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  color: var(--gruvax-blue);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.redeem-discogs-link:hover {
+  color: var(--gruvax-blue-dark);
+}
+
+/* ── Field label ─────────────────────────────────────────────────────────── */
+
+.redeem-field-label {
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  color: var(--gruvax-text-primary);
+  display: block;
+}
+
+/* ── PAT input row ─────────────────────────────────────────────────────────── */
+
+.redeem-pat-row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-sm);
+  background-color: var(--gruvax-white);
+  overflow: hidden;
+}
+
+.redeem-pat-input {
+  flex: 1;
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  color: var(--gruvax-text-primary);
+  background: transparent;
+  border: none;
+  outline: none;
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  min-height: 44px;
+  box-sizing: border-box;
+}
+
+.redeem-pat-input::placeholder {
+  color: var(--gruvax-text-faint);
+}
+
+.redeem-pat-input:disabled {
+  color: var(--gruvax-text-muted);
+}
+
+/* Yellow focus ring on the PAT input — matches kiosk search bar pattern */
+.redeem-pat-row:focus-within {
+  outline: 2px solid var(--gruvax-yellow);
+  outline-offset: 0;
+}
+
+.redeem-pat-toggle {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  color: var(--gruvax-text-muted);
+  flex-shrink: 0;
+}
+
+.redeem-pat-toggle:hover {
+  color: var(--gruvax-blue);
+}
+
+.redeem-pat-toggle:disabled {
+  cursor: not-allowed;
+  color: var(--gruvax-text-faint);
+}
+
+/* ── Inline error ──────────────────────────────────────────────────────────── */
+
+.redeem-inline-error {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  line-height: var(--gruvax-leading-normal);
+  color: var(--gruvax-error);
+  margin: 0;
+}
+
+/* ── CTA button ──────────────────────────────────────────────────────────── */
+
+.redeem-cta {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--gruvax-space-2);
+  width: 100%;
+  min-height: 44px;
+  background-color: var(--gruvax-blue);
+  color: var(--gruvax-white);
+  border: none;
+  border-radius: var(--gruvax-radius-sm);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm);
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  cursor: pointer;
+  transition: background-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.redeem-cta:hover:not(:disabled) {
+  background-color: var(--gruvax-blue-dark);
+}
+
+.redeem-cta:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.redeem-cta__spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+/* ── Error card (invalid/expired/used state) ───────────────────────────────── */
+
+.redeem-error-card {
+  background-color: var(--gruvax-off-white);
+  border: 1px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-5);
+}
+
+.redeem-error-card__message {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  line-height: var(--gruvax-leading-normal);
+  color: var(--gruvax-text-secondary);
+  margin: 0;
+}
+
+/* ── Success icon ─────────────────────────────────────────────────────────── */
+
+.redeem-success__icon {
+  color: var(--gruvax-success);
+  flex-shrink: 0;
+}
+
+/* ── Shared spinner keyframe ──────────────────────────────────────────────── */
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}

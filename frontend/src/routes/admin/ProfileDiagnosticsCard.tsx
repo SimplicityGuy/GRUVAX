@@ -47,6 +47,21 @@ export function ProfileDiagnosticsCard({ profile }: ProfileDiagnosticsCardProps)
       ? profile.last_sync_error.slice(0, 60) + (profile.last_sync_error.length > 60 ? '…' : '')
       : 'none'
 
+  // Phase 7 (API-04): NEW RECORDS / IMPORTED row
+  // last_new_record_count is null when never synced; 0 when synced but no new records.
+  const newRecordCount = profile.last_new_record_count
+  const isInitial = profile.last_sync_is_initial
+  const newRecordsRowLabel = isInitial ? 'IMPORTED' : 'NEW RECORDS'
+  const newRecordsValue =
+    newRecordCount != null && newRecordCount > 0
+      ? newRecordCount.toLocaleString('en-US')
+      : '—'
+  // No yellow on this card (§Color rule). Green for positive counts, muted for zero/null.
+  const newRecordsColor =
+    newRecordCount != null && newRecordCount > 0
+      ? 'var(--gruvax-success)'
+      : 'var(--gruvax-text-muted)'
+
   return (
     <div className="diag-profile-card">
       {/* Card header: profile name + status badge (focal point) */}
@@ -79,6 +94,19 @@ export function ProfileDiagnosticsCard({ profile }: ProfileDiagnosticsCardProps)
           <span className="diag-row-label">ITEMS</span>
         </div>
         <span className="diag-cell-mono">{itemsLabel}</span>
+      </div>
+
+      {/* NEW RECORDS / IMPORTED row (Phase 7 / API-04) */}
+      <div className="diag-status-row">
+        <div className="diag-status-left">
+          <span className="diag-row-label">{newRecordsRowLabel}</span>
+        </div>
+        <span
+          className="diag-cell-mono"
+          style={{ color: newRecordsColor }}
+        >
+          {newRecordsValue}
+        </span>
       </div>
 
       {/* LAST ERROR row */}
