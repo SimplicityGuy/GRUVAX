@@ -43,6 +43,7 @@ from gruvax.api.devices import router as devices_router
 from gruvax.api.events import router as events_router
 from gruvax.api.health import router as health_router
 from gruvax.api.illuminate import router as illuminate_router
+from gruvax.api.invite_codes import public_router as invite_public_router
 from gruvax.api.locate import router as locate_router
 from gruvax.api.search import router as search_router
 from gruvax.api.session import router as session_router
@@ -480,6 +481,11 @@ def create_app() -> FastAPI:
     # ── Kiosk device router (Plan 03-02) — BEFORE StaticFiles mount (Pitfall 3) ─
     # POST /api/devices/pairing-codes, GET /api/devices/me — no PIN required (kiosk-facing).
     app.include_router(devices_router, prefix="/api")
+
+    # ── Invite-code public router (Plan 07-02) — BEFORE StaticFiles mount (Pitfall 8) ─
+    # GET /api/invite-codes/{code}, POST /api/invite-codes/{code}/redeem — public (no PIN).
+    # The owner-side POST /api/admin/profiles/{id}/invite is registered via create_admin_router.
+    app.include_router(invite_public_router, prefix="/api")
 
     # ── StaticFiles SPA mount LAST ───────────────────────────────────────────
     # Plan 04 (React SPA) builds the frontend and copies the dist/ into static/.

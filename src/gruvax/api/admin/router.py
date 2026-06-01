@@ -29,6 +29,7 @@ from gruvax.api.admin.profile_sync import router as profile_sync_router
 from gruvax.api.admin.profiles import router as profiles_router
 from gruvax.api.admin.segments import router as segments_router
 from gruvax.api.admin.settings import router as settings_router
+from gruvax.api.invite_codes import owner_router as invite_owner_router
 
 
 def create_admin_router() -> APIRouter:
@@ -53,4 +54,5 @@ def create_admin_router() -> APIRouter:
     router.include_router(profile_sync_router)
     router.include_router(profiles_router)
     router.include_router(admin_devices_router)
+    router.include_router(invite_owner_router)
     return router
