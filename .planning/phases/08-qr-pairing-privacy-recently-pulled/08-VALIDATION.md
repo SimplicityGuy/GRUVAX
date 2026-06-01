@@ -40,10 +40,10 @@ created: 2026-06-01
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
 | 08-01 T1 | 01 | 1 | PRIV-02, PRIV-03 | T-08-01/02/03 | Query never logged; uvicorn.access suppressed; no search_log table | integration (pytest) | `uv run pytest tests/integration/test_08_privacy.py -x -q` | ❌ created in plan | ⬜ pending |
 | 08-02 T1 | 02 | 1 | DEV-04 | T-08-QR-01/SC | QR renders/encodes code, re-renders on reroll, hidden when paired | unit (vitest) | `npm run test --prefix frontend -- --run PairView` | ❌ extend in plan | ⬜ pending |
-| 08-02 T2 | 02 | 1 | DEV-04 | T-08-QR-03/04/05 | Prefill one-tap confirm; same bind call site (identical audit) | unit/lint+build | `npm run test --prefix frontend -- --run DeviceDrawer DevicesManager` | ❌ created in plan | ⬜ pending |
+| 08-02 T2 | 02 | 1 | DEV-04 | T-08-QR-03/04/05 | Prefill one-tap confirm (no auto-submit, D-04); single `handleBind` bind call site → identical audit (L-03) — DeviceDrawer test asserts `bindDevice` NOT called on mount + called exactly once on confirm | unit (vitest) | `npm run test --prefix frontend -- --run DeviceDrawer DevicesManager` | ❌ DeviceDrawer.test.tsx + DevicesManager.test.tsx created in 08-02 T2 | ⬜ pending |
 | 08-03 T1 | 03 | 1 | PRIV-01, SRCH-09 | T-08-PR-01/02 | sessionStorage key, dedupe/cap-8, idle fire/reset | unit (vitest) | `npm run test --prefix frontend -- --run recentlyPulledStore useIdleTimer` | ❌ created in plan | ⬜ pending |
-| 08-03 T2 | 03 | 1 | PRIV-04, SRCH-09 | T-08-PR-03/04 | Strip null-when-empty; alertdialog focus trap; zero API in reset | lint+build | `npm run lint --prefix frontend && npm run build --prefix frontend` | ❌ created in plan | ⬜ pending |
-| 08-03 T3 | 03 | 1 | PRIV-04, SRCH-09 | T-08-PR-03/04 | Reset hidden when admin; idle/reset clear client-side only | unit (vitest) | `npm run test --prefix frontend -- --run KioskView` | ❌ created in plan | ⬜ pending |
+| 08-03 T2 | 03 | 1 | PRIV-04, SRCH-09 | T-08-PR-03/04 | Strip null-when-empty; alertdialog focus trap; ResetConfirmDialog confirm fires `onConfirm` once + ZERO `fetch` (behavioral L-05 gate) | unit (vitest) + lint/build | `npm run test --prefix frontend -- --run ResetConfirmDialog && npm run lint --prefix frontend && npm run build --prefix frontend` | ❌ ResetConfirmDialog.test.tsx created in 08-03 T2 | ⬜ pending |
+| 08-03 T3 | 03 | 1 | PRIV-04, SRCH-09 | T-08-PR-03/04 | Reset hidden when admin (D-10); idle/reset clear client-side only; addItem on successful locate AND NOT on no-result locate (D-05 negative case) | unit (vitest) | `npm run test --prefix frontend -- --run KioskView` | ❌ created in plan | ⬜ pending |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -55,6 +55,9 @@ created: 2026-06-01
 - [ ] `frontend/src/state/recentlyPulledStore.test.ts` — PRIV-01, SRCH-09 store (08-03 T1)
 - [ ] `frontend/src/hooks/useIdleTimer.test.ts` — SRCH-09 idle semantics (08-03 T1)
 - [ ] Extend `frontend/src/routes/kiosk/PairView.test.tsx` — DEV-04 QR render (08-02 T1)
+- [ ] `frontend/src/routes/admin/DeviceDrawer.test.tsx` — D-04 no-auto-submit + L-03 single bind call site (08-02 T2)
+- [ ] `frontend/src/routes/admin/DevicesManager.test.tsx` — `?code=` prefill opens drawer + strips param (08-02 T2)
+- [ ] `frontend/src/routes/kiosk/ResetConfirmDialog.test.tsx` — L-05 zero-fetch on confirm (08-03 T2)
 
 *If none: "Existing infrastructure covers all phase requirements."*
 
@@ -64,7 +67,7 @@ created: 2026-06-01
 
 | Behavior | Requirement | Why Manual | Test Instructions |
 |----------|-------------|------------|-------------------|
-| QR scan → phone bind flow | DEV-04 | Requires a physical phone camera scanning the kiosk display | Scan the kiosk QR on a phone, confirm it lands on the PIN-gated bind page prefilled with the code, complete one-tap pairing |
+| QR scan → phone bind flow (end-to-end) | DEV-04 | Requires a physical phone camera scanning the kiosk display | Scan the kiosk QR on a phone, confirm it lands on the PIN-gated bind page prefilled with the code, complete one-tap pairing. (L-03 single-bind-call-site is automated in DeviceDrawer.test.tsx; this manual step is the camera-to-bind end-to-end confirmation only.) |
 
 *If none: "All phase behaviors have automated verification."*
 

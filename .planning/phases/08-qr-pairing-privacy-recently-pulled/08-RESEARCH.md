@@ -572,17 +572,15 @@ for entry in ring:
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
 1. **Chip visual content (D-07)**
    - What we know: cap 8, most-recent-first, deduped, DM Mono for catalog numbers
-   - What's unclear: exact truncation budget on the 7" kiosk (e.g., `title` max chars); whether `artist` or `label` is shown on the chip
-   - Recommendation: UI-phase detail per CONTEXT.md; store `{ release_id, title, artist, catalog_number }` and let the chip component truncate via CSS
+   - **RESOLVED:** 08-UI-SPEC.md Surface 2 fixes the chip anatomy — line 1 `primary_artist – title` (Space Grotesk 14px), line 2 catalog_number (DM Mono 14px); truncation via CSS (`max-width: 200px`, `text-overflow: ellipsis`), no per-field char budget needed. Store identity-only: `{ release_id, title, primary_artist, catalog_number }`. NOTE: the field is `SearchResult.primary_artist`, not `artist` (verified against `frontend/src/api/types.ts`).
 
 2. **`SearchResult` vs `LocateResult` as chip identity**
-   - What we know: `addItem` is called on a successful locate; the `LocateResult` returned by `/api/locate` contains `release_id`; `SearchResult` contains title/artist/catalog
-   - What's unclear: which object is most convenient to thread from KioskView to the store
-   - Recommendation: the `selectedResult: SearchResult | null` already in `useGruvaxStore` is available at locate time; store that directly
+   - What we know: `addItem` is called on a successful locate; the `LocateResult` returned by `/api/locate` contains `release_id`; `SearchResult` contains title/primary_artist/catalog
+   - **RESOLVED:** thread `selectedResult: SearchResult | null` from `useGruvaxStore` (already present at locate time). 08-03-PLAN.md Task 3 calls `addItem({ release_id, title, primary_artist, catalog_number })` from `selectedResult` on a successful cube-highlight locate.
 
 ---
 
@@ -621,7 +619,7 @@ No missing dependencies.
 |--------|----------|-----------|-------------------|-------------|
 | DEV-04 | QR renders in PairView when code is available | unit (Vitest) | `npm run test --prefix frontend -- --testPathPattern=PairView` | ❌ Wave 0 |
 | DEV-04 | QR re-renders on reroll (new `value` prop) | unit (Vitest) | same | ❌ Wave 0 |
-| DEV-04 | Both scan path and typed path call `POST /api/admin/devices/bind` | integration (pytest) | `uv run pytest tests/integration/test_devices.py -x -q` | ✅ (existing bind test — extend) |
+| DEV-04 | Both scan path and typed path call the SAME bind path (single `handleBind` call site → `POST /api/admin/devices/bind`) so audit entries are identical (L-03) | unit (vitest) | `npm run test --prefix frontend -- --run DeviceDrawer` (asserts `bindDevice` called exactly once via the confirm tap; no auto-submit) | ❌ created in 08-02 T2 |
 | PRIV-01 | Recently-pulled store key is `gruvax-kiosk-recent` in sessionStorage (not localStorage) | unit (Vitest) | `npm run test --prefix frontend -- --testPathPattern=recentlyPulledStore` | ❌ Wave 0 |
 | PRIV-01 | Recently-pulled store is NOT in `gruvax-admin` localStorage key | unit (Vitest) | same | ❌ Wave 0 |
 | PRIV-02 | Raw query term absent from `app.state.log_ring_buffer` after a search | integration (pytest) | `uv run pytest tests/integration/test_08_privacy.py::test_query_never_in_logs -x -q` | ❌ Wave 0 |
