@@ -72,7 +72,7 @@ Three-font system only. Never use Barlow Condensed for body copy; never use Spac
 | Resting-screen idle caption | Space Grotesk | 16px | 400 | 1.5 | `--gruvax-text-body` |
 | Admin bind confirm CTA ("PAIR THIS DEVICE") | Barlow Condensed | 16px | 700 | 1.1 | `--gruvax-text-display-sm`, `--gruvax-tracking-label` |
 
-Weights used in this phase: **400** (Space Grotesk body, DM Mono data) and **700/900** (Barlow Condensed labels/display). No third weight is introduced.
+Weights used in this phase: **400** (Space Grotesk body, DM Mono data) and **700/900** (Barlow Condensed labels/display). The 900 hero weight is a locked brand-system constraint from the Nordic Grid design language (`design/gruvax-design-language.md` — Barlow Condensed 900 hero/section/card display scale), not a per-phase choice.
 
 ---
 
@@ -244,7 +244,7 @@ This section is the primary deliverable for the executor. Each surface maps to a
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  gap: 2px;
+  gap: 0; /* two stacked 14px/1.5 lines (~21px each ≈ 42px total) fit within the 48px min-height; no separation needed */
   min-height: 48px;
   min-width: 88px;
   max-width: 200px;
