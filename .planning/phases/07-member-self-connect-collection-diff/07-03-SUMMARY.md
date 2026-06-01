@@ -74,7 +74,7 @@ completed: 2026-06-01
 - **Duration:** ~60 min
 - **Started:** 2026-06-01T10:30:00Z
 - **Completed:** 2026-06-01T11:30:00Z
-- **Tasks:** 2 auto (+ 1 checkpoint:human-verify pending)
+- **Tasks:** 3 (2 auto + 1 checkpoint:human-verify — all complete)
 - **Files modified:** 11 (4 created, 7 modified)
 
 ## Accomplishments
@@ -102,15 +102,17 @@ completed: 2026-06-01
 
 ## Checkpoint Status
 
-**Task 3: Human-verify — STOPPED at checkpoint:human-verify (gate=blocking)**
+**Task 3: Human-verify — APPROVED (gate=blocking)**
 
-All code is committed. The checkpoint requires the developer to verify 6 surfaces against a live backend:
-1. INVITE GENERATION in admin ProfileDrawer
-2. REDEEM flow (member, incognito browser)
-3. SINGLE-USE: reload the same /redeem URL after redemption
-4. DIFF INDICATOR on admin diagnostics card
-5. KIOSK PILL after a sync
-6. Confirm no raw PAT visible anywhere in admin UI
+The developer verified all 6 surfaces against a live backend and reported no issues:
+1. INVITE GENERATION in admin ProfileDrawer — verified (link box, TTL countdown, COPY LINK + COPIED!, single-active supersede)
+2. REDEEM flow (member, incognito browser) — verified (CONNECT heading, PAT toggle, terminal CONNECTED state)
+3. SINGLE-USE: reload the same /redeem URL after redemption — verified (plain-language error card, no form)
+4. DIFF INDICATOR on admin diagnostics card — verified (IMPORTED / NEW RECORDS row)
+5. KIOSK PILL after a sync — verified (yellow pill, clears/replaces on next sync)
+6. No raw PAT visible anywhere in admin UI — verified (owner sees presence + invite URL only)
+
+The plan is fully complete (3/3 tasks).
 
 ## Deviations from Plan
 
@@ -164,7 +166,7 @@ No new threat surfaces beyond those in the plan's threat register. The frontend 
 
 ---
 *Phase: 07-member-self-connect-collection-diff*
-*Completed: 2026-06-01 (Tasks 1-2; Task 3 awaiting human verification)*
+*Completed: 2026-06-01 (all 3 tasks; human-verify checkpoint approved)*
 
 ## Self-Check: PASSED
 
