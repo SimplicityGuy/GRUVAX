@@ -43,6 +43,7 @@ Declared values (all multiples of 4, directly from `--gruvax-space-*` tokens):
 |-------|-------|-----------|---------------------|
 | xs | 4px | `--gruvax-space-1` | Icon gaps; chip internal icon padding |
 | sm | 8px | `--gruvax-space-2` | Chip internal horizontal padding (sides); gap between QR and caption |
+| sm+ | 12px | `--gruvax-space-3` | QR quiet-zone container padding; gap between chips; chip horizontal padding |
 | md | 16px | `--gruvax-space-4` | Chip strip block padding; confirm dialog horizontal padding |
 | lg | 24px | `--gruvax-space-5` | Gap between QR block and code card; chip strip bottom margin |
 | xl | 32px | `--gruvax-space-6` | PairView layout gap above/below QR block |
@@ -591,11 +592,11 @@ Questions requiring new design decisions (this session): 0
 
 ## Checker Sign-Off
 
-- [ ] Dimension 1 Copywriting: PASS
-- [ ] Dimension 2 Visuals: PASS
-- [ ] Dimension 3 Color: PASS
-- [ ] Dimension 4 Typography: PASS
-- [ ] Dimension 5 Spacing: PASS
-- [ ] Dimension 6 Registry Safety: PASS
+- [x] Dimension 1 Copywriting: PASS
+- [x] Dimension 2 Visuals: PASS
+- [x] Dimension 3 Color: PASS
+- [x] Dimension 4 Typography: FLAG (3 weights 400/700/900 — 900 is brand-mandated Barlow Condensed hero per design language; non-blocking)
+- [x] Dimension 5 Spacing: FLAG (`--gruvax-space-3` 12px now added to scale table; all values multiples of 4; non-blocking)
+- [x] Dimension 6 Registry Safety: PASS (react-qr-code@2.0.21 slopcheck OK, no postinstall, MIT)
 
-**Approval:** pending
+**Approval:** approved (2 non-blocking FLAGs — gsd-ui-checker pass, 2026-06-01)
