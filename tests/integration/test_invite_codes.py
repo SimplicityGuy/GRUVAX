@@ -2,7 +2,7 @@
 
 Tests (12 total — per RESEARCH.md §Validation Architecture §Phase Requirements → Test Map):
 
-AUTH-02 tests (endpoints in Plan 02 — marked xfail(strict=False) until shipped):
+AUTH-02 tests (endpoints shipped in Plan 02):
   - test_generate_invite: POST /api/admin/profiles/{id}/invite → {code, url, expires_at}
   - test_new_invite_voids_prior: generating a second invite voids the first (D-09)
   - test_get_valid_code: GET /api/invite-codes/{code} → {display_name, expires_at}
@@ -129,14 +129,11 @@ def _csrf(cookies: dict[str, str]) -> str:
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
-# AUTH-02 tests — invite endpoints ship in Plan 02
-# Marked xfail(strict=False) so the suite stays green while Plan 01 only ships
-# the API-04 backend pieces.  These tests will go green once Plan 02 lands.
+# AUTH-02 tests — invite endpoints shipped in Plan 02
 # ═══════════════════════════════════════════════════════════════════════════════
 
 
 @pytest.mark.asyncio(loop_scope="session")
-@pytest.mark.xfail(reason="endpoint in Plan 02", strict=False)
 async def test_generate_invite(client) -> None:  # type: ignore[no-untyped-def]
     """POST /api/admin/profiles/{id}/invite → {code, url, expires_at} (AUTH-02, D-01).
 
@@ -145,7 +142,7 @@ async def test_generate_invite(client) -> None:  # type: ignore[no-untyped-def]
     - response body contains 'code' (UUID string), 'url' (http://...redeem/<code>), 'expires_at'
     - url ends with /redeem/<code>
 
-    RED until Plan 02 ships POST /api/admin/profiles/{id}/invite.
+    Plan 02: POST /api/admin/profiles/{id}/invite endpoint.
     """
     cookies = await _login(client)
     res = await client.post(
@@ -169,7 +166,6 @@ async def test_generate_invite(client) -> None:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.asyncio(loop_scope="session")
-@pytest.mark.xfail(reason="endpoint in Plan 02", strict=False)
 async def test_new_invite_voids_prior(client) -> None:  # type: ignore[no-untyped-def]
     """Generating a second invite voids the first — D-09 one-active-per-profile rule.
 
@@ -177,7 +173,7 @@ async def test_new_invite_voids_prior(client) -> None:  # type: ignore[no-untype
     - First invite code becomes invalid (GET returns 404) after generating a second.
     - Second invite code is valid.
 
-    RED until Plan 02 ships POST /api/admin/profiles/{id}/invite.
+    Plan 02: POST /api/admin/profiles/{id}/invite endpoint.
     """
     cookies = await _login(client)
     headers = {"X-CSRF-Token": _csrf(cookies)}
@@ -214,7 +210,6 @@ async def test_new_invite_voids_prior(client) -> None:  # type: ignore[no-untype
 
 
 @pytest.mark.asyncio(loop_scope="session")
-@pytest.mark.xfail(reason="endpoint in Plan 02", strict=False)
 async def test_get_valid_code(client) -> None:  # type: ignore[no-untyped-def]
     """GET /api/invite-codes/{code} returns {display_name, expires_at} for a valid code.
 
@@ -248,17 +243,13 @@ async def test_get_valid_code(client) -> None:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.asyncio(loop_scope="session")
-@pytest.mark.xfail(reason="endpoint in Plan 02", strict=False)
-async def test_redeem_success(client) -> None:  # type: ignore[no-untyped-def]
+async def test_redeem_success(client, db_pool) -> None:  # type: ignore[no-untyped-def]
     """POST /api/invite-codes/{code}/redeem with valid PAT → 200 + sync starts (AUTH-02, D-04).
 
     Asserts:
     - 200 status
     - response body: {status: "connected", profile_id}
-    - auto-sync triggered (verified by subsequent GET /api/admin/profiles showing in_progress
-      or by last_sync_status changing from None to non-None)
-
-    RED until Plan 02 ships POST /api/invite-codes/{code}/redeem.
+    - auto-sync triggered (D-04)
     """
     cookies = await _login(client)
     gen_res = await client.post(
@@ -270,6 +261,9 @@ async def test_redeem_success(client) -> None:  # type: ignore[no-untyped-def]
         pytest.skip(f"invite generation returned {gen_res.status_code}")
     code = gen_res.json()["code"]
 
+    # Free the shared fake discogs account so this redeem can claim it.
+    await _free_fake_account(db_pool, _DEFAULT_PROFILE_UUID)
+
     # Redeem with a valid fake PAT (the in-process fake accepts any dscg_* token)
     redeem_res = await client.post(
         f"/api/invite-codes/{code}/redeem",
@@ -277,8 +271,7 @@ async def test_redeem_success(client) -> None:  # type: ignore[no-untyped-def]
     )
     assert redeem_res.status_code == 200, (
         f"POST /api/invite-codes/{code}/redeem expected 200, "
-        f"got {redeem_res.status_code}: {redeem_res.text}. "
-        f"RED until Plan 02 ships the redeem endpoint."
+        f"got {redeem_res.status_code}: {redeem_res.text}."
     )
     data = redeem_res.json()
     assert data.get("status") == "connected", (
@@ -288,15 +281,12 @@ async def test_redeem_success(client) -> None:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.asyncio(loop_scope="session")
-@pytest.mark.xfail(reason="endpoint in Plan 02", strict=False)
-async def test_redeem_second_use_rejected(client) -> None:  # type: ignore[no-untyped-def]
+async def test_redeem_second_use_rejected(client, db_pool) -> None:  # type: ignore[no-untyped-def]
     """Second redeem of the same code returns 404 (single-use — D-02, AUTH-02).
 
     Asserts:
     - First redeem: 200
     - Second redeem of same code: 404 {type: "invite_not_found"}
-
-    RED until Plan 02 ships the atomic consume-on-redeem pattern.
     """
     cookies = await _login(client)
     gen_res = await client.post(
@@ -307,6 +297,9 @@ async def test_redeem_second_use_rejected(client) -> None:  # type: ignore[no-un
     if gen_res.status_code != 200:
         pytest.skip(f"invite generation returned {gen_res.status_code}")
     code = gen_res.json()["code"]
+
+    # Free the shared fake discogs account so the first redeem can claim it.
+    await _free_fake_account(db_pool, _DEFAULT_PROFILE_UUID)
 
     # First redeem — should succeed
     first_res = await client.post(
@@ -337,7 +330,6 @@ async def test_redeem_second_use_rejected(client) -> None:  # type: ignore[no-un
 
 
 @pytest.mark.asyncio(loop_scope="session")
-@pytest.mark.xfail(reason="endpoint in Plan 02", strict=False)
 async def test_redeem_bad_pat(client) -> None:  # type: ignore[no-untyped-def]
     """Redeem with invalid PAT returns 401 pat_rejected (AUTH-02, T-07-03).
 
@@ -377,7 +369,6 @@ async def test_redeem_bad_pat(client) -> None:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.asyncio(loop_scope="session")
-@pytest.mark.xfail(reason="endpoint in Plan 02", strict=False)
 async def test_redeem_expired(client, db_pool) -> None:  # type: ignore[no-untyped-def]
     """Expired invite code returns 404 invite_not_found (AUTH-02, D-01 TTL).
 
@@ -425,31 +416,30 @@ async def test_redeem_expired(client, db_pool) -> None:  # type: ignore[no-untyp
 
 
 @pytest.mark.asyncio(loop_scope="session")
-@pytest.mark.xfail(reason="endpoint in Plan 02", strict=False)
-async def test_redeem_rotates_token(client) -> None:  # type: ignore[no-untyped-def]
+async def test_redeem_rotates_token(client, db_pool) -> None:  # type: ignore[no-untyped-def]
     """Redeem onto a profile with existing token rotates it (D-10).
 
     Flow:
     1. Connect a PAT via the owner connect_pat endpoint (profile has a token).
     2. Generate an invite.
     3. Redeem with a different PAT — must overwrite without error (D-10).
-    4. Subsequent sync uses the new PAT.
-
-    RED until Plan 02 ships the redeem endpoint with D-10 overwrite behavior.
     """
     cookies = await _login(client)
     headers = {"X-CSRF-Token": _csrf(cookies)}
 
+    # Free the shared fake discogs account before connecting initial PAT.
+    await _free_fake_account(db_pool, _DEFAULT_PROFILE_UUID)
+
     # Step 1: connect an initial PAT via the owner flow
     connect_res = await client.post(
-        f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/connect-pat",
+        f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/connect",
         json={"pat": "dscg_initial_token"},
         cookies=cookies,
         headers=headers,
     )
     if connect_res.status_code not in (200, 201):
         pytest.skip(
-            f"connect-pat returned {connect_res.status_code} — skipping rotation test"
+            f"connect returned {connect_res.status_code} — skipping rotation test"
         )
 
     # Step 2: generate invite
@@ -462,15 +452,17 @@ async def test_redeem_rotates_token(client) -> None:  # type: ignore[no-untyped-
         pytest.skip(f"invite generation returned {gen_res.status_code}")
     code = gen_res.json()["code"]
 
-    # Step 3: redeem with a different PAT — must overwrite (D-10, no guard)
+    # Step 3: redeem with a different PAT — must overwrite (D-10, no guard).
+    # The profile already holds the fake user_id from Step 1 (COALESCE preserves it).
+    # The second redeem uses a different PAT but same discogsography_user_id (fake constant).
+    # This tests that D-10 (overwrite existing token) works correctly.
     redeem_res = await client.post(
         f"/api/invite-codes/{code}/redeem",
         json={"pat": "dscg_new_member_token"},
     )
     assert redeem_res.status_code == 200, (
         f"Redeem onto a profile with existing token expected 200 (D-10 rotation), "
-        f"got {redeem_res.status_code}: {redeem_res.text}. "
-        f"RED until Plan 02 ships D-10 overwrite behavior."
+        f"got {redeem_res.status_code}: {redeem_res.text}."
     )
 
 
