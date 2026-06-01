@@ -625,6 +625,10 @@ export interface ProfileDiagnosticEntry {
   last_sync_item_count: number | null
   last_sync_error: string | null
   app_token_revoked: boolean
+  /** Phase 7 (API-04): number of new records from the most recent non-initial sync. null if never synced. */
+  last_new_record_count: number | null
+  /** Phase 7 (API-04): true when the most recent sync was the profile's first import. null if never synced. */
+  last_sync_is_initial: boolean | null
 }
 
 /** The full diagnostics payload returned by GET /api/admin/diagnostics. */

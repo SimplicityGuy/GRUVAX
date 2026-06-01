@@ -38,7 +38,8 @@ import {
   rotateAdminProfilePat,
   syncAdminProfile,
 } from '../../api/adminClient'
-import type { AdminProfile } from '../../api/types'
+import { generateInvite } from '../../api/inviteClient'
+import type { AdminProfile, GeneratedInvite } from '../../api/types'
 import { SyncProgressSection } from './SyncProgressSection'
 
 // The Default profile UUID — matches backend DEFAULT_PROFILE_UUID
@@ -98,6 +99,16 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
   const [syncSuccess, setSyncSuccess] = useState(false)
   // D4-17: track sync start time for the elapsed-seconds counter in SyncProgressSection
   const [syncStartedAt, setSyncStartedAt] = useState<number | null>(null)
+
+  // Phase 7 / AUTH-02: invite link state
+  const [inviteInfo, setInviteInfo] = useState<GeneratedInvite | null>(null)
+  const [inviteError, setInviteError] = useState<string | null>(null)
+  const [isGeneratingInvite, setIsGeneratingInvite] = useState(false)
+  // TTL countdown state — recomputed each second from inviteInfo.expires_at
+  const [ttlSeconds, setTtlSeconds] = useState<number | null>(null)
+  // Copy feedback — set to Date.now() when copied; cleared after 2000ms
+  const [copiedAt, setCopiedAt] = useState<number | null>(null)
+  const inviteIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
   // Focus trap: focus first focusable element on mount
   useEffect(() => {
@@ -266,6 +277,86 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
     }
   }
 
+  // ── Invite TTL countdown effect ────────────────────────────────────────────
+  // Starts when inviteInfo is set, ticks every second, clears at 0.
+  // D-09: setting inviteInfo to null at 0 is the TTL-expired signal.
+  useEffect(() => {
+    // Clear any existing interval when invite changes
+    if (inviteIntervalRef.current) {
+      clearInterval(inviteIntervalRef.current)
+      inviteIntervalRef.current = null
+    }
+
+    if (!inviteInfo) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setTtlSeconds(null)
+      return
+    }
+
+    const tick = () => {
+      const remaining = Math.floor(
+        (new Date(inviteInfo.expires_at).getTime() - Date.now()) / 1000,
+      )
+      if (remaining <= 0) {
+        setTtlSeconds(0)
+        setInviteInfo(null) // D-09: expire the invite in UI at TTL=0
+        if (inviteIntervalRef.current) {
+          clearInterval(inviteIntervalRef.current)
+          inviteIntervalRef.current = null
+        }
+      } else {
+        setTtlSeconds(remaining)
+      }
+    }
+
+    tick() // initial tick
+    inviteIntervalRef.current = setInterval(tick, 1000)
+
+    return () => {
+      if (inviteIntervalRef.current) {
+        clearInterval(inviteIntervalRef.current)
+        inviteIntervalRef.current = null
+      }
+    }
+  }, [inviteInfo])
+
+  // ── Invite copy feedback: clear after 2000ms ────────────────────────────────
+  useEffect(() => {
+    if (!copiedAt) return
+    const timer = setTimeout(() => setCopiedAt(null), 2000)
+    return () => clearTimeout(timer)
+  }, [copiedAt])
+
+  // ── Generate invite ─────────────────────────────────────────────────────────
+  async function handleGenerateInvite() {
+    if (!profileId) return
+
+    setInviteError(null)
+    setIsGeneratingInvite(true)
+
+    try {
+      const generated = await generateInvite(profileId)
+      setInviteInfo(generated)
+    } catch {
+      setInviteError('Could not generate invite link. Try again in a moment.')
+    } finally {
+      setIsGeneratingInvite(false)
+    }
+  }
+
+  // ── Copy invite link ────────────────────────────────────────────────────────
+  async function handleCopyLink() {
+    if (!inviteInfo) return
+
+    try {
+      await navigator.clipboard.writeText(inviteInfo.url)
+      setCopiedAt(Date.now())
+      setInviteError(null)
+    } catch {
+      setInviteError('Could not copy. Tap the link to copy manually.')
+    }
+  }
+
   // ── Delete ─────────────────────────────────────────────────────────────────
   async function handleConfirmDelete() {
     if (!profileId) return
@@ -287,6 +378,20 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
   const isSyncing = connectState === 'syncing'
   const isConnecting = connectState === 'connecting'
   const profileStatus = currentProfile?.status ?? 'pending'
+
+  /** Format seconds as MM:SS for the TTL countdown. */
+  function formatTtl(seconds: number): string {
+    const mins = Math.floor(seconds / 60)
+    const secs = seconds % 60
+    return `${String(mins).padStart(2, '0')}:${String(secs).padStart(2, '0')}`
+  }
+
+  /** Derive countdown color based on TTL: warning <5min, error <1min. */
+  function ttlColor(seconds: number): string {
+    if (seconds < 60) return 'var(--gruvax-error)'
+    if (seconds < 300) return 'var(--gruvax-warning)'
+    return 'var(--gruvax-text-muted)'
+  }
 
   return (
     <>
@@ -447,6 +552,67 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
                 </span>.{' '}
                 This cannot be undone.
               </p>
+            </div>
+          )}
+
+          {/* ── INVITE LINK section (D-03 / AUTH-02 / UI-SPEC §Surface 2) ── */}
+          {/* Shown in view mode for non-new, non-syncing profiles */}
+          {profileId !== null && drawerMode === 'view' && !isSyncing && (
+            <div className="profile-drawer-section profile-invite-section">
+              <span className="profile-field-label">INVITE LINK</span>
+
+              {inviteInfo ? (
+                /* Active invite: link box + TTL countdown + COPY LINK button */
+                <>
+                  <div className="profile-invite-link-box">
+                    <span className="profile-invite-url" aria-label="Invite URL">
+                      {inviteInfo.url}
+                    </span>
+                    {ttlSeconds !== null && (
+                      <span
+                        className="profile-invite-ttl"
+                        aria-live="polite"
+                        style={{ color: ttlColor(ttlSeconds) }}
+                      >
+                        Expires in {formatTtl(ttlSeconds)}
+                      </span>
+                    )}
+                  </div>
+                  <button
+                    type="button"
+                    className="profile-btn-cta profile-invite-copy-btn"
+                    onClick={() => void handleCopyLink()}
+                    aria-label="Copy invite link"
+                  >
+                    {copiedAt ? 'COPIED!' : 'COPY LINK'}
+                  </button>
+                </>
+              ) : (
+                /* No active invite: GENERATE INVITE LINK button */
+                <button
+                  type="button"
+                  className="profile-btn-secondary"
+                  onClick={() => void handleGenerateInvite()}
+                  disabled={isGeneratingInvite}
+                  aria-busy={isGeneratingInvite}
+                >
+                  {isGeneratingInvite
+                    ? (
+                      <>
+                        <Loader2 size={16} className="profile-btn-spinner" aria-hidden="true" />
+                        GENERATING…
+                      </>
+                    )
+                    : 'GENERATE INVITE LINK'
+                  }
+                </button>
+              )}
+
+              {inviteError && (
+                <p className="profile-invite-error" role="alert">
+                  {inviteError}
+                </p>
+              )}
             </div>
           )}
 
