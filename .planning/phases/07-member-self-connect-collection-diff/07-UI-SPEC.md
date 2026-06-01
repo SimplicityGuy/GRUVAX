@@ -1,10 +1,11 @@
 ---
 phase: 7
 slug: member-self-connect-collection-diff
-status: draft
+status: approved
 shadcn_initialized: false
 preset: none
 created: 2026-06-01
+reviewed_at: 2026-06-01T00:00:00Z
 ---
 
 # Phase 7 — UI Design Contract
