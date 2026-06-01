@@ -393,8 +393,9 @@ export interface AdminProfile {
   status: ProfileStatus
   /** Phase 7 (API-04): true when an encrypted PAT is stored for this profile. */
   has_token: boolean
-  /** Phase 7 (API-04): number of new records from the most recent non-initial sync. */
-  last_new_record_count: number
+  /** Phase 7 (API-04): number of new records from the most recent non-initial sync.
+   *  Nullable — a profile that has never synced (or a null DB column) sends null. */
+  last_new_record_count: number | null
   /** Phase 7 (API-04): true when the most recent sync was the profile's initial import. */
   last_sync_is_initial: boolean
 }

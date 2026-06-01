@@ -202,6 +202,21 @@ async def generate_invite(
 
     db_pool = request.app.state.db_pool
 
+    # Guard existence before the FK insert: a soft-deleted or unknown profile_id
+    # would otherwise surface the profile_invite_codes FK violation as an
+    # unhandled 500. Mirror the _require_profile() preflight used by every other
+    # mutating profile endpoint (WR-03). Tight pool checkout, released immediately.
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT 1 FROM gruvax.profiles WHERE id = %s::uuid AND deleted_at IS NULL",
+            (str(uid),),
+        )
+        if await cur.fetchone() is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"type": "profile_not_found"},
+            )
+
     async with db_pool.connection() as conn, conn.cursor() as cur:
         # D-09: void prior unredeemed invite before inserting the new one (atomic).
         await cur.execute(_VOID_PRIOR_INVITE, (str(uid),))
@@ -324,14 +339,17 @@ async def redeem_invite(
             detail={"type": "pat_rejected", "message": "PAT rejected by discogsography (401/403)"},
         ) from None
     except RateLimitExhausted as exc:
+        # T-07-08 (WR-02): never forward upstream (discogsography) error text into
+        # the public response body — use a fixed, generic message. The original
+        # exception is still chained (`from exc`) for server-side logs.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"type": "upstream_unavailable", "message": str(exc)},
+            detail={"type": "upstream_unavailable", "message": "Discogs is temporarily unavailable. Please try again shortly."},
         ) from exc
     except (ServerError, NetworkError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"type": "upstream_unavailable", "message": str(exc)},
+            detail={"type": "upstream_unavailable", "message": "Discogs is temporarily unavailable. Please try again shortly."},
         ) from exc
 
     # Step 3: D-09 strict user_id collision check (mirrors connect_pat lines 476-497).

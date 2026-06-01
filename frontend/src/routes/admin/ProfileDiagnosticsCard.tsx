@@ -29,7 +29,10 @@ function deriveProfileStatus(profile: ProfileDiagnosticEntry): ProfileStatus {
   if (profile.app_token_revoked) return 're-auth-required'
   if (profile.last_sync_status === 'in_progress') return 'syncing'
   if (profile.last_sync_status === 'ok') return 'connected'
-  if (profile.last_sync_status === 'failed') return 'connected' // connected but last sync failed
+  // A failed sync is NOT 'connected' — mirror the backend derive_profile_status,
+  // which falls through a non-ok/non-in-progress status to 'pending' (WR-04).
+  // Showing a green CONNECTED badge after a failed sync misleads the admin.
+  if (profile.last_sync_status === 'failed') return 'pending'
   // No sync yet
   return 'pending'
 }
