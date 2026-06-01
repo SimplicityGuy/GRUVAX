@@ -104,7 +104,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 
 **Wave 2** *(blocked on Wave 1 — needs profile_invite_codes table)*
 
-  - [ ] 07-02-PLAN.md — AUTH-02 backend: invite_codes.py router (owner generate + public validate + public redeem), atomic single-use consume, pool-isolated PAT validation, Fernet store, uniform 404, per-IP redeem rate limit; router registration; all 12 integration tests.
+  - [x] 07-02-PLAN.md — AUTH-02 backend: invite_codes.py router (owner generate + public validate + public redeem), atomic single-use consume, pool-isolated PAT validation, Fernet store, uniform 404, per-IP redeem rate limit; router registration; all 12 integration tests.
 
 **Wave 3** *(blocked on Waves 1–2 — needs both backends)*
 
@@ -168,7 +168,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
 | 6. LED Contract over MQTT | v1.0 | 3/3 | Complete    | 2026-05-31 |
-| 7. Wizards + Import/Export | v1.0 | 1/3 | In Progress|  |
+| 7. Wizards + Import/Export | v1.0 | 2/3 | In Progress|  |
 | 8. Observability + Deployment Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
