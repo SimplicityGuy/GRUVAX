@@ -247,4 +247,123 @@ describe('DeviceDrawer', () => {
       expect(screen.queryByRole('button', { name: '1' })).toBeTruthy()
     }, { timeout: 3000 })
   })
+
+  // ── DEV-04: Prefill-confirm tests ─────────────────────────────────────────
+
+  /**
+   * Test 4 (DEV-04 / D-04): rendering with prefillCode shows confirm screen (not NumericKeypad)
+   * and does NOT call the bind API on mount (no auto-submit).
+   *
+   * This is the critical D-04 gate: explicit one-tap confirm, not auto-submit.
+   */
+  it('prefillCode renders confirm screen (not NumericKeypad) and does NOT auto-submit', async () => {
+    const bindCalls: string[] = []
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
+        const body = init?.body ? JSON.parse(init.body as string) : {}
+        bindCalls.push(body.code ?? '')
+      }
+      return { ok: true, json: async () => ({}) } as Response
+    }))
+
+    const qc = makeQueryClient()
+    await act(async () => {
+      render(
+        <QueryClientProvider client={qc}>
+          <DeviceDrawer mode="bind" prefillCode="1234" onClose={vi.fn()} onActionComplete={vi.fn()} />
+        </QueryClientProvider>,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    // Must NOT have auto-submitted — bind API not called on mount (D-04)
+    expect(bindCalls).toHaveLength(0)
+
+    // Confirm screen: "PAIR THIS DEVICE" CTA must be visible
+    const pairBtn = screen.queryByRole('button', { name: /pair this device using code 1234/i })
+    expect(pairBtn).not.toBeNull()
+
+    // NumericKeypad must NOT be rendered (prefill confirm replaces it)
+    const keypadBtn1 = screen.queryByRole('button', { name: '1' })
+    expect(keypadBtn1).toBeNull()
+  })
+
+  /**
+   * Test 5 (L-03 / single call site): tapping "PAIR THIS DEVICE" calls handleBind(prefillCode)
+   * exactly ONCE with code '1234' — the same call site as the typed flow.
+   */
+  it('tapping PAIR THIS DEVICE calls bind API exactly once with prefillCode', async () => {
+    const bindCalls: string[] = []
+
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
+        const body = init?.body ? JSON.parse(init.body as string) : {}
+        bindCalls.push(body.code ?? '')
+        return { ok: true, json: async () => ({ device_id: 'test-device-id', display_name: 'Test Pi' }) } as Response
+      }
+      return { ok: true, json: async () => ({}) } as Response
+    }))
+
+    const qc = makeQueryClient()
+    await act(async () => {
+      render(
+        <QueryClientProvider client={qc}>
+          <DeviceDrawer mode="bind" prefillCode="1234" onClose={vi.fn()} onActionComplete={vi.fn()} />
+        </QueryClientProvider>,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    // Click the "PAIR THIS DEVICE" CTA
+    const pairBtn = screen.queryByRole('button', { name: /pair this device using code 1234/i })
+    expect(pairBtn).not.toBeNull()
+
+    await act(async () => {
+      pairBtn?.click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    // bind API called exactly once with the prefilled code (L-03)
+    expect(bindCalls).toHaveLength(1)
+    expect(bindCalls[0]).toBe('1234')
+  })
+
+  /**
+   * Test 6: clicking "Enter a different code" clears prefill and shows NumericKeypad.
+   */
+  it('Enter a different code link clears prefill and shows NumericKeypad', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => {
+      return { ok: true, json: async () => ({}) } as Response
+    }))
+
+    const qc = makeQueryClient()
+    await act(async () => {
+      render(
+        <QueryClientProvider client={qc}>
+          <DeviceDrawer mode="bind" prefillCode="1234" onClose={vi.fn()} onActionComplete={vi.fn()} />
+        </QueryClientProvider>,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    // "Enter a different code" link must be present
+    const differentCodeBtn = screen.queryByRole('button', { name: /enter a different code/i })
+    expect(differentCodeBtn).not.toBeNull()
+
+    // Click it — should drop back to NumericKeypad
+    await act(async () => {
+      differentCodeBtn?.click()
+      await Promise.resolve()
+    })
+
+    // NumericKeypad should now be rendered
+    const keypadBtn1 = screen.queryByRole('button', { name: '1' })
+    expect(keypadBtn1).not.toBeNull()
+  })
 })

@@ -207,6 +207,31 @@
   transition: color 250ms var(--gruvax-ease-standard);
 }
 
+/* ── QR code block (DEV-04) ──────────────────────────────────────────────── */
+
+.pair-qr-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: var(--gruvax-space-3);       /* 12px quiet-zone extension */
+  background: var(--gruvax-white);
+  border: 1.5px solid var(--gruvax-border-light);
+  border-radius: var(--gruvax-radius-md);
+  margin-top: var(--gruvax-space-3);    /* 12px from .pair-code-card */
+  margin-bottom: var(--gruvax-space-5); /* 24px before .pair-status-row */
+}
+
+.pair-qr-caption {
+  font-family: var(--gruvax-font-display);
+  font-size: 13px;
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-descriptor); /* 0.20em */
+  color: var(--gruvax-text-muted);
+  text-transform: uppercase;
+  margin: var(--gruvax-space-2) 0 0 0;
+  line-height: var(--gruvax-leading-tight);
+}
+
 /* ── Focus rings (accessibility) ─────────────────────────────────────────── */
 
 .pair-page *:focus-visible {

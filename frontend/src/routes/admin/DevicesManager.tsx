@@ -11,8 +11,9 @@
  * Design tokens only — no hardcoded hex (CLAUDE.md constraint).
  */
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useSearchParams } from 'react-router'
 import { getAdminDevices } from '../../api/devices'
 import type { DeviceRow } from '../../api/devices'
 import { DeviceCard } from './DeviceCard'
@@ -24,7 +25,25 @@ type DrawerTarget = DeviceRow | 'bind' | null
 export function DevicesManager() {
   const queryClient = useQueryClient()
   const [drawerTarget, setDrawerTarget] = useState<DrawerTarget>(null)
+  const [prefillCode, setPrefillCode] = useState<string | undefined>(undefined)
   const [actionToast, setActionToast] = useState<{ message: string } | null>(null)
+  const [searchParams, setSearchParams] = useSearchParams()
+
+  // DEV-04: Read ?code= on mount; open bind drawer pre-filled; strip param to
+  // prevent re-opening on reload (PinOverlay is a modal overlay so URL survives the PIN gate).
+  useEffect(() => {
+    const code = searchParams.get('code')
+    if (code) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- reading external URL state on mount; canonical pattern for one-shot URL-param consumption
+      setPrefillCode(code)
+      setDrawerTarget('bind')
+      // Strip the code param so a hard reload doesn't re-open the drawer
+      const next = new URLSearchParams(searchParams)
+      next.delete('code')
+      setSearchParams(next, { replace: true })
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
 
   const { data: devices, isLoading, isError } = useQuery({
     queryKey: ['admin', 'devices'],
@@ -38,6 +57,7 @@ export function DevicesManager() {
 
   function handleDrawerClose() {
     setDrawerTarget(null)
+    setPrefillCode(undefined)
   }
 
   function handleActionComplete(message: string) {
@@ -119,6 +139,7 @@ export function DevicesManager() {
         <DeviceDrawer
           device={drawerTarget === 'bind' ? undefined : drawerTarget}
           mode={drawerTarget === 'bind' ? 'bind' : 'view'}
+          prefillCode={drawerTarget === 'bind' ? prefillCode : undefined}
           onClose={handleDrawerClose}
           onActionComplete={handleActionComplete}
         />
