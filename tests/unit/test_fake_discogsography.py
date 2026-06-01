@@ -8,8 +8,8 @@ Tests:
 
 from __future__ import annotations
 
-import pytest
 from httpx import ASGITransport, AsyncClient
+import pytest
 
 
 @pytest.mark.asyncio

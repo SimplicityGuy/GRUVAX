@@ -11,9 +11,8 @@ Tests:
 
 from __future__ import annotations
 
-import asyncio
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
@@ -24,17 +23,15 @@ import pytest
 @pytest.mark.parametrize(
     "row_count, existing_count, expected",
     [
-        (100, 90, 10),     # 10 new arrivals
-        (50, 50, 0),       # no new arrivals (identical collection)
-        (200, 0, 200),     # initial import: all are new
-        (80, 100, 0),      # shrinking collection: never negative
-        (0, 0, 0),         # empty → empty
-        (1, 0, 1),         # first record
+        (100, 90, 10),  # 10 new arrivals
+        (50, 50, 0),  # no new arrivals (identical collection)
+        (200, 0, 200),  # initial import: all are new
+        (80, 100, 0),  # shrinking collection: never negative
+        (0, 0, 0),  # empty → empty
+        (1, 0, 1),  # first record
     ],
 )
-def test_arrival_count_arithmetic(
-    row_count: int, existing_count: int, expected: int
-) -> None:
+def test_arrival_count_arithmetic(row_count: int, existing_count: int, expected: int) -> None:
     """new_record_count = max(0, row_count - existing_count) — never negative.
 
     This is the D-06 invariant: arrivals only, never negative.
@@ -54,14 +51,12 @@ def test_arrival_count_arithmetic(
 @pytest.mark.parametrize(
     "last_sync_at, expected_is_initial",
     [
-        (None, True),   # first-ever sync: last_sync_at IS NULL → is_initial_import=True
+        (None, True),  # first-ever sync: last_sync_at IS NULL → is_initial_import=True
         ("2026-01-01T00:00:00Z", False),  # subsequent sync: has prior sync_at → False
         ("2026-05-31T03:00:00Z", False),  # nightly sync: not initial
     ],
 )
-def test_is_initial_import_detection(
-    last_sync_at: str | None, expected_is_initial: bool
-) -> None:
+def test_is_initial_import_detection(last_sync_at: str | None, expected_is_initial: bool) -> None:
     """is_initial_import is True iff last_sync_at IS NULL before the swap UPDATE.
 
     Pitfall 4: this must be read BEFORE the UPDATE that sets last_sync_at = NOW().
@@ -144,8 +139,7 @@ async def test_collection_changed_payload() -> None:
         f"profile_id mismatch: expected {profile_id!r}, got {payload['profile_id']!r}"
     )
     assert payload["new_record_count"] == new_record_count, (
-        f"new_record_count mismatch: expected {new_record_count}, "
-        f"got {payload['new_record_count']}"
+        f"new_record_count mismatch: expected {new_record_count}, got {payload['new_record_count']}"
     )
     assert payload["is_initial_import"] == is_initial_import, (
         f"is_initial_import mismatch: expected {is_initial_import}, "

@@ -26,6 +26,7 @@ Fixture pattern from tests/integration/test_devices.py:
 
 from __future__ import annotations
 
+import asyncio
 import os
 import uuid as _uuid_module
 
@@ -41,6 +42,11 @@ from gruvax.app import create_app
 
 _TEST_PIN = "0000"
 _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+# The in-process fake-discogsography returns this CONSTANT discogsography_user_id
+# for every token (see tests/integration/conftest.py). The partial unique index
+# uq_profiles_dgs_user_id_active permits only ONE active profile per discogs account,
+# so a sync test must hold it exclusively (free any leftover active holder first).
+_FAKE_DGS_USER_ID = "99999999-9999-9999-9999-999999999999"
 
 
 # ── Rate-limit reset fixtures ─────────────────────────────────────────────────
@@ -558,6 +564,54 @@ async def test_profile_new_record_fields(client) -> None:  # type: ignore[no-unt
         )
 
 
+async def _free_fake_account(db_pool, keep_profile_id):  # type: ignore[no-untyped-def]
+    """Clear the fake discogs user_id from any OTHER active profile holding it.
+
+    The fake returns a constant discogsography_user_id; uq_profiles_dgs_user_id_active
+    is a partial unique index over active profiles WHERE discogsography_user_id IS NOT
+    NULL. In the full suite an earlier test may leave a profile (commonly the Default
+    profile, synced by the sync/* tests) still holding it, which makes THIS profile's
+    sync fail with a UniqueViolation.
+
+    We NULL out the user_id rather than soft-deleting the holder: NULLing removes the
+    row from the partial index (freeing the account) while keeping the holder ACTIVE.
+    Soft-deleting would evict the Default profile from the app's per-profile registries
+    and break unrelated tests (e.g. test_locate → profile_not_found). For the Default
+    profile, NULL is also its canonical seeded state, so this just undoes the leak.
+    """
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "UPDATE gruvax.profiles SET discogsography_user_id = NULL"
+            " WHERE discogsography_user_id = %s::uuid"
+            " AND deleted_at IS NULL AND id <> %s::uuid",
+            (_FAKE_DGS_USER_ID, keep_profile_id),
+        )
+        await conn.commit()
+
+
+async def _await_sync(client, profile_id, cookies, headers):  # type: ignore[no-untyped-def]
+    """Poll GET /api/admin/profiles/{id} until the async sync settles, return the JSON.
+
+    POST .../sync returns 202 (background swap). Reading the stored diff fields
+    immediately races the background task — under full-suite event-loop contention
+    the swap has not run yet and last_sync_is_initial still reads its default.
+    Mirror the poll pattern used by test_profile_manager_api::test_connect_pat_flow.
+    """
+    profile = {}
+    for _ in range(20):
+        detail = await client.get(
+            f"/api/admin/profiles/{profile_id}",
+            cookies=cookies,
+            headers=headers,
+        )
+        if detail.status_code == 200:
+            profile = detail.json()
+            if profile.get("last_sync_status") in ("ok", "failed"):
+                return profile
+        await asyncio.sleep(0.5)
+    return profile
+
+
 @pytest.mark.asyncio(loop_scope="session")
 async def test_initial_import_flag(client, db_pool) -> None:  # type: ignore[no-untyped-def]
     """First sync reports is_initial_import=True; second sync reports False (API-04, D-07).
@@ -602,6 +656,9 @@ async def test_initial_import_flag(client, db_pool) -> None:  # type: ignore[no-
             )
             await conn.commit()
 
+        # Free the shared fake discogs account so this sync can claim it.
+        await _free_fake_account(db_pool, profile_id)
+
         # First sync — must report is_initial_import=True
         sync_res1 = await client.post(
             f"/api/admin/profiles/{profile_id}/sync",
@@ -614,14 +671,9 @@ async def test_initial_import_flag(client, db_pool) -> None:  # type: ignore[no-
                 f"skipping initial_import_flag test"
             )
 
-        # Check stored last_sync_is_initial via GET /api/admin/profiles/{id}
-        get_res1 = await client.get(
-            f"/api/admin/profiles/{profile_id}",
-            cookies=cookies,
-            headers=headers,
-        )
-        assert get_res1.status_code == 200
-        profile1 = get_res1.json()
+        # /sync is async (202) — wait for the background swap to settle before
+        # reading the stored diff flag, else we race the background task.
+        profile1 = await _await_sync(client, profile_id, cookies, headers)
         assert "last_sync_is_initial" in profile1, (
             "Profile response must include 'last_sync_is_initial' after first sync"
         )
@@ -644,13 +696,7 @@ async def test_initial_import_flag(client, db_pool) -> None:  # type: ignore[no-
                 f"skipping second-sync assertion"
             )
 
-        get_res2 = await client.get(
-            f"/api/admin/profiles/{profile_id}",
-            cookies=cookies,
-            headers=headers,
-        )
-        assert get_res2.status_code == 200
-        profile2 = get_res2.json()
+        profile2 = await _await_sync(client, profile_id, cookies, headers)
         is_initial_2 = profile2["last_sync_is_initial"]
         assert is_initial_2 is False, (
             f"Second sync must report last_sync_is_initial=False (D-07). "
@@ -713,6 +759,9 @@ async def test_arrival_count_accuracy(client, db_pool) -> None:  # type: ignore[
             )
             await conn.commit()
 
+        # Free the shared fake discogs account so this sync can claim it.
+        await _free_fake_account(db_pool, profile_id)
+
         # Trigger sync
         sync_res = await client.post(
             f"/api/admin/profiles/{profile_id}/sync",
@@ -725,14 +774,9 @@ async def test_arrival_count_accuracy(client, db_pool) -> None:  # type: ignore[
                 f"skipping arrival count accuracy test"
             )
 
-        # Check the stored diff state
-        get_res = await client.get(
-            f"/api/admin/profiles/{profile_id}",
-            cookies=cookies,
-            headers=headers,
-        )
-        assert get_res.status_code == 200
-        profile = get_res.json()
+        # /sync is async (202) — wait for the background swap to settle before
+        # reading the stored diff state, else we race the background task.
+        profile = await _await_sync(client, profile_id, cookies, headers)
 
         assert "last_new_record_count" in profile, (
             "Profile response must include 'last_new_record_count' after sync"

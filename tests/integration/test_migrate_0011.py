@@ -87,9 +87,11 @@ async def test_roundtrip_clean(
 
     Mirrors test_roundtrip_clean in test_migrate_0010.py.
     """
-    # Already at HEAD (fresh_head). Downgrade by 1 revision (from 0011 back to 0010).
-    await _alembic("downgrade", "-1")
-    # Re-upgrade to HEAD (0011 again)
+    # Already at HEAD (fresh_head). Downgrade to 0010 (explicit target, NOT the
+    # HEAD-relative "-1" — once a later migration is stacked on top, "-1" no longer
+    # reaches the pre-0011 state and the round-trip stops exercising 0011's downgrade).
+    await _alembic("downgrade", "0010")
+    # Re-upgrade to HEAD (lands at the current head, ≥ 0011).
     await _alembic("upgrade", "head")
 
     # Verify the profiles table survived the round-trip (sanity check)
@@ -161,8 +163,9 @@ async def test_devices_table_absent_after_downgrade(
 
     RED until Plan 03-01 lands migration 0011 with a clean downgrade().
     """
-    # Downgrade by 1 (from 0011 to 0010)
-    await _alembic("downgrade", "-1")
+    # Downgrade to 0010 (explicit target — "-1" is HEAD-relative and no longer
+    # reaches the pre-0011 state once a later migration sits on top of 0011).
+    await _alembic("downgrade", "0010")
 
     async with db_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
@@ -244,7 +247,9 @@ async def test_pairing_codes_table_absent_after_downgrade(
 
     RED until Plan 03-01 lands migration 0011 with a clean downgrade().
     """
-    await _alembic("downgrade", "-1")
+    # Downgrade to 0010 (explicit target — "-1" is HEAD-relative and no longer
+    # reaches the pre-0011 state once a later migration sits on top of 0011).
+    await _alembic("downgrade", "0010")
 
     async with db_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
