@@ -100,7 +100,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 
 **Wave 1**
 
-  - [ ] 07-01-PLAN.md — API-04 backend + migration 0012: profile_invite_codes table, first_seen_at, profiles diff columns; new_record_count + is_initial_import computed in the staging swap; extended collection_changed SSE payload; has_token on admin API; Wave-0 test scaffolds.
+  - [x] 07-01-PLAN.md — API-04 backend + migration 0012: profile_invite_codes table, first_seen_at, profiles diff columns; new_record_count + is_initial_import computed in the staging swap; extended collection_changed SSE payload; has_token on admin API; Wave-0 test scaffolds.
 
 **Wave 2** *(blocked on Wave 1 — needs profile_invite_codes table)*
 
@@ -168,7 +168,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
 | 6. LED Contract over MQTT | v1.0 | 3/3 | Complete    | 2026-05-31 |
-| 7. Wizards + Import/Export | v1.0 | 8/8 | Complete | 2026-05-24 |
+| 7. Wizards + Import/Export | v1.0 | 1/3 | In Progress|  |
 | 8. Observability + Deployment Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
