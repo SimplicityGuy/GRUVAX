@@ -25,6 +25,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { CheckCircle2, Loader2 } from 'lucide-react'
+import QRCode from 'react-qr-code'
 import { getSession } from '../../api/session'
 import { getDeviceMe } from '../../api/devices'
 import './pair.css'
@@ -299,6 +300,25 @@ export function PairView() {
           </div>
         )}
       </div>
+
+      {/* QR code block (DEV-04) — visible when code is active and not yet paired/expired */}
+      {pairingCode && !isExpired && !isPaired && (
+        <div
+          className="pair-qr-container"
+          aria-label="Scan QR code to pair this device"
+        >
+          <QRCode
+            value={`${window.location.origin}/admin/devices?code=${pairingCode.code}`}
+            size={160}
+            level="M"
+            bgColor="var(--gruvax-white)"
+            fgColor="var(--gruvax-blue)"
+            role="img"
+            aria-hidden="true"
+          />
+          <p className="pair-qr-caption">OR SCAN WITH PHONE</p>
+        </div>
+      )}
 
       {/* Waiting status + countdown */}
       {!isPaired && (

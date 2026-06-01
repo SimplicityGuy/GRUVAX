@@ -272,17 +272,27 @@ describe('PairView', () => {
 
   /**
    * Test 6: QR container is absent when code is expired (rerolling).
+   * Verifies the gate `!isExpired` hides the QR during the rerolling state.
+   *
+   * Strategy: provide a code expiring in 1100ms (just over 1 tick), then a
+   * never-resolving reroll so the component stays in 'expired' state.
+   * Advance 2s so the first tick fires and sets pairStatus='expired'.
    */
   it('QR container is absent when code has expired', async () => {
-    // Return an already-expired code
-    const expiredAt = new Date(FAKE_NOW_MS - 1000).toISOString() // already expired
+    const soonExpiredAt = new Date(FAKE_NOW_MS + 1100).toISOString()
+    let callIndex = 0
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       const method = init?.method?.toUpperCase() ?? 'GET'
       if (typeof url === 'string' && url.includes('/api/devices/pairing-codes') && method === 'POST') {
-        return {
-          ok: true,
-          json: async () => ({ code: '5678', expires_at: expiredAt }),
-        } as Response
+        callIndex += 1
+        if (callIndex === 1) {
+          return {
+            ok: true,
+            json: async () => ({ code: '5678', expires_at: soonExpiredAt }),
+          } as Response
+        }
+        // Reroll: never resolves — keeps pairStatus in 'expired'
+        return new Promise<Response>(() => {}) as Promise<Response>
       }
       if (typeof url === 'string' && url.includes('/api/devices/me')) {
         return {
@@ -305,11 +315,14 @@ describe('PairView', () => {
       await Promise.resolve()
       await Promise.resolve()
       await Promise.resolve()
-      // Trigger countdown tick to detect expiry
-      await vi.advanceTimersByTimeAsync(1100)
     })
 
-    // When expired, QR container must NOT be in the DOM
+    // Advance past the 1100ms expiry — pairStatus transitions to 'expired'
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+
+    // When expired (pairStatus === 'expired'), QR container must NOT be in the DOM
     const container = document.body
     const qrContainer = container.querySelector('.pair-qr-container')
     expect(qrContainer).toBeNull()
