@@ -43,3 +43,9 @@ _LOGIN_RATE = parse_limit("5/5minutes")
 # At 10k code keyspace, exhausting this limit eliminates only 10 codes per window
 # — brute-force is infeasible even against repeated window resets (RESEARCH.md Pattern 3).
 _BIND_RATE = parse_limit("10/5minutes")
+
+# Invite redeem rate limit — 5 attempts per 10-minute window per IP.
+# Public endpoint accepting a secret (member PAT) — lower limit than device bind
+# to slow brute-force code enumeration (T-07-05). Namespace key "invite_redeem"
+# keeps it isolated from the login and device_bind counters.
+_REDEEM_RATE = parse_limit("5/10minutes")
