@@ -25,10 +25,18 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { CheckCircle2, Loader2 } from 'lucide-react'
-import QRCode from 'react-qr-code'
+import QRCodeImport from 'react-qr-code'
 import { getSession } from '../../api/session'
 import { getDeviceMe } from '../../api/devices'
 import './pair.css'
+
+// react-qr-code ships CommonJS. Vite/Rolldown's production interop resolves the default
+// import to the module namespace object ({ default, QRCode, __esModule }) rather than the
+// forwardRef component, which white-screens the pair view with React #130 ("element type
+// is invalid: got object"). vitest/jsdom resolves the default correctly, so the unit tests
+// never catch it. Unwrap defensively so both the browser bundle and the test runner get the
+// real component.
+const QRCode = (QRCodeImport as unknown as { default?: typeof QRCodeImport }).default ?? QRCodeImport
 
 /** Format milliseconds remaining as M:SS. */
 function formatCountdown(ms: number): string {
