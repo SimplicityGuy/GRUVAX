@@ -2,13 +2,13 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Resilience + Privacy + UX polish
-status: planning
-last_updated: "2026-06-01T00:28:25.494Z"
-last_activity: 2026-05-31
+status: executing
+last_updated: "2026-06-01T15:56:29.574Z"
+last_activity: 2026-06-01
 progress:
   total_phases: 6
   completed_phases: 1
-  total_plans: 3
+  total_plans: 6
   completed_plans: 3
   percent: 17
 ---
@@ -31,8 +31,8 @@ progress:
 
 Phase: 7
 Plan: Not started
-Status: Ready to plan
-Last activity: 2026-05-31 -- Phase 06 Plan 03 (two-profile isolation tests) complete
+Status: Ready to execute
+Last activity: 2026-06-01 -- Phase 07 planning complete
 
 ```
 v2.1 Progress: [          ] 0% (0/5 phases)
@@ -168,7 +168,7 @@ None.
 
 ## Session Continuity
 
-**Last activity:** 2026-05-31
+**Last activity:** 2026-06-01
 **Prev:** 2026-05-30 — v2.0 milestone closed and archived (5 phases, 35 plans; tag v2.0). ROADMAP/REQUIREMENTS/audit archived to `milestones/v2.0-*`; REQUIREMENTS.md removed (fresh for next milestone); PROJECT.md evolved; RETROSPECTIVE.md updated.
 **Prev2:** 2026-05-30 — Phase 5 closure complete — B-01 + B-02 wired; milestone re-audit `gaps_found` → `tech_debt`.
 **Next action:** `/gsd:plan-phase 6`

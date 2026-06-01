@@ -728,19 +728,21 @@ This phase has no external tool dependencies beyond what the project already use
 
 ---
 
-## Open Questions
+## Open Questions (RESOLVED)
 
-1. **Rate-limit posture for the public redeem endpoint**
+> All three questions were resolved at plan time and implemented in the Phase 7 plans. Resolution markers added below; see 07-01/07-02/07-03-PLAN.md for the implementing tasks.
+
+1. **Rate-limit posture for the public redeem endpoint** — **RESOLVED:** per-IP throttle only (5 attempts / 10 minutes via `_REDEEM_RATE` in Plan 02 Task 1); the per-code attempt cap is deferred as a discretionary enhancement.
    - What we know: the existing `limiter.py` provides `FixedWindowRateLimiter` used for `POST /devices/bind` at 10 attempts / 5 minutes per IP (T-03-05).
    - What's unclear: the redeem endpoint is code-scoped (one valid code per invite), not just IP-scoped. An attacker who has a valid UUID could make repeated PAT submissions.
    - Recommendation: apply both a per-IP limit (e.g., 5 attempts / 10 minutes) AND a per-code attempt cap (e.g., 3 attempts before voiding the code). The per-code cap is new behavior; implement it as a column `attempt_count INTEGER DEFAULT 0` on `profile_invite_codes` or as an application counter. For Phase 7 scope, per-IP throttle alone (reusing existing limiter) is the minimum viable guard; per-code cap is a discretionary enhancement.
 
-2. **`has_token` field in frontend `AdminProfile` type**
+2. **`has_token` field in frontend `AdminProfile` type** — **RESOLVED:** added additively (`has_token: boolean`) while keeping `app_token_revoked` for existing status derivation; implemented in Plans 01 + 03.
    - What we know: `types.ts` defines `AdminProfile` without `has_token`. The backend `_profile_status()` uses `app_token_revoked` to derive status.
    - What's unclear: the frontend ProfileDrawer uses `profile.app_token_revoked` directly for some display logic. Adding `has_token` is additive — does it replace `app_token_revoked` or coexist?
    - Recommendation: add `has_token: boolean` to `AdminProfile` in `types.ts`; keep `app_token_revoked` for backward compatibility with existing status derivation. ProfileDrawer uses `has_token` for the invite affordance visibility condition; existing status logic continues to use `app_token_revoked`.
 
-3. **Invite link URL construction**
+3. **Invite link URL construction** — **RESOLVED:** backend builds the full URL from Starlette `request.base_url` (`f"{request.base_url}redeem/{code}"`); implemented in Plan 02 Task 1.
    - What we know: the backend returns `code` as a UUID string. The owner's browser must construct the full URL (`http://gruvax.lan:{PORT}/redeem/{code}`).
    - What's unclear: the host/port is not stored anywhere server-side. The `POST /profiles/{id}/invite` response should include a ready-to-use URL.
    - Recommendation: the backend constructs the URL from `Request.base_url` (Starlette's `request.base_url`). Example: `f"{request.base_url}redeem/{code}"`. This works correctly for both `http://gruvax.lan:8080/redeem/...` and `http://localhost:5173/redeem/...` in dev. Document this in the endpoint implementation notes.
