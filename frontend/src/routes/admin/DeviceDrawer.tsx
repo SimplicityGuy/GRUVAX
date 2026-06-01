@@ -51,6 +51,7 @@ import { NumericKeypad } from './NumericKeypad'
 export interface DeviceDrawerProps {
   device?: DeviceRow
   mode?: string
+  prefillCode?: string
   onClose: () => void
   onActionComplete?: (message: string) => void
 }
@@ -78,7 +79,7 @@ function mapBindError(type: string | undefined): string {
   }
 }
 
-export function DeviceDrawer({ device, mode: initialMode, onClose, onActionComplete }: DeviceDrawerProps) {
+export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, onActionComplete }: DeviceDrawerProps) {
   const queryClient = useQueryClient()
   const sheetRef = useRef<HTMLDivElement>(null)
   const headingId = 'device-drawer-heading'
@@ -90,6 +91,10 @@ export function DeviceDrawer({ device, mode: initialMode, onClose, onActionCompl
 
   // Bind mode state — code digits (mirrors PinOverlay)
   const [codeDigits, setCodeDigits] = useState<string[]>([])
+
+  // Prefill mode: true when prefillCode is set and user hasn't dismissed it.
+  // Local state allows "Enter a different code" to drop back to NumericKeypad.
+  const [usePrefill, setUsePrefill] = useState<boolean>(!!prefillCode)
 
   // Rename mode state
   const [nameValue, setNameValue] = useState(device?.display_name ?? '')
@@ -271,7 +276,7 @@ export function DeviceDrawer({ device, mode: initialMode, onClose, onActionCompl
 
   // ── Derived heading ───────────────────────────────────────────────────────
   const heading = drawerMode === 'bind-code'
-    ? 'ENTER PAIRING CODE'
+    ? ((prefillCode && usePrefill) ? 'PAIR THIS DEVICE' : 'ENTER PAIRING CODE')
     : (device?.display_name.toUpperCase() ?? '')
 
   const id8 = device ? device.id.replace(/-/g, '').slice(0, 8) : null
@@ -306,8 +311,18 @@ export function DeviceDrawer({ device, mode: initialMode, onClose, onActionCompl
             <p className="device-id-line">ID: {id8}</p>
           )}
 
-          {/* ── BIND-CODE mode: code display + NumericKeypad ─────────────── */}
-          {drawerMode === 'bind-code' && (
+          {/* ── BIND-CODE mode: prefill confirm OR NumericKeypad ───────────── */}
+          {drawerMode === 'bind-code' && prefillCode && usePrefill && (
+            /* Prefill confirm screen (D-04: no auto-submit; explicit one-tap confirm) */
+            <div className="device-prefill-confirm">
+              <p className="device-prefill-instruction">
+                Pair this device with your GRUVAX collection using code:
+              </p>
+              <p className="device-prefill-code">{prefillCode}</p>
+            </div>
+          )}
+
+          {drawerMode === 'bind-code' && !(prefillCode && usePrefill) && (
             <>
               {/* 4-digit code display boxes */}
               <div className="device-drawer-code-display" aria-live="polite" aria-label={`Entered ${codeDigits.length} of 4 digits`}>
@@ -433,8 +448,42 @@ export function DeviceDrawer({ device, mode: initialMode, onClose, onActionCompl
           {/* ── Actions ──────────────────────────────────────────────────── */}
           <div className="sheet-actions">
 
-            {/* ── BIND-CODE mode ── */}
-            {drawerMode === 'bind-code' && (
+            {/* ── BIND-CODE mode: prefill confirm CTA ── */}
+            {drawerMode === 'bind-code' && prefillCode && usePrefill && (
+              <>
+                <button
+                  type="button"
+                  className="device-prefill-cta"
+                  onClick={() => void handleBind(prefillCode)}
+                  disabled={isSaving}
+                  aria-busy={isSaving}
+                  aria-label={`Pair this device using code ${prefillCode}`}
+                >
+                  {isSaving ? 'PAIRING…' : 'PAIR THIS DEVICE'}
+                </button>
+                <button
+                  type="button"
+                  className="device-prefill-different-code"
+                  onClick={() => {
+                    // Clear prefill state — parent manages prefillCode prop, so we
+                    // signal "typed mode" by toggling to a local state override.
+                    // Since prefillCode comes from props, we use an internal flag.
+                    setSaveError(null)
+                    setDrawerMode('bind-code')
+                    // Force the view to typed-code mode by clearing prefill via parent or
+                    // using the component-internal approach: pass undefined as local override.
+                    // Because prefillCode is a prop, we use a local state to mask it.
+                    setUsePrefill(false)
+                  }}
+                  disabled={isSaving}
+                >
+                  Enter a different code
+                </button>
+              </>
+            )}
+
+            {/* ── BIND-CODE mode: typed code ── */}
+            {drawerMode === 'bind-code' && !(prefillCode && usePrefill) && (
               <button
                 type="button"
                 className="editor-btn-primary profile-btn-primary"

@@ -6004,3 +6004,80 @@
   80% { opacity: 1; }
   100% { opacity: 0; }
 }
+
+/* ── DEV-04: Prefill-confirm bind screen ────────────────────────────────────
+ * Surface 6 per 08-UI-SPEC.md. All values via --gruvax-* tokens; no hex.
+ */
+
+.device-prefill-confirm {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-3);
+  padding: var(--gruvax-space-4) 0;
+  text-align: center;
+}
+
+.device-prefill-instruction {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  margin: 0;
+}
+
+.device-prefill-code {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-display-xl); /* 48px — matches kiosk digit scale */
+  font-weight: 500;
+  color: var(--gruvax-text-primary);
+  letter-spacing: var(--gruvax-tracking-descriptor);
+  line-height: 1;
+  margin: 0;
+}
+
+/* Full-width yellow CTA — "PAIR THIS DEVICE" (D-04: explicit confirm button) */
+.device-prefill-cta {
+  width: 100%;
+  min-height: 56px;
+  background: var(--gruvax-yellow);
+  color: var(--gruvax-blue);
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  font-family: var(--gruvax-font-display);
+  font-size: var(--gruvax-text-display-sm); /* 16px Barlow Condensed 700 */
+  font-weight: 700;
+  letter-spacing: var(--gruvax-tracking-label);
+  text-transform: uppercase;
+  cursor: pointer;
+  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+}
+
+.device-prefill-cta:hover:not(:disabled) {
+  background: var(--gruvax-yellow-dark);
+}
+
+.device-prefill-cta:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Secondary link — "Enter a different code" */
+.device-prefill-different-code {
+  width: 100%;
+  background: transparent;
+  border: none;
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  text-decoration: underline;
+  cursor: pointer;
+  padding: var(--gruvax-space-2) 0;
+  text-align: center;
+}
+
+.device-prefill-different-code:hover:not(:disabled) {
+  color: var(--gruvax-text-primary);
+}

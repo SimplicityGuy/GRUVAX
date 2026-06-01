@@ -51,10 +51,14 @@ describe('DevicesManager', () => {
    *
    * Verifies:
    *   - The "PAIR THIS DEVICE" confirm CTA is visible (prefill confirm screen, not NumericKeypad)
-   *   - The digit '1234' is rendered in the prefill display
    *   - The NumericKeypad is NOT rendered (prefill confirm replaces it)
+   *
+   * Uses real timers so waitFor polling works correctly alongside TanStack Query.
    */
   it('opens bind drawer with prefill when ?code=1234 is in URL', async () => {
+    // Real timers for waitFor + TanStack Query
+    vi.useRealTimers()
+
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       const method = (init?.method ?? 'GET').toUpperCase()
       if (typeof url === 'string' && url.includes('/api/admin/devices') && method === 'GET') {
