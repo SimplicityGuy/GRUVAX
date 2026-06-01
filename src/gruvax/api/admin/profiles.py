@@ -192,9 +192,12 @@ async def list_profiles(
     db_pool = request.app.state.db_pool
     async with db_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT id, display_name, last_sync_at, last_sync_status, "
-            "       last_sync_item_count, app_token_revoked, last_sync_error "
-            "FROM gruvax.profiles WHERE deleted_at IS NULL ORDER BY created_at",
+            "SELECT id, display_name, last_sync_at, last_sync_status,"
+            "       last_sync_item_count, app_token_revoked, last_sync_error,"
+            "       (app_token_encrypted IS NOT NULL AND length(app_token_encrypted) > 1)::bool"
+            "           AS has_token,"
+            "       last_new_record_count, last_sync_is_initial"
+            " FROM gruvax.profiles WHERE deleted_at IS NULL ORDER BY created_at",
         )
         rows = await cur.fetchall()
 
@@ -208,6 +211,9 @@ async def list_profiles(
             item_count,
             revoked,
             last_sync_error,
+            has_token,
+            last_new_record_count,
+            last_sync_is_initial,
         ) = row
         row_dict: dict[str, Any] = {
             "app_token_revoked": bool(revoked),
@@ -224,6 +230,10 @@ async def list_profiles(
                 "last_sync_item_count": item_count,
                 "app_token_revoked": bool(revoked),
                 "status": _profile_status(row_dict),
+                "has_token": bool(has_token) if has_token is not None else False,
+                "last_new_record_count": last_new_record_count,
+                "last_sync_is_initial": bool(last_sync_is_initial)
+                    if last_sync_is_initial is not None else False,
             }
         )
     return JSONResponse(content=profiles)
@@ -243,9 +253,12 @@ async def get_profile(
     db_pool = request.app.state.db_pool
     async with db_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT id, display_name, last_sync_at, last_sync_status, "
-            "       last_sync_item_count, app_token_revoked, last_sync_error "
-            "FROM gruvax.profiles WHERE id = %s::uuid AND deleted_at IS NULL",
+            "SELECT id, display_name, last_sync_at, last_sync_status,"
+            "       last_sync_item_count, app_token_revoked, last_sync_error,"
+            "       (app_token_encrypted IS NOT NULL AND length(app_token_encrypted) > 1)::bool"
+            "           AS has_token,"
+            "       last_new_record_count, last_sync_is_initial"
+            " FROM gruvax.profiles WHERE id = %s::uuid AND deleted_at IS NULL",
             (str(uid),),
         )
         row = await cur.fetchone()
@@ -256,7 +269,18 @@ async def get_profile(
             detail={"type": "profile_not_found"},
         )
 
-    pid, display_name, last_sync_at, last_sync_status, item_count, revoked, sync_error = row
+    (
+        pid,
+        display_name,
+        last_sync_at,
+        last_sync_status,
+        item_count,
+        revoked,
+        sync_error,
+        has_token,
+        last_new_record_count,
+        last_sync_is_initial,
+    ) = row
     row_dict: dict[str, Any] = {
         "app_token_revoked": bool(revoked),
         "last_sync_status": last_sync_status,
@@ -271,6 +295,10 @@ async def get_profile(
             "last_sync_item_count": item_count,
             "app_token_revoked": bool(revoked),
             "status": _profile_status(row_dict),
+            "has_token": bool(has_token) if has_token is not None else False,
+            "last_new_record_count": last_new_record_count,
+            "last_sync_is_initial": bool(last_sync_is_initial)
+                if last_sync_is_initial is not None else False,
         }
     )
 

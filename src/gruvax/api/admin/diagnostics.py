@@ -103,9 +103,10 @@ async def get_diagnostics(
     # No f-string interpolation — parameterized %s (bandit B608 compliant).
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT id::text, display_name, last_sync_at, last_sync_status, "
-            "       last_sync_item_count, last_sync_error, app_token_revoked "
-            "FROM gruvax.profiles WHERE deleted_at IS NULL ORDER BY created_at"
+            "SELECT id::text, display_name, last_sync_at, last_sync_status,"
+            "       last_sync_item_count, last_sync_error, app_token_revoked,"
+            "       last_new_record_count, last_sync_is_initial"
+            " FROM gruvax.profiles WHERE deleted_at IS NULL ORDER BY created_at"
         )
         profile_rows = await cur.fetchall()
 
@@ -118,6 +119,8 @@ async def get_diagnostics(
             "last_sync_item_count": row[4],
             "last_sync_error": row[5],
             "app_token_revoked": bool(row[6]),
+            "last_new_record_count": row[7],
+            "last_sync_is_initial": bool(row[8]) if row[8] is not None else False,
         }
         for row in profile_rows
     ]

@@ -283,25 +283,62 @@ async def _swap_inside_tx(
     profile_id: str,
     row_count: int,
     user_id: str,
-) -> None:
+) -> tuple[int, bool]:
     """DELETE old rows, INSERT staging rows, UPDATE profiles — caller owns TX.
 
     Must be called from inside an ``async with conn.transaction()`` block.
     The caller's outer transaction guarantees that the staging TEMP table
     (created earlier in the same TX) is still in scope when the SELECT FROM
     runs here.
+
+    Returns:
+        (new_record_count, is_initial_import) computed atomically inside the TX.
+        new_record_count: number of genuinely new releases this sync (>= 0, D-06).
+        is_initial_import: True iff this is the first-ever sync (D-07).
     """
+    # Pitfall 4: capture is_initial_import BEFORE the UPDATE that sets last_sync_at.
+    # READ last_sync_at IS NULL here — after the UPDATE it will always be non-NULL.
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT last_sync_at IS NULL AS is_initial FROM gruvax.profiles"
+            " WHERE id = %s::uuid",
+            (profile_id,),
+        )
+        initial_row = await cur.fetchone()
+    is_initial_import: bool = bool(initial_row[0]) if initial_row else True
+
+    # Compute existing_count BEFORE the DELETE (Pitfall 9 — retry-safe scalar comparison).
+    # Counts profile_collection rows that match staging on (release_id, folder_id IS NOT DISTINCT).
+    # new_record_count = max(0, row_count - existing_count) — arrivals only, never negative (D-06).
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT COUNT(*) FROM gruvax.profile_collection pc"
+            " JOIN profile_collection_staging s"
+            "   ON pc.release_id = s.release_id"
+            "  AND pc.folder_id IS NOT DISTINCT FROM s.folder_id"
+            " WHERE pc.profile_id = %s::uuid",
+            (profile_id,),
+        )
+        existing_row = await cur.fetchone()
+    existing_count: int = int(existing_row[0]) if existing_row else 0
+    new_record_count: int = max(0, row_count - existing_count)
+
     await conn.execute(
         "DELETE FROM gruvax.profile_collection WHERE profile_id = %s::uuid",
         (profile_id,),
     )
+    # Extended INSERT: sets first_seen_at = NOW() for all rows in this sync (API-04).
+    # Nullable column — rows from before migration 0012 retain NULL (Pitfall 3 compliant).
     await conn.execute(
         "INSERT INTO gruvax.profile_collection "
-        "(profile_id, release_id, folder_id, artist, title, label, catalog_number, year) "
-        "SELECT %s::uuid, release_id, folder_id, artist, title, label, catalog_number, year "
+        "(profile_id, release_id, folder_id, artist, title, label, catalog_number, year,"
+        " first_seen_at) "
+        "SELECT %s::uuid, release_id, folder_id, artist, title, label, catalog_number, year,"
+        "       NOW() "
         "FROM profile_collection_staging",
         (profile_id,),
     )
+    # Extended UPDATE: stores diff state atomically with the swap (D-08, T-07-02).
     await conn.execute(
         "UPDATE gruvax.profiles SET "
         "    last_sync_at = NOW(), "
@@ -309,16 +346,25 @@ async def _swap_inside_tx(
         "    last_sync_item_count = %s, "
         "    last_sync_error = NULL, "
         "    discogsography_user_id = COALESCE(discogsography_user_id, %s::uuid), "
-        "    app_token_revoked = FALSE "
+        "    app_token_revoked = FALSE, "
+        "    last_new_record_count = %s, "
+        "    last_sync_is_initial = %s "
         "WHERE id = %s::uuid",
-        (row_count, user_id, profile_id),
+        (row_count, user_id, new_record_count, is_initial_import, profile_id),
     )
+    return new_record_count, is_initial_import
 
 
 # ── cache refresh (D-14, Plan 02-02 — per-profile registry refresh) ──────────
 
 
-async def _refresh_profile_caches(profile_id: str, app_state: Any) -> None:
+async def _refresh_profile_caches(
+    profile_id: str,
+    app_state: Any,
+    *,
+    new_record_count: int = 0,
+    is_initial_import: bool = False,
+) -> None:
     """Reload the registry caches for one profile and publish collection_changed.
 
     Called from ``sync_profile`` AFTER the swap transaction commits (D-14).
@@ -335,6 +381,8 @@ async def _refresh_profile_caches(profile_id: str, app_state: Any) -> None:
                    ``snapshot_registry``, ``segment_cache_registry``,
                    ``event_bus_registry`` attributes (typically
                    ``request.app.state``).
+        new_record_count: number of new releases in this sync (>= 0, D-06).
+        is_initial_import: True iff this is the first-ever sync for this profile (D-07).
     """
     pool = app_state.db_pool
 
@@ -352,8 +400,13 @@ async def _refresh_profile_caches(profile_id: str, app_state: Any) -> None:
     seg.derive(cache, snapshot, cache.overrides)
 
     # Publish collection_changed AFTER all caches are fresh (Pitfall A ordering).
+    # Extended payload (API-04): includes new_record_count + is_initial_import.
     bus = app_state.event_bus_registry[profile_id]
-    await bus.publish("collection_changed", {"profile_id": profile_id})
+    await bus.publish("collection_changed", {
+        "profile_id": profile_id,
+        "new_record_count": new_record_count,
+        "is_initial_import": is_initial_import,
+    })
 
 
 # ── PAT load + sentinel detection (Pitfall 8) ────────────────────────────────
@@ -503,7 +556,9 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
             async with conn.transaction():
                 await conn.execute(_STAGING_DDL)
                 user_id, row_count = await _ingest_into_staging(conn, client)
-                await _swap_inside_tx(conn, profile_id, row_count, user_id)
+                new_record_count, is_initial_import = await _swap_inside_tx(
+                    conn, profile_id, row_count, user_id
+                )
 
             # Inline cache refresh (D-14). If this fails, the swap is still
             # durable AND last_sync_status is already 'ok' inside the committed
@@ -513,7 +568,12 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
             # original exception via .inner and translates to a 500.
             # P2: use per-profile refresh (publishes collection_changed AFTER load).
             try:
-                await _refresh_profile_caches(profile_id, app_state)
+                await _refresh_profile_caches(
+                    profile_id,
+                    app_state,
+                    new_record_count=new_record_count,
+                    is_initial_import=is_initial_import,
+                )
             except Exception as exc:
                 logger.exception(
                     "sync_profile: cache refresh failed AFTER commit "
