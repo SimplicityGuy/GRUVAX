@@ -117,7 +117,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 **Goal**: The kiosk pairing screen offers a scannable QR code alongside the 4-digit PIN; search history never persists beyond the current session; a no-PIN "Reset kiosk" button clears the local session; query text never appears in server logs.
 **Depends on**: Phase 6 (DEV-05 SSE consumer wired before QR adds a second pairing path)
 **Requirements**: DEV-04, PRIV-01, PRIV-02, PRIV-03, PRIV-04, SRCH-09
-**Open decisions (resolve at plan time)**: QR HTTP-vs-HTTPS on LAN (Pitfall 39 — recommend Option A: HTTP + 60-second nonce rotation + single-use, documented as a Key Decision).
+**Open decisions (RESOLVED at plan time)**: QR HTTP-vs-HTTPS on LAN (Pitfall 39) — RESOLVED per CONTEXT D-01: the QR encodes the existing 4-digit short-TTL single-use pairing code over HTTP on the home LAN (no separate 60s nonce); PIN gate remains the security control. Documented as a Key Decision in 08-02-PLAN.md.
 **Success Criteria** (what must be TRUE):
 
   1. The kiosk pairing screen displays a QR code next to the 4-digit PIN; the admin can scan it on a phone and complete pairing without typing — and both paths call the same `complete_pairing()` function and emit identical audit log entries.
@@ -125,7 +125,14 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
   3. Tapping "Reset kiosk" (visible only when no admin session is active) clears the local session client-side only with zero API calls.
   4. Running `docker logs gruvax-api | grep <any-search-term>` returns zero hits after a search (structlog query redaction + Uvicorn access-log disabled confirmed by CI test).
 
-**Plans**: TBD
+**Plans**: 3 plans (1 wave — all independent, file-disjoint)
+
+**Wave 1** *(parallel — no file overlap)*
+
+  - [ ] 08-01-PLAN.md — PRIV-02 + PRIV-03: CI test-lock (query never in log_ring_buffer; uvicorn.access suppressed; no search_log table). Backend test-only, autonomous.
+  - [ ] 08-02-PLAN.md — DEV-04: react-qr-code QR in PairView + prefill-confirm bind flow (DevicesManager/DeviceDrawer); both paths funnel through the existing bind endpoint. Key Decision: QR over HTTP + existing short-TTL code. Ends with human-verify (phone scan).
+  - [ ] 08-03-PLAN.md — SRCH-09 + PRIV-01 + PRIV-04: sessionStorage recently-pulled store + 15-min idle hook + chip strip + no-PIN client-side Reset (hidden during admin). Ends with human-verify.
+
 **UI hint**: yes
 
 ### Phase 9: Offline + Reconnect UX
@@ -179,7 +186,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 | 5. Close v2.0 integration gaps (B-01 + B-02) | v2.0 | 2/2 | Complete | 2026-05-30 |
 | 6. Safe Boundaries + Live Device Lifecycle | v2.1 | 0/TBD | Not started | — |
 | 7. Member Self-Connect + Collection Diff | v2.1 | 0/3 | Planned | — |
-| 8. QR Pairing + Privacy + Recently-Pulled | v2.1 | 0/TBD | Not started | — |
+| 8. QR Pairing + Privacy + Recently-Pulled | v2.1 | 0/3 | Planned | — |
 | 9. Offline + Reconnect UX | v2.1 | 0/TBD | Not started | — |
 | 10. Shelf Fill-Overview | v2.1 | 0/TBD | Not started | — |
 | 999.2. LED "party" + "sound-reactive" modes | Backlog | 0/0 | Captured | — |
