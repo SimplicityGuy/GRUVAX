@@ -96,7 +96,20 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
   3. Submitting the same invite link a second time returns a clear "already redeemed" error (single-use enforced).
   4. After any sync (nightly or manual), the admin diagnostics card and kiosk `collection_changed` SSE payload include an `item_count_delta` showing how many records are new since the previous sync.
 
-**Plans**: TBD
+**Plans**: 3 plans (3 waves)
+
+**Wave 1**
+
+  - [ ] 07-01-PLAN.md — API-04 backend + migration 0012: profile_invite_codes table, first_seen_at, profiles diff columns; new_record_count + is_initial_import computed in the staging swap; extended collection_changed SSE payload; has_token on admin API; Wave-0 test scaffolds.
+
+**Wave 2** *(blocked on Wave 1 — needs profile_invite_codes table)*
+
+  - [ ] 07-02-PLAN.md — AUTH-02 backend: invite_codes.py router (owner generate + public validate + public redeem), atomic single-use consume, pool-isolated PAT validation, Fernet store, uniform 404, per-IP redeem rate limit; router registration; all 12 integration tests.
+
+**Wave 3** *(blocked on Waves 1–2 — needs both backends)*
+
+  - [ ] 07-03-PLAN.md — AUTH-02 + API-04 frontend: public /redeem/:code page, owner Copy-invite-link affordance (generate + TTL + clipboard), admin NEW RECORDS row, kiosk yellow pill; ends with human-verify checkpoint.
+
 **UI hint**: yes
 
 ### Phase 8: QR Pairing + Privacy + Recently-Pulled
@@ -165,7 +178,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 | 4. Sync polish + diagnostics | v2.0 | 4/4 | Complete | 2026-05-30 |
 | 5. Close v2.0 integration gaps (B-01 + B-02) | v2.0 | 2/2 | Complete | 2026-05-30 |
 | 6. Safe Boundaries + Live Device Lifecycle | v2.1 | 0/TBD | Not started | — |
-| 7. Member Self-Connect + Collection Diff | v2.1 | 0/TBD | Not started | — |
+| 7. Member Self-Connect + Collection Diff | v2.1 | 0/3 | Planned | — |
 | 8. QR Pairing + Privacy + Recently-Pulled | v2.1 | 0/TBD | Not started | — |
 | 9. Offline + Reconnect UX | v2.1 | 0/TBD | Not started | — |
 | 10. Shelf Fill-Overview | v2.1 | 0/TBD | Not started | — |
