@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Resilience + Privacy + UX polish
 status: executing
-last_updated: "2026-06-01T20:28:25.364Z"
+last_updated: "2026-06-01T20:58:13.934Z"
 last_activity: 2026-06-01
 progress:
   total_phases: 6
@@ -21,7 +21,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 8 — qr pairing + privacy + recently pulled
+**Current Focus:** Phase 08 — qr-pairing-privacy-recently-pulled
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -29,10 +29,10 @@ progress:
 
 ## Current Position
 
-Phase: 8
-Plan: Not started
-Status: Ready to execute
-Last activity: 2026-06-01 -- Phase 08 planning complete
+Phase: 08 (qr-pairing-privacy-recently-pulled) — EXECUTING
+Plan: 1 of 3
+Status: Executing Phase 08
+Last activity: 2026-06-01 -- Phase 08 execution started
 
 ```
 v2.1 Progress: [          ] 0% (0/5 phases)

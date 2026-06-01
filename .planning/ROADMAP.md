@@ -54,7 +54,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 
 - [x] **Phase 6: Safe Boundaries + Live Device Lifecycle** — write_boundary profile-scoped; kiosk reacts to revoke/reassign live via SSE. (completed 2026-05-31)
 - [x] **Phase 7: Member Self-Connect + Collection Diff** — invite-token flow (member pastes own PAT); "N new records" badge after sync; migration 0012 folded in. (completed 2026-06-01)
-- [ ] **Phase 8: QR Pairing + Privacy + Recently-Pulled** — QR alongside 4-digit PIN; session-only history; no-PIN kiosk reset; structlog query redaction.
+- [x] **Phase 8: QR Pairing + Privacy + Recently-Pulled** — QR alongside 4-digit PIN; session-only history; no-PIN kiosk reset; structlog query redaction. (completed 2026-06-01)
 - [ ] **Phase 9: Offline + Reconnect UX** — offline banner (SSE-authoritative); degraded mode; auto-reconnect with backoff+jitter; stale-data refresh on reconnect.
 - [ ] **Phase 10: Shelf Fill-Overview** — mini-Kallax fill/occupancy in `LocatorHeader`; milestone close.
 
@@ -129,9 +129,9 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 
 **Wave 1** *(parallel — no file overlap)*
 
-  - [ ] 08-01-PLAN.md — PRIV-02 + PRIV-03: CI test-lock (query never in log_ring_buffer; uvicorn.access suppressed; no search_log table). Backend test-only, autonomous.
-  - [ ] 08-02-PLAN.md — DEV-04: react-qr-code QR in PairView + prefill-confirm bind flow (DevicesManager/DeviceDrawer); both paths funnel through the existing bind endpoint. Key Decision: QR over HTTP + existing short-TTL code. Ends with human-verify (phone scan).
-  - [ ] 08-03-PLAN.md — SRCH-09 + PRIV-01 + PRIV-04: sessionStorage recently-pulled store + 15-min idle hook + chip strip + no-PIN client-side Reset (hidden during admin). Ends with human-verify.
+  - [x] 08-01-PLAN.md — PRIV-02 + PRIV-03: CI test-lock (query never in log_ring_buffer; uvicorn.access suppressed; no search_log table). Backend test-only, autonomous.
+  - [x] 08-02-PLAN.md — DEV-04: react-qr-code QR in PairView + prefill-confirm bind flow (DevicesManager/DeviceDrawer); both paths funnel through the existing bind endpoint. Key Decision: QR over HTTP + existing short-TTL code. Ends with human-verify (phone scan).
+  - [x] 08-03-PLAN.md — SRCH-09 + PRIV-01 + PRIV-04: sessionStorage recently-pulled store + 15-min idle hook + chip strip + no-PIN client-side Reset (hidden during admin). Ends with human-verify.
 
 **UI hint**: yes
 
@@ -176,7 +176,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
 | 6. LED Contract over MQTT | v1.0 | 3/3 | Complete    | 2026-05-31 |
 | 7. Wizards + Import/Export | v1.0 | 3/3 | Complete    | 2026-06-01 |
-| 8. Observability + Deployment Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
+| 8. Observability + Deployment Hardening | v1.0 | 3/3 | Complete   | 2026-06-01 |
 | 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 11/11 | Complete | 2026-05-27 |
