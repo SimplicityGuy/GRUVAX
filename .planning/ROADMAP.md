@@ -168,7 +168,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 | 4. Realtime Live Updates | v1.0 | 4/4 | Complete | 2026-05-22 |
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
 | 6. LED Contract over MQTT | v1.0 | 3/3 | Complete    | 2026-05-31 |
-| 7. Wizards + Import/Export | v1.0 | 3/3 | Complete   | 2026-06-01 |
+| 7. Wizards + Import/Export | v1.0 | 3/3 | Complete    | 2026-06-01 |
 | 8. Observability + Deployment Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |

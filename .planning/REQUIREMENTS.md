@@ -9,7 +9,7 @@
 
 ### Member Onboarding (Auth)
 
-- [ ] **AUTH-02**: Owner can issue a one-time, time-limited invite link for a profile; the member opens it and pastes **their own** discogsography PAT into a GRUVAX-served form. The token is stored Fernet-encrypted on that profile; the owner never sees the raw token (responses expose only `has_token: bool`). Invite is single-use (`consumed_at`) and TTL-bounded; an expired/used/invalid token shows a clear redeem error. No GRUVAX member login account is created — the flow is purely "deposit your PAT into a profile slot."
+- [x] **AUTH-02**: Owner can issue a one-time, time-limited invite link for a profile; the member opens it and pastes **their own** discogsography PAT into a GRUVAX-served form. The token is stored Fernet-encrypted on that profile; the owner never sees the raw token (responses expose only `has_token: bool`). Invite is single-use (`consumed_at`) and TTL-bounded; an expired/used/invalid token shows a clear redeem error. No GRUVAX member login account is created — the flow is purely "deposit your PAT into a profile slot."
 
 ### Devices & Pairing
 
@@ -18,7 +18,7 @@
 
 ### Sync & Collection
 
-- [ ] **API-04**: After a sync (nightly or manual), the kiosk and admin surface a per-profile **"N new records since last sync"** indicator. The diff **count** is computed in the existing staging-swap sync and delivered on the `collection_changed` SSE payload. (Set-level "which records" diff is out of scope — count only.)
+- [x] **API-04**: After a sync (nightly or manual), the kiosk and admin surface a per-profile **"N new records since last sync"** indicator. The diff **count** is computed in the existing staging-swap sync and delivered on the `collection_changed` SSE payload. (Set-level "which records" diff is out of scope — count only.)
 
 ### Search
 
@@ -74,8 +74,8 @@
 |-------------|-------|--------|
 | DATA-01 | Phase 6 | Complete |
 | DEV-05 | Phase 6 | Complete |
-| AUTH-02 | Phase 7 | Pending |
-| API-04 | Phase 7 | Pending |
+| AUTH-02 | Phase 7 | Complete |
+| API-04 | Phase 7 | Complete |
 | DEV-04 | Phase 8 | Pending |
 | PRIV-01 | Phase 8 | Pending |
 | PRIV-02 | Phase 8 | Pending |
