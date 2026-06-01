@@ -1,10 +1,11 @@
 ---
 phase: 07
 slug: member-self-connect-collection-diff
-status: approved
+status: validated
 nyquist_compliant: true
-wave_0_complete: false
+wave_0_complete: true
 created: 2026-06-01
+validated: 2026-06-01
 ---
 
 # Phase 07 — Validation Strategy
@@ -38,14 +39,14 @@ created: 2026-06-01
 
 | Task ID | Plan | Wave | Requirement | Threat Ref | Secure Behavior | Test Type | Automated Command | File Exists | Status |
 |---------|------|------|-------------|------------|-----------------|-----------|-------------------|-------------|--------|
-| 07-01-00 | 01 | 1 | API-04 | T-07-SC | Test scaffolds for AUTH-02 + API-04 (Wave 0) | unit+integration | `uv run pytest tests/unit/test_profile_sync_diff.py tests/unit/test_fake_discogsography.py::test_limit_one -q --benchmark-skip` | ❌ W0 | ⬜ pending |
-| 07-01-01 | 01 | 1 | API-04 | T-07-04 | first_seen_at nullable; invite table FK ON DELETE CASCADE | integration | `uv run alembic upgrade head && uv run alembic downgrade -1 && uv run alembic upgrade head` | ❌ W0 | ⬜ pending |
-| 07-01-02 | 01 | 1 | API-04 | T-07-01 / T-07-02 / T-07-03 | has_token derived (no ciphertext); count + is_initial atomic in swap; read last_sync_at IS NULL before UPDATE | integration | `uv run pytest tests/integration/test_invite_codes.py::test_initial_import_flag ::test_arrival_count_accuracy ::test_profile_new_record_fields ::test_profile_has_token_field tests/unit/test_profile_sync_diff.py -q --benchmark-skip` | ❌ W0 | ⬜ pending |
-| 07-02-01 | 02 | 2 | AUTH-02 | T-07-05..T-07-11 | atomic single-use consume; pool-isolated PAT validate; Fernet store; uniform 404; per-IP rate limit | integration | `uv run mypy src/gruvax/api/invite_codes.py && uv run ruff check src/gruvax/api/invite_codes.py` | ❌ W0 | ⬜ pending |
-| 07-02-02 | 02 | 2 | AUTH-02 | T-07-05/T-07-06/T-07-10 | owner route PIN-gated; public routes reachable + uniform 404 on used/expired/invalid | integration | `uv run pytest tests/integration/test_invite_codes.py -q --benchmark-skip` | ❌ W0 | ⬜ pending |
-| 07-03-01 | 03 | 3 | AUTH-02 | T-07-13 | PAT only in state + POST body; type=password; not persisted client-side | static | `cd frontend && npm run lint && npx tsc --noEmit` | ✅ | ⬜ pending |
-| 07-03-02 | 03 | 3 | AUTH-02 + API-04 | T-07-14/T-07-16 | owner sees only has_token; SSE parse try/catch graceful degrade; token-only CSS | static | `cd frontend && npm run lint && npx tsc --noEmit` | ✅ | ⬜ pending |
-| 07-03-03 | 03 | 3 | AUTH-02 + API-04 | T-07-13/T-07-15 | end-to-end redeem + invite + diff indicators across 6 surfaces | manual | human-verify checkpoint (Local UAT recipe) | N/A | ⬜ pending |
+| 07-01-00 | 01 | 1 | API-04 | T-07-SC | Test scaffolds for AUTH-02 + API-04 (Wave 0) | unit+integration | `uv run pytest tests/unit/test_profile_sync_diff.py tests/unit/test_fake_discogsography.py::test_limit_one -q --benchmark-skip` | ✅ | ✅ green |
+| 07-01-01 | 01 | 1 | API-04 | T-07-04 | first_seen_at nullable; invite table FK ON DELETE CASCADE | integration | `uv run alembic upgrade head && uv run alembic downgrade -1 && uv run alembic upgrade head` | ✅ | ✅ green |
+| 07-01-02 | 01 | 1 | API-04 | T-07-01 / T-07-02 / T-07-03 | has_token derived (no ciphertext); count + is_initial atomic in swap; read last_sync_at IS NULL before UPDATE | integration | `uv run pytest tests/integration/test_invite_codes.py::test_initial_import_flag ::test_arrival_count_accuracy ::test_profile_new_record_fields ::test_profile_has_token_field tests/unit/test_profile_sync_diff.py -q --benchmark-skip` | ✅ | ✅ green |
+| 07-02-01 | 02 | 2 | AUTH-02 | T-07-05..T-07-11 | atomic single-use consume; pool-isolated PAT validate; Fernet store; uniform 404; per-IP rate limit | integration | `uv run mypy src/gruvax/api/invite_codes.py && uv run ruff check src/gruvax/api/invite_codes.py` | ✅ | ✅ green |
+| 07-02-02 | 02 | 2 | AUTH-02 | T-07-05/T-07-06/T-07-10 | owner route PIN-gated; public routes reachable + uniform 404 on used/expired/invalid | integration | `uv run pytest tests/integration/test_invite_codes.py -q --benchmark-skip` | ✅ | ✅ green |
+| 07-03-01 | 03 | 3 | AUTH-02 | T-07-13 | PAT only in state + POST body; type=password; not persisted client-side | static | `cd frontend && npm run lint && npx tsc --noEmit` | ✅ | ✅ green |
+| 07-03-02 | 03 | 3 | AUTH-02 + API-04 | T-07-14/T-07-16 | owner sees only has_token; SSE parse try/catch graceful degrade; token-only CSS | static | `cd frontend && npm run lint && npx tsc --noEmit` | ✅ | ✅ green |
+| 07-03-03 | 03 | 3 | AUTH-02 + API-04 | T-07-13/T-07-15 | end-to-end redeem + invite + diff indicators across 6 surfaces | manual | human-verify checkpoint (Local UAT recipe) | N/A | ✅ approved |
 
 *Status: ⬜ pending · ✅ green · ❌ red · ⚠️ flaky*
 
@@ -53,9 +54,9 @@ created: 2026-06-01
 
 ## Wave 0 Requirements
 
-- [ ] `tests/integration/test_invite_codes.py` — 12 tests covering AUTH-02 + API-04 (Plan-02 endpoint tests xfail-marked until Plan 02; API-04 tests pass after Plan 01). Created in Plan 01 Task 0.
-- [ ] `tests/unit/test_profile_sync_diff.py` — unit tests for `new_record_count` arithmetic + `is_initial_import` detection + extended `collection_changed` payload. Created in Plan 01 Task 0.
-- [ ] `tests/unit/test_fake_discogsography.py::test_limit_one` — confirm the CI fixture supports the `limit=1` PAT-validation call. Created in Plan 01 Task 0.
+- [x] `tests/integration/test_invite_codes.py` — 12 tests covering AUTH-02 + API-04 (Plan-02 endpoint tests xfail-marked until Plan 02; un-xfailed and green after Plan 02). Created in Plan 01 Task 0.
+- [x] `tests/unit/test_profile_sync_diff.py` — unit tests for `new_record_count` arithmetic + `is_initial_import` detection + extended `collection_changed` payload. Created in Plan 01 Task 0.
+- [x] `tests/unit/test_fake_discogsography.py::test_limit_one` — confirm the CI fixture supports the `limit=1` PAT-validation call. Created in Plan 01 Task 0.
 
 Framework already installed (pytest + pytest-asyncio + httpx + asgi-lifespan; frontend ESLint + tsc). No framework install needed.
 
@@ -81,3 +82,29 @@ Framework already installed (pytest + pytest-asyncio + httpx + asgi-lifespan; fr
 - [x] `nyquist_compliant: true` set in frontmatter
 
 **Approval:** approved 2026-06-01
+
+---
+
+## Validation Audit 2026-06-01
+
+Post-execution audit (State A). Every task's automated verification command was
+re-run against the merged `main`; all pass.
+
+| Metric | Count |
+|--------|-------|
+| Tasks audited | 8 |
+| COVERED (green) | 7 automated + 1 human-verify (approved) |
+| PARTIAL | 0 |
+| MISSING (gaps) | 0 |
+| Resolved | 0 |
+| Escalated | 0 |
+
+**Evidence (commands re-run, all exit 0):**
+- `pytest tests/unit/test_profile_sync_diff.py tests/unit/test_fake_discogsography.py` — pass
+- `pytest tests/integration/test_invite_codes.py` (12 tests, AUTH-02 un-xfailed + API-04) — pass
+- `mypy src/gruvax/api/invite_codes.py` — no issues; `ruff check` — clean
+- `alembic upgrade head && downgrade -1 && upgrade head` — round-trips to 0012
+- `frontend: npm run lint` (0 errors, 1 pre-existing BinWidthEditor warning) + `tsc --noEmit` (0 errors)
+- Full backend suite + frontend build/vitest green and order-independent (passes twice back-to-back). Two shared-DB test-isolation traps were fixed during execution: `test_migrate_0011`'s HEAD-relative `downgrade -1` (now pinned to explicit revisions) and the constant fake-discogs `user_id` colliding the new sync tests under `uq_profiles_dgs_user_id_active` (freed via NULLing the holder's user_id, never soft-delete).
+
+**Verdict:** `nyquist_compliant: true` holds post-execution. No gaps to fill.
