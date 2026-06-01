@@ -57,6 +57,9 @@ const CONNECTED_PROFILE: AdminProfile = {
   last_sync_item_count: 3000,
   app_token_revoked: false,
   status: 'connected',
+  has_token: true,
+  last_new_record_count: 0,
+  last_sync_is_initial: false,
 }
 
 const IN_PROGRESS_TICK: AdminProfile = {
