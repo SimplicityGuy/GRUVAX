@@ -1637,9 +1637,24 @@
 }
 
 .locator-cell {
+  /* Cells are <button type="button"> — reset the UA button chrome so --dim/--lit
+     cells don't render a grey 3D border (the --fill/--empty modifiers set their
+     own borders, which override this via source order). box-sizing keeps the 28px
+     footprint constant whether or not a modifier adds a 1.5px border. */
+  appearance: none;
+  border: none;
+  padding: 0;
+  box-sizing: border-box;
+  cursor: pointer;
+  touch-action: manipulation;
   width: var(--gruvax-cell-size-sm);
   height: var(--gruvax-cell-size-sm);
   border-radius: var(--gruvax-cell-radius-sm);
+}
+
+.locator-cell:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
 }
 
 .locator-cell--dim {

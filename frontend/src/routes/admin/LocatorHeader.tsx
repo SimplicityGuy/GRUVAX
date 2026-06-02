@@ -141,7 +141,11 @@ export function LocatorHeader({
         <div
           className="locator-mini-grid"
           style={{ gridTemplateColumns: `repeat(${cols}, var(--gruvax-cell-size-sm))` }}
-          aria-label={`Mini Kallax — edited bin at row ${row + 1}, col ${col + 1}`}
+          aria-label={
+            row !== -1
+              ? `Mini Kallax — edited bin at row ${row + 1}, col ${col + 1}`
+              : 'Mini Kallax — shelf fill overview'
+          }
         >
           {Array.from({ length: rows }, (_, r) =>
             Array.from({ length: cols }, (_, c) => {
@@ -205,7 +209,18 @@ export function LocatorHeader({
                 activeRow >= 2
                   ? `calc((${rows - activeRow}) * (var(--gruvax-cell-size-sm) + var(--gruvax-cell-gap-sm)) + 2px)`
                   : undefined,
-              left: `calc(${activeCol} * (var(--gruvax-cell-size-sm) + var(--gruvax-cell-gap-sm)))`,
+              // Horizontal flip (mirrors the vertical flip above): left-half
+              // columns anchor left and open rightward; right-half columns anchor
+              // right and open leftward so the popover never overflows the grid's
+              // right edge / viewport (WR-02).
+              left:
+                activeCol < cols / 2
+                  ? `calc(${activeCol} * (var(--gruvax-cell-size-sm) + var(--gruvax-cell-gap-sm)))`
+                  : undefined,
+              right:
+                activeCol >= cols / 2
+                  ? `calc(${cols - 1 - activeCol} * (var(--gruvax-cell-size-sm) + var(--gruvax-cell-gap-sm)))`
+                  : undefined,
             }}
           >
             {popoverContent(activeCube, activeBinId)}

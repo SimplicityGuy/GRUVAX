@@ -138,6 +138,28 @@ describe('LocatorHeader popover (D-05 / D-06)', () => {
     expect(container.querySelector('.locator-fill-popover')).toBeNull()
   })
 
+  it('anchors the popover LEFT for a left-half column (WR-02)', () => {
+    const cubes = [makeCube(0, 0, { fill_level: 0.5 })]
+    const { container } = render(
+      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
+    )
+    fireEvent.click(container.querySelector('[data-row="0"][data-col="0"]')!)
+    const popover = container.querySelector('.locator-fill-popover') as HTMLElement
+    expect(popover.style.left).not.toBe('')
+    expect(popover.style.right).toBe('')
+  })
+
+  it('anchors the popover RIGHT for a right-half column so it does not overflow (WR-02)', () => {
+    const cubes = [makeCube(0, 3, { fill_level: 0.5 })]
+    const { container } = render(
+      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
+    )
+    fireEvent.click(container.querySelector('[data-row="0"][data-col="3"]')!)
+    const popover = container.querySelector('.locator-fill-popover') as HTMLElement
+    expect(popover.style.right).not.toBe('')
+    expect(popover.style.left).toBe('')
+  })
+
   it('tapping an empty cube popover shows bin ID and "Empty bin" text', () => {
     const cubes = [makeCube(0, 0, { is_empty: true, fill_level: 0, record_count: 0 })]
     const { container } = render(
@@ -149,5 +171,21 @@ describe('LocatorHeader popover (D-05 / D-06)', () => {
     expect(popover).not.toBeNull()
     expect(popover?.textContent).toContain('A1')
     expect(popover?.textContent).toContain('Empty bin')
+  })
+})
+
+describe('LocatorHeader accessibility (WR-03)', () => {
+  it('labels the grid as a fill overview when no bin is being edited (row -1)', () => {
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} />)
+    const grid = container.querySelector('.locator-mini-grid')
+    expect(grid?.getAttribute('aria-label')).toBe('Mini Kallax — shelf fill overview')
+  })
+
+  it('labels the edited bin when row/col are set', () => {
+    const { container } = render(<LocatorHeader unitId={1} row={0} col={0} />)
+    const grid = container.querySelector('.locator-mini-grid')
+    expect(grid?.getAttribute('aria-label')).toBe(
+      'Mini Kallax — edited bin at row 1, col 1',
+    )
   })
 })
