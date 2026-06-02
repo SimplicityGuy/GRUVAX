@@ -148,7 +148,12 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
   3. When `gruvax-api` restarts, all kiosks reconnect and the offline banner clears within 30 seconds; reconnects are spread over a jitter window (no simultaneous thundering herd).
   4. On successful reconnect, stale search and boundary data is refreshed (TanStack Query invalidation on `server_hello`); any diff badge that was dismissed stays dismissed.
 
-**Plans**: TBD
+**Plans**: 3 plans
+
+Plans:
+- [ ] 09-01-PLAN.md — SSE retry: jitter (no reconnect storm) [OFF-03, backend]
+- [ ] 09-02-PLAN.md — store bannerVisible boolean + QueryClient networkMode: 'always' [OFF-01, OFF-03]
+- [ ] 09-03-PLAN.md — OfflineBanner + degraded mode + reconnect toast [OFF-01, OFF-02, OFF-04]
 **UI hint**: yes
 
 ### Phase 10: Shelf Fill-Overview
@@ -187,7 +192,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 | 6. Safe Boundaries + Live Device Lifecycle | v2.1 | 0/TBD | Not started | — |
 | 7. Member Self-Connect + Collection Diff | v2.1 | 0/3 | Planned | — |
 | 8. QR Pairing + Privacy + Recently-Pulled | v2.1 | 0/3 | Planned | — |
-| 9. Offline + Reconnect UX | v2.1 | 0/TBD | Not started | — |
+| 9. Offline + Reconnect UX | v2.1 | 0/3 | Planned | — |
 | 10. Shelf Fill-Overview | v2.1 | 0/TBD | Not started | — |
 | 999.2. LED "party" + "sound-reactive" modes | Backlog | 0/0 | Captured | — |
 
