@@ -31,8 +31,53 @@ import { SegmentStrip } from './SegmentStrip'
 import { RecordPickerSheet } from './RecordPickerSheet'
 import { adminGetCubes, getUnitSegments } from '../../api/adminClient'
 import { shelfName, shelfLetter } from '../../lib/shelf'
+import { useSessionStore } from '../../state/sessionStore'
 import type { AdminCube, AdminCubesResponse } from '../../api/types'
 import type { Segment } from '../../api/cubeTypes'
+
+// ── useAdminCubesInvalidation ─────────────────────────────────────────────────
+//
+// Subscribes to the per-profile SSE channel (/api/events/{profileId}) while
+// ShelfBinList is mounted, and invalidates the ['admin','cubes'] query on
+// BOTH collection_changed (record counts changed) and boundary_changed (cube
+// boundaries moved — fill data changes). This delivers UX-01 SC2: live fill
+// reshading without a page reload.
+//
+// D-04: invalidate on both events (not just one).
+// D-08 separation: admin-key invalidation lives here, NOT in KioskView.tsx.
+//
+// Key differences from KioskView's SSE consumer:
+//   - Calls es.close() in useEffect cleanup: the admin listener is short-lived,
+//     scoped to ShelfBinList mount/unmount. KioskView deliberately never closes
+//     because it wants auto-reconnect; we do not.
+//   - Uses .getState() (call-time, not reactive) to read boundProfileId, which
+//     avoids stale-closure pitfall when the store updates after mount.
+//
+function useAdminCubesInvalidation(): void {
+  const queryClient = useQueryClient()
+
+  useEffect(() => {
+    // Read boundProfileId at call time (Pitfall 4 stale-closure avoidance).
+    // Matches KioskView.tsx:326 pattern.
+    const profileId = useSessionStore.getState().boundProfileId
+    if (!profileId) return
+
+    const es = new EventSource(`/api/events/${profileId}`)
+
+    es.addEventListener('collection_changed', () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
+    })
+
+    es.addEventListener('boundary_changed', () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
+    })
+
+    // UNLIKE KioskView, the admin listener is intentionally short-lived —
+    // close on unmount to prevent accumulating connections across admin navigation
+    // (T-10-05 mitigation).
+    return () => es.close()
+  }, [queryClient])
+}
 
 const ROWS = 4
 const COLS = 4
@@ -63,6 +108,10 @@ export function ShelfBinList() {
   const queryClient = useQueryClient()
 
   const unitId = Number(unit)
+
+  // D-04: invalidate ['admin','cubes'] when collection or boundaries change externally.
+  // Admin SSE listener opens on mount, closes on unmount (no leaked EventSource).
+  useAdminCubesInvalidation()
 
   // ── Sheet state ──────────────────────────────────────────────────────────────
   const [insertState, setInsertState] = useState<InsertState | null>(null)
@@ -190,7 +239,9 @@ export function ShelfBinList() {
         <h1 className="sbl-title">EDIT SHELF {shelfLtr}</h1>
       </header>
 
-      {/* Locator header — mini Kallax, no specific bin lit */}
+      {/* Locator header — mini Kallax, no specific bin lit.
+          cubes prop wires fill-shading data from the already-fetched query
+          (Pitfall 5: without this, LocatorHeader has no fill data to render). */}
       <div className="sbl-locator">
         <LocatorHeader
           unitId={unitId}
@@ -199,6 +250,7 @@ export function ShelfBinList() {
           shelfName={shelfDisplayName}
           rows={ROWS}
           cols={COLS}
+          cubes={cubesData?.cubes ?? []}
         />
       </div>
 
