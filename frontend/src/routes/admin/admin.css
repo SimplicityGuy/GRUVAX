@@ -1651,6 +1651,72 @@
   box-shadow: var(--gruvax-shadow-led);
 }
 
+/* ── Phase 10: LocatorHeader fill shading + popover ─────────────────────────── */
+
+/* Grid wrapper — establishes position: relative to anchor the absolute popover */
+.locator-mini-grid-wrap {
+  position: relative;
+}
+
+/* Fill shading — continuous blue gradient driven by --fill custom property.
+   color-mix(in srgb, ...) is natively supported in Chromium 111+ (kiosk target). */
+.locator-cell--fill {
+  background: color-mix(
+    in srgb,
+    var(--gruvax-blue) calc(var(--fill, 0) * 70%),
+    var(--gruvax-cell-dim)
+  );
+  border: 1.5px solid var(--gruvax-cell-dim-border);
+  transition: background var(--gruvax-duration-base) var(--gruvax-ease-standard);
+}
+
+/* Empty cube — CUBE-05 desaturated dashed state (UX-01 SC 3) */
+.locator-cell--empty {
+  background: var(--gruvax-cell-empty);
+  border: 1.5px dashed var(--gruvax-cell-empty-border);
+}
+
+/* Popover — position: absolute within .locator-mini-grid-wrap */
+.locator-fill-popover {
+  position: absolute;
+  z-index: var(--gruvax-z-overlay);
+  background: var(--gruvax-white);
+  border: 1.5px solid var(--gruvax-border);
+  border-radius: var(--gruvax-radius-md);
+  box-shadow: var(--gruvax-shadow-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-3);
+  min-width: 120px;
+  pointer-events: auto;
+  white-space: nowrap;
+}
+
+.locator-fill-popover-id {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  font-weight: 400;
+  color: var(--gruvax-text-primary);
+  line-height: var(--gruvax-leading-normal);
+  display: block;
+}
+
+.locator-fill-popover-data {
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-mono);
+  font-weight: 400;
+  color: var(--gruvax-text-secondary);
+  line-height: var(--gruvax-leading-normal);
+  display: block;
+}
+
+.locator-fill-popover-empty {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-caption);
+  font-weight: 400;
+  color: var(--gruvax-text-muted);
+  line-height: var(--gruvax-leading-normal);
+  display: block;
+}
+
 /* ── Phase 5: SegmentStrip ───────────────────────────────────────────────────── */
 
 .seg-strip {
