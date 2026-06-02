@@ -121,7 +121,6 @@ export function PairView() {
       isFetchingRef.current = false
       setIsCodeFetching(false)
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // Initial fetch on mount — side effect only (fetch + setState in callback)
@@ -192,7 +191,6 @@ export function PairView() {
         clearInterval(countdownIntervalRef.current)
       }
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pairingCode?.expires_at, fetchNewCode, updatePairStatus])
 
   // ── Device-state poll ────────────────────────────────────────────────────
