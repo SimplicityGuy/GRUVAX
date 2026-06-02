@@ -487,4 +487,128 @@ describe('KioskView EventSource consumer', () => {
     expect(useGruvaxStore.getState().connectivity.sseConnected).toBe(true)
     expect(useGruvaxStore.getState().connectivity.bannerVisible).toBe(false)
   })
+
+  // ── Phase 9 gap-closure 09-04 ─────────────────────────────────────────────
+
+  // SC4 (09-04): resync() must invalidate ['search'] on reconnect so stale search
+  // results are flushed on onopen and server_hello, not only on collection_changed.
+  it('SC4: onopen (resync) invalidates the search query key', async () => {
+    const qc = makeQueryClient()
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
+    const es = await renderKioskAndFlush(qc)
+
+    // Clear calls accumulated during render (health, session, units, cubes queries)
+    invalidateSpy.mockClear()
+
+    await act(async () => {
+      es.onopen?.()
+    })
+
+    const calledKeys = invalidateSpy.mock.calls.map(
+      (args) => (args[0] as { queryKey?: unknown[] }).queryKey,
+    )
+
+    // resync() must invalidate ['units'], ['cubes'], AND ['search'] (ROADMAP SC4)
+    expect(calledKeys).toContainEqual(['units'])
+    expect(calledKeys).toContainEqual(['cubes'])
+    expect(calledKeys).toContainEqual(['search'])
+  })
+
+  // SC4 (09-04): server_hello also calls resync() and must therefore invalidate ['search']
+  it('SC4: server_hello (resync) invalidates the search query key', async () => {
+    const qc = makeQueryClient()
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
+    const es = await renderKioskAndFlush(qc)
+
+    // Connect first so the SSE handler is registered
+    await act(async () => {
+      es.onopen?.()
+    })
+    invalidateSpy.mockClear()
+
+    await act(async () => {
+      es.dispatchEvent('server_hello', {})
+    })
+
+    const calledKeys = invalidateSpy.mock.calls.map(
+      (args) => (args[0] as { queryKey?: unknown[] }).queryKey,
+    )
+
+    expect(calledKeys).toContainEqual(['search'])
+  })
+
+  // WR-02 (09-04): "Back online" toast must be cleared when onerror fires within 4s
+  // of a reconnect — prevents OfflineBanner + toast appearing simultaneously.
+  it('WR-02: onerror clears the Back online toast (no dual-banner state)', async () => {
+    const qc = makeQueryClient()
+    const { container } = await act(async () =>
+      render(
+        <QueryClientProvider client={qc}>
+          <KioskView />
+        </QueryClientProvider>,
+      ),
+    )
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]
+
+    // Set up offline state so the next onopen will show the toast
+    await act(async () => {
+      es.onopen?.()
+    })
+    await act(async () => {
+      es.onerror?.()
+    })
+    expect(useGruvaxStore.getState().connectivity.bannerVisible).toBe(true)
+
+    // Reconnect — "Back online" toast should appear
+    await act(async () => {
+      es.onopen?.()
+    })
+    const toastAfterReconnect = container.querySelector('.sync-toast')
+    expect(toastAfterReconnect).not.toBeNull()
+
+    // Now disconnect again within the 4s toast window — toast must clear
+    await act(async () => {
+      es.onerror?.()
+    })
+
+    // Toast must be gone; OfflineBanner is back instead
+    const toastAfterDisconnect = container.querySelector('.sync-toast')
+    expect(toastAfterDisconnect).toBeNull()
+
+    const banner = container.querySelector('[role="alert"]')
+    expect(banner).not.toBeNull()
+  })
+
+  // WR-02 (09-04): server_shutdown must also clear the "Back online" toast
+  it('WR-02: server_shutdown clears the Back online toast', async () => {
+    const qc = makeQueryClient()
+    const { container } = await act(async () =>
+      render(
+        <QueryClientProvider client={qc}>
+          <KioskView />
+        </QueryClientProvider>,
+      ),
+    )
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]
+
+    // Set up offline→reconnect so toast is visible
+    await act(async () => {
+      es.onopen?.()
+    })
+    await act(async () => {
+      es.onerror?.()
+    })
+    await act(async () => {
+      es.onopen?.()
+    })
+    expect(container.querySelector('.sync-toast')).not.toBeNull()
+
+    // server_shutdown fires — store goes disconnected AND toast must clear
+    await act(async () => {
+      es.dispatchEvent('server_shutdown', {})
+    })
+
+    expect(container.querySelector('.sync-toast')).toBeNull()
+    expect(useGruvaxStore.getState().connectivity.sseConnected).toBe(false)
+  })
 })

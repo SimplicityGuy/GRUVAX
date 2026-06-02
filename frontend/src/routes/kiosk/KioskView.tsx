@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import gsap from 'gsap'
 import { RotateCcw } from 'lucide-react'
@@ -61,6 +61,9 @@ export function KioskView() {
   const [showBackOnlineToast, setShowBackOnlineToast] = useState(false)
   const profiles = useSessionStore((s) => s.profiles)
   const queryClient = useQueryClient()
+  // WR-01 (gap-closure 09-04): stable dismiss callback — prevents SyncToast 4s auto-dismiss
+  // timer from being re-armed by re-renders that would create a new inline arrow each time.
+  const handleBackOnlineDismiss = useCallback(() => setShowBackOnlineToast(false), [])
   const [debouncedQuery, setDebouncedQuery] = useState('')
   // Cube-tap state for the contents panel (CUBE-09, D-14)
   const [tappedCube, setTappedCube] = useState<CubeRef | null>(null)
@@ -304,6 +307,12 @@ export function KioskView() {
       // admin optimistic update if the same SPA ever shares this consumer.
       void queryClient.invalidateQueries({ queryKey: ['units'] })
       void queryClient.invalidateQueries({ queryKey: ['cubes'] })
+      // ROADMAP SC4 (user decision 2026-06-01): actively invalidate ['search'] on every
+      // reconnect (onopen / server_hello) so stale search results are flushed immediately,
+      // not left to passive staleTime expiry. Supersedes the D-73/D-74 passive-staleTime
+      // approach documented in CONTEXT.md — the active invalidation is the correct
+      // implementation of "stale search data is refreshed on server_hello".
+      void queryClient.invalidateQueries({ queryKey: ['search'] })
       // D-05 + D-11: if a selection is active, re-locate it after reconnect
       // so the highlight reflects the boundary that may have changed while disconnected.
       relocateActiveSelection()
@@ -339,6 +348,9 @@ export function KioskView() {
     es.onerror = () => {
       // Mark disconnected — EventSource auto-reconnects; do NOT call es.close() (Pitfall 4)
       useGruvaxStore.getState().setSseConnected(false)
+      // WR-02 (gap-closure 09-04): clear "Back online" toast on disconnect so the
+      // OfflineBanner and the toast are never visible simultaneously on a flaky LAN.
+      setShowBackOnlineToast(false)
     }
 
     // boundary_changed: admin edit committed → re-render affected cubes (D-04, D-03)
@@ -398,6 +410,9 @@ export function KioskView() {
     // server_shutdown: server going down → mark disconnected (auto-reconnect handles it)
     es.addEventListener('server_shutdown', () => {
       useGruvaxStore.getState().setSseConnected(false)
+      // WR-02 (gap-closure 09-04): clear "Back online" toast on server shutdown so the
+      // OfflineBanner and the toast are never visible simultaneously on a flaky LAN.
+      setShowBackOnlineToast(false)
     })
 
     // collection_changed: nightly/manual sync completed → invalidate search results + resync
@@ -781,7 +796,7 @@ export function KioskView() {
       {showBackOnlineToast && (
         <SyncToast
           message="Back online"
-          onDismiss={() => setShowBackOnlineToast(false)}
+          onDismiss={handleBackOnlineDismiss}
         />
       )}
 
