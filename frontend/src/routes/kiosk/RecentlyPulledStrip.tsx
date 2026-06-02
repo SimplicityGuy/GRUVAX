@@ -39,21 +39,21 @@ export function RecentlyPulledStrip() {
           const chipLabel = `${artistPrefix}${item.title}, catalog number ${item.catalog_number}`
 
           return (
-            <button
-              key={item.release_id}
-              type="button"
-              role="listitem"
-              className="recently-pulled-chip"
-              aria-label={chipLabel}
-              onClick={() => setSelectedReleaseId(item.release_id)}
-            >
-              <span className="recently-pulled-chip__primary">
-                {item.primary_artist ? `${item.primary_artist} – ${item.title}` : item.title}
-              </span>
-              <span className="recently-pulled-chip__catalog">
-                {item.catalog_number}
-              </span>
-            </button>
+            <div key={item.release_id} role="listitem">
+              <button
+                type="button"
+                className="recently-pulled-chip"
+                aria-label={chipLabel}
+                onClick={() => setSelectedReleaseId(item.release_id)}
+              >
+                <span className="recently-pulled-chip__primary">
+                  {item.primary_artist ? `${item.primary_artist} – ${item.title}` : item.title}
+                </span>
+                <span className="recently-pulled-chip__catalog">
+                  {item.catalog_number}
+                </span>
+              </button>
+            </div>
           )
         })}
       </div>
