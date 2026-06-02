@@ -152,8 +152,8 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 Plans:
 **Wave 1**
 
-- [ ] 09-01-PLAN.md — SSE retry: jitter (no reconnect storm) [OFF-03, backend]
-- [ ] 09-02-PLAN.md — store bannerVisible boolean + QueryClient networkMode: 'always' [OFF-01, OFF-03]
+- [x] 09-01-PLAN.md — SSE retry: jitter (no reconnect storm) [OFF-03, backend]
+- [x] 09-02-PLAN.md — store bannerVisible boolean + QueryClient networkMode: 'always' [OFF-01, OFF-03]
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
@@ -187,7 +187,7 @@ Plans:
 | 6. LED Contract over MQTT | v1.0 | 3/3 | Complete    | 2026-05-31 |
 | 7. Wizards + Import/Export | v1.0 | 3/3 | Complete    | 2026-06-01 |
 | 8. Observability + Deployment Hardening | v1.0 | 3/3 | Complete    | 2026-06-02 |
-| 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
+| 9. Tooling and Docs Hardening | v1.0 | 2/3 | In Progress|  |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 11/11 | Complete | 2026-05-27 |
 | 2. Multi-profile migration + profile manager | v2.0 | 11/11 | Complete | 2026-05-28 |
