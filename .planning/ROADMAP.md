@@ -176,7 +176,7 @@ Plans:
 
 **Wave 1**
 
-- [ ] 10-01-PLAN.md — UX-01 render: fix AdminCube type (record_count) + LocatorHeader blue fill shading (color-mix `--fill`) + CUBE-05 empty state + tap-to-reveal popover + token-only CSS + LocatorHeader tests (D-01/D-02/D-03/D-05/D-06; SC1, SC3)
+- [x] 10-01-PLAN.md — UX-01 render: fix AdminCube type (record_count) + LocatorHeader blue fill shading (color-mix `--fill`) + CUBE-05 empty state + tap-to-reveal popover + token-only CSS + LocatorHeader tests (D-01/D-02/D-03/D-05/D-06; SC1, SC3)
 
 **Wave 2** *(blocked on Wave 1 — needs the LocatorHeader cubes prop + updated AdminCube type)*
 
@@ -197,7 +197,7 @@ Plans:
 | 7. Wizards + Import/Export | v1.0 | 3/3 | Complete    | 2026-06-01 |
 | 8. Observability + Deployment Hardening | v1.0 | 3/3 | Complete    | 2026-06-02 |
 | 9. Tooling and Docs Hardening | v1.0 | 5/5 | Complete   | 2026-06-02 |
-| 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
+| 10. Close Milestone Gaps | v1.0 | 1/2 | In Progress|  |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 11/11 | Complete | 2026-05-27 |
 | 2. Multi-profile migration + profile manager | v2.0 | 11/11 | Complete | 2026-05-28 |
 | 3. Devices + pairing | v2.0 | 7/7 | Complete | 2026-05-29 |
