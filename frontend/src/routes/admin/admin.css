@@ -4649,7 +4649,6 @@
   font-weight: 400;
   color: var(--gruvax-error);
   margin: 0;
-  role: alert;
 }
 
 /* Commit button — always visible, disabled state is default */
