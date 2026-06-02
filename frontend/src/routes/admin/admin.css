@@ -4548,7 +4548,7 @@
   font-weight: 700;
   letter-spacing: var(--gruvax-tracking-label);
   background: var(--gruvax-error);
-  color: #FFFFFF;
+  color: var(--gruvax-white);
   padding: 2px 6px;
   border-radius: var(--gruvax-radius-sm);
 }
@@ -4612,7 +4612,7 @@
 
 .import-suggestion-chip:hover {
   background: var(--gruvax-blue);
-  color: #FFFFFF;
+  color: var(--gruvax-white);
 }
 
 .import-suggestion-chip:focus-visible {
@@ -4678,7 +4678,7 @@
 
 .import-commit-btn--enabled {
   background: var(--gruvax-blue);
-  color: #FFFFFF;
+  color: var(--gruvax-white);
   cursor: pointer;
   opacity: 1;
   box-shadow: var(--gruvax-shadow-sm);
