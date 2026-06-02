@@ -26,10 +26,10 @@
 
 ### Offline & Resilience
 
-- [ ] **OFF-01**: When the kiosk loses its connection to the GRUVAX backend, it shows a clear **offline banner** (SSE connection-state is the authoritative signal, not `navigator.onLine`).
-- [ ] **OFF-02**: While offline the kiosk enters **degraded mode** — search input disabled, but the last locate result / cube highlight stays visible (never serve stale boundaries as fresh).
-- [ ] **OFF-03**: The kiosk **auto-reconnects with backoff + jitter** (SSE reconnect + `/healthz` probe), without a reconnect storm.
-- [ ] **OFF-04**: On successful reconnect the banner clears, search re-enables, and stale data is refreshed (TanStack Query invalidation on `server_hello`).
+- [x] **OFF-01**: When the kiosk loses its connection to the GRUVAX backend, it shows a clear **offline banner** (SSE connection-state is the authoritative signal, not `navigator.onLine`).
+- [x] **OFF-02**: While offline the kiosk enters **degraded mode** — search input disabled, but the last locate result / cube highlight stays visible (never serve stale boundaries as fresh).
+- [x] **OFF-03**: The kiosk **auto-reconnects with backoff + jitter** (SSE reconnect + `/healthz` probe), without a reconnect storm.
+- [x] **OFF-04**: On successful reconnect the banner clears, search re-enables, and stale data is refreshed (TanStack Query invalidation on `server_hello`).
 
 ### Privacy
 
@@ -82,10 +82,10 @@
 | PRIV-03 | Phase 8 | Complete |
 | PRIV-04 | Phase 8 | Complete |
 | SRCH-09 | Phase 8 | Complete |
-| OFF-01 | Phase 9 | Pending |
-| OFF-02 | Phase 9 | Pending |
-| OFF-03 | Phase 9 | Pending |
-| OFF-04 | Phase 9 | Pending |
+| OFF-01 | Phase 9 | Complete |
+| OFF-02 | Phase 9 | Complete |
+| OFF-03 | Phase 9 | Complete |
+| OFF-04 | Phase 9 | Complete |
 | UX-01 | Phase 10 | Pending |
 
 **Coverage:**

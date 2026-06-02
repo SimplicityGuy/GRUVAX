@@ -187,7 +187,7 @@ Plans:
 | 6. LED Contract over MQTT | v1.0 | 3/3 | Complete    | 2026-05-31 |
 | 7. Wizards + Import/Export | v1.0 | 3/3 | Complete    | 2026-06-01 |
 | 8. Observability + Deployment Hardening | v1.0 | 3/3 | Complete    | 2026-06-02 |
-| 9. Tooling and Docs Hardening | v1.0 | 3/3 | Complete   | 2026-06-02 |
+| 9. Tooling and Docs Hardening | v1.0 | 4/4 | Complete    | 2026-06-02 |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 11/11 | Complete | 2026-05-27 |
 | 2. Multi-profile migration + profile manager | v2.0 | 11/11 | Complete | 2026-05-28 |
@@ -207,7 +207,7 @@ Plans:
 
 **Goal:** [Captured for future planning]
 **Requirements:** TBD
-**Plans:** 0 plans
+**Plans:** 4/4 plans complete
 
 Post-v1 LED flourishes deferred from Phase 6 (the LED contract). **Party mode** = an
 animated multi-cube color show (button- or schedule-triggered); **sound-reactive mode** =
