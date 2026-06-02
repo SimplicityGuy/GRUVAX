@@ -1,21 +1,38 @@
 ---
-status: partial
+status: testing
 phase: 09-offline-reconnect-ux
 source: [09-VERIFICATION.md]
 started: 2026-06-01T12:00:00Z
-updated: 2026-06-01T12:30:00Z
+updated: 2026-06-02T00:00:00Z
 note: "Gap-closure 09-04 applied — SC4 search now actively invalidated on reconnect; WR-01/WR-02 fixed. Items 4/6/7 below are now 'confirm the fix works live' rather than open decisions."
 ---
 
 ## Current Test
 
-[awaiting human testing]
+number: 1
+name: Offline banner appears on SSE disconnect (SC1)
+expected: |
+  Stop gruvax-api. Within ~15s a blue reversed-palette OfflineBanner appears on the kiosk.
+  Setting navigator.onLine=false while the server is reachable does NOT trigger it.
+awaiting: user response
 
 ## Tests
 
 ### 1. Offline banner appears on SSE disconnect (SC1)
 expected: Blue reversed-palette OfflineBanner renders within ~15s of stopping gruvax-api. A page where `navigator.onLine=false` but the server is reachable shows NO banner (SSE-authoritative, not navigator.onLine).
-result: [pending]
+result: issue
+reported: "Offline banner ('Can't reach GRUVAX — trying to reconnect…') appears on INITIAL load (before stopping anything) and never clears — kiosk permanently bricked into degraded mode while the server is fully reachable."
+severity: blocker
+root_cause: |
+  /api/events/{profile_id} returns 403 device_unknown. Device resolution (deps.py:201-231)
+  prefers the HttpOnly gruvax_device fingerprint cookie over browse-binding; the browser carries
+  a stale fingerprint cookie from earlier pairing tests, but gruvax_dev.devices is empty →
+  device_unknown. EventSource.onerror cannot read the 403 status, so Phase 9 maps it to
+  setSseConnected(false) → offline banner shows and never clears (onopen never fires).
+  Backend verified healthy; SSE connects via curl with browse-binding only (retry: 3347).
+  Two layers: (a) immediate trigger is stale dev-browser fingerprint cookie + empty devices table;
+  (b) real gap — offline banner masks a never-established / device_unknown SSE state instead of
+  routing to pairing (device_revoked is handled; device_unknown and never-connected are not).
 
 ### 2. Degraded mode preserves locate result, disables search (SC2)
 expected: While offline, the shelf grid still shows the previously highlighted cube and RecentlyPulledStrip; SearchBox is greyed, non-focusable, placeholder reads "Search unavailable while offline".
@@ -45,9 +62,17 @@ result: [pending]
 
 total: 7
 passed: 0
-issues: 0
-pending: 7
+issues: 1
+pending: 6
 skipped: 0
 blocked: 0
 
 ## Gaps
+
+- truth: "The OfflineBanner is SSE-authoritative and only signals a genuine lost-after-connected state — it must NOT show during initial bootstrap or when the SSE connection is rejected for an auth/terminal reason (device_unknown / session_unbound), which would mask the true state and brick the kiosk."
+  status: failed
+  reason: "User reported: offline banner stuck on initial load, kiosk unusable. Root cause: /api/events 403 device_unknown (stale fingerprint cookie + empty devices table); EventSource.onerror can't read 403 → Phase 9 treats it as offline. Banner shows before any successful connection and never clears."
+  severity: blocker
+  test: 1
+  artifacts: ["frontend/src/routes/kiosk/KioskView.tsx", "frontend/src/state/store.ts", "src/gruvax/api/deps.py"]
+  missing: ["distinguish never-connected from was-connected-then-dropped before showing banner", "handle device_unknown on SSE like device_revoked (route to /pair) instead of masking as offline"]
