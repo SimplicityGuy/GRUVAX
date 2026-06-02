@@ -56,7 +56,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 - [x] **Phase 7: Member Self-Connect + Collection Diff** — invite-token flow (member pastes own PAT); "N new records" badge after sync; migration 0012 folded in. (completed 2026-06-01)
 - [x] **Phase 8: QR Pairing + Privacy + Recently-Pulled** — QR alongside 4-digit PIN; session-only history; no-PIN kiosk reset; structlog query redaction. (completed 2026-06-01)
 - [x] **Phase 9: Offline + Reconnect UX** — offline banner (SSE-authoritative); degraded mode; auto-reconnect with backoff+jitter; stale-data refresh on reconnect. (completed 2026-06-02)
-- [ ] **Phase 10: Shelf Fill-Overview** — mini-Kallax fill/occupancy in `LocatorHeader`; milestone close.
+- [x] **Phase 10: Shelf Fill-Overview** — mini-Kallax fill/occupancy in `LocatorHeader`; milestone close. (completed 2026-06-02)
 
 ## Phase Details
 
@@ -180,7 +180,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 — needs the LocatorHeader cubes prop + updated AdminCube type)*
 
-- [ ] 10-02-PLAN.md — UX-01 live: new useAdminCubesInvalidation SSE hook in ShelfBinList (invalidate `['admin','cubes']` on collection_changed + boundary_changed) + wire cubes prop to LocatorHeader + SSE tests + full-suite gate + human-verify (D-04; SC2)
+- [x] 10-02-PLAN.md — UX-01 live: new useAdminCubesInvalidation SSE hook in ShelfBinList (invalidate `['admin','cubes']` on collection_changed + boundary_changed) + wire cubes prop to LocatorHeader + SSE tests + full-suite gate + human-verify (D-04; SC2)
 
 **UI hint**: yes
 
@@ -197,7 +197,7 @@ Plans:
 | 7. Wizards + Import/Export | v1.0 | 3/3 | Complete    | 2026-06-01 |
 | 8. Observability + Deployment Hardening | v1.0 | 3/3 | Complete    | 2026-06-02 |
 | 9. Tooling and Docs Hardening | v1.0 | 5/5 | Complete   | 2026-06-02 |
-| 10. Close Milestone Gaps | v1.0 | 1/2 | In Progress|  |
+| 10. Close Milestone Gaps | v1.0 | 2/2 | Complete   | 2026-06-02 |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 11/11 | Complete | 2026-05-27 |
 | 2. Multi-profile migration + profile manager | v2.0 | 11/11 | Complete | 2026-05-28 |
 | 3. Devices + pairing | v2.0 | 7/7 | Complete | 2026-05-29 |
