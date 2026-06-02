@@ -13,7 +13,7 @@
 
 ### Devices & Pairing
 
-- [ ] **DEV-04**: The kiosk pairing screen presents a **QR code alongside** the existing 4-digit PIN. The admin can scan the QR on a phone (opens the bind page prefilled with the current code) **or** type the code — both paths call the same bind endpoint. The QR re-renders when the pairing code auto-rerolls. The QR encodes a bind **URL carrying an opaque short-TTL code**, never a credential.
+- [x] **DEV-04**: The kiosk pairing screen presents a **QR code alongside** the existing 4-digit PIN. The admin can scan the QR on a phone (opens the bind page prefilled with the current code) **or** type the code — both paths call the same bind endpoint. The QR re-renders when the pairing code auto-rerolls. The QR encodes a bind **URL carrying an opaque short-TTL code**, never a credential.
 - [x] **DEV-05**: The kiosk reflects device **switch / revoke live via SSE** — a re-bind or revoke takes effect without a manual reload (closes the v2.0 DEV-02 SSE-immediacy tech debt). On revoke (403 terminal), the kiosk reverts to the profile-picker / pairing screen.
 
 ### Sync & Collection
@@ -22,7 +22,7 @@
 
 ### Search
 
-- [ ] **SRCH-09**: The kiosk keeps a **session-only recently-pulled list** of records recently searched/located, cleared on session end / idle timeout / kiosk reset. No server-side persistence.
+- [x] **SRCH-09**: The kiosk keeps a **session-only recently-pulled list** of records recently searched/located, cleared on session end / idle timeout / kiosk reset. No server-side persistence.
 
 ### Offline & Resilience
 
@@ -33,10 +33,10 @@
 
 ### Privacy
 
-- [ ] **PRIV-01**: Search history is **session-only** (`sessionStorage` / in-memory) and never persists across a kiosk restart; the Zustand `persist` slice explicitly excludes the history.
-- [ ] **PRIV-02**: The server **never persists or logs raw query text** — structlog redacts the `q` field and the uvicorn access-log query string is suppressed. Enforced by a CI test asserting no plaintext query appears in logs. (De-facto met since v1.0 Phase 8; formalized + test-locked here.)
-- [ ] **PRIV-03**: Record statistics are **aggregate-only** (per-`release_id` counters; no per-query `search_log` table). (De-facto met since v1.0 Phase 8; formalized here.)
-- [ ] **PRIV-04**: A **no-PIN "Reset kiosk"** affordance clears the local session **client-side only** (no API call, no device unbind), and is hidden during an active admin session.
+- [x] **PRIV-01**: Search history is **session-only** (`sessionStorage` / in-memory) and never persists across a kiosk restart; the Zustand `persist` slice explicitly excludes the history.
+- [x] **PRIV-02**: The server **never persists or logs raw query text** — structlog redacts the `q` field and the uvicorn access-log query string is suppressed. Enforced by a CI test asserting no plaintext query appears in logs. (De-facto met since v1.0 Phase 8; formalized + test-locked here.)
+- [x] **PRIV-03**: Record statistics are **aggregate-only** (per-`release_id` counters; no per-query `search_log` table). (De-facto met since v1.0 Phase 8; formalized here.)
+- [x] **PRIV-04**: A **no-PIN "Reset kiosk"** affordance clears the local session **client-side only** (no API call, no device unbind), and is hidden during an active admin session.
 
 ### UX Polish
 
@@ -76,12 +76,12 @@
 | DEV-05 | Phase 6 | Complete |
 | AUTH-02 | Phase 7 | Complete |
 | API-04 | Phase 7 | Complete |
-| DEV-04 | Phase 8 | Pending |
-| PRIV-01 | Phase 8 | Pending |
-| PRIV-02 | Phase 8 | Pending |
-| PRIV-03 | Phase 8 | Pending |
-| PRIV-04 | Phase 8 | Pending |
-| SRCH-09 | Phase 8 | Pending |
+| DEV-04 | Phase 8 | Complete |
+| PRIV-01 | Phase 8 | Complete |
+| PRIV-02 | Phase 8 | Complete |
+| PRIV-03 | Phase 8 | Complete |
+| PRIV-04 | Phase 8 | Complete |
+| SRCH-09 | Phase 8 | Complete |
 | OFF-01 | Phase 9 | Pending |
 | OFF-02 | Phase 9 | Pending |
 | OFF-03 | Phase 9 | Pending |

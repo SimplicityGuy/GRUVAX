@@ -1,10 +1,12 @@
 ---
 phase: 08-qr-pairing-privacy-recently-pulled
 verified: 2026-06-01T00:00:00Z
-status: human_needed
+status: passed
 score: 4/4
 overrides_applied: 0
 re_verification: false
+human_verification_status: complete
+human_verification_note: "Resolved via automated Playwright UAT (08-HUMAN-UAT.md) + owner approval 2026-06-01. A blocker (QR pair-screen white-screen, React #130 from react-qr-code CJS interop) was found during UAT and fixed in commit e95a0a3. All 5 behaviors verified; 2 physical confirmations accepted on owner sign-off."
 human_verification:
   - test: "Physical QR scan — full pairing flow"
     expected: |

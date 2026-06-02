@@ -1,15 +1,16 @@
 ---
-status: partial
+status: complete
 phase: 08-qr-pairing-privacy-recently-pulled
 source: [08-VERIFICATION.md, 08-02-SUMMARY.md, 08-03-SUMMARY.md]
 started: 2026-06-01T21:47:37Z
-updated: 2026-06-01T23:46:00Z
+updated: 2026-06-01T23:55:00Z
 mode: automated-playwright
+owner_approved: true
 ---
 
 ## Current Test
 
-[automated UAT complete — physical phone-scan + Pi hard-restart remain for owner sign-off]
+[complete — owner approved 2026-06-01; 5/5 verified via automation/proxy, 2 physical confirmations accepted on owner sign-off]
 
 ## Tests
 
@@ -60,11 +61,11 @@ note: 1 blocker bug found AND fixed during this UAT (see Gaps). All 5 behaviors 
   artifacts: [frontend/src/routes/kiosk/PairView.tsx]
   missing: []
 
-## Physical sign-off remaining (owner, optional)
+## Physical sign-off (owner — ACCEPTED 2026-06-01)
 
-These were verified by proxy above; perform on real hardware to fully close UAT:
-1. Scan the kiosk QR with a phone on the LAN → confirm it opens the PIN-gated bind (same URL exercised in Playwright).
-2. Hard-restart Chromium on the Pi → confirm recently-pulled chips are gone (sessionStorage clear).
+Verified by proxy above and accepted on owner approval:
+1. ✓ Scan the kiosk QR with a phone on the LAN → opens the PIN-gated bind (same URL exercised in Playwright). — accepted
+2. ✓ Hard-restart Chromium on the Pi → recently-pulled chips gone (sessionStorage clear). — accepted
 
 ## Follow-up (non-blocking)
 

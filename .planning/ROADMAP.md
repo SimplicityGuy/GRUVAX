@@ -176,7 +176,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 | 5. Segment-Aware Position Precision | v1.0 | 6/6 | Complete | 2026-05-23 |
 | 6. LED Contract over MQTT | v1.0 | 3/3 | Complete    | 2026-05-31 |
 | 7. Wizards + Import/Export | v1.0 | 3/3 | Complete    | 2026-06-01 |
-| 8. Observability + Deployment Hardening | v1.0 | 3/3 | Complete   | 2026-06-01 |
+| 8. Observability + Deployment Hardening | v1.0 | 3/3 | Complete    | 2026-06-02 |
 | 9. Tooling and Docs Hardening | v1.0 | 6/6 | Complete | 2026-05-25 |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 11/11 | Complete | 2026-05-27 |

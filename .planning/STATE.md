@@ -2,15 +2,16 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Resilience + Privacy + UX polish
-status: executing
-last_updated: "2026-06-01T20:58:13.934Z"
+status: ready_to_plan
+last_updated: 2026-06-02T00:46:47.501Z
 last_activity: 2026-06-01
 progress:
   total_phases: 6
   completed_phases: 2
   total_plans: 9
-  completed_plans: 6
+  completed_plans: 9
   percent: 33
+stopped_at: Phase 08 complete (3/3) — ready to discuss Phase 9
 ---
 
 # State: GRUVAX
@@ -21,7 +22,7 @@ progress:
 
 **Core Value:** Type artist / title / label / catalog# → see the right cube (and a sub-cube position estimate) on the touchscreen within ~200 ms. Everything else is decoration.
 
-**Current Focus:** Phase 08 — qr-pairing-privacy-recently-pulled
+**Current Focus:** Phase 9 — offline + reconnect ux
 
 **Mode:** mvp (vertical slices — every phase delivers an end-to-end user-observable capability)
 
@@ -29,9 +30,9 @@ progress:
 
 ## Current Position
 
-Phase: 08 (qr-pairing-privacy-recently-pulled) — EXECUTING
-Plan: 1 of 3
-Status: Executing Phase 08
+Phase: 9
+Plan: Not started
+Status: Ready to plan
 Last activity: 2026-06-01 -- Phase 08 execution started
 
 ```
@@ -168,7 +169,7 @@ None.
 
 ## Session Continuity
 
-**Last activity:** 2026-06-01
+**Last activity:** 2026-06-02
 **Prev:** 2026-05-30 — v2.0 milestone closed and archived (5 phases, 35 plans; tag v2.0). ROADMAP/REQUIREMENTS/audit archived to `milestones/v2.0-*`; REQUIREMENTS.md removed (fresh for next milestone); PROJECT.md evolved; RETROSPECTIVE.md updated.
 **Prev2:** 2026-05-30 — Phase 5 closure complete — B-01 + B-02 wired; milestone re-audit `gaps_found` → `tech_debt`.
 **Next action:** `/gsd:plan-phase 6`
