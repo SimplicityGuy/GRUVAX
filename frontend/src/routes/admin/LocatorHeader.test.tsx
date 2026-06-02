@@ -85,6 +85,35 @@ describe('LocatorHeader popover (D-05 / D-06)', () => {
     expect(popover?.textContent).toContain('50')
   })
 
+  it('shows the TRUE (unclamped) percentage for an overfull cube, matching the kiosk', () => {
+    // fill_level 2.63 → 263% (the bin holds 250 records in space for ~95).
+    // Must NOT clamp the displayed number to 100% — that would disagree with the
+    // kiosk CubeContentsPanel which shows "263% FULL" for the same cube.
+    const cubes = [makeCube(0, 0, { fill_level: 2.63, record_count: 250 })]
+    const { container } = render(
+      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
+    )
+    const cell = container.querySelector('[data-row="0"][data-col="0"]')!
+    fireEvent.click(cell)
+    const popover = container.querySelector('.locator-fill-popover')
+    expect(popover?.textContent).toContain('250')
+    expect(popover?.textContent).toContain('263%')
+    expect(popover?.textContent).not.toContain('100%')
+    // The shading custom property still clamps to 1 (D-03) — colour never oversaturates.
+    expect(cell).toHaveStyle('--fill: 1')
+  })
+
+  it('caps the displayed percentage at 999% for absurdly overfull cubes', () => {
+    const cubes = [makeCube(0, 0, { fill_level: 42, record_count: 4000 })]
+    const { container } = render(
+      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
+    )
+    const cell = container.querySelector('[data-row="0"][data-col="0"]')!
+    fireEvent.click(cell)
+    const popover = container.querySelector('.locator-fill-popover')
+    expect(popover?.textContent).toContain('999%')
+  })
+
   it('tapping the same cell again dismisses the popover', () => {
     const cubes = [makeCube(0, 0, { fill_level: 0.5 })]
     const { container } = render(

@@ -39,6 +39,20 @@ function binId(unitId: number, r: number, c: number, cols: number): string {
   return `${shelfLetter(unitId)}${r * cols + c + 1}`
 }
 
+/**
+ * True fill percentage for the numeric readout, capped at 999% to avoid layout
+ * blowups on wildly overstuffed cubes. Mirrors the kiosk's `formatFillPct`
+ * (CubeContentsPanel.tsx) so the admin overview and the kiosk agree on the same
+ * cube (e.g. an overfull bin reads "263%", not "100%").
+ *
+ * NOTE: this is intentionally NOT the D-03 clamp. D-03 clamps the `--fill`
+ * *shading* at 1.0 so the colour never oversaturates; the displayed number must
+ * still reflect the real overflow.
+ */
+function fillPct(fillLevel: number): number {
+  return Math.min(Math.round(fillLevel * 100), 999)
+}
+
 /** Popover content for a given cube. */
 function popoverContent(
   cube: AdminCube | undefined,
@@ -52,7 +66,7 @@ function popoverContent(
       </>
     )
   }
-  const pct = Math.round(Math.min(cube.fill_level, 1) * 100)
+  const pct = fillPct(cube.fill_level)
   return (
     <>
       <span className="locator-fill-popover-id">{id}</span>
@@ -157,7 +171,7 @@ export function LocatorHeader({
                 ? 'edited bin'
                 : isEmpty
                   ? 'empty'
-                  : `${Math.round(fillLevel * 100)}% full`
+                  : `${fillPct(cube?.fill_level ?? 0)}% full`
 
               return (
                 <button
