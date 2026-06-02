@@ -55,7 +55,7 @@ Phase numbering CONTINUES from v2.0 (v2.1 starts at Phase 6, the global next int
 - [x] **Phase 6: Safe Boundaries + Live Device Lifecycle** — write_boundary profile-scoped; kiosk reacts to revoke/reassign live via SSE. (completed 2026-05-31)
 - [x] **Phase 7: Member Self-Connect + Collection Diff** — invite-token flow (member pastes own PAT); "N new records" badge after sync; migration 0012 folded in. (completed 2026-06-01)
 - [x] **Phase 8: QR Pairing + Privacy + Recently-Pulled** — QR alongside 4-digit PIN; session-only history; no-PIN kiosk reset; structlog query redaction. (completed 2026-06-01)
-- [ ] **Phase 9: Offline + Reconnect UX** — offline banner (SSE-authoritative); degraded mode; auto-reconnect with backoff+jitter; stale-data refresh on reconnect.
+- [x] **Phase 9: Offline + Reconnect UX** — offline banner (SSE-authoritative); degraded mode; auto-reconnect with backoff+jitter; stale-data refresh on reconnect. (completed 2026-06-02)
 - [ ] **Phase 10: Shelf Fill-Overview** — mini-Kallax fill/occupancy in `LocatorHeader`; milestone close.
 
 ## Phase Details
@@ -157,7 +157,7 @@ Plans:
 
 **Wave 2** *(blocked on Wave 1 completion)*
 
-- [ ] 09-03-PLAN.md — OfflineBanner + degraded mode + reconnect toast [OFF-01, OFF-02, OFF-04]
+- [x] 09-03-PLAN.md — OfflineBanner + degraded mode + reconnect toast [OFF-01, OFF-02, OFF-04]
 
 **UI hint**: yes
 
@@ -187,7 +187,7 @@ Plans:
 | 6. LED Contract over MQTT | v1.0 | 3/3 | Complete    | 2026-05-31 |
 | 7. Wizards + Import/Export | v1.0 | 3/3 | Complete    | 2026-06-01 |
 | 8. Observability + Deployment Hardening | v1.0 | 3/3 | Complete    | 2026-06-02 |
-| 9. Tooling and Docs Hardening | v1.0 | 2/3 | In Progress|  |
+| 9. Tooling and Docs Hardening | v1.0 | 3/3 | Complete   | 2026-06-02 |
 | 10. Close Milestone Gaps | v1.0 | 3/3 | Complete | 2026-05-25 |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 11/11 | Complete | 2026-05-27 |
 | 2. Multi-profile migration + profile manager | v2.0 | 11/11 | Complete | 2026-05-28 |
