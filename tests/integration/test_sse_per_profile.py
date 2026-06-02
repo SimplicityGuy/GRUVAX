@@ -164,6 +164,54 @@ async def test_sse_connects_when_bound(live_server) -> None:  # type: ignore[no-
 
 
 @pytest.mark.asyncio(loop_scope="session")
+async def test_sse_emits_jittered_retry(live_server) -> None:  # type: ignore[no-untyped-def]
+    """GET /api/events/{profile_id} initial SSE frame must carry a retry: directive in [2000, 8000].
+
+    Verifies OFF-03 (PITFALLS 36 anti-thundering-herd): each connected client
+    receives a distinct reconnect interval so ~30 kiosks do not reconnect in
+    lockstep after a server restart.  The value is randomised per connection;
+    this test asserts the contract (range + presence + positive int), not a
+    specific value, and does NOT monkeypatch random.
+    """
+    profile_a = "00000000-0000-0000-0000-000000000001"
+    cookies = {BROWSE_BINDING_COOKIE: profile_a}
+
+    retry_value: int | None = None
+
+    async with (
+        httpx.AsyncClient(base_url=live_server) as ac,
+        ac.stream("GET", f"/api/events/{profile_a}", cookies=cookies) as resp,
+    ):
+        assert resp.status_code == 200, (
+            f"GET /api/events/{profile_a} with bound cookie must return 200, "
+            f"got {resp.status_code}"
+        )
+        # Read up to 10 lines to find the retry: directive in the initial SSE frame.
+        lines_read = 0
+        async for line in resp.aiter_lines():
+            lines_read += 1
+            if line.startswith("retry:"):
+                raw = line[len("retry:"):].strip()
+                assert raw.isdigit(), (
+                    f"retry: field must be a non-negative integer, got {raw!r}"
+                )
+                retry_value = int(raw)
+                break
+            if lines_read >= 10:
+                break  # initial frame should be within the first few lines
+
+    assert retry_value is not None, (
+        "Initial SSE frame must contain a 'retry:' directive (OFF-03 / PITFALLS 36). "
+        "No retry: line found in the first 10 SSE lines."
+    )
+    assert 2000 <= retry_value <= 8000, (
+        f"retry: value {retry_value} is outside the required [2000, 8000] ms window "
+        "(OFF-03 / PITFALLS 36: jitter range 2000-8000 ms). "
+        "Implementation in events.py lines 65-66: random.randint(2000, 8000)."
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
 async def test_no_cross_profile_leakage(live_server) -> None:  # type: ignore[no-untyped-def]
     """Two SSE clients on profiles A and B; event on A's bus must not reach B.
 
