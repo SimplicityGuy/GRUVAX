@@ -167,7 +167,7 @@ beforeEach(() => {
     selectedResult: null,
     query: '',
     highlight: { primaryCube: null },
-    connectivity: { sseConnected: false, lastSeenAt: 0, bannerVisible: false },
+    connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
   })
 
   // Set admin state (not logged in by default)

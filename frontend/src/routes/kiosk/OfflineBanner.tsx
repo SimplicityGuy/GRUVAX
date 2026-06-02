@@ -1,10 +1,15 @@
 /**
- * OfflineBanner — kiosk persistent banner when SSE is disconnected (OFF-01, D-01..D-04).
+ * OfflineBanner — kiosk persistent banner when SSE is offline-confirmed (OFF-01, D-01..D-04).
  *
  * SSE connection state is the authoritative offline trigger — NOT navigator.onLine
- * (PITFALLS 35). navigator.onLine is used only as cosmetic secondary hint for copy:
- *   sseConnected=false + onLine=false → "No network — trying to reconnect…"
- *   sseConnected=false + onLine=true  → "Can't reach GRUVAX — trying to reconnect…"
+ * (PITFALLS 35). Render is gated on bannerVisible (offline-confirmed = !sseConnected AND
+ * everConnected, gap-closure 09-05) so the banner only appears when a connection was
+ * previously established and then lost — never during initial bootstrap or when the very
+ * first SSE connection is rejected (e.g., 403 device_unknown).
+ *
+ * navigator.onLine is used only as cosmetic secondary hint for copy (D-01/D-02):
+ *   bannerVisible + onLine=false → "No network — trying to reconnect…"
+ *   bannerVisible + onLine=true  → "Can't reach GRUVAX — trying to reconnect…"
  *
  * Nordic Grid design contract:
  * - Background: --gruvax-blue (reversed/urgent treatment — distinct from yellow StalenessBar)
@@ -22,7 +27,8 @@ import { useGruvaxStore } from '../../state/store'
 import './OfflineBanner.css'
 
 export function OfflineBanner() {
-  const sseConnected = useGruvaxStore((s) => s.connectivity.sseConnected)
+  // offline-confirmed: true only when was-connected-then-lost (gap-closure 09-05)
+  const bannerVisible = useGruvaxStore((s) => s.connectivity.bannerVisible)
   const [isOnline, setIsOnline] = useState(navigator.onLine)
 
   useEffect(() => {
@@ -36,8 +42,8 @@ export function OfflineBanner() {
     }
   }, [])
 
-  // Hidden when SSE is connected — the authoritative offline signal (PITFALLS 35)
-  if (sseConnected) return null
+  // Hidden unless offline-confirmed — never shows on bootstrap or auth-rejected state (PITFALLS 35)
+  if (!bannerVisible) return null
 
   // Select copy by navigator.onLine as cosmetic secondary hint only (D-01/D-02)
   const copy = isOnline

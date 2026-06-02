@@ -6,6 +6,8 @@
  *   - clearShimmerCubes: removes matching cubes; leaves others intact (D-03 primary on-commit clear)
  *   - setSseConnected: updates sseConnected; stamps lastSeenAt on connect; leaves it unchanged on disconnect
  *   - shimmerExpiresAt math (the 60s client TTL safety validated against the store directly)
+ *   - offline-confirmed contract (gap-closure 09-05): bannerVisible = !sseConnected AND everConnected.
+ *     Never-connected → bannerVisible false; connect→disconnect → true; reconnect → false.
  */
 import { beforeEach, describe, expect, it, vi, afterEach } from 'vitest'
 import { useGruvaxStore } from './store'
@@ -22,7 +24,7 @@ function resetStore() {
     subCubeInterval: null,
     confidence: 0,
     animationToken: 0,
-    connectivity: { sseConnected: false, lastSeenAt: 0, bannerVisible: false },
+    connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
     shimmerCubes: [],
     shimmerExpiresAt: 0,
   })
@@ -139,20 +141,70 @@ describe('store.connectivity – SSE connection state (D-10)', () => {
     const { connectivity } = useGruvaxStore.getState()
     expect(connectivity.sseConnected).toBe(false)
     expect(connectivity.lastSeenAt).toBe(0)
+    expect(connectivity.everConnected).toBe(false)
     expect(connectivity.bannerVisible).toBe(false)
   })
 
-  // OFF-01 / D-01: bannerVisible derives from !sseConnected
-  it('setSseConnected(false) sets bannerVisible to true', () => {
+  // ── gap-closure 09-05: offline-confirmed contract ─────────────────────────
+  // bannerVisible = !sseConnected AND everConnected — never just !sseConnected.
+
+  // Never-connected: a bare setSseConnected(false) with no prior onopen must NOT
+  // show the banner (boot state / 403 device_unknown / bootstrap error).
+  it('never-connected: setSseConnected(false) with no prior connect → bannerVisible false', () => {
     useGruvaxStore.getState().setSseConnected(false)
     const { connectivity } = useGruvaxStore.getState()
+    expect(connectivity.sseConnected).toBe(false)
+    expect(connectivity.everConnected).toBe(false)
+    expect(connectivity.bannerVisible).toBe(false)
+  })
+
+  // First connect: setSseConnected(true) → sseConnected true, everConnected true, banner false.
+  it('setSseConnected(true) → sseConnected true, everConnected true, bannerVisible false', () => {
+    useGruvaxStore.getState().setSseConnected(true)
+    const { connectivity } = useGruvaxStore.getState()
+    expect(connectivity.sseConnected).toBe(true)
+    expect(connectivity.everConnected).toBe(true)
+    expect(connectivity.bannerVisible).toBe(false)
+  })
+
+  // Lost-after-connect: setSseConnected(true) then setSseConnected(false) → bannerVisible true.
+  // This is the only legitimate "offline" state (SC1).
+  it('connect then disconnect → bannerVisible true (offline-confirmed)', () => {
+    useGruvaxStore.getState().setSseConnected(true)
+    useGruvaxStore.getState().setSseConnected(false)
+    const { connectivity } = useGruvaxStore.getState()
+    expect(connectivity.sseConnected).toBe(false)
+    expect(connectivity.everConnected).toBe(true)
     expect(connectivity.bannerVisible).toBe(true)
+  })
+
+  // Reconnect: setSseConnected(true) after offline → bannerVisible false; everConnected stays true (SC3).
+  it('reconnect after offline → bannerVisible false, everConnected still true (SC3)', () => {
+    useGruvaxStore.getState().setSseConnected(true)
+    useGruvaxStore.getState().setSseConnected(false)
+    useGruvaxStore.getState().setSseConnected(true)
+    const { connectivity } = useGruvaxStore.getState()
+    expect(connectivity.sseConnected).toBe(true)
+    expect(connectivity.everConnected).toBe(true)
+    expect(connectivity.bannerVisible).toBe(false)
+  })
+
+  // everConnected is a one-way latch: once true it never reverts to false.
+  it('everConnected stays true after subsequent disconnect/reconnect cycles', () => {
+    useGruvaxStore.getState().setSseConnected(true)
+    useGruvaxStore.getState().setSseConnected(false)
+    expect(useGruvaxStore.getState().connectivity.everConnected).toBe(true)
+    useGruvaxStore.getState().setSseConnected(true)
+    expect(useGruvaxStore.getState().connectivity.everConnected).toBe(true)
+    useGruvaxStore.getState().setSseConnected(false)
+    expect(useGruvaxStore.getState().connectivity.everConnected).toBe(true)
   })
 
   it('setSseConnected(true) sets bannerVisible to false', () => {
     // First disconnect so bannerVisible is true, then reconnect
-    useGruvaxStore.getState().setSseConnected(false)
-    useGruvaxStore.getState().setSseConnected(true)
+    useGruvaxStore.getState().setSseConnected(true)  // establish connection
+    useGruvaxStore.getState().setSseConnected(false) // lose it
+    useGruvaxStore.getState().setSseConnected(true)  // reconnect
     const { connectivity } = useGruvaxStore.getState()
     expect(connectivity.bannerVisible).toBe(false)
   })

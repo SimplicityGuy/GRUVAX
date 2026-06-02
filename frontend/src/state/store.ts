@@ -14,12 +14,27 @@ export interface ShimmerCube {
 
 /**
  * SSE connectivity state (Phase 4 / D-10).
- * bannerVisible tracks !sseConnected — true when disconnected (OFF-01, D-01).
+ * bannerVisible = !sseConnected AND everConnected (offline-confirmed — OFF-01, D-01).
+ * Refined in gap-closure 09-05: bannerVisible is only true when a connection was
+ * previously established and then LOST, never during initial bootstrap or when the
+ * very first SSE connection is rejected (e.g., 403 device_unknown). This prevents
+ * the banner from masking a never-connected / terminal state and bricking the kiosk.
  * Activated in Phase 9 (was a stub literal `false` in prior phases).
  */
 interface ConnectivityState {
   sseConnected: boolean
   lastSeenAt: number
+  /**
+   * True after the first successful SSE onopen; gates bannerVisible so the banner
+   * only ever reflects a lost-after-connected state — never a never-connected /
+   * bootstrap / auth-rejected one (gap-closure 09-05).
+   */
+  everConnected: boolean
+  /**
+   * True when offline-confirmed: sseConnected is false AND everConnected is true.
+   * "offline-confirmed" means a connection was previously established and then lost —
+   * it is NOT true on initial bootstrap or when the first SSE connection is rejected.
+   */
   bannerVisible: boolean
 }
 
@@ -163,19 +178,26 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
 
   // ── Phase 4: SSE connectivity + shimmer ─────────────────────────────────
 
-  connectivity: { sseConnected: false, lastSeenAt: 0, bannerVisible: false },
+  connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
 
   setSseConnected: (connected) =>
-    set((s) => ({
-      connectivity: {
-        ...s.connectivity,
-        sseConnected: connected,
-        // Stamp lastSeenAt only when transitioning to connected (D-10)
-        lastSeenAt: connected ? Date.now() : s.connectivity.lastSeenAt,
-        // Banner shows when disconnected — derives from !connected (OFF-01, D-01)
-        bannerVisible: !connected,
-      },
-    })),
+    set((s) => {
+      // everConnected is a one-way latch: once true, stays true for the session.
+      // It becomes true on the first successful SSE onopen (connected=true).
+      const everConnected = s.connectivity.everConnected || connected
+      return {
+        connectivity: {
+          ...s.connectivity,
+          sseConnected: connected,
+          everConnected,
+          // Stamp lastSeenAt only when transitioning to connected (D-10)
+          lastSeenAt: connected ? Date.now() : s.connectivity.lastSeenAt,
+          // offline-confirmed: banner only when was-connected-then-lost (gap-closure 09-05).
+          // Never true during initial bootstrap or when the first connection is rejected.
+          bannerVisible: !connected && everConnected,
+        },
+      }
+    }),
 
   shimmerCubes: [],
   shimmerExpiresAt: 0,

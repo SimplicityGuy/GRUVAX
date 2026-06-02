@@ -31,7 +31,7 @@ function resetStore() {
     confidence: 0,
     animationToken: 0,
     shelfLayoutUnavailable: false,
-    connectivity: { sseConnected: false, lastSeenAt: 0, bannerVisible: false },
+    connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
     shimmerCubes: [],
     shimmerExpiresAt: 0,
   })

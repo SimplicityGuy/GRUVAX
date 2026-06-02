@@ -51,8 +51,11 @@ export function KioskView() {
   const shimmerExpiresAt = useGruvaxStore((s) => s.shimmerExpiresAt)
   // Phase 2 / D2-04: session store for bound profile
   const boundProfileId = useSessionStore((s) => s.boundProfileId)
-  // Phase 9 / OFF-01: SSE connectivity state — drives offline banner + degraded-mode gating
+  // Phase 9 / OFF-01: SSE connectivity state — drives show-when-connected secondary UI
   const sseConnected = useGruvaxStore((s) => s.connectivity.sseConnected)
+  // gap-closure 09-05: offline-confirmed = !sseConnected AND everConnected — drives banner + degraded-mode.
+  // Never true on bootstrap or when the first SSE connection is rejected (device_unknown).
+  const bannerVisible = useGruvaxStore((s) => s.connectivity.bannerVisible)
   // Phase 8 / PRIV-04 / D-10: admin login state — Reset button hidden when logged in
   const isLoggedIn = useAdminStore((s) => s.isLoggedIn)
   // Phase 8 / PRIV-04 / D-11: Reset confirm dialog visibility
@@ -329,13 +332,11 @@ export function KioskView() {
     const es = new EventSource(`/api/events/${currentProfileId}`)
 
     es.onopen = () => {
-      // Phase 9 / OFF-04 / D-07 / Blocker 1: detect offline→online transition BEFORE
-      // flipping connection. Read bannerVisible (NOT !sseConnected): sseConnected starts
-      // false in the initial store state, so !sseConnected would be true on the very first
-      // onopen of a fresh page load and fire the toast spuriously. bannerVisible starts false
-      // and only becomes true after a real disconnect (setSseConnected(false) from onerror /
-      // server_shutdown), so it is false on first-ever onopen (no toast) and true only on a
-      // genuine reconnect (toast fires) — per D-07. Uses .getState() to avoid stale closure (Pitfall 5).
+      // Phase 9 / OFF-04 / D-07 / gap-closure 09-05: detect offline→online transition BEFORE
+      // flipping connection. Read bannerVisible (offline-confirmed: !sseConnected AND everConnected).
+      // bannerVisible is false on first-ever onopen (no toast — never-connected is not "offline"),
+      // and true only on a genuine reconnect after a real drop (toast fires) — per D-07.
+      // Uses .getState() to avoid stale closure (Pitfall 5).
       const wasOffline = useGruvaxStore.getState().connectivity.bannerVisible
       useGruvaxStore.getState().setSseConnected(true)  // also clears bannerVisible → false
       resync()
@@ -662,7 +663,7 @@ export function KioskView() {
             onDebouncedQuery={setDebouncedQuery}
             isLoading={showLoading}
             hasError={hasSearchError}
-            isOffline={!sseConnected}
+            isOffline={bannerVisible}
           />
           {/* D2-03: EmptyCollectionState replaces results area for unsynced profiles */}
           {isEmptyCollection ? (
@@ -702,10 +703,11 @@ export function KioskView() {
           </div>
         )}
 
-        {/* Phase 9 / OFF-01 / D-03/D-04: offline banner — top-priority SSE-authoritative signal.
-            Takes the top slot when SSE is disconnected. Suppresses other transient banners
-            while offline (D-04). Not dismissible — clears on reconnect. */}
-        {!sseConnected && <OfflineBanner />}
+        {/* Phase 9 / OFF-01 / D-03/D-04 / gap-closure 09-05: offline banner — top-priority.
+            Rendered only when offline-confirmed (bannerVisible = !sseConnected AND everConnected).
+            Never shown during initial bootstrap or when the first SSE connection is rejected.
+            Suppresses other transient banners while offline (D-04). Not dismissible — clears on reconnect. */}
+        {bannerVisible && <OfflineBanner />}
 
         {/* Staleness banner (OBS-06, D-01) — above the grid, never overlaying it.
             Phase 9 / D-04: only rendered when online (health data unavailable offline anyway).
@@ -750,7 +752,7 @@ export function KioskView() {
                 subCubeInterval={subCubeInterval}
                 confidence={confidence}
                 fillLevels={fillLevels}
-                onCubeTap={sseConnected ? setTappedCube : undefined}
+                onCubeTap={!bannerVisible ? setTappedCube : undefined}
                 shimmerCubes={shimmerSet}
               />
             </div>
@@ -771,7 +773,7 @@ export function KioskView() {
                     subCubeInterval={subCubeInterval}
                     confidence={confidence}
                     fillLevels={fillLevels}
-                    onCubeTap={sseConnected ? setTappedCube : undefined}
+                    onCubeTap={!bannerVisible ? setTappedCube : undefined}
                     shimmerCubes={shimmerSet}
                   />
                 </div>
