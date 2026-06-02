@@ -3,7 +3,8 @@ status: partial
 phase: 09-offline-reconnect-ux
 source: [09-VERIFICATION.md]
 started: 2026-06-01T12:00:00Z
-updated: 2026-06-01T12:00:00Z
+updated: 2026-06-01T12:30:00Z
+note: "Gap-closure 09-04 applied — SC4 search now actively invalidated on reconnect; WR-01/WR-02 fixed. Items 4/6/7 below are now 'confirm the fix works live' rather than open decisions."
 ---
 
 ## Current Test
@@ -24,8 +25,8 @@ result: [pending]
 expected: Restarting gruvax-api clears the banner, shows a brief "Back online" SyncToast (auto-dismiss ~4s), and search re-enables with the normal placeholder.
 result: [pending]
 
-### 4. SC4 — stale search data after >30s outage
-expected: After a reconnect following an outage >30s, typing the same query produces a fresh result (staleTime=30s passive expiry). NOTE: resync() does NOT actively invalidate ['search'] — intentional per CONTEXT.md D-73/74. Human judgment required on whether passive stale-handling satisfies ROADMAP SC4 ("stale search...is refreshed").
+### 4. SC4 — search refreshed on reconnect (RESOLVED in code, confirm live)
+expected: After a reconnect (server restart or onopen following a disconnect), the previous search re-fetches fresh results without requiring a keystroke. resync() now actively calls invalidateQueries({queryKey:['search']}) (gap-closure 09-04, user decision) — confirm stale pre-outage results are not shown.
 result: [pending]
 
 ### 5. SC4 — dismissed diff badge stays dismissed across reconnect

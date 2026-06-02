@@ -1,10 +1,12 @@
 ---
 phase: 09-offline-reconnect-ux
 verified: 2026-06-01T12:00:00Z
+reverified: 2026-06-01T12:30:00Z
 status: human_needed
-score: 3/4 must-haves verified
+score: 4/4 must-haves structurally verified (SC1/SC3 live timing pending UAT)
 overrides_applied: 0
 gaps: []
+reverification_note: "Gap-closure plan 09-04 applied (commits 6742cd6, 8bc2bf7, ecfdf12). SC4 now actively invalidates ['search'] in resync() — search is refreshed on reconnect/server_hello, satisfying ROADMAP SC4 literally (user decision). WR-01 fixed (stable useCallback onDismiss) and WR-02 fixed (toast cleared in es.onerror + server_shutdown). Frontend build clean, 124/124 tests green. Status remains human_needed ONLY for live-kiosk timing confirmation of SC1 (banner within ~15s) and SC3 (clear within 30s) — not automatable."
 human_verification:
   - test: "Stop gruvax-api and observe that the offline banner appears within one SSE ping interval (~15–20s). Confirm the banner is driven by SSE disconnect, not navigator.onLine."
     expected: "Blue reversed-palette OfflineBanner renders within ~15s of API stoppage. Navigating to a page with navigator.onLine=false but server reachable shows NO banner."
