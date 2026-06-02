@@ -61,11 +61,19 @@ export function PairView() {
   // so the countdown renders immediately after fetch resolves.
   const [pairingCode, setPairingCode] = useState<PairingCodeData | null>(null)
   const [isCodeFetching, setIsCodeFetching] = useState(false)
+  // WR-05: ref mirror so fetchNewCode (empty deps) always reads the current in-flight state
+  const isFetchingRef = useRef(false)
   const fetchAbortRef = useRef<AbortController | null>(null)
 
   // Countdown state
   const [remainingMs, setRemainingMs] = useState<number | null>(null)
   const [pairStatus, setPairStatus] = useState<PairStatus>('loading')
+  // CR-01: ref mirror so setInterval closure always reads current status, not a stale capture
+  const pairStatusRef = useRef<PairStatus>('loading')
+  const updatePairStatus = useCallback((s: PairStatus) => {
+    pairStatusRef.current = s
+    setPairStatus(s)
+  }, [])
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Guard: track whether reroll has been triggered to avoid double-firing
   const rerollTriggeredRef = useRef(false)
@@ -90,7 +98,9 @@ export function PairView() {
 
   // ── Pairing code fetcher ─────────────────────────────────────────────────
   const fetchNewCode = useCallback(async () => {
-    if (isCodeFetching) return
+    // WR-05: use ref guard (not isCodeFetching state) — empty-deps callback always reads current value
+    if (isFetchingRef.current) return
+    isFetchingRef.current = true
     // Cancel any in-flight fetch
     fetchAbortRef.current?.abort()
     const controller = new AbortController()
@@ -108,6 +118,7 @@ export function PairView() {
     } catch {
       // Fetch failed or aborted — degrade gracefully (keep old code displayed)
     } finally {
+      isFetchingRef.current = false
       setIsCodeFetching(false)
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -144,7 +155,7 @@ export function PairView() {
     // eslint-disable-next-line react-hooks/set-state-in-effect -- countdown initial value derived from server-authoritative expires_at; no other place to set this than the effect that starts the interval
     setRemainingMs(clampedInitial)
 
-    setPairStatus(clampedInitial <= 60_000 ? 'expiring' : 'active')
+    updatePairStatus(clampedInitial <= 60_000 ? 'expiring' : 'active')
 
     countdownIntervalRef.current = setInterval(() => {
       const rem = computeRemaining()
@@ -163,13 +174,14 @@ export function PairView() {
         }
       }
 
-      if (clamped <= 60_000 && pairStatus !== 'expired' && pairStatus !== 'paired') {
-        setPairStatus('expiring')
+      // CR-01: read pairStatusRef (always current) instead of captured pairStatus
+      if (clamped <= 60_000 && pairStatusRef.current !== 'expired' && pairStatusRef.current !== 'paired') {
+        updatePairStatus('expiring')
       }
 
       if (clamped <= 0 && !rerollTriggeredRef.current) {
         rerollTriggeredRef.current = true
-        setPairStatus('expired')
+        updatePairStatus('expired')
         // Auto-reroll: fetch a new code
         void fetchNewCode()
       }
@@ -180,9 +192,8 @@ export function PairView() {
         clearInterval(countdownIntervalRef.current)
       }
     }
-    // pairStatus is intentionally omitted — we only restart on new code
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [pairingCode?.expires_at, fetchNewCode])
+  }, [pairingCode?.expires_at, fetchNewCode, updatePairStatus])
 
   // ── Device-state poll ────────────────────────────────────────────────────
   const { data: deviceState } = useQuery({
@@ -199,7 +210,7 @@ export function PairView() {
   const handlePaired = useCallback(() => {
     if (pairedHandledRef.current) return
     pairedHandledRef.current = true
-    setPairStatus('paired')
+    updatePairStatus('paired')
     // Stop countdown
     if (countdownIntervalRef.current) {
       clearInterval(countdownIntervalRef.current)
@@ -208,7 +219,7 @@ export function PairView() {
     setTimeout(() => {
       void navigate('/', { replace: true })
     }, 800)
-  }, [navigate])
+  }, [navigate, updatePairStatus])
 
   useEffect(() => {
     if (deviceState?.state === 'paired') {
