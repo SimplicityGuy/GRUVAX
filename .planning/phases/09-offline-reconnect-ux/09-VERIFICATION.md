@@ -1,12 +1,12 @@
 ---
 phase: 09-offline-reconnect-ux
 verified: 2026-06-01T12:00:00Z
-reverified: 2026-06-01T12:30:00Z
-status: human_needed
-score: 4/4 must-haves structurally verified (SC1/SC3 live timing pending UAT)
+reverified: 2026-06-02T19:30:00Z
+status: verified
+score: 4/4 must-haves verified (structural + live UAT)
 overrides_applied: 0
 gaps: []
-reverification_note: "Gap-closure plan 09-04 applied (commits 6742cd6, 8bc2bf7, ecfdf12). SC4 now actively invalidates ['search'] in resync() — search is refreshed on reconnect/server_hello, satisfying ROADMAP SC4 literally (user decision). WR-01 fixed (stable useCallback onDismiss) and WR-02 fixed (toast cleared in es.onerror + server_shutdown). Frontend build clean, 124/124 tests green. Status remains human_needed ONLY for live-kiosk timing confirmation of SC1 (banner within ~15s) and SC3 (clear within 30s) — not automatable."
+reverification_note: "Gap-closure plan 09-04 applied (commits 6742cd6, 8bc2bf7, ecfdf12). SC4 now actively invalidates ['search'] in resync() — search is refreshed on reconnect/server_hello, satisfying ROADMAP SC4 literally (user decision). WR-01 fixed (stable useCallback onDismiss) and WR-02 fixed (toast cleared in es.onerror + server_shutdown). Frontend build clean, 124/124 tests green. 2026-06-02: ALL human_verification items below confirmed LIVE — see 09-HUMAN-UAT.md (7/7 pass, 0 issues). SC1 banner ~1s, SC2 degraded mode, SC3 reconnect clear + toast auto-dismiss ~2.2s, SC4 stale-search invalidation + diff-pill suppress/return/clear, WR-01 toast auto-dismiss, WR-02 no banner+toast coexistence across 3 recorded reconnect cycles. Tests 5 & 7 driven against a local uvicorn + the shipped fake-discogsography (real collection_changed events). Two non-blocking design clarifications recorded in the UAT (pill has no manual-dismiss affordance by D-08; local SSE drop-detection ~7s > 4s toast so an in-toast disconnect can't be photographed locally, which itself precludes the dual-banner failure). Status → verified."
 human_verification:
   - test: "Stop gruvax-api and observe that the offline banner appears within one SSE ping interval (~15–20s). Confirm the banner is driven by SSE disconnect, not navigator.onLine."
     expected: "Blue reversed-palette OfflineBanner renders within ~15s of API stoppage. Navigating to a page with navigator.onLine=false but server reachable shows NO banner."
@@ -34,9 +34,9 @@ human_verification:
 # Phase 9: Offline + Reconnect UX — Verification Report
 
 **Phase Goal:** When the GRUVAX server is unreachable the kiosk shows a clear offline banner (driven by SSE state, not `navigator.onLine`), preserves the last locate result, then auto-reconnects with backoff and refreshes stale data on success.
-**Verified:** 2026-06-01
-**Status:** human_needed
-**Re-verification:** No — initial verification
+**Verified:** 2026-06-01 (structural); 2026-06-02 (live UAT, all human items confirmed)
+**Status:** verified
+**Re-verification:** Yes — live UAT closed all 7 human_verification items (see 09-HUMAN-UAT.md, 7/7 pass)
 
 ## Goal Achievement
 
