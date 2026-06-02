@@ -46,7 +46,12 @@ tokens.
 **Grid cell size (fixed by token):** `--gruvax-cell-size-sm` = 28px. The mini-Kallax
 renders at this size; no change to cell dimensions.
 
-Exceptions: none.
+**Exceptions:** `--gruvax-space-3` (12px) falls outside the standard 8-point set
+{4, 8, 16, 24, 32, 48, 64}. It is **not invented for this phase** — it is a pre-existing
+project design token defined in `design/gruvax-design-tokens.css` and already used by the
+existing `.locator-header` padding (admin.css line 1615). Reusing it for the popover's
+vertical padding keeps the popover visually consistent with the locator header it lives
+inside, rather than introducing a competing value. Accepted as a project-token exception.
 
 ---
 
@@ -55,10 +60,15 @@ Exceptions: none.
 Three roles are active in this phase. The existing `.locator-header-shelf` / `.locator-header-bin`
 labels carry over unchanged; only the popover introduces new text.
 
+Exactly **two font weights** are declared: 400 (DM Mono popover text + Space Grotesk empty
+state) and 700 (Barlow Condensed locator label). Within the popover, the bin ID and the data
+line share weight 400 and are distinguished **by color only** — `--gruvax-text-primary`
+(blue) for the bin ID versus `--gruvax-text-secondary` (gray) for the data line.
+
 | Role | Font | Size | Weight | Line Height | Token |
 |------|------|------|--------|-------------|-------|
 | Locator label ("SHELF A") | Barlow Condensed | 16px | 700 | 1.1 | `--gruvax-text-display-sm`, `--gruvax-leading-tight` |
-| Popover bin ID ("A1") | DM Mono | 14px | 500 | 1.5 | `--gruvax-text-mono`, `--gruvax-leading-normal` |
+| Popover bin ID ("A1") | DM Mono | 14px | 400 | 1.5 | `--gruvax-text-mono`, `--gruvax-leading-normal` |
 | Popover data line ("47 records · 78%") | DM Mono | 14px | 400 | 1.5 | `--gruvax-text-mono`, `--gruvax-leading-normal` |
 | Popover empty state ("Empty bin") | Space Grotesk | 12px | 400 | 1.5 | `--gruvax-text-caption`, `--gruvax-leading-normal` |
 
@@ -153,6 +163,21 @@ file, and design language accessibility constraints.
 
 ---
 
+## Visuals
+
+**Primary visual anchor:** the filled mini-Kallax grid — the degree of blue saturation
+across the 16 cells is what the user reads first. Each cell's saturation encodes its bin's
+occupancy, so the grid as a whole reads as an at-a-glance "fill heatmap" of the shelf. The
+popover is strictly supplemental detail revealed on tap; it never competes with the grid for
+the focal point.
+
+Visual hierarchy (most → least prominent):
+1. The 4×4 saturation gradient across the mini-Kallax cells (the anchor).
+2. The "SHELF A" Barlow Condensed label above the grid (context).
+3. The tap-revealed popover (on-demand precise count, transient).
+
+---
+
 ## Component Inventory
 
 ### Modified: `LocatorHeader.tsx`
@@ -228,7 +253,7 @@ highlight the edited bin yellow. Renders `.locator-cell--lit` (yellow) or `.loca
 .locator-fill-popover-id {
   font-family: var(--gruvax-font-mono);
   font-size: var(--gruvax-text-mono);
-  font-weight: 500;
+  font-weight: 400;
   color: var(--gruvax-text-primary);
   line-height: var(--gruvax-leading-normal);
 }
