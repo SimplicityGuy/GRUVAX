@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import gsap from 'gsap'
 import { RotateCcw } from 'lucide-react'
@@ -61,6 +61,9 @@ export function KioskView() {
   const [showBackOnlineToast, setShowBackOnlineToast] = useState(false)
   const profiles = useSessionStore((s) => s.profiles)
   const queryClient = useQueryClient()
+  // WR-01 (gap-closure 09-04): stable dismiss callback — prevents SyncToast 4s auto-dismiss
+  // timer from being re-armed by re-renders that would create a new inline arrow each time.
+  const handleBackOnlineDismiss = useCallback(() => setShowBackOnlineToast(false), [])
   const [debouncedQuery, setDebouncedQuery] = useState('')
   // Cube-tap state for the contents panel (CUBE-09, D-14)
   const [tappedCube, setTappedCube] = useState<CubeRef | null>(null)
@@ -345,6 +348,9 @@ export function KioskView() {
     es.onerror = () => {
       // Mark disconnected — EventSource auto-reconnects; do NOT call es.close() (Pitfall 4)
       useGruvaxStore.getState().setSseConnected(false)
+      // WR-02 (gap-closure 09-04): clear "Back online" toast on disconnect so the
+      // OfflineBanner and the toast are never visible simultaneously on a flaky LAN.
+      setShowBackOnlineToast(false)
     }
 
     // boundary_changed: admin edit committed → re-render affected cubes (D-04, D-03)
@@ -404,6 +410,9 @@ export function KioskView() {
     // server_shutdown: server going down → mark disconnected (auto-reconnect handles it)
     es.addEventListener('server_shutdown', () => {
       useGruvaxStore.getState().setSseConnected(false)
+      // WR-02 (gap-closure 09-04): clear "Back online" toast on server shutdown so the
+      // OfflineBanner and the toast are never visible simultaneously on a flaky LAN.
+      setShowBackOnlineToast(false)
     })
 
     // collection_changed: nightly/manual sync completed → invalidate search results + resync
@@ -787,7 +796,7 @@ export function KioskView() {
       {showBackOnlineToast && (
         <SyncToast
           message="Back online"
-          onDismiss={() => setShowBackOnlineToast(false)}
+          onDismiss={handleBackOnlineDismiss}
         />
       )}
 
