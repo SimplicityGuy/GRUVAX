@@ -26,6 +26,8 @@ const queryClient = new QueryClient({
     queries: {
       retry: 1,
       refetchOnWindowFocus: false,
+      networkMode: 'always', // OFF-03/D8: do not pause on navigator.onLine=false (PITFALLS 35/36)
+                             // SSE-derived sseConnected is the authoritative offline signal
     },
   },
 });
