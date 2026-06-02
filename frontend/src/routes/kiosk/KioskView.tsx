@@ -304,6 +304,12 @@ export function KioskView() {
       // admin optimistic update if the same SPA ever shares this consumer.
       void queryClient.invalidateQueries({ queryKey: ['units'] })
       void queryClient.invalidateQueries({ queryKey: ['cubes'] })
+      // ROADMAP SC4 (user decision 2026-06-01): actively invalidate ['search'] on every
+      // reconnect (onopen / server_hello) so stale search results are flushed immediately,
+      // not left to passive staleTime expiry. Supersedes the D-73/D-74 passive-staleTime
+      // approach documented in CONTEXT.md — the active invalidation is the correct
+      // implementation of "stale search data is refreshed on server_hello".
+      void queryClient.invalidateQueries({ queryKey: ['search'] })
       // D-05 + D-11: if a selection is active, re-locate it after reconnect
       // so the highlight reflects the boundary that may have changed while disconnected.
       relocateActiveSelection()
