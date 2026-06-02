@@ -17,6 +17,7 @@ from __future__ import annotations
 import asyncio
 import json
 import logging
+import random
 from typing import TYPE_CHECKING
 
 from fastapi import APIRouter, Depends, Request
@@ -58,10 +59,11 @@ async def stream_events(
     async def generator() -> AsyncIterator[ServerSentEvent]:
         q = bus.subscribe()
         try:
-            # Yield an SSE comment immediately so headers flush to the client
-            # before the first real event arrives (Pitfall 8: proxy buffering).
-            # sse-starlette forwards comment-only ServerSentEvent as ": ...\n\n".
-            yield ServerSentEvent(comment="connected")
+            # Yield comment + retry directive immediately so headers flush and
+            # client gets its jittered reconnect interval before the first real event.
+            # retry: field spreads reconnects over 2–8s window (PITFALLS 36 prevention).
+            retry_ms = random.randint(2000, 8000)
+            yield ServerSentEvent(comment="connected", retry=retry_ms)
             while True:
                 if await request.is_disconnected():
                     break
