@@ -3,7 +3,7 @@ gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Resilience + Privacy + UX polish
 status: planning
-last_updated: "2026-06-02T20:03:28.141Z"
+last_updated: "2026-06-02T20:13:20.557Z"
 last_activity: 2026-06-02
 progress:
   total_phases: 6
