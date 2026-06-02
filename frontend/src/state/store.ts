@@ -14,13 +14,13 @@ export interface ShimmerCube {
 
 /**
  * SSE connectivity state (Phase 4 / D-10).
- * bannerVisible is a stub for the deferred Offline-Banner slice (Plan 04);
- * set false always this phase.
+ * bannerVisible tracks !sseConnected — true when disconnected (OFF-01, D-01).
+ * Activated in Phase 9 (was a stub literal `false` in prior phases).
  */
 interface ConnectivityState {
   sseConnected: boolean
   lastSeenAt: number
-  bannerVisible: false
+  bannerVisible: boolean
 }
 
 interface GruvaxStore {
@@ -172,6 +172,8 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
         sseConnected: connected,
         // Stamp lastSeenAt only when transitioning to connected (D-10)
         lastSeenAt: connected ? Date.now() : s.connectivity.lastSeenAt,
+        // Banner shows when disconnected — derives from !connected (OFF-01, D-01)
+        bannerVisible: !connected,
       },
     })),
 

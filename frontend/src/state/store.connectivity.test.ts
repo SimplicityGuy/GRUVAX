@@ -141,4 +141,45 @@ describe('store.connectivity – SSE connection state (D-10)', () => {
     expect(connectivity.lastSeenAt).toBe(0)
     expect(connectivity.bannerVisible).toBe(false)
   })
+
+  // OFF-01 / D-01: bannerVisible derives from !sseConnected
+  it('setSseConnected(false) sets bannerVisible to true', () => {
+    useGruvaxStore.getState().setSseConnected(false)
+    const { connectivity } = useGruvaxStore.getState()
+    expect(connectivity.bannerVisible).toBe(true)
+  })
+
+  it('setSseConnected(true) sets bannerVisible to false', () => {
+    // First disconnect so bannerVisible is true, then reconnect
+    useGruvaxStore.getState().setSseConnected(false)
+    useGruvaxStore.getState().setSseConnected(true)
+    const { connectivity } = useGruvaxStore.getState()
+    expect(connectivity.bannerVisible).toBe(false)
+  })
+
+  it('setSseConnected(true) still updates sseConnected and bumps lastSeenAt', () => {
+    const now = 1_700_000_001_000
+    vi.setSystemTime(now)
+    useGruvaxStore.getState().setSseConnected(true)
+    const { connectivity } = useGruvaxStore.getState()
+    expect(connectivity.sseConnected).toBe(true)
+    expect(connectivity.lastSeenAt).toBeGreaterThanOrEqual(now - 100)
+    expect(connectivity.lastSeenAt).toBeLessThanOrEqual(now + 100)
+  })
+
+  it('setSseConnected(false) preserves the previous lastSeenAt (existing behavior unchanged)', () => {
+    const connectTime = 1_700_000_002_000
+    vi.setSystemTime(connectTime)
+    useGruvaxStore.getState().setSseConnected(true)
+
+    // Advance time then disconnect
+    vi.setSystemTime(connectTime + 45_000)
+    useGruvaxStore.getState().setSseConnected(false)
+
+    const { connectivity } = useGruvaxStore.getState()
+    expect(connectivity.sseConnected).toBe(false)
+    // lastSeenAt must still be the connect-time stamp, not the disconnect time
+    expect(connectivity.lastSeenAt).toBeGreaterThanOrEqual(connectTime - 100)
+    expect(connectivity.lastSeenAt).toBeLessThanOrEqual(connectTime + 100)
+  })
 })
