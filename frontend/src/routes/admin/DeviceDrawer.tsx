@@ -151,7 +151,11 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
         onActionComplete?.(`Profile updated for ${device.display_name}.`)
         onClose()
       } else {
-        // PENDING: bind with last pending code if present, else fall back to code entry
+        // PENDING: bind with last pending code if present, else fall back to code entry.
+        // WR-04: The backend does not currently return last_pairing_code in DeviceRow, so
+        // pendingCode will always be undefined and this fast-path is presently inert — the
+        // code always falls through to the 'bind-code' mode below. This branch is preserved
+        // for the planned bind-to-profile flow that will add the field to the API response.
         const pendingCode = (device as DeviceRow & { last_pairing_code?: string }).last_pairing_code
         if (pendingCode) {
           const bound = await bindDevice({ code: pendingCode, profile_id: profileId })
