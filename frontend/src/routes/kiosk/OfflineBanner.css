@@ -1,0 +1,52 @@
+/**
+ * OfflineBanner — kiosk SSE-disconnect persistent banner.
+ *
+ * Nordic Grid design contract (09-PLAN.md, D-03 urgent palette):
+ * - Background: --gruvax-blue (reversed/urgent treatment — blue-ground vs StalenessBar's yellow)
+ * - Text: --gruvax-white (white-on-blue — AAA at 18px)
+ * - Font: Space Grotesk 18px weight 400 — accessibility floor for this context
+ * - Padding: --gruvax-space-3 (12px) vertical × --gruvax-space-4 (16px) horizontal
+ * - Full-width, no border-radius (flush edge-to-edge — system notification bar style)
+ * - Icon gap: --gruvax-space-2 (8px)
+ * - Mount: mirrors staleness-bar-enter keyframe (already in global scope via KioskView import)
+ *
+ * ENFORCEMENT: no hardcoded hex values — consume tokens only.
+ */
+
+.offline-banner {
+  background: var(--gruvax-blue);         /* reversed: blue-ground vs yellow-ground StalenessBar */
+  color: var(--gruvax-white);             /* white-on-blue — AAA at 18px (D-03) */
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-lg);  /* 18px — matches staleness-bar accessibility floor */
+  font-weight: 400;
+  line-height: var(--gruvax-leading-normal);
+  padding: var(--gruvax-space-3) var(--gruvax-space-4);
+  display: flex;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+  width: 100%;
+  border-radius: 0;
+
+  /* Mount animation: banner fades in and expands from 0 height */
+  overflow: hidden;
+  max-height: 48px;
+  opacity: 1;
+  animation: offline-banner-enter var(--gruvax-duration-base) var(--gruvax-ease-decelerate) both;
+}
+
+@keyframes offline-banner-enter {
+  from {
+    opacity: 0;
+    max-height: 0;
+  }
+  to {
+    opacity: 1;
+    max-height: 48px;
+  }
+}
+
+/* Ensure the SVG icon color inherits from the container (--gruvax-white via currentColor) */
+.offline-banner svg {
+  flex-shrink: 0;
+  color: inherit;
+}
