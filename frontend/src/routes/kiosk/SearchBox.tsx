@@ -8,6 +8,12 @@ interface SearchBoxProps {
   isLoading: boolean
   /** True if the last API call resulted in an error */
   hasError: boolean
+  /**
+   * True when SSE connection is lost — greys + disables the input and swaps the placeholder
+   * to "Search unavailable while offline" (OFF-02, D-06).
+   * Loading/error affordances and the clear-X are also suppressed while offline.
+   */
+  isOffline?: boolean
 }
 
 /**
@@ -20,7 +26,7 @@ interface SearchBoxProps {
  * Per 01-UI-SPEC.md §Search Box Component Contract.
  * All colors/fonts/motion from kiosk.css tokens — no hardcoded hex here.
  */
-export function SearchBox({ onDebouncedQuery, isLoading, hasError }: SearchBoxProps) {
+export function SearchBox({ onDebouncedQuery, isLoading, hasError, isOffline = false }: SearchBoxProps) {
   // store.query is the single source of truth for the input value, so external
   // setters (e.g. a "did you mean" tap calling setQuery) update the field too.
   const { query, setQuery, clearSearch } = useGruvaxStore()
@@ -43,12 +49,14 @@ export function SearchBox({ onDebouncedQuery, isLoading, hasError }: SearchBoxPr
     onDebouncedQuery('')
   }
 
-  const showClearX = query.length > 0 && !isLoading
-  const showLoading = isLoading
+  // While offline: suppress loading, error, and clear-X (no query interaction — OFF-02, D-06)
+  const showClearX = query.length > 0 && !isLoading && !isOffline
+  const showLoading = isLoading && !isOffline
 
   const boxClass = [
     'search-box',
-    hasError ? 'search-box--error' : '',
+    hasError && !isOffline ? 'search-box--error' : '',
+    isOffline ? 'search-box--offline' : '',
   ]
     .filter(Boolean)
     .join(' ')
@@ -75,14 +83,15 @@ export function SearchBox({ onDebouncedQuery, isLoading, hasError }: SearchBoxPr
         type="search"
         value={query}
         onChange={handleChange}
-        placeholder="Type artist, title, label or catalog#"
+        placeholder={isOffline ? 'Search unavailable while offline' : 'Type artist, title, label or catalog#'}
         aria-label="Search vinyl collection"
         autoComplete="off"
         autoCorrect="off"
         spellCheck={false}
+        disabled={isOffline}
       />
 
-      {/* Loading indicator — only after >300ms in flight (SRCH-05) */}
+      {/* Loading indicator — only after >300ms in flight (SRCH-05); suppressed offline */}
       {showLoading && (
         <div className="search-box__action" aria-label="Searching…">
           <div className="search-box__loading" role="status">
@@ -93,7 +102,7 @@ export function SearchBox({ onDebouncedQuery, isLoading, hasError }: SearchBoxPr
         </div>
       )}
 
-      {/* Clear-X button — ≥44×44px tap target (SRCH-03) */}
+      {/* Clear-X button — ≥44×44px tap target (SRCH-03); suppressed offline */}
       {showClearX && (
         <button
           type="button"
