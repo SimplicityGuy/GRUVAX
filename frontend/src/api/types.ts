@@ -303,10 +303,9 @@ export interface AdminCube {
   col: number
   first_label: string
   first_catalog: string
-  last_label: string
-  last_catalog: string
   is_empty: boolean
-  fill_level: number     // 0.0–1.0 fraction of nominal capacity
+  fill_level: number     // 0.0–1.0+ fraction of nominal capacity
+  record_count: number   // raw count for popover display (cubes.py:211)
 }
 
 /** Response from GET /api/admin/cubes. */
