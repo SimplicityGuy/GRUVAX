@@ -122,10 +122,10 @@ async function renderKioskAndFlush(queryClient: QueryClient): Promise<MockEventS
 
 beforeEach(() => {
   MockEventSource.instances = []
-  // Reset store to clean state before each test
+  // Reset store to clean state before each test (gap-closure 09-05: include everConnected)
   useGruvaxStore.setState({
     selectedReleaseId: null,
-    connectivity: { sseConnected: false, lastSeenAt: 0, bannerVisible: false },
+    connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
   })
   // D2-04: seed sessionStore with a bound profile so the SSE effect creates
   // an EventSource (per-profile guard: no profile → no EventSource created).
@@ -384,9 +384,9 @@ describe('KioskView EventSource consumer', () => {
   // reconnect) so the toast guard correctly suppresses it.
   it('Phase 9 Blocker 1: initial onopen does NOT show the Back online toast', async () => {
     const qc = makeQueryClient()
-    // Ensure clean state — bannerVisible=false (initial store state)
+    // Ensure clean state — bannerVisible=false, everConnected=false (never-connected / initial store state)
     useGruvaxStore.setState({
-      connectivity: { sseConnected: false, lastSeenAt: 0, bannerVisible: false },
+      connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
     })
 
     const { container } = await act(async () =>
