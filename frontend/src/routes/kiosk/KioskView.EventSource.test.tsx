@@ -376,4 +376,115 @@ describe('KioskView EventSource consumer', () => {
     // searchCollection WILL be called before the fix (failing this assertion).
     expect(searchSpy).not.toHaveBeenCalled()
   })
+
+  // ── Phase 9 (OFF-01/OFF-02/OFF-04): offline banner + degraded mode ───────
+
+  // Phase 9 / Blocker 1 (OFF-04): on initial page load, after the FIRST onopen fires,
+  // the "Back online" toast must NOT appear. bannerVisible starts false (not a real
+  // reconnect) so the toast guard correctly suppresses it.
+  it('Phase 9 Blocker 1: initial onopen does NOT show the Back online toast', async () => {
+    const qc = makeQueryClient()
+    // Ensure clean state — bannerVisible=false (initial store state)
+    useGruvaxStore.setState({
+      connectivity: { sseConnected: false, lastSeenAt: 0, bannerVisible: false },
+    })
+
+    const { container } = await act(async () =>
+      render(
+        <QueryClientProvider client={qc}>
+          <KioskView />
+        </QueryClientProvider>,
+      ),
+    )
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]
+
+    // Simulate the first onopen on a fresh page load
+    await act(async () => {
+      es.onopen?.()
+    })
+
+    // The "Back online" toast must NOT appear — bannerVisible was false before onopen
+    // so it was not a genuine offline→online transition
+    const toast = container.querySelector('.sync-toast')
+    expect(toast).toBeNull()
+  })
+
+  // Phase 9 / OFF-01 (offline transition): onerror fires → OfflineBanner appears (role=alert)
+  // and SearchBox becomes disabled
+  it('Phase 9 OFF-01: onerror shows the OfflineBanner and disables SearchBox', async () => {
+    const qc = makeQueryClient()
+    const { container } = await act(async () =>
+      render(
+        <QueryClientProvider client={qc}>
+          <KioskView />
+        </QueryClientProvider>,
+      ),
+    )
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]
+
+    // Connect first
+    await act(async () => {
+      es.onopen?.()
+    })
+
+    // Simulate an SSE error (connection dropped)
+    await act(async () => {
+      es.onerror?.()
+    })
+
+    // OfflineBanner must be visible (role=alert)
+    const banner = container.querySelector('[role="alert"]')
+    expect(banner).not.toBeNull()
+
+    // SearchBox input must be disabled
+    const input = container.querySelector<HTMLInputElement>('input[type="search"]')
+    expect(input).not.toBeNull()
+    expect(input?.disabled).toBe(true)
+
+    // connectivity store state should reflect disconnected
+    expect(useGruvaxStore.getState().connectivity.sseConnected).toBe(false)
+    expect(useGruvaxStore.getState().connectivity.bannerVisible).toBe(true)
+  })
+
+  // Phase 9 / OFF-04 (reconnect transition): after offline, onopen fires → banner clears
+  // AND "Back online" toast appears (bannerVisible was true → genuine reconnect)
+  it('Phase 9 OFF-04: reconnect after offline clears banner and shows Back online toast', async () => {
+    const qc = makeQueryClient()
+    const { container } = await act(async () =>
+      render(
+        <QueryClientProvider client={qc}>
+          <KioskView />
+        </QueryClientProvider>,
+      ),
+    )
+    const es = MockEventSource.instances[MockEventSource.instances.length - 1]
+
+    // Connect, then disconnect (simulates onerror)
+    await act(async () => {
+      es.onopen?.()
+    })
+    await act(async () => {
+      es.onerror?.()
+    })
+
+    // Verify offline state
+    expect(useGruvaxStore.getState().connectivity.bannerVisible).toBe(true)
+
+    // Simulate reconnect (onopen fires again after auto-reconnect)
+    await act(async () => {
+      es.onopen?.()
+    })
+
+    // Banner must be cleared (sseConnected=true → OfflineBanner returns null)
+    const banner = container.querySelector('.offline-banner')
+    expect(banner).toBeNull()
+
+    // "Back online" toast must appear
+    const toast = container.querySelector('.sync-toast')
+    expect(toast).not.toBeNull()
+
+    // connectivity store state should reflect connected
+    expect(useGruvaxStore.getState().connectivity.sseConnected).toBe(true)
+    expect(useGruvaxStore.getState().connectivity.bannerVisible).toBe(false)
+  })
 })
