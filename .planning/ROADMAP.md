@@ -197,7 +197,7 @@ Plans:
 | 7. Wizards + Import/Export | v1.0 | 3/3 | Complete    | 2026-06-01 |
 | 8. Observability + Deployment Hardening | v1.0 | 3/3 | Complete    | 2026-06-02 |
 | 9. Tooling and Docs Hardening | v1.0 | 5/5 | Complete   | 2026-06-02 |
-| 10. Close Milestone Gaps | v1.0 | 2/2 | Complete   | 2026-06-02 |
+| 10. Close Milestone Gaps | v1.0 | 2/2 | Complete    | 2026-06-02 |
 | 1. Walking skeleton — API client + single-profile sync | v2.0 | 11/11 | Complete | 2026-05-27 |
 | 2. Multi-profile migration + profile manager | v2.0 | 11/11 | Complete | 2026-05-28 |
 | 3. Devices + pairing | v2.0 | 7/7 | Complete | 2026-05-29 |

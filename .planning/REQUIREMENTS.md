@@ -40,7 +40,7 @@
 
 ### UX Polish
 
-- [ ] **UX-01**: The admin ShelfBinList `LocatorHeader` mini 4×4 Kallax shows **per-cube fill/occupancy** at a glance (`is_empty` / `fill_level` from `GET /api/admin/cubes`) instead of uniform dim tiles, honoring the CUBE-05 empty-cube desaturated state. (Promoted from backlog 999.1.)
+- [x] **UX-01**: The admin ShelfBinList `LocatorHeader` mini 4×4 Kallax shows **per-cube fill/occupancy** at a glance (`is_empty` / `fill_level` from `GET /api/admin/cubes`) instead of uniform dim tiles, honoring the CUBE-05 empty-cube desaturated state. (Promoted from backlog 999.1.)
 
 ### Data Integrity & Tech-Debt Closure
 
@@ -86,7 +86,7 @@
 | OFF-02 | Phase 9 | Complete |
 | OFF-03 | Phase 9 | Complete |
 | OFF-04 | Phase 9 | Complete |
-| UX-01 | Phase 10 | Pending |
+| UX-01 | Phase 10 | Complete |
 
 **Coverage:**
 - v2.1 requirements: 15 total
