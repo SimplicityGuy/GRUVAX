@@ -172,7 +172,16 @@ Plans:
   2. The fill shading updates live after a sync (TanStack Query invalidation on `collection_changed`) without a page reload.
   3. An empty cube and a full cube are visually distinct at a glance on the 7" kiosk display.
 
-**Plans**: TBD
+**Plans**: 2 plans (2 waves)
+
+**Wave 1**
+
+- [ ] 10-01-PLAN.md — UX-01 render: fix AdminCube type (record_count) + LocatorHeader blue fill shading (color-mix `--fill`) + CUBE-05 empty state + tap-to-reveal popover + token-only CSS + LocatorHeader tests (D-01/D-02/D-03/D-05/D-06; SC1, SC3)
+
+**Wave 2** *(blocked on Wave 1 — needs the LocatorHeader cubes prop + updated AdminCube type)*
+
+- [ ] 10-02-PLAN.md — UX-01 live: new useAdminCubesInvalidation SSE hook in ShelfBinList (invalidate `['admin','cubes']` on collection_changed + boundary_changed) + wire cubes prop to LocatorHeader + SSE tests + full-suite gate + human-verify (D-04; SC2)
+
 **UI hint**: yes
 
 ## Progress
@@ -198,7 +207,7 @@ Plans:
 | 7. Member Self-Connect + Collection Diff | v2.1 | 0/3 | Planned | — |
 | 8. QR Pairing + Privacy + Recently-Pulled | v2.1 | 0/3 | Planned | — |
 | 9. Offline + Reconnect UX | v2.1 | 0/3 | Planned | — |
-| 10. Shelf Fill-Overview | v2.1 | 0/TBD | Not started | — |
+| 10. Shelf Fill-Overview | v2.1 | 0/2 | Planned | — |
 | 999.2. LED "party" + "sound-reactive" modes | Backlog | 0/0 | Captured | — |
 
 ## Backlog
