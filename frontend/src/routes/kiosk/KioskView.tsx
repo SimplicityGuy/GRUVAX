@@ -13,6 +13,7 @@ import { getSession } from '../../api/session'
 import { CubeContentsPanel } from './CubeContentsPanel'
 import { ReassignBanner } from './DeviceLifecycle'
 import { EmptyCollectionState } from './EmptyCollectionState'
+import { OfflineBanner } from './OfflineBanner'
 import { ReauthBanner } from './ReauthBanner'
 import { RecentlyPulledStrip } from './RecentlyPulledStrip'
 import { ResetConfirmDialog } from './ResetConfirmDialog'
@@ -23,7 +24,9 @@ import { ShelfGrid } from './ShelfGrid'
 import { ShelfLabel } from './ShelfLabel'
 import { StalenessBar } from './StalenessBar'
 import { SwitchProfileButton } from './SwitchProfileButton'
+import { SyncToast } from '../../components/SyncToast'
 import './DeviceLifecycle.css'
+import './OfflineBanner.css'
 import './ReauthBanner.css'
 import './StalenessBar.css'
 import './kiosk.css'
@@ -48,10 +51,14 @@ export function KioskView() {
   const shimmerExpiresAt = useGruvaxStore((s) => s.shimmerExpiresAt)
   // Phase 2 / D2-04: session store for bound profile
   const boundProfileId = useSessionStore((s) => s.boundProfileId)
+  // Phase 9 / OFF-01: SSE connectivity state — drives offline banner + degraded-mode gating
+  const sseConnected = useGruvaxStore((s) => s.connectivity.sseConnected)
   // Phase 8 / PRIV-04 / D-10: admin login state — Reset button hidden when logged in
   const isLoggedIn = useAdminStore((s) => s.isLoggedIn)
   // Phase 8 / PRIV-04 / D-11: Reset confirm dialog visibility
   const [showResetConfirm, setShowResetConfirm] = useState(false)
+  // Phase 9 / OFF-04 / D-07: "Back online" toast — shown on genuine offline→online transition
+  const [showBackOnlineToast, setShowBackOnlineToast] = useState(false)
   const profiles = useSessionStore((s) => s.profiles)
   const queryClient = useQueryClient()
   const [debouncedQuery, setDebouncedQuery] = useState('')
@@ -313,8 +320,20 @@ export function KioskView() {
     const es = new EventSource(`/api/events/${currentProfileId}`)
 
     es.onopen = () => {
-      useGruvaxStore.getState().setSseConnected(true)
+      // Phase 9 / OFF-04 / D-07 / Blocker 1: detect offline→online transition BEFORE
+      // flipping connection. Read bannerVisible (NOT !sseConnected): sseConnected starts
+      // false in the initial store state, so !sseConnected would be true on the very first
+      // onopen of a fresh page load and fire the toast spuriously. bannerVisible starts false
+      // and only becomes true after a real disconnect (setSseConnected(false) from onerror /
+      // server_shutdown), so it is false on first-ever onopen (no toast) and true only on a
+      // genuine reconnect (toast fires) — per D-07. Uses .getState() to avoid stale closure (Pitfall 5).
+      const wasOffline = useGruvaxStore.getState().connectivity.bannerVisible
+      useGruvaxStore.getState().setSseConnected(true)  // also clears bannerVisible → false
       resync()
+      // Show "Back online" confirmation only when recovering from a real disconnected state (D-07)
+      if (wasOffline) {
+        setShowBackOnlineToast(true)
+      }
     }
 
     es.onerror = () => {
@@ -628,6 +647,7 @@ export function KioskView() {
             onDebouncedQuery={setDebouncedQuery}
             isLoading={showLoading}
             hasError={hasSearchError}
+            isOffline={!sseConnected}
           />
           {/* D2-03: EmptyCollectionState replaces results area for unsynced profiles */}
           {isEmptyCollection ? (
@@ -647,8 +667,9 @@ export function KioskView() {
         {/* Phase 7 (API-04): new-records pill — yellow, below search, above grid.
             Shown when newRecordState.count > 0; clears/replaces on next collection_changed (D-08).
             Enter: opacity 0→1 via CSS animation (--gruvax-duration-base 250ms).
-            No manual dismiss button — persists until next sync (D-08). */}
-        {newRecordState && newRecordState.count > 0 && (
+            No manual dismiss button — persists until next sync (D-08).
+            Phase 9 / D-04: suppressed while offline — returns on reconnect. */}
+        {sseConnected && newRecordState && newRecordState.count > 0 && (
           <div
             className="kiosk-new-records-pill"
             role="status"
@@ -666,19 +687,27 @@ export function KioskView() {
           </div>
         )}
 
+        {/* Phase 9 / OFF-01 / D-03/D-04: offline banner — top-priority SSE-authoritative signal.
+            Takes the top slot when SSE is disconnected. Suppresses other transient banners
+            while offline (D-04). Not dismissible — clears on reconnect. */}
+        {!sseConnected && <OfflineBanner />}
+
         {/* Staleness banner (OBS-06, D-01) — above the grid, never overlaying it.
-            Hidden when offline (health null) or sync_age <= 14d. */}
-        <StalenessBar syncAgeSeconds={healthData?.sync_age_seconds ?? null} />
+            Phase 9 / D-04: only rendered when online (health data unavailable offline anyway).
+            Hidden when sync_age <= 14d. */}
+        {sseConnected && <StalenessBar syncAgeSeconds={healthData?.sync_age_seconds ?? null} />}
 
         {/* Reassign banner (D-08): "MOVED TO <Profile>" on device_reassigned SSE.
             Rendered from sessionStore.reassignBanner; auto-dismissed after ~2.5s
-            inside the component. No prop needed — reads from store. */}
+            inside the component. No prop needed — reads from store.
+            Always shown — it's a completed event signal, not a live-state signal. */}
         <ReassignBanner />
 
         {/* Re-auth banner (D4-08, D4-10): non-blocking, appears when bound profile's
             PAT is revoked. CRITICAL: search input, cube grid, and all kiosk
-            interactivity remain live — this banner is purely informational. */}
-        {needsReauth && <ReauthBanner profileName={boundProfile?.display_name} />}
+            interactivity remain live — this banner is purely informational.
+            Phase 9 / D-04: suppressed while offline — returns on reconnect. */}
+        {sseConnected && needsReauth && <ReauthBanner profileName={boundProfile?.display_name} />}
 
         {/* Plan 09 / D-12: shelf layout not configured affordance.
             Shown when a selected result IS in the collection (HTTP 200 locate)
@@ -706,7 +735,7 @@ export function KioskView() {
                 subCubeInterval={subCubeInterval}
                 confidence={confidence}
                 fillLevels={fillLevels}
-                onCubeTap={setTappedCube}
+                onCubeTap={sseConnected ? setTappedCube : undefined}
                 shimmerCubes={shimmerSet}
               />
             </div>
@@ -727,7 +756,7 @@ export function KioskView() {
                     subCubeInterval={subCubeInterval}
                     confidence={confidence}
                     fillLevels={fillLevels}
-                    onCubeTap={setTappedCube}
+                    onCubeTap={sseConnected ? setTappedCube : undefined}
                     shimmerCubes={shimmerSet}
                   />
                 </div>
@@ -743,8 +772,18 @@ export function KioskView() {
         onDismiss={() => setTappedCube(null)}
       />
 
-      {/* D2-09: persistent Switch-profile corner button (2+ profiles only) */}
-      <SwitchProfileButton />
+      {/* D2-09: persistent Switch-profile corner button (2+ profiles only).
+          Phase 9 / D-05: suppressed while offline (profile-switch is server-dependent). */}
+      {sseConnected && <SwitchProfileButton />}
+
+      {/* Phase 9 / OFF-04 / D-07: "Back online" toast — auto-dismisses after 4s.
+          Only shown on genuine offline→online reconnect (bannerVisible was true in onopen). */}
+      {showBackOnlineToast && (
+        <SyncToast
+          message="Back online"
+          onDismiss={() => setShowBackOnlineToast(false)}
+        />
+      )}
 
       {/* Phase 8 / PRIV-04 / D-10 / D-12: Reset kiosk button — subtle, fixed bottom-right.
           Hidden when admin is logged in (client-side only — per-browser isLoggedIn, NOT a server flag).
