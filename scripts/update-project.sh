@@ -438,16 +438,16 @@ update_precommit_hooks() {
     return
   fi
 
-  print_info "Updating pre-commit hooks to latest versions..."
+  print_info "Updating pre-commit hooks to latest versions (frozen to commit SHAs)..."
 
   if [[ "$DRY_RUN" == false ]]; then
     if [[ "$BACKUP" == true ]]; then
       backup_file ".pre-commit-config.yaml"
     fi
 
-    if uv run pre-commit autoupdate; then
+    if uv run pre-commit autoupdate --freeze; then
       print_success "Pre-commit hooks updated successfully"
-      FILE_CHANGES+=(".pre-commit-config.yaml: Updated pre-commit hooks to latest versions")
+      FILE_CHANGES+=(".pre-commit-config.yaml: Updated pre-commit hooks to latest versions (frozen to commit SHAs)")
       CHANGES_MADE=true
 
       sync_dependencies_after_precommit
@@ -458,7 +458,7 @@ update_precommit_hooks() {
       print_warning "Failed to update pre-commit hooks"
     fi
   else
-    print_info "[DRY RUN] Would run: uv run pre-commit autoupdate"
+    print_info "[DRY RUN] Would run: uv run pre-commit autoupdate --freeze"
   fi
 }
 

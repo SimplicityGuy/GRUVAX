@@ -238,6 +238,8 @@ __pycache__/
 .venv/
 # Auto-generated at Docker build time; dev fallback is ImportError → GIT_SHA = "dev"
 src/gruvax/_version.py
+# scripts/update-project.sh --backup writes pre-update copies here
+backups/
 
 # Playwright MCP transient artifacts
 .playwright-mcp/
