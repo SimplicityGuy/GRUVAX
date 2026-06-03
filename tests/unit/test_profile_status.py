@@ -9,7 +9,7 @@ the "never-connected → pending" distinction an existing integration test relie
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from gruvax.api.admin.profiles import _profile_status
 
@@ -39,7 +39,7 @@ def test_revoked_with_prior_sync_is_reauth_required() -> None:
         "app_token_revoked": True,
         "last_sync_status": "failed",
         "last_sync_error": "network",
-        "last_sync_at": datetime(2026, 5, 1, tzinfo=timezone.utc),
+        "last_sync_at": datetime(2026, 5, 1, tzinfo=UTC),
     }
     assert _profile_status(row) == "re-auth-required"
 
@@ -68,7 +68,7 @@ def test_revoked_status_ok_still_reauth_required() -> None:
         "app_token_revoked": True,
         "last_sync_status": "ok",
         "last_sync_error": None,
-        "last_sync_at": datetime(2026, 5, 1, tzinfo=timezone.utc),
+        "last_sync_at": datetime(2026, 5, 1, tzinfo=UTC),
     }
     assert _profile_status(row) == "re-auth-required"
 
@@ -88,7 +88,7 @@ def test_synced_ok_is_connected() -> None:
         "app_token_revoked": False,
         "last_sync_status": "ok",
         "last_sync_error": None,
-        "last_sync_at": datetime(2026, 5, 1, tzinfo=timezone.utc),
+        "last_sync_at": datetime(2026, 5, 1, tzinfo=UTC),
     }
     assert _profile_status(row) == "connected"
 

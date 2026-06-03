@@ -16,12 +16,9 @@ from __future__ import annotations
 
 import os
 from typing import Any
-from unittest.mock import AsyncMock, patch
 
-from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 import pytest
-import pytest_asyncio
 
 
 # ── constants ─────────────────────────────────────────────────────────────────

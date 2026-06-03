@@ -17,7 +17,6 @@ LifespanManager + AsyncClient with db_pool, Phase 06-04 canonical pattern).
 from __future__ import annotations
 
 import os
-from typing import Any
 
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
@@ -107,8 +106,8 @@ async def test_profiles_section(diag_client) -> None:  # type: ignore[no-untyped
 
     # At least one profile should exist (the default profile seeded by the test suite)
     assert len(profiles) >= 1, (
-        f"diagnostics['profiles'] is empty — expected at least the default profile. "
-        f"If the dev DB is freshly reset, the default profile must still be present."
+        "diagnostics['profiles'] is empty — expected at least the default profile. "
+        "If the dev DB is freshly reset, the default profile must still be present."
     )
 
     # Required keys for each profile entry

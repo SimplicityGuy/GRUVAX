@@ -35,23 +35,13 @@ from __future__ import annotations
 
 import os
 import types
-import uuid
-from typing import TYPE_CHECKING
 from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
 import pytest
-import pytest_asyncio
 
-from gruvax._internal.fake_discogsography import create_fake_app
-from gruvax.discogsography.client import DiscogsographyClient
 from gruvax.settings import settings
-from gruvax.sync import profile_sync
 from gruvax.sync.pat_crypto import encrypt_pat
-
-
-if TYPE_CHECKING:
-    from collections.abc import AsyncIterator
 
 
 # ── constants ─────────────────────────────────────────────────────────────────

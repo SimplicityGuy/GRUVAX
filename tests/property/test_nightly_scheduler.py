@@ -10,7 +10,7 @@ Invariants verified:
   1. test_next_fire_always_future — next_fire_after() always returns a time strictly
      after the input `now` across 2025-2027 epoch range, for any hour 0-23. (D4-01)
   2. test_next_fire_interval_in_22_26h_window — successive 03:00 firings are always
-     22–26 wall-clock hours apart, covering DST spring-forward and fall-back. (D4-01)
+     22-26 wall-clock hours apart, covering DST spring-forward and fall-back. (D4-01)
 
 Analog: tests/property/test_estimator_props.py (exact structure match — Hypothesis
 @given/@settings, from __future__ import annotations, pytest import).
@@ -18,7 +18,7 @@ Analog: tests/property/test_estimator_props.py (exact structure match — Hypoth
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from hypothesis import given, settings, strategies as st
 
@@ -31,8 +31,8 @@ from gruvax.sync.nightly import next_fire_after, now_local  # noqa: F401 — RED
 @given(
     # Generate a datetime in 2025-2027 to cover DST transitions
     epoch_seconds=st.integers(
-        min_value=int(datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp()),
-        max_value=int(datetime(2027, 12, 31, tzinfo=timezone.utc).timestamp()),
+        min_value=int(datetime(2025, 1, 1, tzinfo=UTC).timestamp()),
+        max_value=int(datetime(2027, 12, 31, tzinfo=UTC).timestamp()),
     ),
     hour=st.integers(min_value=0, max_value=23),
 )
@@ -57,8 +57,8 @@ def test_next_fire_always_future(epoch_seconds: int, hour: int) -> None:
 
 @given(
     epoch_seconds=st.integers(
-        min_value=int(datetime(2025, 1, 1, tzinfo=timezone.utc).timestamp()),
-        max_value=int(datetime(2027, 12, 31, tzinfo=timezone.utc).timestamp()),
+        min_value=int(datetime(2025, 1, 1, tzinfo=UTC).timestamp()),
+        max_value=int(datetime(2027, 12, 31, tzinfo=UTC).timestamp()),
     ),
 )
 @settings(max_examples=500)

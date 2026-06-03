@@ -23,9 +23,10 @@ Behaviors under test:
 
 from __future__ import annotations
 
-from datetime import datetime, timezone
+import contextlib
+from datetime import UTC, datetime
 from typing import Any
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock, patch
 
 import pytest
 
@@ -42,7 +43,7 @@ _CADENCE_HOURS: dict[str, list[int]] = {
 
 def _utc(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetime:
     """Build a UTC-aware datetime for cadence anchoring tests."""
-    return datetime(year, month, day, hour, minute, 0, tzinfo=timezone.utc)
+    return datetime(year, month, day, hour, minute, 0, tzinfo=UTC)
 
 
 # ── (a) Cadence fire-time anchoring ──────────────────────────────────────────
@@ -188,11 +189,9 @@ async def test_skip_policy() -> None:
     with (
         patch("gruvax.sync.nightly.sync_profile", _fake_sync),
         patch("gruvax.sync.nightly.asyncio.sleep", _fake_sleep),
+        contextlib.suppress(asyncio.CancelledError),
     ):
-        try:
-            await _sync_loop(pool=pool, app_state=app_state)
-        except asyncio.CancelledError:
-            pass
+        await _sync_loop(pool=pool, app_state=app_state)
 
     # Only the eligible profile should have been passed to sync_profile
     assert sync_calls == [eligible_uuid], (
@@ -241,11 +240,9 @@ async def test_cadence_off() -> None:
         patch("gruvax.sync.nightly.sync_profile", _fake_sync),
         patch("gruvax.sync.nightly.asyncio.sleep", _fake_sleep),
         patch("gruvax.sync.nightly._read_sync_cadence", _fake_read_cadence),
+        contextlib.suppress(asyncio.CancelledError),
     ):
-        try:
-            await _sync_loop(pool=pool, app_state=app_state)
-        except asyncio.CancelledError:
-            pass
+        await _sync_loop(pool=pool, app_state=app_state)
 
     assert sync_calls == [], (
         f"When cadence='off', sync_profile must NOT be called. "
