@@ -26,6 +26,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 # Test PIN used throughout this module — must match the seeded hash below.
@@ -139,7 +140,7 @@ async def test_csrf_missing(client) -> None:  # type: ignore[no-untyped-def]
     # Make a mutating request WITHOUT the X-CSRF-Token header
     response = await client.post(
         "/api/admin/logout",
-        cookies=login_res.cookies,
+        headers=cookie_header(login_res.cookies),
         # No X-CSRF-Token header — should be rejected
     )
     assert response.status_code == 403, (
@@ -198,15 +199,14 @@ async def test_logout(client) -> None:  # type: ignore[no-untyped-def]
     # Log out (must include X-CSRF-Token header)
     logout_res = await client.post(
         "/api/admin/logout",
-        cookies=login_res.cookies,
-        headers={"X-CSRF-Token": csrf_token or ""},
+        headers={"X-CSRF-Token": csrf_token or "", **cookie_header(login_res.cookies)},
     )
     assert logout_res.status_code == 200, f"Expected 200 from logout, got {logout_res.status_code}"
 
     # After logout, session must be revoked — a session-gated request must return 401
     verify_res = await client.get(
         "/api/admin/session",
-        cookies=login_res.cookies,
+        headers=cookie_header(login_res.cookies),
     )
     assert verify_res.status_code == 401, (
         f"After logout, session-gated endpoint must return 401, got {verify_res.status_code}"
@@ -232,8 +232,7 @@ async def test_change_pin_revokes_sessions(client) -> None:  # type: ignore[no-u
     change_res = await client.post(
         "/api/admin/settings/pin",
         json={"current_pin": "0000", "new_pin": "0000"},  # keep same for test idempotency
-        cookies=original_cookies,
-        headers={"X-CSRF-Token": csrf_token or ""},
+        headers={"X-CSRF-Token": csrf_token or "", **cookie_header(original_cookies)},
     )
     # Even if Change-PIN isn't implemented yet, we verify the behavior contract:
     # if it returns 200, the original session must still be valid (same-user session
@@ -244,7 +243,7 @@ async def test_change_pin_revokes_sessions(client) -> None:  # type: ignore[no-u
 
     # Verify the current session is still valid (or has been appropriately handled)
     # This test primarily documents the contract; full validation in Plan 02.
-    verify_res = await client.get("/api/admin/session", cookies=original_cookies)
+    verify_res = await client.get("/api/admin/session", headers=cookie_header(original_cookies))
     # After PIN change, other sessions would be revoked — current session handling
     # is implementation-defined (may stay valid or be re-issued)
     assert verify_res.status_code in (200, 401), (
