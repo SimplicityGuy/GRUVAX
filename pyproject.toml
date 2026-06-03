@@ -8,31 +8,31 @@ authors = [
 ]
 requires-python = ">=3.14"
 dependencies = [
-    "aiomqtt>=2.5",
+    "aiomqtt>=2.5.1",
     "alembic>=1.18.4",
     "orjson>=3.11.9",
     "asgi-lifespan>=2.1.0",
     "cryptography>=48.0.0",
-    "fastapi>=0.136.1",
+    "fastapi>=0.136.3",
     # Runtime dep — used by gruvax.discogsography.client (Plan 01-02) and gruvax.cli.sync_cli (Plan 01-04).
     # Was historically only in [dependency-groups] dev which broke the api container's `uv sync --no-dev`.
     "httpx>=0.28.1",
     "itsdangerous>=2.2",
     "limits>=5.8",
     "passlib[argon2]>=1.7.4",
-    "psycopg[binary,pool]>=3.2",
+    "psycopg[binary,pool]>=3.3.4",
     "pydantic>=2.13.4",
-    "pydantic-settings>=2.14",
-    "python-multipart>=0.0.12",
+    "pydantic-settings>=2.14.1",
+    "python-multipart>=0.0.30",
     "pyyaml>=6.0.3",
-    "sqlalchemy[asyncio]>=2.0.49",
-    "sse-starlette>=3.4",
+    "sqlalchemy[asyncio]>=2.0.50",
+    "sse-starlette>=3.4.4",
     "stamina>=26.1.0",
     # Pull up the transitive starlette to >=1.0.1 — PYSEC-2026-161 affects 1.0.0
     # (FastAPI 0.136.1 accepts >=1.0,<2.0; 1.0.1 is in range).
-    "starlette>=1.0.1",
+    "starlette>=1.2.1",
     "structlog>=25.5.0",
-    "uvicorn[standard]>=0.47.0",
+    "uvicorn[standard]>=0.48.0",
 ]
 
 [project.scripts]
@@ -47,21 +47,21 @@ build-backend = "uv_build"
 
 [dependency-groups]
 dev = [
-    "bandit>=1.9",
-    "hypothesis>=6.152.9",
+    "bandit>=1.9.4",
+    "hypothesis>=6.155.1",
     "mypy>=2.1.0",
     "natsort>=8.4",
-    "pip-audit>=2.7",
+    "pip-audit>=2.10.0",
     "playwright>=1.60.0",
     "pre-commit>=4.6",
     "pytest>=9.0.3",
-    "pytest-asyncio>=1.3.0",
+    "pytest-asyncio>=1.4.0",
     "pytest-benchmark>=5.2.3",
-    "pytest-cov>=7",
+    "pytest-cov>=7.1.0",
     "pytest-httpx>=0.36.2",
     "pytest-playwright>=0.8.0",
-    "ruff>=0.15.13",
-    "types-passlib>=1.7.7",
+    "ruff>=0.15.15",
+    "types-passlib>=1.7.7.20260211",
     "types-pyyaml>=6.0.12.20260518",
 ]
 
