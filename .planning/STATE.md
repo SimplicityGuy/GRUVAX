@@ -156,6 +156,7 @@ None.
 
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
+| 260602-oxg | Close v2.1 milestone tech debt — WARNING-1 (remove dead ['admin','settings'] invalidation), WARNING-2 (server_hello → invalidate ['admin','cubes'] + test), item D (backfill requirements-completed in 14 summaries) | 2026-06-03 | 10d305c | [260602-oxg-close-v2-1-milestone-tech-debt-warning-1](./quick/260602-oxg-close-v2-1-milestone-tech-debt-warning-1/) |
 | 260530-j7t | Style unstyled LED-action buttons (ALL OFF / RUN DIAGNOSTIC) — add missing `.settings-btn-secondary` CSS rule (surfaced in Phase 3 UAT) | 2026-05-30 | c9bd90e | [260530-j7t-style-unstyled-led-action-buttons-add-se](./quick/260530-j7t-style-unstyled-led-action-buttons-add-se/) |
 | 260526-d6s | fix WR-04: contiguity error should render original-cased label, not casefolded (doc-only — fix already on main in 3598c22) | 2026-05-26 | aee5967 | [260526-d6s-fix-wr-04-contiguity-error-should-render](./quick/260526-d6s-fix-wr-04-contiguity-error-should-render/) |
 | 260524-sd6 | Reconcile gruvax vs gruvax_app Postgres role naming (canonical: gruvax) | 2026-05-25 | 250f7b9 | [260524-sd6-reconcile-gruvax-vs-gruvax-app-postgres-](./quick/260524-sd6-reconcile-gruvax-vs-gruvax-app-postgres-/) |
