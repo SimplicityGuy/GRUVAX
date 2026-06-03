@@ -402,10 +402,9 @@ export function KioskView() {
       }
     })
 
-    // server_hello: server (re)started → resync all data + settings
+    // server_hello: server (re)started → resync all data
     es.addEventListener('server_hello', () => {
       resync()
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'settings'] })
     })
 
     // server_shutdown: server going down → mark disconnected (auto-reconnect handles it)
