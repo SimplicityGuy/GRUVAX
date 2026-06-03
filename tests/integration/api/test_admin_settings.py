@@ -77,6 +77,7 @@ def _ensure_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
         os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
     if not os.environ.get("GRUVAX_SECRET_KEY"):
         from cryptography.fernet import Fernet
+
         monkeypatch.setenv("GRUVAX_SECRET_KEY", Fernet.generate_key().decode())
 
 
@@ -117,12 +118,11 @@ async def admin_session(client) -> dict:  # type: ignore[no-untyped-def]
     """Log in with test PIN and return session cookies + CSRF token."""
     # Reset the rate limiter so a prior test module's logins don't block us
     from gruvax.api.admin.limiter import limiter
+
     limiter.reset()
 
     res = await client.post("/api/admin/login", json={"pin": _TEST_PIN})
-    assert res.status_code == 200, (
-        f"admin_session: login failed {res.status_code}: {res.text}"
-    )
+    assert res.status_code == 200, f"admin_session: login failed {res.status_code}: {res.text}"
     csrf = res.cookies.get("gruvax_csrf") or res.json().get("csrf_token")
     return {"cookies": res.cookies, "csrf_token": csrf}
 
@@ -196,12 +196,7 @@ async def test_sync_cadence_invalid_value(client, admin_session) -> None:  # typ
 
     # The error detail must identify the rejection reason
     detail = body.get("detail") or body
-    error_type = (
-        detail.get("type")
-        if isinstance(detail, dict)
-        else None
-    )
+    error_type = detail.get("type") if isinstance(detail, dict) else None
     assert error_type == "invalid_cadence", (
-        f"422 response body must include type='invalid_cadence'. "
-        f"Got detail: {detail!r}"
+        f"422 response body must include type='invalid_cadence'. Got detail: {detail!r}"
     )

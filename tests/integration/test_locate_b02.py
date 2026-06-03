@@ -82,9 +82,7 @@ async def test_omitted_profile_id_with_cookie(client) -> None:  # type: ignore[n
     After the fix: returns 200 (release found) or 404 (release not found) — either is correct
     because the session resolved successfully. The point is "not 422".
     """
-    response = await client.get(
-        "/api/locate", params={"release_id": COVERED_RELEASE_ID}
-    )
+    response = await client.get("/api/locate", params={"release_id": COVERED_RELEASE_ID})
     assert response.status_code in (200, 404), (
         f"Expected 200 or 404 with omitted profile_id + valid cookie (B-02), got "
         f"{response.status_code}: {response.text}"
@@ -99,9 +97,7 @@ async def test_no_cookie_returns_session_unbound(no_cookie_client) -> None:  # t
     cookie means the session cannot be resolved → 400 session_unbound before any data
     query runs.
     """
-    response = await no_cookie_client.get(
-        "/api/locate", params={"release_id": COVERED_RELEASE_ID}
-    )
+    response = await no_cookie_client.get("/api/locate", params={"release_id": COVERED_RELEASE_ID})
     assert response.status_code == 400, (
         f"Expected 400 session_unbound, got {response.status_code}: {response.text}"
     )

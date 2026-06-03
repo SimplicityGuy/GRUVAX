@@ -143,9 +143,7 @@ async def test_profiles_section(diag_client) -> None:  # type: ignore[no-untyped
         )
         assert profile["last_sync_item_count"] is None or isinstance(
             profile["last_sync_item_count"], int
-        ), (
-            f"profiles[{i}]['last_sync_item_count'] must be int or null"
-        )
+        ), f"profiles[{i}]['last_sync_item_count'] must be int or null"
         assert isinstance(profile["app_token_revoked"], bool), (
             f"profiles[{i}]['app_token_revoked'] must be bool, "
             f"got {type(profile['app_token_revoked'])!r}"

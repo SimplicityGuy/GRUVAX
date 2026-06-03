@@ -90,13 +90,10 @@ async def test_query_never_in_logs(privacy_client) -> None:  # type: ignore[no-u
     await ac.get(f"/api/search?q={PROBE_TERM}&limit=5")
 
     ring = list(app.state.log_ring_buffer)
-    offenders = [
-        entry for entry in ring if PROBE_TERM in entry.get("msg", "")
-    ]
+    offenders = [entry for entry in ring if PROBE_TERM in entry.get("msg", "")]
     assert not offenders, (
         f"PRIV-02 VIOLATION: query term {PROBE_TERM!r} found in {len(offenders)} "
-        f"log ring entry/entries:\n"
-        + "\n".join(f"  {e!r}" for e in offenders)
+        f"log ring entry/entries:\n" + "\n".join(f"  {e!r}" for e in offenders)
     )
 
 

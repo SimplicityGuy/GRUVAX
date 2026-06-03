@@ -320,10 +320,7 @@ async def test_redeem_second_use_rejected(client, db_pool) -> None:  # type: ign
         f"The atomic UPDATE ... WHERE consumed_at IS NULL must reject the second attempt."
     )
     detail = second_res.json()
-    error_type = (
-        detail.get("type")
-        or detail.get("detail", {}).get("type")
-    )
+    error_type = detail.get("type") or detail.get("detail", {}).get("type")
     assert error_type == "invite_not_found", (
         f"404 response must include {{type: 'invite_not_found'}}, got: {detail}"
     )
@@ -359,10 +356,7 @@ async def test_redeem_bad_pat(client) -> None:  # type: ignore[no-untyped-def]
         f"RED until Plan 02 ships PAT validation in the redeem endpoint."
     )
     detail = redeem_res.json()
-    error_type = (
-        detail.get("type")
-        or detail.get("detail", {}).get("type")
-    )
+    error_type = detail.get("type") or detail.get("detail", {}).get("type")
     assert error_type == "pat_rejected", (
         f"401 response must include {{type: 'pat_rejected'}}, got: {detail}"
     )
@@ -405,13 +399,9 @@ async def test_redeem_expired(client, db_pool) -> None:  # type: ignore[no-untyp
         f"The WHERE expires_at > NOW() clause must reject expired codes."
     )
     detail = redeem_res.json()
-    error_type = (
-        detail.get("type")
-        or detail.get("detail", {}).get("type")
-    )
+    error_type = detail.get("type") or detail.get("detail", {}).get("type")
     assert error_type == "invite_not_found", (
-        f"404 response must be {{type: 'invite_not_found'}} (no oracle — Pitfall 2), "
-        f"got: {detail}"
+        f"404 response must be {{type: 'invite_not_found'}} (no oracle — Pitfall 2), got: {detail}"
     )
 
 
@@ -438,9 +428,7 @@ async def test_redeem_rotates_token(client, db_pool) -> None:  # type: ignore[no
         headers=headers,
     )
     if connect_res.status_code not in (200, 201):
-        pytest.skip(
-            f"connect returned {connect_res.status_code} — skipping rotation test"
-        )
+        pytest.skip(f"connect returned {connect_res.status_code} — skipping rotation test")
 
     # Step 2: generate invite
     gen_res = await client.post(
@@ -639,6 +627,7 @@ async def test_initial_import_flag(client, db_pool) -> None:  # type: ignore[no-
         # Seed a valid PAT for the profile so sync can proceed
         async with db_pool.connection() as conn:
             from gruvax.sync.pat_crypto import encrypt_pat
+
             ciphertext = encrypt_pat("dscg_test_initial_import_token")
             await conn.execute(
                 "UPDATE gruvax.profiles"
@@ -684,8 +673,7 @@ async def test_initial_import_flag(client, db_pool) -> None:  # type: ignore[no-
         )
         if sync_res2.status_code not in (200, 202):
             pytest.skip(
-                f"second sync returned {sync_res2.status_code} — "
-                f"skipping second-sync assertion"
+                f"second sync returned {sync_res2.status_code} — skipping second-sync assertion"
             )
 
         profile2 = await _await_sync(client, profile_id, cookies, headers)
@@ -742,6 +730,7 @@ async def test_arrival_count_accuracy(client, db_pool) -> None:  # type: ignore[
         # Seed a valid PAT
         async with db_pool.connection() as conn:
             from gruvax.sync.pat_crypto import encrypt_pat
+
             ciphertext = encrypt_pat("dscg_test_arrival_count_token")
             await conn.execute(
                 "UPDATE gruvax.profiles"
@@ -774,9 +763,7 @@ async def test_arrival_count_accuracy(client, db_pool) -> None:  # type: ignore[
             "Profile response must include 'last_new_record_count' after sync"
         )
         count = profile["last_new_record_count"]
-        assert count is not None, (
-            "last_new_record_count must not be None after a successful sync"
-        )
+        assert count is not None, "last_new_record_count must not be None after a successful sync"
         assert count >= 0, (
             f"last_new_record_count must be >= 0 (D-06: never negative). Got: {count}"
         )

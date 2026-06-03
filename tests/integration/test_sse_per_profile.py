@@ -183,18 +183,15 @@ async def test_sse_emits_jittered_retry(live_server) -> None:  # type: ignore[no
         ac.stream("GET", f"/api/events/{profile_a}", cookies=cookies) as resp,
     ):
         assert resp.status_code == 200, (
-            f"GET /api/events/{profile_a} with bound cookie must return 200, "
-            f"got {resp.status_code}"
+            f"GET /api/events/{profile_a} with bound cookie must return 200, got {resp.status_code}"
         )
         # Read up to 10 lines to find the retry: directive in the initial SSE frame.
         lines_read = 0
         async for line in resp.aiter_lines():
             lines_read += 1
             if line.startswith("retry:"):
-                raw = line[len("retry:"):].strip()
-                assert raw.isdigit(), (
-                    f"retry: field must be a non-negative integer, got {raw!r}"
-                )
+                raw = line[len("retry:") :].strip()
+                assert raw.isdigit(), f"retry: field must be a non-negative integer, got {raw!r}"
                 retry_value = int(raw)
                 break
             if lines_read >= 10:
@@ -257,7 +254,7 @@ async def test_no_cross_profile_leakage(live_server) -> None:  # type: ignore[no
                     if "boundary_changed" in line or "collection_changed" in line:
                         received_by_a.append(line)
                         return
-        except (httpx.TimeoutException, httpx.RemoteProtocolError):
+        except httpx.TimeoutException, httpx.RemoteProtocolError:
             a_connected.set()
 
     async def subscribe_b() -> None:
@@ -282,7 +279,7 @@ async def test_no_cross_profile_leakage(live_server) -> None:  # type: ignore[no
                     if "boundary_changed" in line or "collection_changed" in line:
                         received_by_b.append(line)
                         return
-        except (httpx.TimeoutException, httpx.RemoteProtocolError):
+        except httpx.TimeoutException, httpx.RemoteProtocolError:
             b_connected.set()
 
     # Start both subscribers

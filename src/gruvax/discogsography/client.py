@@ -75,7 +75,7 @@ def _parse_retry_after(value: str | None) -> dt.timedelta:
         return dt.timedelta(seconds=1)
     try:
         return dt.timedelta(seconds=max(1, int(float(value))))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         return dt.timedelta(seconds=1)
 
 

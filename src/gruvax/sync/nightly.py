@@ -84,9 +84,7 @@ def next_fire_after(now_aware: datetime, hour: int = 3) -> datetime:
     candidate = candidate_naive.replace(tzinfo=tz, fold=1)
     if candidate <= now_aware:
         tomorrow = today + timedelta(days=1)
-        candidate_naive = datetime(
-            tomorrow.year, tomorrow.month, tomorrow.day, hour, 0, 0
-        )
+        candidate_naive = datetime(tomorrow.year, tomorrow.month, tomorrow.day, hour, 0, 0)
         candidate = candidate_naive.replace(tzinfo=tz, fold=1)
     return candidate
 
@@ -203,18 +201,14 @@ async def _sync_loop(pool: Any, app_state: Any) -> None:
             logger.info("nightly_sync: loop cancelled (shutdown)")
             raise  # Re-raise so FastAPI/uvicorn can tear down cleanly (Pitfall 1).
         except Exception as exc:
-            logger.warning(
-                "nightly_sync: outer loop error: %s — will retry in 60s", exc
-            )
+            logger.warning("nightly_sync: outer loop error: %s — will retry in 60s", exc)
             await asyncio.sleep(60)
 
 
 # ── Startup sweeps ────────────────────────────────────────────────────────────
 
 
-async def _startup_catchup_sweep(
-    pool: Any, app_state: Any, cadence: str
-) -> None:
+async def _startup_catchup_sweep(pool: Any, app_state: Any, cadence: str) -> None:
     """One-shot catch-up sweep: sync any non-revoked stale profiles on startup.
 
     D4-02: profiles whose last_sync_at is older than the cadence threshold are

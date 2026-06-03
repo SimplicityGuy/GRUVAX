@@ -344,12 +344,18 @@ async def redeem_invite(
         # exception is still chained (`from exc`) for server-side logs.
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"type": "upstream_unavailable", "message": "Discogs is temporarily unavailable. Please try again shortly."},
+            detail={
+                "type": "upstream_unavailable",
+                "message": "Discogs is temporarily unavailable. Please try again shortly.",
+            },
         ) from exc
     except (ServerError, NetworkError) as exc:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"type": "upstream_unavailable", "message": "Discogs is temporarily unavailable. Please try again shortly."},
+            detail={
+                "type": "upstream_unavailable",
+                "message": "Discogs is temporarily unavailable. Please try again shortly.",
+            },
         ) from exc
 
     # Step 3: D-09 strict user_id collision check (mirrors connect_pat lines 476-497).

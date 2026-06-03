@@ -163,9 +163,7 @@ async def get_session(
     # T-04-01-05: derived from the live per-request profiles read, not an app.state cache.
     needs_reauth = False
     if bound_profile_id:
-        bound_profile = next(
-            (p for p in profiles if str(p["id"]) == bound_profile_id), None
-        )
+        bound_profile = next((p for p in profiles if str(p["id"]) == bound_profile_id), None)
         if bound_profile is not None:
             needs_reauth = bool(bound_profile.get("app_token_revoked", False))
 

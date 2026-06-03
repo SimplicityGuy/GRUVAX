@@ -300,8 +300,7 @@ async def _swap_inside_tx(
     # READ last_sync_at IS NULL here — after the UPDATE it will always be non-NULL.
     async with conn.cursor() as cur:
         await cur.execute(
-            "SELECT last_sync_at IS NULL AS is_initial FROM gruvax.profiles"
-            " WHERE id = %s::uuid",
+            "SELECT last_sync_at IS NULL AS is_initial FROM gruvax.profiles WHERE id = %s::uuid",
             (profile_id,),
         )
         initial_row = await cur.fetchone()
@@ -402,11 +401,14 @@ async def _refresh_profile_caches(
     # Publish collection_changed AFTER all caches are fresh (Pitfall A ordering).
     # Extended payload (API-04): includes new_record_count + is_initial_import.
     bus = app_state.event_bus_registry[profile_id]
-    await bus.publish("collection_changed", {
-        "profile_id": profile_id,
-        "new_record_count": new_record_count,
-        "is_initial_import": is_initial_import,
-    })
+    await bus.publish(
+        "collection_changed",
+        {
+            "profile_id": profile_id,
+            "new_record_count": new_record_count,
+            "is_initial_import": is_initial_import,
+        },
+    )
 
 
 # ── PAT load + sentinel detection (Pitfall 8) ────────────────────────────────

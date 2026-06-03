@@ -53,19 +53,19 @@ def _utc(year: int, month: int, day: int, hour: int, minute: int = 0) -> datetim
     "cadence,now_hour,expected_next_hour",
     [
         # 24h cadence: only fires at 03:00
-        ("24h", 1, 3),   # 01:00 → next is 03:00 same day
-        ("24h", 4, 3),   # 04:00 → next is 03:00 next day (past today's slot)
+        ("24h", 1, 3),  # 01:00 → next is 03:00 same day
+        ("24h", 4, 3),  # 04:00 → next is 03:00 next day (past today's slot)
         ("24h", 23, 3),  # 23:00 → next is 03:00 next day
         # 12h cadence: fires at 03:00 and 15:00
-        ("12h", 1, 3),   # 01:00 → next is 03:00
+        ("12h", 1, 3),  # 01:00 → next is 03:00
         ("12h", 4, 15),  # 04:00 → next is 15:00 same day
         ("12h", 16, 3),  # 16:00 → next is 03:00 next day (past 15:00 slot)
         # 6h cadence: fires at 03:00, 09:00, 15:00, 21:00
-        ("6h", 1, 3),    # 01:00 → next is 03:00
-        ("6h", 4, 9),    # 04:00 → next is 09:00
+        ("6h", 1, 3),  # 01:00 → next is 03:00
+        ("6h", 4, 9),  # 04:00 → next is 09:00
         ("6h", 10, 15),  # 10:00 → next is 15:00
         ("6h", 16, 21),  # 16:00 → next is 21:00
-        ("6h", 22, 3),   # 22:00 → next is 03:00 next day
+        ("6h", 22, 3),  # 22:00 → next is 03:00 next day
     ],
 )
 def test_cadence_anchoring(cadence: str, now_hour: int, expected_next_hour: int) -> None:
@@ -160,7 +160,7 @@ async def test_skip_policy() -> None:
     from gruvax.sync.nightly import _sync_loop
 
     eligible_uuid = "00000000-0000-0000-0000-000000000001"
-    revoked_uuid = "00000000-0000-0000-0000-000000000002"   # excluded by SQL
+    revoked_uuid = "00000000-0000-0000-0000-000000000002"  # excluded by SQL
     inprogress_uuid = "00000000-0000-0000-0000-000000000003"  # excluded by SQL
 
     # The skip policy SQL excludes revoked/in_progress rows before returning.
@@ -245,8 +245,7 @@ async def test_cadence_off() -> None:
         await _sync_loop(pool=pool, app_state=app_state)
 
     assert sync_calls == [], (
-        f"When cadence='off', sync_profile must NOT be called. "
-        f"Got calls: {sync_calls!r}"
+        f"When cadence='off', sync_profile must NOT be called. Got calls: {sync_calls!r}"
     )
 
 
@@ -268,8 +267,7 @@ async def test_read_sync_cadence_fallback() -> None:
 
     result = await _read_sync_cadence(empty_pool)
     assert result == "24h", (
-        f"_read_sync_cadence must return '24h' when no settings row exists, "
-        f"got {result!r}"
+        f"_read_sync_cadence must return '24h' when no settings row exists, got {result!r}"
     )
 
 
@@ -310,9 +308,7 @@ async def test_startup_catchup_sweep_syncs_stale_profiles() -> None:
         f"Expected sync_profile called for stale profiles in order "
         f"[{stale_uuid_1!r}, {stale_uuid_2!r}], got {sync_calls!r}."
     )
-    assert fresh_uuid not in sync_calls, (
-        f"Non-stale profile {fresh_uuid!r} must not be synced."
-    )
+    assert fresh_uuid not in sync_calls, f"Non-stale profile {fresh_uuid!r} must not be synced."
 
 
 @pytest.mark.asyncio
@@ -372,9 +368,7 @@ async def test_startup_catchup_sweep_revoked_profile_excluded() -> None:
     with patch("gruvax.sync.nightly.sync_profile", _fake_sync):
         await _startup_catchup_sweep(pool=pool, app_state=app_state, cadence="24h")
 
-    assert eligible_uuid in sync_calls, (
-        f"Eligible profile {eligible_uuid!r} must be synced."
-    )
+    assert eligible_uuid in sync_calls, f"Eligible profile {eligible_uuid!r} must be synced."
     assert revoked_uuid not in sync_calls, (
         f"Revoked profile {revoked_uuid!r} must NOT be synced (skip policy)."
     )

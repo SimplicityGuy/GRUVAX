@@ -103,10 +103,7 @@ def _profile_status(row: dict[str, Any]) -> str:
     last_sync_error=='pat_rejected' or a non-null last_sync_at.
     """
     if row.get("app_token_revoked"):
-        if (
-            row.get("last_sync_error") == "pat_rejected"
-            or row.get("last_sync_at") is not None
-        ):
+        if row.get("last_sync_error") == "pat_rejected" or row.get("last_sync_at") is not None:
             return "re-auth-required"
         return "pending"
     if row.get("last_sync_status") == "in_progress":
@@ -233,7 +230,8 @@ async def list_profiles(
                 "has_token": bool(has_token) if has_token is not None else False,
                 "last_new_record_count": last_new_record_count,
                 "last_sync_is_initial": bool(last_sync_is_initial)
-                    if last_sync_is_initial is not None else False,
+                if last_sync_is_initial is not None
+                else False,
             }
         )
     return JSONResponse(content=profiles)
@@ -298,7 +296,8 @@ async def get_profile(
             "has_token": bool(has_token) if has_token is not None else False,
             "last_new_record_count": last_new_record_count,
             "last_sync_is_initial": bool(last_sync_is_initial)
-                if last_sync_is_initial is not None else False,
+            if last_sync_is_initial is not None
+            else False,
         }
     )
 

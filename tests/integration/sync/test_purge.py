@@ -122,12 +122,8 @@ async def _count_audit_rows(db_pool, profile_id: str) -> dict[str, int]:
         "segment_overrides": (
             "SELECT COUNT(*) FROM gruvax.segment_overrides WHERE profile_id = %s::uuid"
         ),
-        "record_stats": (
-            "SELECT COUNT(*) FROM gruvax.record_stats WHERE profile_id = %s::uuid"
-        ),
-        "settings": (
-            "SELECT COUNT(*) FROM gruvax.settings WHERE profile_id = %s::uuid"
-        ),
+        "record_stats": ("SELECT COUNT(*) FROM gruvax.record_stats WHERE profile_id = %s::uuid"),
+        "settings": ("SELECT COUNT(*) FROM gruvax.settings WHERE profile_id = %s::uuid"),
     }
 
     for table, sql in _QUERIES.items():
@@ -352,6 +348,7 @@ async def test_rotate_clears_revoked(db_pool) -> None:  # type: ignore[no-untype
 
             # Log in
             from gruvax.api.admin.limiter import limiter
+
             limiter.reset()
             login_res = await client.post("/api/admin/login", json={"pin": _TEST_PIN})
             assert login_res.status_code == 200, (
@@ -369,8 +366,7 @@ async def test_rotate_clears_revoked(db_pool) -> None:  # type: ignore[no-untype
                 pre_row = await cur.fetchone()
             assert pre_row is not None, f"Test profile {test_profile_id} not found"
             assert pre_row[0] is True, (
-                f"Pre-condition: app_token_revoked must be TRUE before rotate. "
-                f"Got: {pre_row[0]!r}"
+                f"Pre-condition: app_token_revoked must be TRUE before rotate. Got: {pre_row[0]!r}"
             )
 
             # Rotate PAT

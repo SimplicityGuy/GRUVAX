@@ -305,7 +305,7 @@ async def illuminate_with_lifecycle(
 
     try:
         delay_seconds = int(str(ttl_raw).strip('"'))
-    except (ValueError, TypeError):
+    except ValueError, TypeError:
         delay_seconds = 900 if retain_mode else 180
         logger.warning(
             "Invalid TTL value %r; falling back to %d seconds",

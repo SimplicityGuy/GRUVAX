@@ -309,7 +309,7 @@ async def fan_out_illuminate(
             try:
                 start_f = float(raw_start)
                 end_f = float(raw_end)
-            except (TypeError, ValueError):
+            except TypeError, ValueError:
                 logger.warning(
                     "illuminate: non-numeric sub_cube_interval (start=%r end=%r) — "
                     "skipping sub publish for cube %s/%s/%s (WR-08)",
@@ -667,7 +667,7 @@ async def run_diagnostic(
     # while holding the status/# subscription open.
     try:
         inter_cube_ms = int(settings_cache.get("led_diagnostic.inter_cube_ms", 200))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         logger.warning(
             "run_diagnostic run_id=%s: invalid led_diagnostic.inter_cube_ms %r; using 200ms",
             run_id,

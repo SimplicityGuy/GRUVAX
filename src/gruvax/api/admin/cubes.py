@@ -152,7 +152,7 @@ def _get_nominal_capacity(request: Request) -> int:
     raw = settings_cache.get("cube.nominal_capacity", 95)
     try:
         return max(1, int(raw))
-    except (TypeError, ValueError):
+    except TypeError, ValueError:
         logger.warning(
             "cube.nominal_capacity=%r is not a valid int; falling back to 95",
             raw,

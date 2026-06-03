@@ -47,8 +47,7 @@ def test_next_fire_always_future(epoch_seconds: int, hour: int) -> None:
     now = datetime.fromtimestamp(epoch_seconds).astimezone()
     result = next_fire_after(now, hour)
     assert result > now, (
-        f"next_fire_after({now!r}, hour={hour}) returned {result!r} "
-        f"which is not strictly after now"
+        f"next_fire_after({now!r}, hour={hour}) returned {result!r} which is not strictly after now"
     )
 
 

@@ -29,6 +29,7 @@ _REVOKED_PROFILE_UUID = "00000000-0000-0000-0000-000000000002"
 
 # ── fake DB profile rows ──────────────────────────────────────────────────────
 
+
 def _make_profile_rows(revoked: bool) -> list[tuple[Any, ...]]:
     """Build a fake cursor result for _SELECT_ACTIVE_PROFILES.
 
@@ -37,14 +38,15 @@ def _make_profile_rows(revoked: bool) -> list[tuple[Any, ...]]:
       last_sync_item_count, app_token_revoked
     """
     import uuid
+
     return [
         (
             uuid.UUID(_DEFAULT_PROFILE_UUID),  # id
-            "Default",                          # display_name
-            None,                               # last_sync_at
-            None,                               # last_sync_status
-            None,                               # last_sync_item_count
-            revoked,                            # app_token_revoked
+            "Default",  # display_name
+            None,  # last_sync_at
+            None,  # last_sync_status
+            None,  # last_sync_item_count
+            revoked,  # app_token_revoked
         )
     ]
 
