@@ -1,14 +1,13 @@
 /**
- * ShelfBinList SSE invalidation tests — Plan 10-02 (D-04).
+ * ShelfBinList SSE invalidation tests — Plan 10-02 (D-04), extended 260602-oxg (WARNING-2).
  *
  * Uses MockEventSource to drive the admin SSE consumer in ShelfBinList without
  * a real server. The hook invalidates ['admin','cubes'] on both SSE events.
  *
  * Test 1: collection_changed invalidates ['admin','cubes']
  * Test 2: boundary_changed invalidates ['admin','cubes']
- * Test 3: unmounting ShelfBinList calls es.close() (no leaked connection)
- *
- * Tests 1–3 are RED until Task 2 adds useAdminCubesInvalidation to ShelfBinList.tsx.
+ * Test 3: server_hello invalidates ['admin','cubes'] (WARNING-2 — fill shading refreshes after server restart)
+ * Test 3 (close): unmounting ShelfBinList calls es.close() (no leaked connection)
  *
  * Analog: frontend/src/routes/kiosk/KioskView.EventSource.test.tsx
  */
@@ -176,6 +175,22 @@ describe('ShelfBinList SSE invalidation (useAdminCubesInvalidation)', () => {
         cube_ids: [{ unit: 1, row: 0, col: 0 }],
         change_set_id: 'test-set-abc',
       })
+    })
+
+    const calledKeys = invalidateSpy.mock.calls.map(
+      (args) => (args[0] as { queryKey?: unknown[] }).queryKey,
+    )
+    expect(calledKeys).toContainEqual(['admin', 'cubes'])
+  })
+
+  it('Test 3: server_hello invalidates [admin, cubes]', async () => {
+    const qc = makeQueryClient()
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
+
+    const { es } = await renderShelfBinListAndFlush(qc)
+
+    await act(async () => {
+      es.dispatchEvent('server_hello', {})
     })
 
     const calledKeys = invalidateSpy.mock.calls.map(
