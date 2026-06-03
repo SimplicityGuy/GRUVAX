@@ -20,7 +20,6 @@ should use ``boundary_cache`` or plain Python fixtures.
 
 from __future__ import annotations
 
-import asyncio
 import os
 from pathlib import Path
 from typing import Any
@@ -35,15 +34,6 @@ from gruvax.db.pool import create_pool
 # Path to the committed synthetic boundary fixture
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
 BOUNDARIES_YAML = FIXTURE_DIR / "boundaries.yaml"
-
-
-# ── event loop ───────────────────────────────────────────────────────────────
-
-
-@pytest.fixture(scope="session")
-def event_loop_policy() -> asyncio.DefaultEventLoopPolicy:
-    """Use the default event loop policy (no uvloop in tests for simplicity)."""
-    return asyncio.DefaultEventLoopPolicy()
 
 
 # ── login rate-limit reset (global) ──────────────────────────────────────────
