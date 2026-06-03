@@ -28,6 +28,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -184,8 +185,7 @@ async def test_resume_revalidates_stale_cut(client) -> None:  # type: ignore[no-
     response = await client.post(
         "/api/admin/cubes/validate",
         json={"updates": [stale_cut_update]},
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
 
     # The validate endpoint is a dry-run: it returns 200 with valid=false

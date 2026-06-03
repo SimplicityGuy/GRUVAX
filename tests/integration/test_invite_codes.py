@@ -36,6 +36,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 # ── Test constants ────────────────────────────────────────────────────────────
@@ -147,8 +148,7 @@ async def test_generate_invite(client) -> None:  # type: ignore[no-untyped-def]
     cookies = await _login(client)
     res = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/invite",
-        cookies=cookies,
-        headers={"X-CSRF-Token": _csrf(cookies)},
+        headers={"X-CSRF-Token": _csrf(cookies), **cookie_header(cookies)},
     )
     assert res.status_code == 200, (
         f"POST /api/admin/profiles/{{id}}/invite expected 200, got {res.status_code}: {res.text}. "
@@ -181,8 +181,7 @@ async def test_new_invite_voids_prior(client) -> None:  # type: ignore[no-untype
     # Generate first invite
     res1 = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/invite",
-        cookies=cookies,
-        headers=headers,
+        headers={**headers, **cookie_header(cookies)},
     )
     if res1.status_code != 200:
         pytest.skip(f"invite endpoint returned {res1.status_code} — skipping void test")
@@ -191,8 +190,7 @@ async def test_new_invite_voids_prior(client) -> None:  # type: ignore[no-untype
     # Generate second invite — must void the first
     res2 = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/invite",
-        cookies=cookies,
-        headers=headers,
+        headers={**headers, **cookie_header(cookies)},
     )
     assert res2.status_code == 200, (
         f"Second invite generation expected 200, got {res2.status_code}: {res2.text}"
@@ -224,8 +222,7 @@ async def test_get_valid_code(client) -> None:  # type: ignore[no-untyped-def]
     # Generate a fresh invite
     gen_res = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/invite",
-        cookies=cookies,
-        headers={"X-CSRF-Token": _csrf(cookies)},
+        headers={"X-CSRF-Token": _csrf(cookies), **cookie_header(cookies)},
     )
     if gen_res.status_code != 200:
         pytest.skip(f"invite endpoint returned {gen_res.status_code}")
@@ -254,8 +251,7 @@ async def test_redeem_success(client, db_pool) -> None:  # type: ignore[no-untyp
     cookies = await _login(client)
     gen_res = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/invite",
-        cookies=cookies,
-        headers={"X-CSRF-Token": _csrf(cookies)},
+        headers={"X-CSRF-Token": _csrf(cookies), **cookie_header(cookies)},
     )
     if gen_res.status_code != 200:
         pytest.skip(f"invite generation returned {gen_res.status_code}")
@@ -291,8 +287,7 @@ async def test_redeem_second_use_rejected(client, db_pool) -> None:  # type: ign
     cookies = await _login(client)
     gen_res = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/invite",
-        cookies=cookies,
-        headers={"X-CSRF-Token": _csrf(cookies)},
+        headers={"X-CSRF-Token": _csrf(cookies), **cookie_header(cookies)},
     )
     if gen_res.status_code != 200:
         pytest.skip(f"invite generation returned {gen_res.status_code}")
@@ -338,8 +333,7 @@ async def test_redeem_bad_pat(client) -> None:  # type: ignore[no-untyped-def]
     cookies = await _login(client)
     gen_res = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/invite",
-        cookies=cookies,
-        headers={"X-CSRF-Token": _csrf(cookies)},
+        headers={"X-CSRF-Token": _csrf(cookies), **cookie_header(cookies)},
     )
     if gen_res.status_code != 200:
         pytest.skip(f"invite generation returned {gen_res.status_code}")
@@ -373,8 +367,7 @@ async def test_redeem_expired(client, db_pool) -> None:  # type: ignore[no-untyp
     cookies = await _login(client)
     gen_res = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/invite",
-        cookies=cookies,
-        headers={"X-CSRF-Token": _csrf(cookies)},
+        headers={"X-CSRF-Token": _csrf(cookies), **cookie_header(cookies)},
     )
     if gen_res.status_code != 200:
         pytest.skip(f"invite generation returned {gen_res.status_code}")
@@ -424,8 +417,7 @@ async def test_redeem_rotates_token(client, db_pool) -> None:  # type: ignore[no
     connect_res = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/connect",
         json={"pat": "dscg_initial_token"},
-        cookies=cookies,
-        headers=headers,
+        headers={**headers, **cookie_header(cookies)},
     )
     if connect_res.status_code not in (200, 201):
         pytest.skip(f"connect returned {connect_res.status_code} — skipping rotation test")
@@ -433,8 +425,7 @@ async def test_redeem_rotates_token(client, db_pool) -> None:  # type: ignore[no
     # Step 2: generate invite
     gen_res = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/invite",
-        cookies=cookies,
-        headers=headers,
+        headers={**headers, **cookie_header(cookies)},
     )
     if gen_res.status_code != 200:
         pytest.skip(f"invite generation returned {gen_res.status_code}")
@@ -473,8 +464,7 @@ async def test_profile_has_token_field(client) -> None:  # type: ignore[no-untyp
     cookies = await _login(client)
     res = await client.get(
         "/api/admin/profiles",
-        cookies=cookies,
-        headers={"X-CSRF-Token": _csrf(cookies)},
+        headers={"X-CSRF-Token": _csrf(cookies), **cookie_header(cookies)},
     )
     assert res.status_code == 200, (
         f"GET /api/admin/profiles expected 200, got {res.status_code}: {res.text}"
@@ -513,8 +503,7 @@ async def test_profile_new_record_fields(client) -> None:  # type: ignore[no-unt
     cookies = await _login(client)
     res = await client.get(
         "/api/admin/profiles",
-        cookies=cookies,
-        headers={"X-CSRF-Token": _csrf(cookies)},
+        headers={"X-CSRF-Token": _csrf(cookies), **cookie_header(cookies)},
     )
     assert res.status_code == 200, (
         f"GET /api/admin/profiles expected 200, got {res.status_code}: {res.text}"
@@ -581,8 +570,7 @@ async def _await_sync(client, profile_id, cookies, headers):  # type: ignore[no-
     for _ in range(20):
         detail = await client.get(
             f"/api/admin/profiles/{profile_id}",
-            cookies=cookies,
-            headers=headers,
+            headers={**headers, **cookie_header(cookies)},
         )
         if detail.status_code == 200:
             profile = detail.json()
@@ -611,8 +599,7 @@ async def test_initial_import_flag(client, db_pool) -> None:  # type: ignore[no-
     create_res = await client.post(
         "/api/admin/profiles",
         json={"display_name": f"Initial-Import-Test-{unique_suffix}"},
-        cookies=cookies,
-        headers=headers,
+        headers={**headers, **cookie_header(cookies)},
     )
     if create_res.status_code not in (200, 201):
         pytest.skip(
@@ -643,8 +630,7 @@ async def test_initial_import_flag(client, db_pool) -> None:  # type: ignore[no-
         # First sync — must report is_initial_import=True
         sync_res1 = await client.post(
             f"/api/admin/profiles/{profile_id}/sync",
-            cookies=cookies,
-            headers=headers,
+            headers={**headers, **cookie_header(cookies)},
         )
         if sync_res1.status_code not in (200, 202):
             pytest.skip(
@@ -668,8 +654,7 @@ async def test_initial_import_flag(client, db_pool) -> None:  # type: ignore[no-
         # Second sync — must report is_initial_import=False
         sync_res2 = await client.post(
             f"/api/admin/profiles/{profile_id}/sync",
-            cookies=cookies,
-            headers=headers,
+            headers={**headers, **cookie_header(cookies)},
         )
         if sync_res2.status_code not in (200, 202):
             pytest.skip(
@@ -714,8 +699,7 @@ async def test_arrival_count_accuracy(client, db_pool) -> None:  # type: ignore[
     create_res = await client.post(
         "/api/admin/profiles",
         json={"display_name": f"Arrival-Count-Test-{unique_suffix}"},
-        cookies=cookies,
-        headers=headers,
+        headers={**headers, **cookie_header(cookies)},
     )
     if create_res.status_code not in (200, 201):
         pytest.skip(
@@ -746,8 +730,7 @@ async def test_arrival_count_accuracy(client, db_pool) -> None:  # type: ignore[
         # Trigger sync
         sync_res = await client.post(
             f"/api/admin/profiles/{profile_id}/sync",
-            cookies=cookies,
-            headers=headers,
+            headers={**headers, **cookie_header(cookies)},
         )
         if sync_res.status_code not in (200, 202):
             pytest.skip(

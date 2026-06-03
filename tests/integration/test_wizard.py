@@ -23,6 +23,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -86,10 +87,10 @@ async def test_wizard_atomic_commit(client, four_cube_boundaries) -> None:  # ty
             ],
             "source": "wizard",
         },
-        cookies=auth["cookies"],
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": idempotency_key,
+            **cookie_header(auth["cookies"]),
         },
     )
     assert response.status_code == 200, (
@@ -129,10 +130,10 @@ async def test_source_label(client, four_cube_boundaries, db_pool) -> None:  # t
             ],
             "source": "wizard",
         },
-        cookies=auth["cookies"],
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": idempotency_key,
+            **cookie_header(auth["cookies"]),
         },
     )
     assert response.status_code == 200, (
@@ -178,10 +179,10 @@ async def test_reshuffle_source(client, four_cube_boundaries, db_pool) -> None: 
             ],
             "source": "reshuffle",
         },
-        cookies=auth["cookies"],
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": idempotency_key,
+            **cookie_header(auth["cookies"]),
         },
     )
     assert response.status_code == 200, (
@@ -239,8 +240,7 @@ async def test_idempotency_replay(client, four_cube_boundaries, db_pool) -> None
     r1 = await client.post(
         "/api/admin/cubes/bulk",
         json=payload,
-        cookies=auth["cookies"],
-        headers=headers,
+        headers={**headers, **cookie_header(auth["cookies"])},
     )
     assert r1.status_code == 200, f"First request failed: {r1.status_code}: {r1.text}"
     change_set_id = r1.json()["change_set_id"]
@@ -257,8 +257,7 @@ async def test_idempotency_replay(client, four_cube_boundaries, db_pool) -> None
     r2 = await client.post(
         "/api/admin/cubes/bulk",
         json=payload,
-        cookies=auth["cookies"],
-        headers=headers,
+        headers={**headers, **cookie_header(auth["cookies"])},
     )
     assert r2.status_code == 200, f"Replay request failed: {r2.status_code}: {r2.text}"
     assert r2.json()["change_set_id"] == change_set_id, (

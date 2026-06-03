@@ -43,6 +43,7 @@ import pytest
 import uvicorn
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 logger = logging.getLogger(__name__)
@@ -276,8 +277,7 @@ async def test_boundary_edit_profile_a_does_not_touch_profile_b(
                 "is_empty": False,
                 "force": True,
             },
-            cookies=auth["cookies"],
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
         )
 
     assert res.status_code == 200, (
@@ -328,8 +328,7 @@ async def test_unbound_admin_write_returns_400(live_server) -> None:  # type: ig
                 "is_empty": False,
                 "force": True,
             },
-            cookies=session_only_cookies,
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(session_only_cookies)},
         )
 
     assert res.status_code == 400, (
@@ -371,8 +370,7 @@ async def test_zero_row_write_returns_404(
                 "is_empty": False,
                 "force": True,
             },
-            cookies=b_bound_cookies,
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(b_bound_cookies)},
         )
 
     assert res.status_code == 404, (
@@ -421,7 +419,7 @@ async def test_boundary_changed_fans_out_per_profile(
             probe.stream(
                 "GET",
                 f"/api/events/{profile_b}",
-                cookies={BROWSE_BINDING_COOKIE: profile_b},
+                headers=cookie_header({BROWSE_BINDING_COOKIE: profile_b}),
                 timeout=3.0,
             ) as check_stream,
         ):
@@ -453,7 +451,7 @@ async def test_boundary_changed_fans_out_per_profile(
                 ac.stream(
                     "GET",
                     f"/api/events/{DEFAULT_PROFILE_UUID}",
-                    cookies=sse_cookies,
+                    headers=cookie_header(sse_cookies),
                     timeout=8.0,
                 ) as resp,
             ):
@@ -476,7 +474,7 @@ async def test_boundary_changed_fans_out_per_profile(
                 ac.stream(
                     "GET",
                     f"/api/events/{profile_b}",
-                    cookies=sse_cookies,
+                    headers=cookie_header(sse_cookies),
                     timeout=8.0,
                 ) as resp,
             ):
@@ -512,8 +510,7 @@ async def test_boundary_changed_fans_out_per_profile(
                 "is_empty": False,
                 "force": True,
             },
-            cookies=auth["cookies"],
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
         )
     assert put_res.status_code == 200, (
         f"Expected 200 from admin PUT in fan-out test, got {put_res.status_code}: {put_res.text}"
@@ -569,7 +566,7 @@ async def test_admin_editing_fans_out_per_profile(
             probe.stream(
                 "GET",
                 f"/api/events/{profile_b}",
-                cookies={BROWSE_BINDING_COOKIE: profile_b},
+                headers=cookie_header({BROWSE_BINDING_COOKIE: profile_b}),
                 timeout=3.0,
             ) as check_stream,
         ):
@@ -599,7 +596,7 @@ async def test_admin_editing_fans_out_per_profile(
                 ac.stream(
                     "GET",
                     f"/api/events/{DEFAULT_PROFILE_UUID}",
-                    cookies=sse_cookies,
+                    headers=cookie_header(sse_cookies),
                     timeout=6.0,
                 ) as resp,
             ):
@@ -622,7 +619,7 @@ async def test_admin_editing_fans_out_per_profile(
                 ac.stream(
                     "GET",
                     f"/api/events/{profile_b}",
-                    cookies=sse_cookies,
+                    headers=cookie_header(sse_cookies),
                     timeout=6.0,
                 ) as resp,
             ):
@@ -655,8 +652,7 @@ async def test_admin_editing_fans_out_per_profile(
         edit_res = await ac.post(
             "/api/admin/editing",
             json=payload,
-            cookies=auth["cookies"],
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
         )
     assert edit_res.status_code == 200, (
         f"Expected 200 from POST /api/admin/editing, got {edit_res.status_code}: {edit_res.text}"
@@ -763,8 +759,7 @@ async def test_phantom_validation_is_per_profile(
                 "is_empty": False,
                 "force": False,  # phantom check active
             },
-            cookies=a_bound_cookies,
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(a_bound_cookies)},
         )
 
     assert res_a.status_code != 400 or res_a.json().get("type") != "phantom_boundary", (
@@ -785,8 +780,7 @@ async def test_phantom_validation_is_per_profile(
                 "is_empty": False,
                 "force": False,  # phantom check active
             },
-            cookies=b_bound_cookies,
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(b_bound_cookies)},
         )
 
     assert res_b.status_code == 400, (
@@ -830,7 +824,7 @@ async def test_get_admin_cubes_returns_only_bound_profile(
     a_cookies[BROWSE_BINDING_COOKIE] = DEFAULT_PROFILE_UUID
 
     async with httpx.AsyncClient(base_url=live_server) as ac:
-        res_a = await ac.get("/api/admin/cubes", cookies=a_cookies)
+        res_a = await ac.get("/api/admin/cubes", headers=cookie_header(a_cookies))
 
     if res_a.status_code in (404, 405):
         pytest.skip("GET /admin/cubes not implemented — skipping")
@@ -859,7 +853,7 @@ async def test_get_admin_cubes_returns_only_bound_profile(
     b_cookies[BROWSE_BINDING_COOKIE] = profile_b
 
     async with httpx.AsyncClient(base_url=live_server) as ac:
-        res_b = await ac.get("/api/admin/cubes", cookies=b_cookies)
+        res_b = await ac.get("/api/admin/cubes", headers=cookie_header(b_cookies))
 
     assert res_b.status_code == 200, (
         f"Expected 200 from GET /admin/cubes bound to profile B, got {res_b.status_code}"
@@ -917,7 +911,7 @@ async def test_get_cube_boundary_returns_bound_profile_row(
     b_cookies[BROWSE_BINDING_COOKIE] = profile_b
 
     async with httpx.AsyncClient(base_url=live_server) as ac:
-        res_b = await ac.get(path, cookies=b_cookies)
+        res_b = await ac.get(path, headers=cookie_header(b_cookies))
 
     if res_b.status_code in (404, 405):
         pytest.skip("GET /admin/cubes/{u}/{r}/{c}/boundary not implemented — skipping")
@@ -937,7 +931,7 @@ async def test_get_cube_boundary_returns_bound_profile_row(
     a_cookies[BROWSE_BINDING_COOKIE] = DEFAULT_PROFILE_UUID
 
     async with httpx.AsyncClient(base_url=live_server) as ac:
-        res_a = await ac.get(path, cookies=a_cookies)
+        res_a = await ac.get(path, headers=cookie_header(a_cookies))
 
     assert res_a.status_code == 200, (
         f"Expected 200 from GET boundary bound to profile A, got {res_a.status_code}: {res_a.text}"

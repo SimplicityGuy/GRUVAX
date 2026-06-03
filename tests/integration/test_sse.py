@@ -28,6 +28,7 @@ import pytest
 import uvicorn
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 # Default profile UUID (D-02) — the single profile seeded by migrations.
@@ -124,7 +125,7 @@ async def test_sse_headers(live_server) -> None:  # type: ignore[no-untyped-def]
     sse_url = f"/api/events/{DEFAULT_PROFILE_UUID}"
     async with (
         httpx.AsyncClient(base_url=live_server) as ac,
-        ac.stream("GET", sse_url, cookies=cookies) as resp,
+        ac.stream("GET", sse_url, headers=cookie_header(cookies)) as resp,
     ):
         assert resp.status_code == 200, (
             f"Expected 200 from {sse_url} with bound cookie, got {resp.status_code}"
@@ -183,7 +184,7 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
     async def read_sse() -> None:
         async with (
             httpx.AsyncClient(base_url=live_server) as ac,
-            ac.stream("GET", sse_url, cookies=sse_cookies) as response,
+            ac.stream("GET", sse_url, headers=cookie_header(sse_cookies)) as response,
         ):
             async for line in response.aiter_lines():
                 if "boundary_changed" in line:
@@ -200,8 +201,7 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
         await ac.put(
             "/api/admin/cubes/1/0/0/boundary",
             json=TEST_BOUNDARY,
-            cookies=auth["cookies"],
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
         )
 
     try:
@@ -213,8 +213,7 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
             await ac.put(
                 "/api/admin/cubes/1/0/0/boundary",
                 json=ORIGINAL_BOUNDARY,
-                cookies=auth["cookies"],
-                headers={"X-CSRF-Token": auth["csrf_token"]},
+                headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
             )
         pytest.fail("boundary_changed not received within 500ms — ADMN-11 gate FAILED")
 
@@ -226,8 +225,7 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
         await ac.put(
             "/api/admin/cubes/1/0/0/boundary",
             json=ORIGINAL_BOUNDARY,
-            cookies=auth["cookies"],
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
         )
 
     assert latency < 0.5, f"boundary_changed latency {latency:.3f}s exceeded 500ms budget"
@@ -249,7 +247,7 @@ async def test_concurrent_searches(live_server) -> None:  # type: ignore[no-unty
             await ac.get(
                 "/api/search",
                 params={"q": q, "profile_id": DEFAULT_PROFILE_UUID},
-                cookies=cookies,
+                headers=cookie_header(cookies),
             )
         return time.perf_counter() - t0
 

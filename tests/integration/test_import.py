@@ -25,6 +25,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -121,8 +122,8 @@ async def _seed_boundaries_via_bulk(client, auth, cubes) -> None:  # type: ignor
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": str(uuid.uuid4()),
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     assert resp.status_code == 200, f"Seed via bulk failed: {resp.status_code}: {resp.text}"
 
@@ -149,8 +150,8 @@ async def test_csv_import(client, four_cube_boundaries) -> None:  # type: ignore
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "text/csv",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     # Expect 200 — unimplemented endpoint returns 404 → test fails RED as intended
     assert response.status_code == 200, (
@@ -180,8 +181,8 @@ async def test_yaml_import(client, four_cube_boundaries) -> None:  # type: ignor
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "application/x-yaml",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     assert response.status_code == 200, (
         f"Expected 200 from import/boundaries (YAML), got {response.status_code}: {response.text}"
@@ -233,8 +234,8 @@ async def test_partial_import(client) -> None:  # type: ignore[no-untyped-def]
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "application/x-yaml",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     # 200 expected — import fills missing cubes with is_empty; 404 fails RED
     assert response.status_code == 200, (
@@ -271,8 +272,8 @@ async def test_phantom_row_rejected(client) -> None:  # type: ignore[no-untyped-
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "application/x-yaml",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     # Expect 400 phantom_boundary — unimplemented endpoint (404) fails RED
     assert response.status_code == 400, (
@@ -336,8 +337,8 @@ async def test_contiguity_violation(client) -> None:  # type: ignore[no-untyped-
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "application/x-yaml",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     # Expect 400 contiguity rejection — unimplemented (404) fails RED
     assert response.status_code == 400, (
@@ -385,8 +386,8 @@ async def test_unchanged_unmatchable_row_skips_phantom(client, four_cube_boundar
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": str(uuid.uuid4()),
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     assert seed_resp.status_code == 200, (
         f"Seed via bulk failed: {seed_resp.status_code}: {seed_resp.text}"
@@ -402,8 +403,8 @@ async def test_unchanged_unmatchable_row_skips_phantom(client, four_cube_boundar
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "application/x-yaml",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     assert response.status_code == 200, (
         f"Expected 200 from identity re-import (G3 skip), got {response.status_code}: "
@@ -444,8 +445,8 @@ async def test_atomicity(client, four_cube_boundaries) -> None:  # type: ignore[
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "application/x-yaml",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     # Must reject with 400 and no partial state — 404 fails RED
     assert response.status_code == 400, (

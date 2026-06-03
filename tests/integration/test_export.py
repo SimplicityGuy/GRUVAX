@@ -19,6 +19,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -58,7 +59,7 @@ async def test_export_returns_yaml(client) -> None:  # type: ignore[no-untyped-d
 
     response = await client.get(
         "/api/admin/export/boundaries.yaml",
-        cookies=auth["cookies"],
+        headers=cookie_header(auth["cookies"]),
     )
     assert response.status_code == 200, (
         f"Expected 200 from export/boundaries.yaml, got {response.status_code}: {response.text}"
@@ -87,7 +88,7 @@ async def test_overrides_in_export(client) -> None:  # type: ignore[no-untyped-d
 
     response = await client.get(
         "/api/admin/export/boundaries.yaml",
-        cookies=auth["cookies"],
+        headers=cookie_header(auth["cookies"]),
     )
     # 200 required — 404 (unimplemented) fails RED
     assert response.status_code == 200, (

@@ -28,6 +28,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 # ── fixtures ─────────────────────────────────────────────────────────────────
@@ -89,8 +90,10 @@ async def test_create_profile(
     res = await client.post(
         "/api/admin/profiles",
         json={"display_name": "Sam"},
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     assert res.status_code in (200, 201), (
         f"POST /api/admin/profiles expected 200/201, got {res.status_code}: {res.text}"
@@ -102,8 +105,10 @@ async def test_create_profile(
     # List profiles and find our new one
     list_res = await client.get(
         "/api/admin/profiles",
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     assert list_res.status_code == 200, (
         f"GET /api/admin/profiles expected 200, got {list_res.status_code}"
@@ -123,8 +128,10 @@ async def test_create_profile(
     # Cleanup: soft-delete the test profile
     await client.delete(
         f"/api/admin/profiles/{new_profile_id}",
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
 
 
@@ -148,8 +155,10 @@ async def test_connect_pat_flow(
     create_res = await client.post(
         "/api/admin/profiles",
         json={"display_name": "ConnectTestProfile"},
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     if create_res.status_code not in (200, 201):
         pytest.skip("Profile create endpoint not implemented — skipping connect test")
@@ -161,8 +170,10 @@ async def test_connect_pat_flow(
         connect_res = await client.post(
             f"/api/admin/profiles/{profile_id}/connect",
             json={"pat": "dscg_test_valid_token_00000000"},
-            cookies=admin_session["cookies"],
-            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin_session["csrf_token"],
+                **cookie_header(admin_session["cookies"]),
+            },
         )
         assert connect_res.status_code == 200, (
             f"POST /connect expected 200, got {connect_res.status_code}: {connect_res.text}"
@@ -176,8 +187,10 @@ async def test_connect_pat_flow(
         while asyncio.get_event_loop().time() < deadline:
             detail_res = await client.get(
                 f"/api/admin/profiles/{profile_id}",
-                cookies=admin_session["cookies"],
-                headers={"X-CSRF-Token": admin_session["csrf_token"]},
+                headers={
+                    "X-CSRF-Token": admin_session["csrf_token"],
+                    **cookie_header(admin_session["cookies"]),
+                },
             )
             if detail_res.status_code == 200:
                 sync_status = detail_res.json().get("last_sync_status")
@@ -194,8 +207,10 @@ async def test_connect_pat_flow(
         # Cleanup
         await client.delete(
             f"/api/admin/profiles/{profile_id}",
-            cookies=admin_session["cookies"],
-            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin_session["csrf_token"],
+                **cookie_header(admin_session["cookies"]),
+            },
         )
 
 
@@ -215,8 +230,10 @@ async def test_sync_202_poll(
     create_res = await client.post(
         "/api/admin/profiles",
         json={"display_name": "SyncPollTestProfile"},
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     if create_res.status_code not in (200, 201):
         pytest.skip("Profile create endpoint not implemented — skipping sync 202 test")
@@ -227,8 +244,10 @@ async def test_sync_202_poll(
         # Trigger sync — must return 202 Accepted (not 200)
         sync_res = await client.post(
             f"/api/admin/profiles/{profile_id}/sync",
-            cookies=admin_session["cookies"],
-            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin_session["csrf_token"],
+                **cookie_header(admin_session["cookies"]),
+            },
         )
         assert sync_res.status_code == 202, (
             f"POST /sync must return 202 Accepted (background task), "
@@ -243,8 +262,10 @@ async def test_sync_202_poll(
         while asyncio.get_event_loop().time() < deadline:
             detail_res = await client.get(
                 f"/api/admin/profiles/{profile_id}",
-                cookies=admin_session["cookies"],
-                headers={"X-CSRF-Token": admin_session["csrf_token"]},
+                headers={
+                    "X-CSRF-Token": admin_session["csrf_token"],
+                    **cookie_header(admin_session["cookies"]),
+                },
             )
             if detail_res.status_code == 200:
                 final_status = detail_res.json().get("last_sync_status")
@@ -258,8 +279,10 @@ async def test_sync_202_poll(
     finally:
         await client.delete(
             f"/api/admin/profiles/{profile_id}",
-            cookies=admin_session["cookies"],
-            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin_session["csrf_token"],
+                **cookie_header(admin_session["cookies"]),
+            },
         )
 
 
@@ -279,8 +302,10 @@ async def test_user_id_collision(
     res_a = await client.post(
         "/api/admin/profiles",
         json={"display_name": "CollisionProfileA"},
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     if res_a.status_code not in (200, 201):
         pytest.skip("Profile create endpoint not implemented — skipping collision test")
@@ -289,14 +314,18 @@ async def test_user_id_collision(
     res_b = await client.post(
         "/api/admin/profiles",
         json={"display_name": "CollisionProfileB"},
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     if res_b.status_code not in (200, 201):
         await client.delete(
             f"/api/admin/profiles/{profile_id_a}",
-            cookies=admin_session["cookies"],
-            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin_session["csrf_token"],
+                **cookie_header(admin_session["cookies"]),
+            },
         )
         pytest.skip("Profile create endpoint not implemented — skipping collision test")
     profile_id_b = res_b.json()["id"]
@@ -306,8 +335,10 @@ async def test_user_id_collision(
         connect_a = await client.post(
             f"/api/admin/profiles/{profile_id_a}/connect",
             json={"pat": "dscg_test_valid_token_collision_a"},
-            cookies=admin_session["cookies"],
-            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin_session["csrf_token"],
+                **cookie_header(admin_session["cookies"]),
+            },
         )
         if connect_a.status_code != 200:
             pytest.skip("Connect endpoint not implemented — skipping collision test")
@@ -318,8 +349,10 @@ async def test_user_id_collision(
         connect_b = await client.post(
             f"/api/admin/profiles/{profile_id_b}/connect",
             json={"pat": "dscg_test_valid_token_collision_b"},
-            cookies=admin_session["cookies"],
-            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin_session["csrf_token"],
+                **cookie_header(admin_session["cookies"]),
+            },
         )
         assert connect_b.status_code == 409, (
             f"Second connect with same discogsography_user_id must return 409, "
@@ -335,8 +368,10 @@ async def test_user_id_collision(
         for pid in (profile_id_a, profile_id_b):
             await client.delete(
                 f"/api/admin/profiles/{pid}",
-                cookies=admin_session["cookies"],
-                headers={"X-CSRF-Token": admin_session["csrf_token"]},
+                headers={
+                    "X-CSRF-Token": admin_session["csrf_token"],
+                    **cookie_header(admin_session["cookies"]),
+                },
             )
 
 
@@ -356,8 +391,10 @@ async def test_soft_delete_evicts(
     create_res = await client.post(
         "/api/admin/profiles",
         json={"display_name": "ToBeDeleted"},
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     if create_res.status_code not in (200, 201):
         pytest.skip("Profile create endpoint not implemented — skipping soft-delete test")
@@ -366,8 +403,10 @@ async def test_soft_delete_evicts(
     # Soft-delete
     delete_res = await client.delete(
         f"/api/admin/profiles/{profile_id}",
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     assert delete_res.status_code == 200, (
         f"DELETE /api/admin/profiles/{profile_id} expected 200, "
@@ -377,8 +416,10 @@ async def test_soft_delete_evicts(
     # Must not appear in GET /api/admin/profiles
     list_res = await client.get(
         "/api/admin/profiles",
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     assert list_res.status_code == 200
     profiles = list_res.json()
@@ -415,8 +456,10 @@ async def test_pat_rejected(
     create_res = await client.post(
         "/api/admin/profiles",
         json={"display_name": "PatRejectedTestProfile"},
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     if create_res.status_code not in (200, 201):
         pytest.skip("Profile create endpoint not implemented — skipping pat_rejected test")
@@ -430,8 +473,10 @@ async def test_pat_rejected(
             # A token that the fake-discogsography's auth check will reject:
             # doesn't start with "dscg_" prefix so the fake returns 401.
             json={"pat": "invalid_token_no_dscg_prefix"},
-            cookies=admin_session["cookies"],
-            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin_session["csrf_token"],
+                **cookie_header(admin_session["cookies"]),
+            },
         )
         assert connect_res.status_code == 401, (
             f"POST /connect with invalid PAT must return 401, "
@@ -450,8 +495,10 @@ async def test_pat_rejected(
     finally:
         await client.delete(
             f"/api/admin/profiles/{profile_id}",
-            cookies=admin_session["cookies"],
-            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin_session["csrf_token"],
+                **cookie_header(admin_session["cookies"]),
+            },
         )
 
 
@@ -472,8 +519,10 @@ async def test_created_profile_registries_are_real_instances(
     res = await client.post(
         "/api/admin/profiles",
         json={"display_name": "RegistryRoutable"},
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     assert res.status_code in (200, 201), f"create failed: {res.status_code} {res.text}"
     new_id = res.json()["id"]
@@ -490,7 +539,7 @@ async def test_created_profile_registries_are_real_instances(
         search = await client.get(
             "/api/search",
             params={"profile_id": new_id, "q": "anything"},
-            cookies=browse_cookie,
+            headers=cookie_header(browse_cookie),
         )
         assert search.status_code != 404, (
             "freshly-created profile must be routable, not 404 profile_not_found "
@@ -503,6 +552,8 @@ async def test_created_profile_registries_are_real_instances(
     finally:
         await client.delete(
             f"/api/admin/profiles/{new_id}",
-            cookies=admin_session["cookies"],
-            headers={"X-CSRF-Token": admin_session["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin_session["csrf_token"],
+                **cookie_header(admin_session["cookies"]),
+            },
         )

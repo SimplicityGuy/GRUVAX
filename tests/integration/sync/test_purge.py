@@ -42,6 +42,7 @@ import pytest
 
 from gruvax.settings import settings
 from gruvax.sync.pat_crypto import encrypt_pat
+from tests.cookies import cookie_header
 
 
 # ── constants ─────────────────────────────────────────────────────────────────
@@ -373,8 +374,7 @@ async def test_rotate_clears_revoked(db_pool) -> None:  # type: ignore[no-untype
             rotate_res = await client.post(
                 f"/api/admin/profiles/{test_profile_id}/rotate",
                 json={"pat": _TEST_PAT},
-                cookies=admin_cookies,
-                headers={"X-CSRF-Token": csrf},
+                headers={"X-CSRF-Token": csrf, **cookie_header(admin_cookies)},
             )
             assert rotate_res.status_code == 200, (
                 f"POST /api/admin/profiles/{test_profile_id}/rotate "

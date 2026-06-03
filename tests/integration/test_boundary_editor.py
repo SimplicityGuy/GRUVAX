@@ -19,6 +19,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 # Browse-binding cookie value (D-02 fail-loud contract).  Admin write routes now
@@ -74,8 +75,10 @@ async def test_phantom_blocked(client) -> None:  # type: ignore[no-untyped-def]
             "is_empty": False,
             "force": False,
         },
-        cookies=_with_browse_binding(login_res.cookies),
-        headers={"X-CSRF-Token": csrf_token or ""},
+        headers={
+            "X-CSRF-Token": csrf_token or "",
+            **cookie_header(_with_browse_binding(login_res.cookies)),
+        },
     )
     assert response.status_code == 400, (
         f"Expected 400 for phantom boundary, got {response.status_code}: {response.text}"
@@ -110,8 +113,10 @@ async def test_phantom_force_save(client) -> None:  # type: ignore[no-untyped-de
             "is_empty": False,
             "force": True,  # bypass phantom check; no last_* comparator in Phase 5
         },
-        cookies=_with_browse_binding(login_res.cookies),
-        headers={"X-CSRF-Token": csrf_token or ""},
+        headers={
+            "X-CSRF-Token": csrf_token or "",
+            **cookie_header(_with_browse_binding(login_res.cookies)),
+        },
     )
     # Must succeed: phantom check bypassed by force=True, no last_* validation in cut-point model
     assert response.status_code == 200, (
@@ -131,8 +136,10 @@ async def test_phantom_force_save(client) -> None:  # type: ignore[no-untyped-de
             "is_empty": False,
             "force": True,  # restore; BLP 4001 IS in collection but force ensures idempotent
         },
-        cookies=_with_browse_binding(login_res.cookies),
-        headers={"X-CSRF-Token": csrf_token or ""},
+        headers={
+            "X-CSRF-Token": csrf_token or "",
+            **cookie_header(_with_browse_binding(login_res.cookies)),
+        },
     )
 
 
@@ -158,8 +165,10 @@ async def test_near_misses_returned(client) -> None:  # type: ignore[no-untyped-
             "is_empty": False,
             "force": False,
         },
-        cookies=_with_browse_binding(login_res.cookies),
-        headers={"X-CSRF-Token": csrf_token or ""},
+        headers={
+            "X-CSRF-Token": csrf_token or "",
+            **cookie_header(_with_browse_binding(login_res.cookies)),
+        },
     )
     assert response.status_code == 400, (
         f"Expected 400 for phantom boundary, got {response.status_code}"
@@ -199,8 +208,10 @@ async def test_validate_no_db_write(client) -> None:  # type: ignore[no-untyped-
                 }
             ]
         },
-        cookies=_with_browse_binding(login_res.cookies),
-        headers={"X-CSRF-Token": csrf_token or ""},
+        headers={
+            "X-CSRF-Token": csrf_token or "",
+            **cookie_header(_with_browse_binding(login_res.cookies)),
+        },
     )
     # If the endpoint exists, it must return 200 with movement_counts and NOT write to DB
     if response.status_code == 404:
@@ -249,8 +260,10 @@ async def test_single_cube_put_writes_history(client, db_pool) -> None:  # type:
             "is_empty": False,
             "force": True,  # bypass phantom check; cut-point model has no last_* comparator
         },
-        cookies=_with_browse_binding(login_res.cookies),
-        headers={"X-CSRF-Token": csrf_token},
+        headers={
+            "X-CSRF-Token": csrf_token,
+            **cookie_header(_with_browse_binding(login_res.cookies)),
+        },
     )
     if response.status_code == 404:
         pytest.skip("Single-cube boundary endpoint not implemented")

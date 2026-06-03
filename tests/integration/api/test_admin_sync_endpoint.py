@@ -45,6 +45,7 @@ from gruvax.discogsography.client import DiscogsographyClient
 from gruvax.settings import settings
 from gruvax.sync import profile_sync
 from gruvax.sync.pat_crypto import encrypt_pat
+from tests.cookies import cookie_header
 
 
 if TYPE_CHECKING:
@@ -216,7 +217,7 @@ async def test_logged_in_no_csrf_returns_403(app_client) -> None:  # type: ignor
     auth = await _login(client)
     res = await client.post(
         f"/api/admin/profiles/{DEFAULT_UUID}/sync",
-        cookies=auth["cookies"],
+        headers=cookie_header(auth["cookies"]),
         # no X-CSRF-Token header
     )
     assert res.status_code == 403, f"expected 403, got {res.status_code}: {res.text}"
@@ -241,8 +242,7 @@ async def test_happy_path_sync(app_client, db_pool, monkeypatch: pytest.MonkeyPa
     auth = await _login(client)
     res = await client.post(
         f"/api/admin/profiles/{DEFAULT_UUID}/sync",
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     assert res.status_code == 202, f"got {res.status_code}: {res.text}"
     body = res.json()
@@ -276,8 +276,7 @@ async def test_unknown_profile_returns_404(app_client) -> None:  # type: ignore[
     bogus = "ffffffff-ffff-ffff-ffff-ffffffffffff"
     res = await client.post(
         f"/api/admin/profiles/{bogus}/sync",
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     assert res.status_code == 404, f"got {res.status_code}: {res.text}"
     body = res.json()
@@ -292,8 +291,7 @@ async def test_invalid_uuid_returns_400(app_client) -> None:  # type: ignore[no-
     auth = await _login(client)
     res = await client.post(
         "/api/admin/profiles/not-a-uuid/sync",
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     assert res.status_code == 400, f"got {res.status_code}: {res.text}"
     body = res.json()
@@ -327,8 +325,7 @@ async def test_concurrent_sync_returns_409(  # type: ignore[no-untyped-def]
         auth = await _login(client)
         res = await client.post(
             f"/api/admin/profiles/{DEFAULT_UUID}/sync",
-            cookies=auth["cookies"],
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
         )
         # D2-13: the endpoint returns 202 immediately; the background task then
         # races the held lock and fails with SyncInProgress. The DB will NOT
@@ -372,8 +369,7 @@ async def test_pat_rejected_returns_401_typed(  # type: ignore[no-untyped-def]
     auth = await _login(client)
     res = await client.post(
         f"/api/admin/profiles/{DEFAULT_UUID}/sync",
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     assert res.status_code == 202, f"got {res.status_code}: {res.text}"
     assert res.json().get("status") == "accepted"
@@ -423,8 +419,7 @@ async def test_server_error_returns_503_typed(  # type: ignore[no-untyped-def]
     auth = await _login(client)
     res = await client.post(
         f"/api/admin/profiles/{DEFAULT_UUID}/sync",
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     assert res.status_code == 202, f"got {res.status_code}: {res.text}"
     assert res.json().get("status") == "accepted"
@@ -488,8 +483,7 @@ async def test_caches_refreshed_inline(  # type: ignore[no-untyped-def]
     auth = await _login(client)
     res = await client.post(
         f"/api/admin/profiles/{DEFAULT_UUID}/sync",
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     assert res.status_code == 202, res.text
 

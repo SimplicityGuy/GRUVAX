@@ -27,7 +27,18 @@ from __future__ import annotations
 from typing import Any
 
 
-def cookie_header(cookies: Any) -> dict[str, str]:
-    """Return ``{"Cookie": "<k>=<v>; ..."}`` for an httpx Cookies jar or a dict."""
-    items = cookies.items() if hasattr(cookies, "items") else cookies
-    return {"Cookie": "; ".join(f"{name}={value}" for name, value in items)}
+def cookie_header(*sources: Any) -> dict[str, str]:
+    """Return ``{"Cookie": "<k>=<v>; ..."}`` from one or more httpx Cookies jars/dicts.
+
+    Multiple sources are merged left-to-right (later sources win on a name clash),
+    which is how you preserve a request that previously relied on *both* the
+    client's persisted jar *and* a per-request ``cookies=`` override::
+
+        # was: client.get(url, cookies=fp_cookies)  # jar + fp_cookies (union)
+        client.get(url, headers=cookie_header(client.cookies, fp_cookies))
+    """
+    merged: dict[str, str] = {}
+    for source in sources:
+        items = source.items() if hasattr(source, "items") else source
+        merged.update(items)
+    return {"Cookie": "; ".join(f"{name}={value}" for name, value in merged.items())}

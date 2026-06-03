@@ -29,6 +29,7 @@ import pytest
 import uvicorn
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 # ── browse-binding cookie name (D2-10) ───────────────────────────────────────
@@ -101,7 +102,7 @@ async def test_sse_403_on_profile_mismatch(live_server) -> None:  # type: ignore
     async with httpx.AsyncClient(base_url=live_server) as ac:
         res = await ac.get(
             f"/api/events/{profile_b}",
-            cookies=cookies,
+            headers=cookie_header(cookies),
         )
 
     assert res.status_code == 403, (
@@ -148,7 +149,7 @@ async def test_sse_connects_when_bound(live_server) -> None:  # type: ignore[no-
 
     async with (
         httpx.AsyncClient(base_url=live_server) as ac,
-        ac.stream("GET", f"/api/events/{profile_a}", cookies=cookies) as resp,
+        ac.stream("GET", f"/api/events/{profile_a}", headers=cookie_header(cookies)) as resp,
     ):
         assert resp.status_code == 200, (
             f"GET /api/events/{profile_a} with bound cookie must return 200, "
@@ -180,7 +181,7 @@ async def test_sse_emits_jittered_retry(live_server) -> None:  # type: ignore[no
 
     async with (
         httpx.AsyncClient(base_url=live_server) as ac,
-        ac.stream("GET", f"/api/events/{profile_a}", cookies=cookies) as resp,
+        ac.stream("GET", f"/api/events/{profile_a}", headers=cookie_header(cookies)) as resp,
     ):
         assert resp.status_code == 200, (
             f"GET /api/events/{profile_a} with bound cookie must return 200, got {resp.status_code}"
@@ -242,7 +243,7 @@ async def test_no_cross_profile_leakage(live_server) -> None:  # type: ignore[no
                 ac.stream(
                     "GET",
                     f"/api/events/{profile_a}",
-                    cookies=cookies,
+                    headers=cookie_header(cookies),
                     timeout=5.0,
                 ) as resp,
             ):
@@ -265,7 +266,7 @@ async def test_no_cross_profile_leakage(live_server) -> None:  # type: ignore[no
                 ac.stream(
                     "GET",
                     f"/api/events/{profile_b}",
-                    cookies=cookies,
+                    headers=cookie_header(cookies),
                     timeout=5.0,
                 ) as resp,
             ):

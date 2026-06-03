@@ -16,6 +16,7 @@ import inspect
 import pytest
 
 from gruvax.api.deps import get_write_target
+from tests.cookies import cookie_header
 
 
 # ── Static / import-time checks (no DB needed) ───────────────────────────────
@@ -118,8 +119,7 @@ async def test_put_cube_boundary_no_session_returns_400(db_pool) -> None:  # typ
                 "is_empty": False,
                 "force": True,
             },
-            cookies=session_cookies,
-            headers={"X-CSRF-Token": csrf_token},
+            headers={"X-CSRF-Token": csrf_token, **cookie_header(session_cookies)},
         )
         # Must fail with 400 session_unbound (D-01, D-02)
         assert response.status_code == 400, (

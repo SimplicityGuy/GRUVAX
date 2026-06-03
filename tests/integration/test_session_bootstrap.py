@@ -29,6 +29,7 @@ import pytest_asyncio
 
 from gruvax.app import create_app
 from gruvax.auth.sessions import CSRF_COOKIE, SESSION_COOKIE
+from tests.cookies import cookie_header
 
 
 # ── browse-binding cookie name (D2-10) ───────────────────────────────────────
@@ -218,7 +219,7 @@ async def test_bind_then_unbind(
     # Unbind
     unbind_res = await client.delete(
         "/api/session/bind",
-        cookies=bind_res.cookies,
+        headers=cookie_header(bind_res.cookies),
     )
     assert unbind_res.status_code == 200, (
         f"DELETE /api/session/bind expected 200, got {unbind_res.status_code}: {unbind_res.text}"
@@ -262,7 +263,7 @@ async def test_binding_independent_of_admin(
     bind_res = await client.post(
         "/api/session/bind",
         json={"profile_id": profile_a},
-        cookies=admin_session["cookies"],
+        headers=cookie_header(admin_session["cookies"]),
     )
     if bind_res.status_code != 200:
         pytest.skip("Session bind endpoint not implemented — skipping independence test")
@@ -279,8 +280,10 @@ async def test_binding_independent_of_admin(
     # Logout (admin) must NOT clear the browse-binding cookie.
     logout_res = await client.post(
         "/api/admin/logout",
-        cookies={**admin_session["cookies"], **bind_res.cookies},
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header({**admin_session["cookies"], **bind_res.cookies}),
+        },
     )
     if logout_res.status_code == 200:
         logout_set_cookies = {

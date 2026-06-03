@@ -35,6 +35,7 @@ import pytest_asyncio
 import uvicorn
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 # ── Test constants ────────────────────────────────────────────────────────────
@@ -241,7 +242,7 @@ async def test_me_transitions_to_paired(client) -> None:  # type: ignore[no-unty
     fp_cookies = gen_res.cookies
 
     # Step 2: verify initial state via GET /api/devices/me
-    me_res = await client.get("/api/devices/me", cookies=fp_cookies)
+    me_res = await client.get("/api/devices/me", headers=cookie_header(client.cookies, fp_cookies))
     assert me_res.status_code == 200, (
         f"GET /api/devices/me expected 200, got {me_res.status_code}: {me_res.text}. "
         f"RED until Plan 03-01 ships the endpoint."
@@ -256,8 +257,10 @@ async def test_me_transitions_to_paired(client) -> None:  # type: ignore[no-unty
     bind_res = await client.post(
         "/api/admin/devices/bind",
         json={"code": code},
-        cookies=admin["cookies"],
-        headers={"X-CSRF-Token": admin["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
     )
     if bind_res.status_code != 200:
         pytest.skip(
@@ -265,7 +268,9 @@ async def test_me_transitions_to_paired(client) -> None:  # type: ignore[no-unty
         )
 
     # Step 4: re-check state
-    me_after = await client.get("/api/devices/me", cookies=fp_cookies)
+    me_after = await client.get(
+        "/api/devices/me", headers=cookie_header(client.cookies, fp_cookies)
+    )
     assert me_after.status_code == 200, (
         f"GET /api/devices/me after bind expected 200, got {me_after.status_code}"
     )
@@ -299,8 +304,10 @@ async def test_bind_success(client) -> None:  # type: ignore[no-untyped-def]
     bind_res = await client.post(
         "/api/admin/devices/bind",
         json={"code": code},
-        cookies=admin["cookies"],
-        headers={"X-CSRF-Token": admin["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
     )
     assert bind_res.status_code == 200, (
         f"POST /api/admin/devices/bind expected 200 on valid code, "
@@ -335,16 +342,20 @@ async def test_bind_rate_limit(client) -> None:  # type: ignore[no-untyped-def]
         await client.post(
             "/api/admin/devices/bind",
             json={"code": f"{i:04d}"},
-            cookies=admin["cookies"],
-            headers={"X-CSRF-Token": admin["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin["csrf_token"],
+                **cookie_header(admin["cookies"]),
+            },
         )
 
     # 11th attempt must be rate-limited
     response = await client.post(
         "/api/admin/devices/bind",
         json={"code": "9999"},
-        cookies=admin["cookies"],
-        headers={"X-CSRF-Token": admin["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
     )
     assert response.status_code == 429, (
         f"11th bind attempt expected 429 (rate_limited), got {response.status_code}: "
@@ -379,8 +390,10 @@ async def test_revoke_guard(client) -> None:  # type: ignore[no-untyped-def]
     bind_res = await client.post(
         "/api/admin/devices/bind",
         json={"code": code},
-        cookies=admin["cookies"],
-        headers={"X-CSRF-Token": admin["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
     )
     if bind_res.status_code != 200:
         pytest.skip("bind endpoint not yet implemented")
@@ -391,8 +404,10 @@ async def test_revoke_guard(client) -> None:  # type: ignore[no-untyped-def]
         # Try listing devices to find the one we just bound
         list_res = await client.get(
             "/api/admin/devices",
-            cookies=admin["cookies"],
-            headers={"X-CSRF-Token": admin["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin["csrf_token"],
+                **cookie_header(admin["cookies"]),
+            },
         )
         if list_res.status_code != 200:
             pytest.skip("devices list endpoint not yet implemented")
@@ -408,8 +423,10 @@ async def test_revoke_guard(client) -> None:  # type: ignore[no-untyped-def]
     # Revoke the device
     revoke_res = await client.post(
         f"/api/admin/devices/{device_id}/revoke",
-        cookies=admin["cookies"],
-        headers={"X-CSRF-Token": admin["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
     )
     if revoke_res.status_code not in (200, 204):
         pytest.skip(
@@ -419,7 +436,7 @@ async def test_revoke_guard(client) -> None:  # type: ignore[no-untyped-def]
     # A request with the revoked fingerprint cookie must be rejected
     # The per-request guard (D3-07) checks on every profile-scoped request.
     # Test against GET /api/devices/me — a request that requires device validity.
-    me_res = await client.get("/api/devices/me", cookies=fp_cookies)
+    me_res = await client.get("/api/devices/me", headers=cookie_header(client.cookies, fp_cookies))
     # After revoke, /api/devices/me must reflect revoked state
     # The exact behavior (403 or state=revoked) depends on implementation;
     # the security requirement is that the device cannot access profile resources.
@@ -461,8 +478,10 @@ async def test_profile_soft_delete_detaches(client, db_pool) -> None:  # type: i
     create_res = await client.post(
         "/api/admin/profiles",
         json={"display_name": "Test Soft-Delete Profile"},
-        cookies=admin["cookies"],
-        headers={"X-CSRF-Token": admin["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
     )
     if create_res.status_code != 200:
         pytest.skip("create profile endpoint not yet available")
@@ -481,16 +500,20 @@ async def test_profile_soft_delete_detaches(client, db_pool) -> None:  # type: i
     bind_res = await client.post(
         "/api/admin/devices/bind",
         json={"code": code, "profile_id": test_profile_id},
-        cookies=admin["cookies"],
-        headers={"X-CSRF-Token": admin["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
     )
     if bind_res.status_code != 200:
         # Try binding to default profile then reassign
         bind_res = await client.post(
             "/api/admin/devices/bind",
             json={"code": code},
-            cookies=admin["cookies"],
-            headers={"X-CSRF-Token": admin["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin["csrf_token"],
+                **cookie_header(admin["cookies"]),
+            },
         )
         if bind_res.status_code != 200:
             pytest.skip("bind not yet implemented")
@@ -506,7 +529,7 @@ async def test_profile_soft_delete_detaches(client, db_pool) -> None:  # type: i
     # After soft-delete, the device's profile_id must be NULL (detached)
     # This is the ON DELETE SET NULL / soft-delete handler contract.
     # GET /api/devices/me with the orphaned fingerprint must show unpaired state.
-    me_res = await client.get("/api/devices/me", cookies=fp_cookies)
+    me_res = await client.get("/api/devices/me", headers=cookie_header(client.cookies, fp_cookies))
     assert me_res.status_code == 200, (
         f"GET /api/devices/me expected 200 after profile soft-delete, "
         f"got {me_res.status_code}: {me_res.text}. "
@@ -542,8 +565,10 @@ async def test_concurrent_bind(client) -> None:  # type: ignore[no-untyped-def]
         res = await client.post(
             "/api/admin/devices/bind",
             json={"code": code},
-            cookies=admin["cookies"],
-            headers={"X-CSRF-Token": admin["csrf_token"]},
+            headers={
+                "X-CSRF-Token": admin["csrf_token"],
+                **cookie_header(admin["cookies"]),
+            },
         )
         return res.status_code
 
@@ -595,8 +620,10 @@ async def test_session_returns_device(client) -> None:  # type: ignore[no-untype
     bind_res = await client.post(
         "/api/admin/devices/bind",
         json={"code": code},
-        cookies=admin["cookies"],
-        headers={"X-CSRF-Token": admin["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
     )
     if bind_res.status_code != 200:
         pytest.skip("bind endpoint not yet implemented")
@@ -658,8 +685,7 @@ async def test_sse_device_revoked(live_server) -> None:  # type: ignore[no-untyp
         bind_res = await ac.post(
             "/api/admin/devices/bind",
             json={"code": code},
-            cookies=admin_cookies,
-            headers={"X-CSRF-Token": csrf},
+            headers={"X-CSRF-Token": csrf, **cookie_header(admin_cookies)},
         )
         if bind_res.status_code != 200:
             pytest.skip("bind endpoint not yet implemented on live server")
@@ -681,7 +707,7 @@ async def test_sse_device_revoked(live_server) -> None:  # type: ignore[no-untyp
                     sse_client.stream(
                         "GET",
                         f"/api/events/{profile_id}",
-                        cookies=browse_cookies,
+                        headers=cookie_header(browse_cookies),
                         timeout=10.0,
                     ) as resp,
                 ):
@@ -707,8 +733,7 @@ async def test_sse_device_revoked(live_server) -> None:  # type: ignore[no-untyp
         if device_id:
             revoke_res = await ac.post(
                 f"/api/admin/devices/{device_id}/revoke",
-                cookies=admin_cookies,
-                headers={"X-CSRF-Token": csrf},
+                headers={"X-CSRF-Token": csrf, **cookie_header(admin_cookies)},
             )
             if revoke_res.status_code not in (200, 204):
                 pytest.skip(
@@ -759,8 +784,7 @@ async def test_sse_device_reassigned(live_server) -> None:  # type: ignore[no-un
         create_res = await ac.post(
             "/api/admin/profiles",
             json={"display_name": f"Profile B (reassign-{unique_suffix})"},
-            cookies=admin_cookies,
-            headers={"X-CSRF-Token": csrf},
+            headers={"X-CSRF-Token": csrf, **cookie_header(admin_cookies)},
         )
         if create_res.status_code not in (200, 201):
             pytest.skip("create profile endpoint not available on live server")
@@ -775,8 +799,7 @@ async def test_sse_device_reassigned(live_server) -> None:  # type: ignore[no-un
         bind_res = await ac.post(
             "/api/admin/devices/bind",
             json={"code": code},
-            cookies=admin_cookies,
-            headers={"X-CSRF-Token": csrf},
+            headers={"X-CSRF-Token": csrf, **cookie_header(admin_cookies)},
         )
         if bind_res.status_code != 200:
             pytest.skip("bind endpoint not yet implemented on live server")
@@ -797,7 +820,7 @@ async def test_sse_device_reassigned(live_server) -> None:  # type: ignore[no-un
                     sse_client.stream(
                         "GET",
                         f"/api/events/{profile_a_id}",
-                        cookies=browse_cookies,
+                        headers=cookie_header(browse_cookies),
                         timeout=10.0,
                     ) as resp,
                 ):
@@ -824,8 +847,7 @@ async def test_sse_device_reassigned(live_server) -> None:  # type: ignore[no-un
             patch_res = await ac.patch(
                 f"/api/admin/devices/{device_id}",
                 json={"profile_id": profile_b_id},
-                cookies=admin_cookies,
-                headers={"X-CSRF-Token": csrf},
+                headers={"X-CSRF-Token": csrf, **cookie_header(admin_cookies)},
             )
             if patch_res.status_code not in (200, 204):
                 pytest.skip(
@@ -878,8 +900,10 @@ async def test_expired_code(client) -> None:  # type: ignore[no-untyped-def]
     bind_res = await client.post(
         "/api/admin/devices/bind",
         json={"code": "9876"},  # a code that was never generated → not found
-        cookies=admin["cookies"],
-        headers={"X-CSRF-Token": admin["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
     )
     assert bind_res.status_code == 404, (
         f"Binding a non-existent/expired code expected 404, "

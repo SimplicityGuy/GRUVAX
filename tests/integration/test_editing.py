@@ -23,6 +23,7 @@ import httpx
 import pytest
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 logger = logging.getLogger(__name__)
@@ -163,7 +164,7 @@ async def test_editing_fans_out(live_server) -> None:  # type: ignore[no-untyped
     async def read_sse() -> None:
         async with (
             httpx.AsyncClient(base_url=live_server) as ac,
-            ac.stream("GET", sse_url, cookies=sse_cookies) as response,
+            ac.stream("GET", sse_url, headers=cookie_header(sse_cookies)) as response,
         ):
             async for line in response.aiter_lines():
                 if "admin_editing" in line:
@@ -179,8 +180,7 @@ async def test_editing_fans_out(live_server) -> None:  # type: ignore[no-untyped
         res = await ac.post(
             "/api/admin/editing",
             json=payload,
-            cookies=auth["cookies"],
-            headers={"X-CSRF-Token": auth["csrf_token"]},
+            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
         )
 
     assert res.status_code == 200, (

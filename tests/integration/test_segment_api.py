@@ -25,6 +25,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 _BOUNDARIES_YAML = Path(__file__).parents[2] / "fixtures" / "boundaries.yaml"
@@ -112,7 +113,7 @@ async def test_get_segments_returns_derived_data(client) -> None:  # type: ignor
 
     response = await client.get(
         "/api/admin/cubes/1/0/0/segments",
-        cookies=auth["cookies"],
+        headers=cookie_header(auth["cookies"]),
     )
     if response.status_code == 404:
         pytest.skip("GET segments endpoint not yet implemented")
@@ -144,7 +145,7 @@ async def test_get_segments_404_unknown_bin(client) -> None:  # type: ignore[no-
     # unit_id=99 does not exist in the synthetic fixture
     response = await client.get(
         "/api/admin/cubes/99/99/99/segments",
-        cookies=auth["cookies"],
+        headers=cookie_header(auth["cookies"]),
     )
     if response.status_code == 404:
         # This is the expected response — pass
@@ -179,8 +180,7 @@ async def test_put_cut_accepted(client) -> None:  # type: ignore[no-untyped-def]
             "first_catalog": "BLP 4001",
             "force": True,
         },
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if response.status_code == 404:
         pytest.skip("PUT cut endpoint not yet implemented")
@@ -211,8 +211,7 @@ async def test_put_cut_phantom_rejected(client) -> None:  # type: ignore[no-unty
             "first_catalog": "PHANTOM_999999",
             "force": False,  # phantom check enabled
         },
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if response.status_code in (404, 405):
         pytest.skip("PUT cut endpoint not yet implemented")
@@ -241,7 +240,7 @@ async def test_set_override_accepted(client) -> None:  # type: ignore[no-untyped
     # First get the segments to find a valid label
     seg_res = await client.get(
         "/api/admin/cubes/1/0/0/segments",
-        cookies=auth["cookies"],
+        headers=cookie_header(auth["cookies"]),
     )
     if seg_res.status_code in (404, 405):
         pytest.skip("GET segments not implemented — cannot determine valid label")
@@ -257,8 +256,7 @@ async def test_set_override_accepted(client) -> None:  # type: ignore[no-untyped
     response = await client.post(
         "/api/admin/cubes/1/0/0/overrides",
         json={"overrides": [{"label": valid_label, "fraction": 1.0}]},
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if response.status_code in (404, 405):
         pytest.skip("POST overrides endpoint not yet implemented")
@@ -289,8 +287,7 @@ async def test_set_override_rejected_fraction_over_one(client) -> None:  # type:
                 {"label": "Blue Note", "fraction": 1.5}  # > 1.0 — must be rejected
             ]
         },
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if response.status_code in (404, 405):
         pytest.skip("POST overrides endpoint not yet implemented")
@@ -314,8 +311,7 @@ async def test_set_override_rejects_phantom_label(client) -> None:  # type: igno
     response = await client.post(
         "/api/admin/cubes/1/0/0/overrides",
         json={"overrides": [{"label": "PHANTOM_NONEXISTENT_LABEL_XYZ", "fraction": 0.5}]},
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if response.status_code in (404, 405):
         pytest.skip("POST overrides endpoint not yet implemented")
@@ -359,8 +355,7 @@ async def test_insert_cut_shelf_overflow_rejected(client) -> None:  # type: igno
             "new_first_catalog": "BLP 4001",
             "force": True,
         },
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if response.status_code in (404, 405):
         pytest.skip("POST insert-cut endpoint not yet implemented")
@@ -429,7 +424,7 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
             if c["unit_id"] == 1 and not c["is_empty"]
         }
 
-    before_res = await client.get("/api/admin/cubes", cookies=auth["cookies"])
+    before_res = await client.get("/api/admin/cubes", headers=cookie_header(auth["cookies"]))
     if before_res.status_code in (404, 405):
         pytest.skip("Admin cubes endpoint not yet implemented")
     assert before_res.status_code == 200, before_res.text
@@ -449,8 +444,7 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
             "new_first_catalog": "BLP 1010",
             "force": True,
         },
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if response.status_code in (404, 405):
         pytest.skip("POST insert-cut endpoint not yet implemented")
@@ -460,7 +454,7 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
     change_set_id = response.json().get("change_set_id")
 
     try:
-        after_res = await client.get("/api/admin/cubes", cookies=auth["cookies"])
+        after_res = await client.get("/api/admin/cubes", headers=cookie_header(auth["cookies"]))
         assert after_res.status_code == 200, after_res.text
         after = unit1_cuts(after_res.json())
 
@@ -510,7 +504,7 @@ async def test_list_labels_returns_distinct_labels(client, db_pool) -> None:  # 
     auth = await _login(client)
     assert auth, "login should succeed after seeding the test PIN"
 
-    res = await client.get("/api/admin/labels", cookies=auth["cookies"])
+    res = await client.get("/api/admin/labels", headers=cookie_header(auth["cookies"]))
     assert res.status_code == 200, f"expected 200, got {res.status_code}: {res.text}"
     body = res.json()
     assert isinstance(body, list) and body, "labels response must be a non-empty list"
@@ -530,7 +524,9 @@ async def test_list_catalogs_for_label(client, db_pool) -> None:  # type: ignore
     auth = await _login(client)
     assert auth, "login should succeed after seeding the test PIN"
 
-    res = await client.get("/api/admin/labels/Blue%20Note/catalogs", cookies=auth["cookies"])
+    res = await client.get(
+        "/api/admin/labels/Blue%20Note/catalogs", headers=cookie_header(auth["cookies"])
+    )
     assert res.status_code == 200, f"expected 200, got {res.status_code}: {res.text}"
     body = res.json()
     assert isinstance(body, list) and body, "catalogs response must be a non-empty list"
@@ -599,8 +595,7 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
     cache_sync_res = await client.put(
         "/api/admin/cubes/1/0/0/cut",
         json={"first_label": "Blue Note", "first_catalog": "BLP 1000", "force": True},
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     assert cache_sync_res.status_code == 200, (
         f"Cache-sync PUT failed: {cache_sync_res.status_code} {cache_sync_res.text}"
@@ -613,8 +608,7 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
             "first_catalog": "BLP 1000",
             "force": True,  # bypass phantom check; Blue Note BLP 1000 IS in the v2 collection
         },
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if response.status_code in (404, 405):
         pytest.skip("PUT cut endpoint not yet implemented")
@@ -646,7 +640,7 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
 
         # Confirm no DB write occurred — (1,0,3) must still be "ECM"
         # (Plan 01-07 v2 layout: was "KC" in the v1 fixture)
-        cubes_res = await client.get("/api/admin/cubes", cookies=auth["cookies"])
+        cubes_res = await client.get("/api/admin/cubes", headers=cookie_header(auth["cookies"]))
         assert cubes_res.status_code == 200, cubes_res.text
         cube_103 = next(
             (
@@ -807,8 +801,7 @@ async def test_cut_publishes_correct_payload(db_pool) -> None:  # type: ignore[n
             response = await ac.put(
                 "/api/admin/cubes/1/0/0/cut",
                 json={"first_label": "Blue Note", "first_catalog": "BLP 4001", "force": True},
-                cookies=auth["cookies"],
-                headers={"X-CSRF-Token": auth["csrf_token"]},
+                headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
             )
             assert response.status_code == 200, (
                 f"Expected 200 from PUT cut, got {response.status_code}: {response.text}"
@@ -876,7 +869,9 @@ async def test_overrides_publishes_correct_payload(db_pool) -> None:  # type: ig
             assert auth, "login should succeed after seeding the test PIN"
 
             # Find a valid label in bin (1,0,0) to override
-            seg_res = await ac.get("/api/admin/cubes/1/0/0/segments", cookies=auth["cookies"])
+            seg_res = await ac.get(
+                "/api/admin/cubes/1/0/0/segments", headers=cookie_header(auth["cookies"])
+            )
             assert seg_res.status_code == 200, f"GET segments failed: {seg_res.text}"
             segments = seg_res.json().get("segments", [])
             assert segments, "Need at least one segment in bin (1,0,0) for override test"
@@ -888,8 +883,7 @@ async def test_overrides_publishes_correct_payload(db_pool) -> None:  # type: ig
             response = await ac.post(
                 "/api/admin/cubes/1/0/0/overrides",
                 json={"overrides": [{"label": valid_label, "fraction": 1.0}]},
-                cookies=auth["cookies"],
-                headers={"X-CSRF-Token": auth["csrf_token"]},
+                headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
             )
             assert response.status_code == 200, (
                 f"Expected 200 from POST overrides, got {response.status_code}: {response.text}"
@@ -971,8 +965,7 @@ async def test_insert_cut_publishes_correct_payload(db_pool) -> None:  # type: i
                     "new_first_catalog": "BLP 4005",
                     "force": True,
                 },
-                cookies=auth["cookies"],
-                headers={"X-CSRF-Token": auth["csrf_token"]},
+                headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
             )
             assert response.status_code == 200, (
                 f"Expected 200 from POST insert-cut, got {response.status_code}: {response.text}"

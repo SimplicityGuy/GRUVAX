@@ -19,6 +19,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -65,8 +66,8 @@ async def test_unknown_key_rejected(client) -> None:  # type: ignore[no-untyped-
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "application/x-yaml",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     # Expect 422 for unknown key — 404 (unimplemented) fails RED
     assert response.status_code == 422, (
@@ -98,8 +99,8 @@ async def test_auth_key_rejected(client) -> None:  # type: ignore[no-untyped-def
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "application/x-yaml",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     # Expect 422 auth key rejection — 404 (unimplemented) fails RED
     assert response.status_code == 422, (

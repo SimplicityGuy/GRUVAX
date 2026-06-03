@@ -28,6 +28,7 @@ import pytest_asyncio
 
 from gruvax.app import create_app
 from gruvax.settings import settings
+from tests.cookies import cookie_header
 
 
 if TYPE_CHECKING:
@@ -144,8 +145,10 @@ async def test_sync_cadence(client, admin_session) -> None:  # type: ignore[no-u
     put_res = await client.put(
         "/api/admin/settings",
         json={"sync_cadence": "12h"},
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     assert put_res.status_code == 200, (
         f"PUT /api/admin/settings {{sync_cadence: '12h'}} expected 200, "
@@ -155,8 +158,10 @@ async def test_sync_cadence(client, admin_session) -> None:  # type: ignore[no-u
     # GET should now return sync_cadence: "12h"
     get_res = await client.get(
         "/api/admin/settings",
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     assert get_res.status_code == 200, (
         f"GET /api/admin/settings expected 200, got {get_res.status_code}: {get_res.text}"
@@ -185,8 +190,10 @@ async def test_sync_cadence_invalid_value(client, admin_session) -> None:  # typ
     put_res = await client.put(
         "/api/admin/settings",
         json={"sync_cadence": "7h"},  # invalid: "7h" is not in _CADENCE_VALUES
-        cookies=admin_session["cookies"],
-        headers={"X-CSRF-Token": admin_session["csrf_token"]},
+        headers={
+            "X-CSRF-Token": admin_session["csrf_token"],
+            **cookie_header(admin_session["cookies"]),
+        },
     )
     assert put_res.status_code == 422, (
         f"PUT /api/admin/settings {{sync_cadence: '7h'}} expected 422 "

@@ -30,6 +30,7 @@ import pytest_asyncio
 import yaml
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -104,8 +105,8 @@ async def test_export_reimport_identity(client, four_cube_boundaries) -> None:  
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": str(uuid.uuid4()),
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     assert seed_resp.status_code == 200, (
         f"Seed via bulk failed: {seed_resp.status_code}: {seed_resp.text}"
@@ -114,7 +115,7 @@ async def test_export_reimport_identity(client, four_cube_boundaries) -> None:  
     # ── 2. Export the current state ───────────────────────────────────────────
     export_resp = await client.get(
         "/api/admin/export/boundaries.yaml",
-        cookies=auth["cookies"],
+        headers=cookie_header(auth["cookies"]),
     )
     assert export_resp.status_code == 200, (
         f"Export failed: {export_resp.status_code}: {export_resp.text}"
@@ -136,8 +137,8 @@ async def test_export_reimport_identity(client, four_cube_boundaries) -> None:  
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "application/x-yaml",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     assert dry_run_resp.status_code == 200, (
         f"Dry-run re-import failed: {dry_run_resp.status_code}: {dry_run_resp.text}"
@@ -171,8 +172,8 @@ async def test_export_reimport_identity(client, four_cube_boundaries) -> None:  
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Content-Type": "application/x-yaml",
+            **cookie_header(auth["cookies"]),
         },
-        cookies=auth["cookies"],
     )
     assert commit_resp.status_code == 200, (
         f"Commit re-import failed: {commit_resp.status_code}: {commit_resp.text}"
@@ -183,7 +184,7 @@ async def test_export_reimport_identity(client, four_cube_boundaries) -> None:  
     # ── 5. Second export must equal the first (round-trip identity) ───────────
     export_resp2 = await client.get(
         "/api/admin/export/boundaries.yaml",
-        cookies=auth["cookies"],
+        headers=cookie_header(auth["cookies"]),
     )
     assert export_resp2.status_code == 200, (
         f"Second export failed: {export_resp2.status_code}: {export_resp2.text}"

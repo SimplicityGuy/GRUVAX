@@ -22,6 +22,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from tests.cookies import cookie_header
 
 
 @pytest_asyncio.fixture(scope="module")
@@ -82,10 +83,10 @@ async def test_bulk_writes_history(client) -> None:  # type: ignore[no-untyped-d
                 }
             ]
         },
-        cookies=auth["cookies"],
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": idempotency_key,
+            **cookie_header(auth["cookies"]),
         },
     )
     if response.status_code == 404:
@@ -132,8 +133,7 @@ async def test_idempotency_key_replay(client) -> None:  # type: ignore[no-untype
     res1 = await client.post(
         "/api/admin/cubes/bulk",
         json=payload,
-        cookies=auth["cookies"],
-        headers=headers,
+        headers={**headers, **cookie_header(auth["cookies"])},
     )
     if res1.status_code == 404:
         pytest.skip("Bulk endpoint not yet implemented")
@@ -143,8 +143,7 @@ async def test_idempotency_key_replay(client) -> None:  # type: ignore[no-untype
     res2 = await client.post(
         "/api/admin/cubes/bulk",
         json=payload,
-        cookies=auth["cookies"],
-        headers=headers,
+        headers={**headers, **cookie_header(auth["cookies"])},
     )
     assert res2.status_code == 200, (
         f"Replay with same Idempotency-Key must return 200, got {res2.status_code}"
@@ -182,10 +181,10 @@ async def test_revert_writes_inverse(client) -> None:  # type: ignore[no-untyped
                 }
             ]
         },
-        cookies=auth["cookies"],
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": idempotency_key,
+            **cookie_header(auth["cookies"]),
         },
     )
     if bulk_res.status_code == 404:
@@ -198,8 +197,7 @@ async def test_revert_writes_inverse(client) -> None:  # type: ignore[no-untyped
     # Revert the change-set
     revert_res = await client.post(
         f"/api/admin/history/{change_set_id}/revert",
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if revert_res.status_code == 404:
         pytest.skip("Revert endpoint not yet implemented")
@@ -239,10 +237,10 @@ async def test_revert_conflict_skip(client) -> None:  # type: ignore[no-untyped-
                 }
             ]
         },
-        cookies=auth["cookies"],
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": str(uuid.uuid4()),
+            **cookie_header(auth["cookies"]),
         },
     )
     if orig_res.status_code == 404:
@@ -268,10 +266,10 @@ async def test_revert_conflict_skip(client) -> None:  # type: ignore[no-untyped-
                 }
             ]
         },
-        cookies=auth["cookies"],
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": str(uuid.uuid4()),
+            **cookie_header(auth["cookies"]),
         },
     )
     assert newer_res.status_code == 200
@@ -279,8 +277,7 @@ async def test_revert_conflict_skip(client) -> None:  # type: ignore[no-untyped-
     # Now revert the ORIGINAL change-set — cube (1,2,0) was changed by newer → must be skipped
     revert_res = await client.post(
         f"/api/admin/history/{original_change_set_id}/revert",
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if revert_res.status_code == 404:
         pytest.skip("Revert endpoint not yet implemented")
@@ -321,10 +318,10 @@ async def test_revert_is_undoable(client) -> None:  # type: ignore[no-untyped-de
                 }
             ]
         },
-        cookies=auth["cookies"],
         headers={
             "X-CSRF-Token": auth["csrf_token"],
             "Idempotency-Key": str(uuid.uuid4()),
+            **cookie_header(auth["cookies"]),
         },
     )
     if bulk_res.status_code == 404:
@@ -337,8 +334,7 @@ async def test_revert_is_undoable(client) -> None:  # type: ignore[no-untyped-de
     # Revert it
     revert_res = await client.post(
         f"/api/admin/history/{change_set_id}/revert",
-        cookies=auth["cookies"],
-        headers={"X-CSRF-Token": auth["csrf_token"]},
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
     if revert_res.status_code == 404:
         pytest.skip("Revert endpoint not yet implemented")
@@ -351,7 +347,7 @@ async def test_revert_is_undoable(client) -> None:  # type: ignore[no-untyped-de
     # The revert change-set must appear in history
     history_res = await client.get(
         "/api/admin/history",
-        cookies=auth["cookies"],
+        headers=cookie_header(auth["cookies"]),
     )
     if history_res.status_code == 404:
         pytest.skip("History endpoint not yet implemented")
@@ -445,7 +441,7 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
         # Blue Note records in the collection, so segments is non-empty.
         pre_seg_res = await ac.get(
             "/api/admin/cubes/1/0/1/segments",
-            cookies=auth_cookies,
+            headers=cookie_header(auth_cookies),
         )
         if pre_seg_res.status_code == 404:
             pytest.skip("GET segments endpoint not implemented or cube (1,0,1) not in cache")
@@ -475,10 +471,10 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
                     }
                 ]
             },
-            cookies=auth_cookies,
             headers={
                 "X-CSRF-Token": csrf_token,
                 "Idempotency-Key": str(uuid.uuid4()),
+                **cookie_header(auth_cookies),
             },
         )
         if bulk_res.status_code == 404:
@@ -492,7 +488,7 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
         # Step 2b: Confirm SegmentCache changed after the bulk write.
         post_write_seg_res = await ac.get(
             "/api/admin/cubes/1/0/1/segments",
-            cookies=auth_cookies,
+            headers=cookie_header(auth_cookies),
         )
         assert post_write_seg_res.status_code == 200
         post_write_labels = {s["label"] for s in post_write_seg_res.json().get("segments", [])}
@@ -504,8 +500,7 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
         # Step 3: Revert the bulk write.
         revert_res = await ac.post(
             f"/api/admin/history/{change_set_id}/revert",
-            cookies=auth_cookies,
-            headers={"X-CSRF-Token": csrf_token},
+            headers={"X-CSRF-Token": csrf_token, **cookie_header(auth_cookies)},
         )
         if revert_res.status_code == 404:
             pytest.skip("Revert endpoint not yet implemented — skipping re-derive test")
@@ -520,7 +515,7 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
         # Without the fix, SegmentCache is stale → segments still match post-write state.
         post_revert_seg_res = await ac.get(
             "/api/admin/cubes/1/0/1/segments",
-            cookies=auth_cookies,
+            headers=cookie_header(auth_cookies),
         )
         assert post_revert_seg_res.status_code == 200
         post_revert_labels = {s["label"] for s in post_revert_seg_res.json().get("segments", [])}
@@ -639,10 +634,10 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
                         }
                     ]
                 },
-                cookies=auth_cookies,
                 headers={
                     "X-CSRF-Token": csrf_token,
                     "Idempotency-Key": str(uuid.uuid4()),
+                    **cookie_header(auth_cookies),
                 },
             )
             if bulk_res.status_code == 404:
@@ -659,8 +654,7 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
             # Revert the change_set.
             revert_res = await ac.post(
                 f"/api/admin/history/{change_set_id}/revert",
-                cookies=auth_cookies,
-                headers={"X-CSRF-Token": csrf_token},
+                headers={"X-CSRF-Token": csrf_token, **cookie_header(auth_cookies)},
             )
             if revert_res.status_code == 404:
                 pytest.skip("Revert endpoint not yet implemented — skipping publish test")
