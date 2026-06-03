@@ -1,5 +1,25 @@
 # Milestones
 
+## v2.1 Resilience + Privacy + UX polish (Shipped: 2026-06-03)
+
+**Delivered:** Hardened GRUVAX for real multi-person household use — safe multi-profile boundary editing, member self-service onboarding, privacy/QR pairing, resilient offline UX, and shelf fill-overview.
+
+**Phases completed:** 5 phases (6–10), 16 plans. Requirements: 15/15 satisfied.
+
+**Key accomplishments:**
+
+- **Safe multi-profile boundaries + live device lifecycle (Phase 6, DATA-01/DEV-05):** every boundary write is profile-scoped (`WHERE profile_id = %s::uuid`), closing a cross-profile corruption hole; the kiosk reacts live via SSE to device revoke (→ "SCREEN REMOVED" → `/pair`) and reassign (→ "MOVED TO {profile}" → live rebind). Verified end-to-end via Playwright UAT.
+- **Member self-connect without PAT exposure (Phase 7, AUTH-02/API-04):** single-use, 1-hour invite-link flow — the owner generates a PIN-gated link; the member redeems it publicly with their *own* Discogs PAT (Fernet-encrypted at rest, never seen by the owner); redeem auto-starts the initial sync. Post-sync "N new records" diff badge surfaces on kiosk + admin. Migration 0012 landed the invite + diff columns.
+- **Privacy, QR pairing & recently-pulled (Phase 8, DEV-04/PRIV-01..04/SRCH-09):** scannable QR alongside the 4-digit PIN; search history is session-only (never persisted server-side); no-PIN "Reset kiosk" clears the local session; structlog redacts query text from logs.
+- **Offline + reconnect UX (Phase 9, OFF-01..04):** SSE-authoritative offline banner (not `navigator.onLine`), last-locate preservation, auto-reconnect with backoff+jitter, and stale-data refresh on reconnect; everConnected latch prevents bootstrap false-positives.
+- **Shelf fill-overview (Phase 10, UX-01):** the admin `LocatorHeader` mini 4×4 Kallax shades per-cube fill/occupancy at a glance, reshading live on collection/boundary/server-hello events.
+
+**Audit:** `passed` — all 5 non-blocking tech-debt items closed on 2026-06-03 before archive (DEV-05 live UAT, 06-VALIDATION Nyquist doc, two integration warnings, summary-frontmatter backfill). See `milestones/v2.1-MILESTONE-AUDIT.md`.
+
+**Known deferred items at close:** none open. (The 10 quick-tasks flagged by `audit-open` are all complete — each has a SUMMARY.md — and were flagged only for absent status frontmatter; acknowledged as no real open work. AUTH-01 OAuth2 device-grant remains deferred to a future milestone, as planned.)
+
+---
+
 ## v2.0 Multi-User Collections (Shipped: 2026-05-30)
 
 **Timeline:** 2026-05-26 → 2026-05-30 (5 days)

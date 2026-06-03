@@ -2,16 +2,15 @@
 gsd_state_version: 1.0
 milestone: v2.1
 milestone_name: Resilience + Privacy + UX polish
-status: ready_to_plan
-last_updated: 2026-06-02T23:40:29.077Z
-last_activity: 2026-06-02
+status: Awaiting next milestone
+last_updated: "2026-06-03T01:17:11.990Z"
+last_activity: 2026-06-03
 progress:
   total_phases: 6
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 16
   completed_plans: 16
-  percent: 67
-stopped_at: Phase 10 complete (2/2) — ready to discuss Phase 999.2
+  percent: 83
 ---
 
 # State: GRUVAX
@@ -30,14 +29,10 @@ stopped_at: Phase 10 complete (2/2) — ready to discuss Phase 999.2
 
 ## Current Position
 
-Phase: 999.2
-Plan: Not started
-Status: Ready to plan
-Last activity: 2026-06-02 -- Phase 10 execution started
-
-```
-v2.1 Progress: [          ] 0% (0/5 phases)
-```
+Phase: Milestone v2.1 complete
+Plan: —
+Status: Awaiting next milestone
+Last activity: 2026-06-03 — Milestone v2.1 completed and archived
 
 ## Performance Metrics (v2.1)
 
@@ -170,10 +165,14 @@ None.
 
 ## Session Continuity
 
-**Last activity:** 2026-06-02
+**Last activity:** 2026-06-03
 **Prev:** 2026-05-30 — v2.0 milestone closed and archived (5 phases, 35 plans; tag v2.0). ROADMAP/REQUIREMENTS/audit archived to `milestones/v2.0-*`; REQUIREMENTS.md removed (fresh for next milestone); PROJECT.md evolved; RETROSPECTIVE.md updated.
 **Prev2:** 2026-05-30 — Phase 5 closure complete — B-01 + B-02 wired; milestone re-audit `gaps_found` → `tech_debt`.
 **Next action:** `/gsd:plan-phase 6`
 
 ---
 *State initialized: 2026-05-19 with roadmap creation. v2.0 milestone reset: 2026-05-26. v2.1 roadmap: 2026-05-30.*
+
+## Operator Next Steps
+
+- Start the next milestone with /gsd-new-milestone

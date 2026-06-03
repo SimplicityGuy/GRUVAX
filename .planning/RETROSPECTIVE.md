@@ -2,6 +2,46 @@
 
 *A living document updated after each milestone. Lessons feed forward into future planning.*
 
+## Milestone: v2.1 — Resilience + Privacy + UX polish
+
+**Shipped:** 2026-06-03
+**Phases:** 5 (6–10) | **Plans:** 16 | **Timeline:** 2026-05-30 → 2026-06-03
+
+### What Was Built
+- Profile-scoped boundary writes (DATA-01) + live device revoke/reassign over SSE (DEV-05).
+- Member self-connect via single-use invite links — members supply their own PAT; owner never sees it (AUTH-02) + post-sync collection-diff "N new records" (API-04).
+- QR pairing alongside the 4-digit PIN, session-only search history, no-PIN kiosk reset, log query-redaction (DEV-04 / PRIV-01..04 / SRCH-09).
+- SSE-authoritative offline banner + degraded mode + backoff/jitter reconnect + stale-data refresh (OFF-01..04).
+- Admin mini-Kallax per-cube fill/occupancy shading with live reshade (UX-01).
+
+### What Worked
+- **Vertical MVP slicing held up** — every phase shipped a user-observable capability; no horizontal infra-only phases.
+- **Retroactive close-out caught real gaps** — verifying the milestone before archiving surfaced an un-run live UAT and a missing Nyquist doc; closing them took one focused session.
+- **Playwright two-tab UAT** (kiosk + admin, shared cookie context) deterministically verified the device-lifecycle behaviors that unit tests could only prove at the signal level — a DOM-observer pattern captured transient overlays/banners that would otherwise be missed.
+
+### What Was Inefficient
+- **Phantom phase 999.1** lingered as an empty directory after its scope was promoted into Phase 10, and `roadmap.analyze` surfaced it as "pending" — needed manual cleanup at close.
+- **Audit went stale between run and archive** — its #1 tech-debt item (DEV-05 live UAT) was already closed by the time of archive; had to reconcile the audit status manually.
+- **CLI accomplishment extraction produced junk** — `milestone.complete` grabbed literal `"One-liner:"` header lines from SUMMARYs; the MILESTONES entry had to be rewritten by hand.
+- **`requirements-completed` SUMMARY frontmatter was under-populated** (14/16) through the milestone, so the cross-check field wasn't a reliable coverage source until backfilled at close.
+
+### Patterns Established
+- **DOM-observer UAT for transient UI** — arm a `MutationObserver` that records fleeting overlay/banner text before triggering the event from another tab; survives SPA client-side navigation.
+- **Worktree exception for test-dependent quick tasks** — when a quick task must run a suite that needs gitignored deps (`node_modules`), run it on the main tree, not an isolated worktree.
+- **Close debt before archive** — treat a `tech_debt` audit as a punch-list to clear (or consciously accept) at milestone close rather than carrying it silently forward.
+
+### Key Lessons
+1. Promote-from-backlog should *delete* the originating placeholder directory, or roadmap analysis will keep reporting it as pending work.
+2. Re-verify and re-stamp the milestone audit immediately before archive — point-in-time audits drift once debt is worked.
+3. Don't trust auto-extracted accomplishment text; the SUMMARY one-liner heuristic is fragile — review the MILESTONES entry before committing.
+
+### Cost Observations
+- Model mix: planning on opus, execution on sonnet (balanced profile).
+- Close-out was one session: Playwright UAT + 1 quick task (W-1/W-2/frontmatter) + Nyquist doc + archive.
+- Notable: the most expensive verification (live device lifecycle) was the highest-value — it was the last unproven requirement in the milestone.
+
+---
+
 ## Milestone: v2.0 — Multi-User Collections
 
 **Shipped:** 2026-05-30
