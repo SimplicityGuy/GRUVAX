@@ -72,6 +72,12 @@ function useAdminCubesInvalidation(): void {
       void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
     })
 
+    // WARNING-2 (v2.1 milestone audit): server (re)started → refresh fill shading so
+    // admin ShelfBinList does not show stale per-cube occupancy after a server restart.
+    es.addEventListener('server_hello', () => {
+      void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
+    })
+
     // UNLIKE KioskView, the admin listener is intentionally short-lived —
     // close on unmount to prevent accumulating connections across admin navigation
     // (T-10-05 mitigation).
