@@ -22,6 +22,7 @@ metrics:
   completed: "2026-06-01"
   tasks_completed: 1
   tasks_total: 1
+requirements-completed: [PRIV-02, PRIV-03]
 ---
 
 # Phase 8 Plan 01: Privacy CI-Lock (PRIV-02 + PRIV-03) Summary

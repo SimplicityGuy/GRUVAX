@@ -31,6 +31,7 @@ metrics:
   tasks_completed: 3
   tasks_total: 3
   files_modified: 8
+requirements-completed: [OFF-01]
 ---
 
 # Phase 09 Plan 05: Gap-Closure — Offline-Confirmed Banner Gate Summary

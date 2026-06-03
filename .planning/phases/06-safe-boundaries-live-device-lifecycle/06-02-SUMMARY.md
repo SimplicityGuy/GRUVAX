@@ -31,6 +31,7 @@ metrics:
   completed: "2026-05-31"
   tasks_completed: 2
   files_changed: 9
+requirements-completed: [DEV-05]
 ---
 
 # Phase 6 Plan 2: Device Lifecycle SSE Handlers + Terminal-Revoke Seam Summary

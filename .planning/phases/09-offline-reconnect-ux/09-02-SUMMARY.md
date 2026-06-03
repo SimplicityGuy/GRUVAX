@@ -25,6 +25,7 @@ metrics:
   completed: "2026-06-02"
   tasks_completed: 2
   files_modified: 3
+requirements-completed: [OFF-01, OFF-03]
 ---
 
 # Phase 9 Plan 02: Connectivity Store Contract + QueryClient Network Policy Summary

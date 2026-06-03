@@ -47,6 +47,7 @@ metrics:
   completed: "2026-06-01"
   tasks: 3
   files: 10
+requirements-completed: [PRIV-01, PRIV-04, SRCH-09]
 ---
 
 # Phase 8 Plan 3: Recently-Pulled Strip + Privacy Reset + Idle Timeout Summary

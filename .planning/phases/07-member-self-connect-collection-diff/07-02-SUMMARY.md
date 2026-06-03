@@ -49,6 +49,7 @@ key-decisions:
 # Metrics
 duration: ~19min
 completed: 2026-06-01
+requirements-completed: [AUTH-02]
 ---
 
 # Phase 7 Plan 02: AUTH-02 Backend — Invite-Code Endpoints Summary

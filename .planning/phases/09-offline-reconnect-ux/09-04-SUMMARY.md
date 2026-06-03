@@ -25,6 +25,7 @@ metrics:
   tasks_total: 3
   files_changed: 2
 requirements: [OFF-04]
+requirements-completed: [OFF-04]
 ---
 
 # Phase 9 Plan 04: SC4 Search Invalidation + WR-01/WR-02 Toast Fixes Summary

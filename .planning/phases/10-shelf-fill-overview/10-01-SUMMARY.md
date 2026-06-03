@@ -37,6 +37,7 @@ metrics:
   completed: "2026-06-02"
   tasks_completed: 3
   files_modified: 4
+requirements-completed: [UX-01]
 ---
 
 # Phase 10 Plan 01: LocatorHeader Fill Shading + Popover Summary

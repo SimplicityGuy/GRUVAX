@@ -33,6 +33,7 @@ metrics:
   completed: "2026-06-02"
   tasks: 3
   files: 7
+requirements-completed: [OFF-01, OFF-02, OFF-04]
 ---
 
 # Phase 9 Plan 03: Offline Banner + Degraded Mode + Reconnect Toast Summary
