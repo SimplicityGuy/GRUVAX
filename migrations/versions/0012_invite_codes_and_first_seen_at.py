@@ -84,8 +84,7 @@ _IDX_INVITE_CODES_PROFILE = (
 #   uses scalar pre-DELETE COUNT(*), NOT per-row first_seen_at, so NULL backfill
 #   cannot mis-count on the first sync after migration (T-07-04).
 _ADD_FIRST_SEEN_AT = (
-    "ALTER TABLE gruvax.profile_collection"
-    " ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ"
+    "ALTER TABLE gruvax.profile_collection ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ"
 )
 
 
@@ -126,9 +125,7 @@ def downgrade() -> None:
     op.execute("DROP TABLE IF EXISTS gruvax.profile_invite_codes")
 
     # Reverse ALTER TABLEs — fully reverses upgrade().
-    op.execute(
-        "ALTER TABLE gruvax.profile_collection DROP COLUMN IF EXISTS first_seen_at"
-    )
+    op.execute("ALTER TABLE gruvax.profile_collection DROP COLUMN IF EXISTS first_seen_at")
     op.execute(
         "ALTER TABLE gruvax.profiles"
         " DROP COLUMN IF EXISTS last_new_record_count,"

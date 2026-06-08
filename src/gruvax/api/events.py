@@ -62,7 +62,7 @@ async def stream_events(
             # Yield comment + retry directive immediately so headers flush and
             # client gets its jittered reconnect interval before the first real event.
             # retry: field spreads reconnects over 2-8s window (PITFALLS 36 prevention).
-            retry_ms = random.randint(2000, 8000)  # noqa: S311  # jitter, not crypto
+            retry_ms = random.randint(2000, 8000)  # noqa: S311  # nosec B311 — jitter, not crypto
             yield ServerSentEvent(comment="connected", retry=retry_ms)
             while True:
                 if await request.is_disconnected():

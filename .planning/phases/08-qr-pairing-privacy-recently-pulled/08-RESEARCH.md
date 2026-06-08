@@ -147,7 +147,7 @@ Browser (kiosk, /pair route)
     │                                            re-renders on reroll effect
     │
     └── countdown/reroll effect (existing) drives both code display AND QR
-    
+
 Browser (phone, scans QR)
   Navigates to /admin/devices?code=XXXX
     │

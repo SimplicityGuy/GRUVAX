@@ -287,7 +287,7 @@ All copy follows Nordic Grid voice: labels ALL CAPS (Barlow Condensed 700 tracke
 
 ### Copy Flow
 
-1. Tap "COPY LINK" → `navigator.clipboard.writeText(fullUrl)` 
+1. Tap "COPY LINK" → `navigator.clipboard.writeText(fullUrl)`
 2. On success: button label → "COPIED!" for 2000ms, then reverts to "COPY LINK"
 3. On failure: inline error message; URL box becomes user-selectable text
 

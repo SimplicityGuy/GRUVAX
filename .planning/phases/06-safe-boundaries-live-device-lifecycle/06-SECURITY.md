@@ -12,11 +12,11 @@ created: 2026-05-31
 
 ## Phase 6 Security Audit — Safe Boundaries + Live Device Lifecycle
 
-**Phase:** 6 — Safe Boundaries + Live Device Lifecycle  
-**Requirements:** DATA-01, DEV-05  
-**ASVS Level:** default  
-**Audit Date:** 2026-05-31  
-**Threats Closed:** 10/10  
+**Phase:** 6 — Safe Boundaries + Live Device Lifecycle
+**Requirements:** DATA-01, DEV-05
+**ASVS Level:** default
+**Audit Date:** 2026-05-31
+**Threats Closed:** 10/10
 **OPEN Blockers:** 0
 
 ---
@@ -67,5 +67,5 @@ None — no new attack surface identified during this audit beyond what was regi
 
 ---
 
-_Audited by: Claude (gsd-security-auditor)_  
+_Audited by: Claude (gsd-security-auditor)_
 _Phase implementation commits: 36e7356, 0afb00c, ca00af9, 595cdae, 7f20e3d, dfbf08e, 10191cf, f062648_
