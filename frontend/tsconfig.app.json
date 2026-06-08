@@ -19,7 +19,13 @@
     "noUnusedLocals": true,
     "noUnusedParameters": true,
     "erasableSyntaxOnly": true,
-    "noFallthroughCasesInSwitch": true
+    "noFallthroughCasesInSwitch": true,
+
+    /* Module overrides — redirect packages whose exports map lacks a "types"
+       condition (bundler mode can't reach their shipped types/index.d.ts). */
+    "paths": {
+      "react-qr-code": ["./src/react-qr-code"]
+    }
   },
   "include": ["src"]
 }
