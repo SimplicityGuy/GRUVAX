@@ -24,7 +24,7 @@ jobs:
       contents: read
     steps:
       - name: Cleanup Docker Images
-        uses: dataaxiom/ghcr-cleanup-action@374e2028c8fb93b7219f3771cd405fab95d3dec4  # v1.2.0
+        uses: dataaxiom/ghcr-cleanup-action@d52806a0dc70b430571a37da1fde39733ffd640f  # v1.2.2
         with:
           delete-partial-images: true
           delete-untagged: true
