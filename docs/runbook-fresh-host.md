@@ -73,7 +73,9 @@ just up-d
 # Equivalent to: docker compose up --build -d  (override auto-merges, builds locally)
 
 # 4. Verify all services are healthy (may take 30–60 s on first boot)
-docker compose ps
+#    -a is required: plain `docker compose ps` hides exited containers, and the
+#    one-shot init-sync row only appears with --all
+docker compose ps -a
 ```
 
 `docker compose up` (dev or prod) starts every service **except** `mqtt-explorer`, which is
@@ -90,7 +92,8 @@ in production.
 > a fresh production host, expect to see `gruvax-fake-discogsography` running (harmlessly)
 > alongside the real stack until a profile gate lands for it.
 
-Expected output of `docker compose ps` when healthy (production host):
+Expected output of `docker compose ps -a` when healthy (production host — the
+`init-sync` `Exited (0)` row is only visible with `-a`):
 
 ```
 NAME                         IMAGE                                   STATUS                    PORTS
@@ -219,8 +222,13 @@ docker compose logs api --tail 50
 ```
 
 Common causes: missing `SESSION_SECRET` or `GRUVAX_SECRET_KEY` in `.env` (both use `:?`
-substitution in `compose.yaml` and abort the container with a clear "must be set in .env"
-error before the app even boots), or an Alembic migration failure. If `init-sync` is the
-one exiting non-zero instead, check for a missing `GRUVAX_ADMIN_PIN` or a
+substitution in `compose.yaml` and abort `docker compose up` with a clear "must be set in
+.env" error before any container starts — as does a missing `GRUVAX_ADMIN_PIN`), or an
+Alembic migration failure. If `init-sync` is the one exiting non-zero instead, check for a
 `DISCOGSOGRAPHY_BASE_URL` that the `fake-discogsography`/discogsography service can't
 reach.
+
+If Alembic fails with `role "gruvax" does not exist` / `permission denied for schema`, the
+shared Postgres hasn't been provisioned for GRUVAX yet — `just provision-db` prints the
+grant SQL to run as a superuser on the shared instance; create the `gruvax` role/database
+first, run those grants, then re-run `docker compose up -d`.

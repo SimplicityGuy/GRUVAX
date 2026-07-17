@@ -286,7 +286,7 @@ a long-lived SSE connection can never hold a pool slot).
 
 The `EventBus` is now **one instance per profile**, held in
 `app.state.event_bus_registry[str(profile_id)]`. Admin writes call
-`get_event_bus_for_profile(...).publish(...)` without awaiting subscriber drain; each
+`get_bus_for_profile(...).publish(...)` without awaiting subscriber drain; each
 connected SSE client owns its own `asyncio.Queue` subscriber, unsubscribed on disconnect.
 A P1-compatible `app.state.event_bus` alias still points at the default profile's bus for
 a handful of admin routes pending full per-profile migration (documented tech debt,
@@ -439,9 +439,9 @@ flowchart LR
 | Service | Purpose | Notes |
 |---------|---------|-------|
 | `api` | GRUVAX FastAPI app + built SPA | Same `image:`/`build:` block serves both prod (pull) and dev (build); healthcheck hits `/api/health` |
-| `gruvax-dev-pg` | Postgres 18 | **Dev-only.** Production points `DATABASE_URL` at the shared discogsography Postgres host via env vars instead |
+| `gruvax-dev-pg` | Postgres 18 | Starts on every plain `up` (no profile gate). Its role is dev-only: production must point `DATABASE_URL` at the shared discogsography Postgres host via env vars — the container still runs, it's just unused |
 | `mosquitto` | `eclipse-mosquitto:2.1.2-alpine` | No `ports:` mapping — internal-only in both dev and prod |
-| `fake-discogsography` | Synthetic discogsography API stand-in | **Dev/CI only** — serves `/api/user/collection` from `services/fake-discogsography/seed.yaml`; production overrides `DISCOGSOGRAPHY_BASE_URL` to the real service and does not run this container |
+| `fake-discogsography` | Synthetic discogsography API stand-in | Serves `/api/user/collection` from `services/fake-discogsography/seed.yaml`. **Not production-excluded**: `api` has an unconditional `depends_on: service_healthy` on it, so it runs on every `up`. Production must override `DISCOGSOGRAPHY_BASE_URL` to the real service or the kiosk serves synthetic data (see the runbook's fake-data pitfall) |
 | `init-sync` | One-shot idempotent bootstrap job | Runs `gruvax-sync --profile default` once, only if `profile_collection` is empty for the default profile; requires `GRUVAX_ADMIN_PIN` |
 | `mqtt-explorer` | MQTT broker inspector web UI | Gated behind `docker compose --profile debug up mqtt-explorer` — never starts on a plain `up` |
 

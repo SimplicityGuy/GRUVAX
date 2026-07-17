@@ -154,8 +154,15 @@ docker compose down
 
 `just test` / `just migrate` run against `DATABASE_URL` directly (not through the Compose
 network), so they need a bare Postgres reachable at `localhost:5432`. If the Compose stack
-from `just up` is already running, its `gruvax-dev-pg` service covers this. To start one
-standalone instead:
+from `just up` is already running, its `gruvax-dev-pg` service publishes that port — but note
+the `.env` copied from `.env.example` points `DATABASE_URL` at the Compose-network hostname
+`gruvax-dev-pg`, which does not resolve from the host. Override the host for host-side runs:
+
+```bash
+DATABASE_URL=postgresql+psycopg://gruvax:gruvax@localhost:5432/gruvax just test
+```
+
+To start a standalone Postgres instead:
 
 ```bash
 docker run -d --name gruvax-dev-pg \
@@ -168,16 +175,19 @@ docker run -d --name gruvax-dev-pg \
 
 ### Environment Variables
 
-Copy `.env.example` to `.env` and set your values. Required variables (compose refuses to
-start if any are missing):
+Copy `.env.example` to `.env` and set your values. Three variables are hard-required —
+compose refuses to start if they're missing (`${VAR:?}` guards): `SESSION_SECRET`,
+`GRUVAX_SECRET_KEY`, and `GRUVAX_ADMIN_PIN`. The others fall back to compose-supplied
+defaults when unset — in particular `DISCOGSOGRAPHY_BASE_URL` silently defaults to the
+built-in fake dataset, so **always set it explicitly in production**:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql+psycopg://gruvax:gruvax@gruvax-dev-pg:5432/gruvax` | SQLAlchemy/psycopg connection string (boot-fail-if-missing) |
+| `DATABASE_URL` | `postgresql+psycopg://gruvax:gruvax@gruvax-dev-pg:5432/gruvax` | SQLAlchemy/psycopg connection string (compose supplies the `gruvax-dev-pg` default when unset) |
 | `SESSION_SECRET` | _(required, no default)_ | Signs the admin session cookie — boot-fail-if-missing |
 | `GRUVAX_SECRET_KEY` | _(required, no default)_ | Fernet key for PAT-at-rest encryption — boot-fail-if-missing or malformed |
 | `GRUVAX_ADMIN_PIN` | _(required by the `init-sync` container, no default)_ | Piped into `gruvax-sync` on first boot; **not** in `.env.example` — add it yourself (e.g. `1234` for local dev) |
-| `DISCOGSOGRAPHY_BASE_URL` | `http://fake-discogsography:8004` | HTTP base URL of the discogsography API (boot-fail-if-missing) |
+| `DISCOGSOGRAPHY_BASE_URL` | `http://fake-discogsography:8004` | HTTP base URL of the discogsography API — compose defaults to the **fake** service when unset; set explicitly in production |
 | `GRUVAX_ENV` | `development` (in `.env.example`) | `development` enables dev-only migration stubs + synthetic seeding; leave unset (`production`) for a real deployment |
 
 The `api` service also derives `DATABASE_URL` from `GRUVAX_DB_USER` / `GRUVAX_DB_PASSWORD` /
@@ -236,7 +246,7 @@ gruvax/
 
 ## 🗺️ Planning Artifacts
 
-This project develops via [Beadhive/AGF](.beads/PRIME.md) — active work is tracked as beads (`bh work ...`), not raw git or ad-hoc docs. The historical design + milestone trail from v1.0 through v2.1 lives in [`.planning/`](.planning/):
+This project develops via Beadhive/AGF — active work is tracked as beads (`bh work ...`), not raw git or ad-hoc docs; see the Workflow section in [`CLAUDE.md`](CLAUDE.md). The historical design + milestone trail from v1.0 through v2.1 lives in [`.planning/`](.planning/):
 
 - [`PROJECT.md`](.planning/PROJECT.md) — what GRUVAX is, Core Value, constraints, key decisions
 - [`intel/requirements.md`](.planning/intel/requirements.md) — requirements extracted from the design spec, by milestone
