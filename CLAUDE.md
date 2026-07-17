@@ -291,6 +291,15 @@ and deploy model.
 
 No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.github/skills/`, or `.codex/skills/` with a `SKILL.md` index file.
 
+## Workflow
+
+- **All work must have a bead filed.** No untracked changes. Larger work is filed as a bead of type `epic`, with the concrete units of work broken out into specific `story` / `task` / `bug` beads underneath it as children.
+- **Ask clarifying questions when filing a bead.** If the request is ambiguous, resolve it with the requester before the bead is written up.
+- **Ask clarifying questions before starting execution too.** If there's any confusion about what a bead needs to deliver once work is about to begin, get it clarified before writing code.
+- **Execution dispatches to a team of agents.** Once work starts, spin up a team where each agent works in its own worktree off the bead's branch — never multiple agents sharing one working tree.
+- **Children merge into the epic first.** All child beads of an epic must cleanly merge into the epic's own worktree/branch before the epic itself is considered mergeable.
+- **Close out an epic by going through review and CI, then merge and record.** Once every child of the epic is done, open a PR, invoke a code review, and wait for CI to go green — investigating and fixing any failure along the way. Once green, merge to main, then close the bead(s) with comments. Periodically run `bd dolt push` to push the beads database to the remote.
+
 <!-- bh:agf:start (managed by `bh rig init` — edit outside these markers; `-f` refreshes) -->
 ## AGF — Agentic Git Flow
 
