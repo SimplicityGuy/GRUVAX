@@ -1,5 +1,8 @@
 # GRUVAX v2.0 — Multi-User Collections via discogsography API
 
+> **Historical design document (point-in-time, 2026-05-25):** describes the v2 design as
+> proposed on this date; the shipped implementation may differ.
+
 **Date:** 2026-05-25
 **Status:** Approved (design) — ready to route into GSD (`/gsd-new-milestone` for v2.0; `/gsd-phase` for the v1.x Phase 9)
 **Author:** brainstorming session (Robert + Claude)
