@@ -1,7 +1,0 @@
-{
-  "database": "dolt",
-  "backend": "dolt",
-  "dolt_mode": "embedded",
-  "dolt_database": "gruvax",
-  "project_id": "4a7ff55b-b621-410f-8cb6-fb423228fc5e"
-}

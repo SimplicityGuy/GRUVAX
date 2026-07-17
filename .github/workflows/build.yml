@@ -36,17 +36,14 @@ permissions:
 jobs:
   run-code-quality:
     uses: ./.github/workflows/code-quality.yml
-    secrets: inherit
 
   run-tests:
     needs: [run-code-quality]
     uses: ./.github/workflows/test.yml
-    secrets: inherit
 
   run-security:
     needs: [run-code-quality]
     uses: ./.github/workflows/security.yml
-    secrets: inherit
     permissions:
       contents: read
       security-events: write

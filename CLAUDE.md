@@ -11,10 +11,10 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 - **Tech stack — Backend**: Python + FastAPI in this repo. Align Python and FastAPI versions with discogsography to share a dependency story.
 - **Tech stack — Frontend**: Web stack (React + GSAP + Three.js/Pixi proposed) running in Chromium kiosk mode on the Pi. Final stack decision deferred to UI design phase.
 - **Deployment**: Docker Compose on the deployment host, sibling to discogsography. No second host for v1.
-- **Database**: Shared Postgres instance with discogsography. GRUVAX owns a dedicated schema (`gruvax`); reads from discogsography's collection tables read-only.
+- **Database**: Shared Postgres instance with discogsography. GRUVAX owns a dedicated schema (`gruvax`) with per-profile collection tables synced from discogsography over its HTTP API (v2). The v1 read-only view onto discogsography's tables is retired.
 - **Performance**: Type-ahead search round-trip ≤ ~200 ms perceived from keystroke to result.
 - **Connectivity**: Home LAN only; no public exposure. Pi → deployment host link is the critical path.
-- **Security**: Single PIN gates admin actions; session timeout after inactivity. No multi-user concerns.
+- **Security**: Single PIN gates admin actions; session timeout after inactivity. v2 adds per-member profiles (invite-link self-connect, per-profile Discogs PATs encrypted at rest) — still home-LAN only, no public multi-tenant exposure.
 - **Footprint**: Total hardware budget guidance from prior planning: ~$80–$150 (screen + Pi + initial LEDs). Software side aims to stay correspondingly small — no heavyweight services beyond what already runs on the deployment host.
 - **Repo hygiene**: The collection CSV and `background/` directory are local-only references; they must never be committed.
 
@@ -23,7 +23,7 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 ## TL;DR
 | Layer | Recommendation | Confidence |
 |-------|----------------|------------|
-| Backend language | Python 3.13 (match discogsography) | HIGH |
+| Backend language | Python 3.14 (match discogsography) | HIGH |
 | Web framework | FastAPI 0.136.x | HIGH |
 | DB driver | `psycopg` 3.2 (async) — match discogsography | HIGH |
 | Migrations | Alembic 1.18.x with async template | HIGH |
@@ -40,13 +40,13 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 | MQTT broker | `eclipse-mosquitto:2.1-alpine` | HIGH |
 | MQTT client (Python) | `aiomqtt` 3.x | HIGH |
 | Auth | Starlette `SessionMiddleware` (signed cookies via `itsdangerous`) + a single PIN check route + sliding session TTL. Do **not** introduce `fastapi-users` for one PIN. | HIGH |
-| Container | Multi-stage Dockerfile, `uv` in builder stage, `python:3.13-slim` runtime, non-root user | HIGH |
+| Container | Multi-stage Dockerfile, `uv` in builder stage, `python:3.14-slim` runtime, non-root user | HIGH |
 | Kiosk OS | Raspberry Pi OS Trixie (Debian 13), Wayland with `labwc` compositor, Chromium kiosk launched from `~/.config/labwc/autostart` and supervised by a `systemd --user` unit | HIGH |
 ## Recommended Stack — Backend
 ### Core
 | Technology | Version | Purpose | Why |
 |------------|---------|---------|-----|
-| Python | 3.13.x | Runtime | Discogsography uses 3.13+. Avoiding a version split simplifies shared dev tooling, Docker base images, and any future code sharing. Python 3.13 is current stable; 3.14 is recent but `aiomqtt` and others have less production exposure on it. |
+| Python | 3.14.x | Runtime | Discogsography uses 3.14+. Avoiding a version split simplifies shared dev tooling, Docker base images, and any future code sharing. (Originally planned as 3.13; the shipped stack landed on 3.14.) |
 | FastAPI | 0.136.1 (April 2026) | HTTP framework + OpenAPI | Discogsography already uses FastAPI; consistent dev story. 0.135+ added first-class SSE (`fastapi.sse`) which is directly relevant to the realtime requirement. |
 | Uvicorn | 0.32+ | ASGI server | The de facto FastAPI runner; works correctly with the long-lived SSE connections this app needs. |
 | Pydantic | 2.13.x | Models, validation, OpenAPI | Required by FastAPI 0.136; v2 is the Rust-core version that's 5–50x faster than v1. |
@@ -174,7 +174,7 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 ## What NOT to Use
 | Avoid | Why | Use Instead |
 |-------|-----|-------------|
-| Python 3.10 or 3.11 | Discogsography is on 3.13+; splitting versions adds maintenance for zero benefit. | Python 3.13 |
+| Python 3.10 or 3.11 | Discogsography is on 3.14+; splitting versions adds maintenance for zero benefit. | Python 3.14 |
 | Poetry (for this project) | Slower than `uv` for installs and locks. Discogsography uses `uv`. | `uv` |
 | `pipenv` | Effectively abandoned. | `uv` |
 | Pydantic v1 | EOL — many libraries have dropped support. | Pydantic v2 |
@@ -224,7 +224,7 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 ## Discogsography Alignment Notes
 | Item | Constraint | Rationale |
 |------|------------|-----------|
-| Python 3.13 | Hard match | Shared dev tooling, single Docker base layer story. |
+| Python 3.14 | Hard match | Shared dev tooling, single Docker base layer story. |
 | FastAPI | Soft match (same library, version can drift minor) | Both stay on the same major; FastAPI minor versions are usually safe to differ. |
 | psycopg3 | Hard match | Shared Postgres instance; discogsography already runs the migration story. |
 | uv | Hard match | Lockfile format and CI scripts can be near-identical. |
@@ -283,13 +283,22 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 
 ## Architecture
 
-See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the Phase 1–8 design:
+See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the current (v2.1) architecture reference:
 data model, API surface, position estimation, LED contract, realtime, observability,
 and deploy model.
 
 ## Project Skills
 
 No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.github/skills/`, or `.codex/skills/` with a `SKILL.md` index file.
+
+## Workflow
+
+- **All work must have a bead filed.** No untracked changes. Larger work is filed as a bead of type `epic`, with the concrete units of work broken out into specific `story` / `task` / `bug` beads underneath it as children.
+- **Ask clarifying questions when filing a bead.** If the request is ambiguous, resolve it with the requester before the bead is written up.
+- **Ask clarifying questions before starting execution too.** If there's any confusion about what a bead needs to deliver once work is about to begin, get it clarified before writing code.
+- **Execution dispatches to a team of agents.** Once work starts, spin up a team where each agent works in its own worktree off the bead's branch — never multiple agents sharing one working tree.
+- **Children merge into the epic first.** All child beads of an epic must cleanly merge into the epic's own worktree/branch before the epic itself is considered mergeable.
+- **Close out an epic by going through review and CI, then merge and record.** Once every child of the epic is done, open a PR, invoke a code review, and wait for CI to go green — investigating and fixing any failure along the way. Once green, merge to main, then close the bead(s) with comments. Periodically run `bd dolt push` to push the beads database to the remote.
 
 <!-- bh:agf:start (managed by `bh rig init` — edit outside these markers; `-f` refreshes) -->
 ## AGF — Agentic Git Flow

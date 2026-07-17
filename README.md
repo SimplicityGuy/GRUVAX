@@ -16,7 +16,7 @@
 
 <p align="center">
 
-[🔍 How It Works](#-how-it-works) | [🧱 Hardware](#-hardware) | [🧰 Stack](#-stack) | [✨ Features](#-v1-features) | [🏛️ Architecture](#-architecture) | [🎨 Design](#-design) | [🗺️ Planning](#-planning-artifacts)
+[🔍 How It Works](#-how-it-works) | [🧱 Hardware](#-hardware) | [🧰 Stack](#-stack) | [✨ Features](#-features) | [🏛️ Architecture](#-architecture) | [🎨 Design](#-design) | [🗺️ Planning](#-planning-artifacts)
 
 </p>
 
@@ -48,32 +48,38 @@ Initial deployment: two 4×4 IKEA Kallax units side-by-side (32 cubes total). Th
 ## 🧰 Stack
 
 - **Backend** — Python 3.14 + FastAPI, deployed via Docker Compose alongside [discogsography](https://github.com/SimplicityGuy/discogsography) on the home server. Structured JSON logging via `structlog` + `orjson`.
-- **Database** — Shared PostgreSQL instance; GRUVAX owns a dedicated `gruvax` schema and reads discogsography's collection data through a read-only `gruvax.v_collection` view.
-- **Frontend** — Single-page app served by the backend; runs fullscreen in Chromium kiosk mode on the Pi and is responsive enough to double as the mobile admin UI. Final framework choice lands in the UI design phase; the working baseline is Vite 8 + React 19.
-- **Realtime** — Server-Sent Events for kiosk updates on boundary edits.
-- **LED control plane** — `aiomqtt` publishing to an internal `eclipse-mosquitto` broker; the contract is locked in v1 even though the hardware milestone (ESP32 firmware + WS2812B wiring) lands later.
+- **Database** — Shared PostgreSQL instance; GRUVAX owns a dedicated `gruvax` schema — `profiles` + a per-profile `profile_collection` cache, refreshed by a staging-swap sync against discogsography's HTTP API (the v1-era read-only `gruvax.v_collection` cross-schema view was retired in migration 0009).
+- **Frontend** — Single-page app served by the backend; runs fullscreen in Chromium kiosk mode on the Pi and is responsive enough to double as the mobile admin UI. Built with Vite 8 + React 19 + TypeScript.
+- **Realtime** — Server-Sent Events, one channel per profile, for kiosk updates on boundary edits, sync completion, and device lifecycle changes.
+- **LED control plane** — `aiomqtt` publishing to an internal `eclipse-mosquitto` broker; the contract is locked even though the hardware milestone (ESP32 firmware + WS2812B wiring) lands later.
 - **Deploy** — Pull-based: `docker compose pull && docker compose up -d` using the pre-built `ghcr.io/simplicityguy/gruvax:latest` image from GitHub Container Registry. No build step required on the deployment host.
-- **Metadata** — comes from the [discogsography](https://github.com/SimplicityGuy/discogsography) project, which handles Discogs OAuth sync, full-text search, and the music graph.
+- **Metadata** — each profile connects with its own Fernet-encrypted Discogs PAT (personal access token) and syncs a local copy of its collection from the [discogsography](https://github.com/SimplicityGuy/discogsography) HTTP API; discogsography remains the canonical source of Discogs OAuth sync and the music graph, while GRUVAX runs its own full-text + trigram search over the local cache.
 
-## ✨ v1 Features
+## ✨ Features
+
+Shipped through the v2.1 milestone (v1.0 → v2.0 multi-user → v2.1 resilience/privacy/UX):
 
 - **Configurable N×4×4 Kallax grid** UI — supports any number of side-by-side 4×4 units (currently 2).
 - **Type-ahead search** across artist / title / label / catalog number, with sub-200 ms perceived latency and pg_trgm "did you mean" fallback.
 - **Cube highlight on match** — primary cube + label-span secondary highlight + sub-cube position interval bar (interval may cross a cube boundary).
-- **PIN-protected admin** with sliding-window session timeout — mobile-first, with a kiosk fallback that uses an in-app numeric keypad.
+- **PIN-protected admin** with sliding-window session timeout — mobile-first, with a kiosk fallback that uses an in-app numeric keypad; a scannable QR code accompanies the 4-digit PIN.
 - **Three boundary workflows** — manual entry with autocomplete + diff preview, guided setup wizard, CSV/YAML seed import. Every mutation goes through an append-only change log with one-tap undo.
-- **Live kiosk updates** — admin boundary edits on mobile re-render the kiosk via SSE without a manual refresh.
+- **Live kiosk updates** — admin boundary edits, sync completion, and device changes re-render the kiosk via SSE without a manual refresh.
 - **Admin-configurable LED colors and brightness** per system state (label-span, position, error, setup, all-off).
-- **Offline detection** with auto-reconnect and exponential backoff.
+- **Multi-profile / multi-user collections** — each household member connects their own Discogs PAT via a single-use, PIN-gated invite link; sync and search are isolated per profile.
+- **Device pairing and lifecycle** — 4-digit-code kiosk pairing, per-device rename / reassign / revoke from the admin UI, and a persistent fingerprint cookie that survives a Pi reboot.
+- **Offline detection** with an SSE-authoritative banner, auto-reconnect with backoff + jitter, and stale-data refresh on reconnect.
+- **Privacy by default** — search history is session-only (never persisted server-side), aggregate-only usage stats (no query text), and a no-PIN "reset kiosk" affordance.
+- **Shelf fill-overview** — an admin mini 4×4 grid that shades per-cube occupancy at a glance.
 - **Docker Compose deployment** with healthchecks, log limits, and Alembic migrations.
 
-Deferred to later milestones: real LED hardware integration (firmware + WS2812B wiring), screensaver / cover-art browse mode, periodic JSON export of boundaries to git, per-visitor PIN, service-worker offline cache.
+Deferred to later milestones: real LED hardware integration (firmware + WS2812B wiring), screensaver / cover-art browse mode, periodic JSON export of boundaries to git, OAuth2 device-authorization grant for member self-connect (AUTH-01), service-worker offline cache.
 
 ## 🏛️ Architecture
 
-The canonical Phase 1–8 design reference is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). It covers:
+The canonical design reference is [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md). It covers:
 
-- **Data model** — `gruvax` schema tables and the `gruvax.v_collection` read-only contract over discogsography
+- **Data model** — `gruvax` schema tables, including `profiles` + the per-profile `profile_collection` sync cache
 - **API surface** — all public `/api/*` and PIN-gated `/api/admin/*` endpoints
 - **Position estimation** — two-level segment-aware interpolation and the `LocateResult` contract
 - **LED contract** — MQTT topic structure, Pydantic payloads, `HighlightRegistry` TTL
@@ -111,41 +117,52 @@ The atomic unit of the UI is the Kallax cube: a 4×4 grid where each cell is a r
 ### Prerequisites
 
 - Docker + Docker Compose
-- A running `gruvax-dev-pg` container on `localhost:5432` (see below) with the dev DB seeded
 - `just` task runner (`brew install just` or see [just.systems](https://just.systems))
 
 ### Quickstart
 
 ```bash
-# 1. Seed the dev database (first time or after a schema reset)
-#    This starts a local Postgres container named gruvax-dev-pg,
-#    applies Alembic migrations, and loads the synthetic collection + boundaries.
-just seed-dev
+# 1. Copy the environment template and fill in the required secrets (see below)
+cp .env.example .env
 
-# 2. Build the SPA and start the full stack
-docker compose up
+# 2. Build and start the full stack: api, gruvax-dev-pg, mosquitto, and the
+#    fake-discogsography sibling used for local dev. The api container waits
+#    for Postgres, runs Alembic migrations, and seeds the synthetic collection
+#    + cube boundaries on first boot (GRUVAX_ENV=development, set by default
+#    in .env.example).
+just up
 
 # 3. Open the kiosk
 open http://localhost:8000
 ```
 
-Type an artist, label, or catalog number (e.g. `Blue Note`, `BLP 4001`, or `ECM`).
+Type an artist, label, or catalog number (e.g. `Blue Note`, `BLP 1000`, or `ECM`).
 The top result auto-highlights its cube. Tap other results to move the highlight.
 Click the clear-X (×) to reset.
 
 ### Stop / Restart
 
 ```bash
-# Stop and remove containers — does NOT delete volumes (keeps mosquitto persistence)
+# Stop and remove containers — does NOT delete volumes (keeps mosquitto + Postgres persistence)
 docker compose down
 
-# NEVER run `docker compose down -v` unless you intend to wipe the mosquitto-data
-# volume (persistent retained LED state in Phase 5+). The -v flag deletes volumes.
+# NEVER run `docker compose down -v` unless you intend to wipe the gruvax-dev-pg-data
+# and mosquitto-data volumes. The -v flag deletes volumes.
 ```
 
-### Starting the Dev Postgres
+### Running Tests Locally (outside Docker)
 
-If `gruvax-dev-pg` is not running:
+`just test` / `just migrate` run against `DATABASE_URL` directly (not through the Compose
+network), so they need a bare Postgres reachable at `localhost:5432`. If the Compose stack
+from `just up` is already running, its `gruvax-dev-pg` service publishes that port — but note
+the `.env` copied from `.env.example` points `DATABASE_URL` at the Compose-network hostname
+`gruvax-dev-pg`, which does not resolve from the host. Override the host for host-side runs:
+
+```bash
+DATABASE_URL=postgresql+psycopg://gruvax:gruvax@localhost:5432/gruvax just test
+```
+
+To start a standalone Postgres instead:
 
 ```bash
 docker run -d --name gruvax-dev-pg \
@@ -158,38 +175,53 @@ docker run -d --name gruvax-dev-pg \
 
 ### Environment Variables
 
-Copy `.env.example` to `.env` and set your values. Key variables:
+Copy `.env.example` to `.env` and set your values. Three variables are hard-required —
+compose refuses to start if they're missing (`${VAR:?}` guards): `SESSION_SECRET`,
+`GRUVAX_SECRET_KEY`, and `GRUVAX_ADMIN_PIN`. The others fall back to compose-supplied
+defaults when unset — in particular `DISCOGSOGRAPHY_BASE_URL` silently defaults to the
+built-in fake dataset, so **always set it explicitly in production**:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `GRUVAX_DB_USER` | `gruvax` | Postgres user |
-| `GRUVAX_DB_PASSWORD` | `gruvax` | Postgres password |
-| `GRUVAX_DB_HOST` | `host.docker.internal` | DB hostname (from inside the container) |
-| `GRUVAX_DB_NAME` | `gruvax` | Database name |
-| `DISCOGSOGRAPHY_BASE_URL` | `http://fake-discogsography:8004` | HTTP base URL of the discogsography API (boot-fail-if-missing) |
+| `DATABASE_URL` | `postgresql+psycopg://gruvax:gruvax@gruvax-dev-pg:5432/gruvax` | SQLAlchemy/psycopg connection string (compose supplies the `gruvax-dev-pg` default when unset) |
+| `SESSION_SECRET` | _(required, no default)_ | Signs the admin session cookie — boot-fail-if-missing |
 | `GRUVAX_SECRET_KEY` | _(required, no default)_ | Fernet key for PAT-at-rest encryption — boot-fail-if-missing or malformed |
+| `GRUVAX_ADMIN_PIN` | _(required by the `init-sync` container, no default)_ | Piped into `gruvax-sync` on first boot; **not** in `.env.example` — add it yourself (e.g. `1234` for local dev) |
+| `DISCOGSOGRAPHY_BASE_URL` | `http://fake-discogsography:8004` | HTTP base URL of the discogsography API — compose defaults to the **fake** service when unset; set explicitly in production |
+| `GRUVAX_ENV` | `development` (in `.env.example`) | `development` enables dev-only migration stubs + synthetic seeding; leave unset (`production`) for a real deployment |
 
-**DB connectivity from inside Docker (Linux):** The `api` service container reaches the host Postgres
-via `host.docker.internal`. On Linux, this resolves via the `extra_hosts: host-gateway` line
-in `compose.yaml`. On macOS/Windows, `host.docker.internal` is built in.
+The `api` service also derives `DATABASE_URL` from `GRUVAX_DB_USER` / `GRUVAX_DB_PASSWORD` /
+`GRUVAX_DB_HOST` / `GRUVAX_DB_PORT` / `GRUVAX_DB_NAME` (see `compose.yaml`) if you'd rather
+override the pieces than the full connection string.
+
+**DB connectivity from inside Docker (Linux):** The `api` service container reaches the
+bundled `gruvax-dev-pg` service by container name on the Compose network by default. If you
+point it at a host Postgres instead via `host.docker.internal`, that resolves via the
+`extra_hosts: host-gateway` line in `compose.yaml` on Linux; macOS/Windows have it built in.
 
 ### Secrets bootstrap
 
-On first install (and any time a deployment needs to be rebuilt from scratch) the
-`GRUVAX_SECRET_KEY` Fernet key must be generated once and written into `.env` before
-`docker compose up`. The compose file uses `${GRUVAX_SECRET_KEY:?…}` substitution and
-will refuse to start if the variable is missing or empty.
+On first install (and any time a deployment needs to be rebuilt from scratch) `.env` needs
+three secrets before `docker compose up` / `just up` will start: `GRUVAX_SECRET_KEY`,
+`SESSION_SECRET`, and `GRUVAX_ADMIN_PIN`. The compose file uses `${VAR:?…}` substitution for
+each and will refuse to start if any is missing or empty.
 
 ```bash
-# Generate a fresh Fernet key (URL-safe base64, 32 random bytes):
+# Fernet key for PAT-at-rest encryption (URL-safe base64, 32 random bytes):
 python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
-# Then add the printed value to .env:
-#   GRUVAX_SECRET_KEY=<paste-the-output-here>
+#   -> GRUVAX_SECRET_KEY=<paste-the-output-here>
+
+# Session-cookie signing secret:
+python -c "import secrets; print(secrets.token_urlsafe(32))"
+#   -> SESSION_SECRET=<paste-the-output-here>
+
+# Admin PIN used by the init-sync container (any 4 digits for local dev):
+#   -> GRUVAX_ADMIN_PIN=1234
 ```
 
-Rotating the key orphans every existing `profiles.app_token_encrypted` row — treat the
-generated value as permanent per deployment. (A P4 utility will land for the re-encrypt
-flow; until then, regenerate only as part of a full PAT re-provisioning.)
+Rotating `GRUVAX_SECRET_KEY` orphans every existing `profiles.app_token_encrypted` row —
+treat the generated value as permanent per deployment. (A P4 utility will land for the
+re-encrypt flow; until then, regenerate only as part of a full PAT re-provisioning.)
 
 ## 🗂️ Repository Layout
 
@@ -197,36 +229,39 @@ flow; until then, regenerate only as part of a full PAT re-provisioning.)
 gruvax/
 ├── pyproject.toml           # Python project (uv-managed)
 ├── uv.lock                  # Python lockfile
-├── compose.yaml             # Docker Compose: api + mosquitto (container: gruvax-api-1)
+├── compose.yaml             # Docker Compose: api + gruvax-dev-pg + mosquitto + fake-discogsography + init-sync
 ├── Dockerfile               # Multi-stage: frontend build + Python runtime
-├── justfile                 # Task runner: test, lint, migrate, seed-dev, up
+├── justfile                 # Task runner: test, lint, migrate, up, seed-dev
 ├── alembic.ini              # Alembic migration config
 ├── design/                  # Design language: tokens, logos, banners, spec
+├── docs/                    # ARCHITECTURE.md, ops runbooks
 ├── mosquitto/               # Broker config (mosquitto.conf)
-├── fixtures/                # Synthetic collection seed + boundary YAML
+├── fixtures/                # Cube boundary YAML + golden test cases
 ├── migrations/              # Alembic migration versions
-├── src/gruvax/              # Backend: FastAPI + estimator + mqtt
+├── services/                # fake-discogsography sibling (local dev / CI)
+├── src/gruvax/              # Backend: FastAPI + estimator + mqtt + sync
 ├── tests/                   # Unit, integration, property (Hypothesis)
-└── frontend/                # Vite 8 + React 19 SPA (kiosk + future /admin)
+└── frontend/                # Vite 8 + React 19 SPA (kiosk + admin)
 ```
 
 ## 🗺️ Planning Artifacts
 
-This project is being built via the [Get Shit Done](https://github.com/SimplicityGuy/get-shit-done) workflow. The full planning trail lives in [`.planning/`](.planning/):
+This project develops via Beadhive/AGF — active work is tracked as beads (`bh work ...`), not raw git or ad-hoc docs; see the Workflow section in [`CLAUDE.md`](CLAUDE.md). The historical design + milestone trail from v1.0 through v2.1 lives in [`.planning/`](.planning/):
 
 - [`PROJECT.md`](.planning/PROJECT.md) — what GRUVAX is, Core Value, constraints, key decisions
-- [`REQUIREMENTS.md`](.planning/REQUIREMENTS.md) — 73 v1 requirements across 11 categories
-- [`ROADMAP.md`](.planning/ROADMAP.md) — 7-phase vertical MVP plan
+- [`intel/requirements.md`](.planning/intel/requirements.md) — requirements extracted from the design spec, by milestone
+- [`ROADMAP.md`](.planning/ROADMAP.md) / [`MILESTONES.md`](.planning/MILESTONES.md) — the v1.0 → v2.0 → v2.1 milestone history
 - [`research/`](.planning/research/) — stack, features, architecture, pitfalls, position-estimation algorithms, synthesis
-- [`STATE.md`](.planning/STATE.md) — project memory and current focus
+- [`STATE.md`](.planning/STATE.md) — project memory as of the v2.1 close
 
 ## 📊 Status
 
-**Phase 1 complete.** The Core Value is demoable: `docker compose up` brings up the full stack, the
-React SPA serves from `http://localhost:8000`, and typing a query lights up the right cube in the
-2×(4×4) grid.
+**v2.1 shipped** (v1.0 MVP → v2.0 multi-user collections → v2.1 resilience/privacy/UX polish; see
+[Planning Artifacts](#-planning-artifacts)). The Core Value is demoable: `just up` brings up the full
+stack, the React SPA serves from `http://localhost:8000`, and typing a query lights up the right cube
+in the 2×(4×4) grid.
 
-Stack versions as shipped (reconciled from RESEARCH.md against npm/PyPI):
+Stack versions as shipped (reconciled from [`.planning/research/STACK.md`](.planning/research/STACK.md) against npm/PyPI):
 
 | Component | Version | Note |
 |-----------|---------|------|
