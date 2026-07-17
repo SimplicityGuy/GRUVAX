@@ -1,4 +1,3 @@
-<!-- GSD:project-start source:PROJECT.md -->
 ## Project
 
 **GRUVAX**
@@ -18,9 +17,7 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 - **Security**: Single PIN gates admin actions; session timeout after inactivity. No multi-user concerns.
 - **Footprint**: Total hardware budget guidance from prior planning: ~$80–$150 (screen + Pi + initial LEDs). Software side aims to stay correspondingly small — no heavyweight services beyond what already runs on the deployment host.
 - **Repo hygiene**: The collection CSV and `background/` directory are local-only references; they must never be committed.
-<!-- GSD:project-end -->
 
-<!-- GSD:stack-start source:research/STACK.md -->
 ## Technology Stack
 
 ## TL;DR
@@ -260,9 +257,7 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 ### MQTT / Realtime
 - [aiomqtt on GitHub (empicano)](https://github.com/empicano/aiomqtt) — v3 sans-io rewrite — HIGH
 - [sse-starlette on PyPI](https://pypi.org/project/sse-starlette/) — current SSE implementation — HIGH
-<!-- GSD:stack-end -->
 
-<!-- GSD:conventions-start source:CONVENTIONS.md -->
 
 ## Conventions
 
@@ -285,40 +280,24 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 - **The main `README.md` follows the discogsography pattern** — centered header block, theme-aware banner via `<picture>` (`design/assets/banner_dark.png` / `banner_light.png`), shields.io badges, a bold tagline, and a centered nav line, then emoji-prefixed sections.
 - **GitHub banners are committed as PNGs** (`design/assets/banner_{light,dark}.png`) rendered from the SVG sources, so the Barlow Condensed wordmark renders correctly instead of falling back to a system font.
 
-<!-- GSD:conventions-end -->
 
-<!-- GSD:architecture-start source:ARCHITECTURE.md -->
 ## Architecture
 
 See [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) for the Phase 1–8 design:
 data model, API surface, position estimation, LED contract, realtime, observability,
 and deploy model.
-<!-- GSD:architecture-end -->
 
-<!-- GSD:skills-start source:skills/ -->
 ## Project Skills
 
 No project skills found. Add skills to any of: `.claude/skills/`, `.agents/skills/`, `.cursor/skills/`, `.github/skills/`, or `.codex/skills/` with a `SKILL.md` index file.
-<!-- GSD:skills-end -->
 
-<!-- GSD:workflow-start source:GSD defaults -->
-## GSD Workflow Enforcement
+<!-- bh:agf:start (managed by `bh rig init` — edit outside these markers; `-f` refreshes) -->
+## AGF — Agentic Git Flow
 
-Before using Edit, Write, or other file-changing tools, start work through a GSD command so planning artifacts and execution context stay in sync.
+This repo is onboarded as a **`bh` rig** and develops via **AGF**: work is tracked in beads
+and driven through `bh`, **not** raw `git` / `bd` / `gh`.
 
-Use these entry points:
-- `/gsd-quick` for small fixes, doc updates, and ad-hoc tasks
-- `/gsd-debug` for investigation and bug fixing
-- `/gsd-execute-phase` for planned phase work
-
-Do not make direct repo edits outside a GSD workflow unless the user explicitly asks to bypass it.
-<!-- GSD:workflow-end -->
-
-
-
-<!-- GSD:profile-start -->
-## Developer Profile
-
-> Profile not yet configured. Run `/gsd-profile-user` to generate your developer profile.
-> This section is managed by `generate-claude-profile` -- do not edit manually.
-<!-- GSD:profile-end -->
+- **Is this repo set up for AGF?** → run `bh rig ready` (add `-v` for the line-item breakdown).
+- **Lifecycle, roles, conventions:** see `.beads/PRIME.md` and `docs/AGF.md`.
+- Drive beads with `bh work`; load the role skill for your seat (coordinator / developer / merger).
+<!-- bh:agf:end -->
