@@ -1,5 +1,8 @@
 # GRUVAX v2.0 — Multi-User Collections via discogsography API (Refined)
 
+> **Historical design document (point-in-time, 2026-05-26):** describes the v2 design as
+> proposed on this date; the shipped implementation may differ.
+
 **Date:** 2026-05-26
 **Status:** Approved (design) — ready to route into `/gsd-new-milestone v2.0 --reset-phase-numbers`
 **Supersedes:** [`2026-05-25-v2-multi-user-collections-design.md`](./2026-05-25-v2-multi-user-collections-design.md) (the original approved design — kept for historical context; this refinement is the authoritative v2.0 design as of this date)
