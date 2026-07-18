@@ -248,7 +248,8 @@ async def revert_change_set(
                 await cur2.execute(
                     "SELECT unit_id, row, col, label, fraction"
                     " FROM gruvax.segment_overrides"
-                    " WHERE profile_id = %s::uuid",
+                    " WHERE profile_id = %s::uuid"
+                    " ORDER BY unit_id, row, col, label",
                     (profile_id,),
                 )
                 override_rows = await cur2.fetchall()

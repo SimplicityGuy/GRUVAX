@@ -58,9 +58,16 @@ async def export_boundaries(
     Returns:
         YAML file download with Content-Disposition attachment.
     """
-    # Load per-label segment overrides, keyed by (unit_id, row, col) → {label: fraction}
+    # Load per-label segment overrides, keyed by (unit_id, row, col) → {label: fraction}.
+    # gruvax-rn7l.3: export label_display (original case), NEVER the casefolded
+    # `label` storage key — a round-tripped export/import must not silently
+    # relabel every override to lowercase.
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute("SELECT unit_id, row, col, label, fraction FROM gruvax.segment_overrides")
+        await cur.execute(
+            "SELECT unit_id, row, col, label_display, fraction"
+            " FROM gruvax.segment_overrides"
+            " ORDER BY unit_id, row, col, label"
+        )
         override_rows = await cur.fetchall()
 
     overrides_index: dict[tuple[int, int, int], dict[str, float]] = {}
