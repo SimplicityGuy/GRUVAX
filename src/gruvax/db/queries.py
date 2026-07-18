@@ -233,6 +233,7 @@ WITH fts AS (
         setweight(to_tsvector('gruvax.gruvax_fts', coalesce(v.catalog_number, '')), 'A')
         || setweight(v.fts_vector, 'C')
       ) @@ tsq.query
+    ORDER BY score DESC
     LIMIT 40
 ),
 cat AS (
@@ -250,6 +251,7 @@ cat AS (
     WHERE profile_id = %s::uuid
       AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
           LIKE lower(regexp_replace(%s, '[\\s\\-_./]+', '', 'g')) || '%%'
+    ORDER BY score DESC
     LIMIT 20
 ),
 combined AS (
@@ -261,18 +263,34 @@ combined AS (
            label, catalog_number, format, year, score
     FROM cat
 )
-SELECT DISTINCT ON (release_id)
-    release_id,
-    collection_item_id,
-    title,
-    primary_artist,
-    label,
-    catalog_number,
-    format,
-    year,
-    score AS rank
-FROM combined
-ORDER BY release_id, score DESC
+SELECT release_id,
+       collection_item_id,
+       title,
+       primary_artist,
+       label,
+       catalog_number,
+       format,
+       year,
+       rank
+FROM (
+    -- DISTINCT ON keeps the highest-scoring row per release_id, but forces the
+    -- ORDER BY to lead with release_id.  Wrapping it in a subquery lets the
+    -- OUTER query re-order by rank DESC before LIMIT, so the LIMIT keeps the
+    -- top-scored matches rather than the lowest release_ids (gruvax-07a).
+    SELECT DISTINCT ON (release_id)
+        release_id,
+        collection_item_id,
+        title,
+        primary_artist,
+        label,
+        catalog_number,
+        format,
+        year,
+        score AS rank
+    FROM combined
+    ORDER BY release_id, score DESC
+) deduped
+ORDER BY rank DESC
 LIMIT %s
 """
         params: tuple[Any, ...] = (q, profile_id, profile_id, q, limit)
@@ -300,6 +318,7 @@ WITH fts AS (
     CROSS JOIN websearch_to_tsquery('gruvax.gruvax_fts', %s) AS tsq(query)
     WHERE v.profile_id = %s::uuid
       AND v.fts_vector @@ tsq.query
+    ORDER BY score DESC
     LIMIT 40
 ),
 cat AS (
@@ -317,6 +336,7 @@ cat AS (
     WHERE profile_id = %s::uuid
       AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
           LIKE lower(regexp_replace(%s, '[\\s\\-_./]+', '', 'g')) || '%%'
+    ORDER BY score DESC
     LIMIT 20
 ),
 -- UNION ALL the two paths, then DISTINCT ON keeps the highest-scoring row
@@ -330,18 +350,34 @@ combined AS (
            label, catalog_number, format, year, score
     FROM cat
 )
-SELECT DISTINCT ON (release_id)
-    release_id,
-    collection_item_id,
-    title,
-    primary_artist,
-    label,
-    catalog_number,
-    format,
-    year,
-    score AS rank
-FROM combined
-ORDER BY release_id, score DESC
+SELECT release_id,
+       collection_item_id,
+       title,
+       primary_artist,
+       label,
+       catalog_number,
+       format,
+       year,
+       rank
+FROM (
+    -- DISTINCT ON keeps the highest-scoring row per release_id, but forces the
+    -- ORDER BY to lead with release_id.  Wrapping it in a subquery lets the
+    -- OUTER query re-order by rank DESC before LIMIT, so the LIMIT keeps the
+    -- top-scored matches rather than the lowest release_ids (gruvax-07a).
+    SELECT DISTINCT ON (release_id)
+        release_id,
+        collection_item_id,
+        title,
+        primary_artist,
+        label,
+        catalog_number,
+        format,
+        year,
+        score AS rank
+    FROM combined
+    ORDER BY release_id, score DESC
+) deduped
+ORDER BY rank DESC
 LIMIT %s
 """
         params = (q, profile_id, profile_id, q, limit)
@@ -356,7 +392,9 @@ LIMIT %s
 
     rows: list[SearchRow] = [dict(zip(cols, row, strict=True)) for row in rows_raw]
 
-    # Re-sort the de-duplicated rows by rank DESC (DISTINCT ON breaks ORDER BY)
+    # The SQL now returns rows already ordered by rank DESC (the DISTINCT ON is
+    # wrapped so the outer LIMIT keeps the top-scored matches — gruvax-07a).
+    # This re-sort is a cheap, defensive no-op that also guards the None-rank case.
     rows.sort(key=lambda r: r.get("rank", 0) or 0, reverse=True)
 
     # SRCH-07 / D-11: only trigger did-you-mean when FTS finds nothing strong.
