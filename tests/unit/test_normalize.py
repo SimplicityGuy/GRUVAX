@@ -12,11 +12,14 @@ Tests the golden cases described in PLAN.md §Task 1 <behavior>:
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 
 from gruvax.estimator.normalize import (
     catalog_in_range,
     compare_catalogs,
+    label_sort_key,
     normalize_catalog,
     parse_key,
 )
@@ -140,6 +143,29 @@ def test_nfkc_fullwidth_digits() -> None:
     assert parse_key(full_width) == parse_key("BLP 4195")
 
 
+def test_nfkc_fullwidth_letters_and_hyphen() -> None:
+    """ADR-0001 witness: a full-width "BLP-4195" folds to the same key as 'BLP 4195'.
+
+    Exercises normalize_catalog / parse_key across full-width LETTERS (U+FF22 'B',
+    U+FF2C 'L', U+FF30 'P'), a full-width hyphen-minus (U+FF0D, separator), and
+    full-width DIGITS (U+FF14/FF11/FF19/FF15) — the shelved-vs-searchable identity
+    gap the authority closes. Built via chr() so the source stays pure-ASCII.
+    """
+    # chr() avoids RUF001/RUF002 ambiguous-character linter warnings on full-width forms.
+    full_width = (
+        chr(0xFF22)  # 'B'
+        + chr(0xFF2C)  # 'L'
+        + chr(0xFF30)  # 'P'
+        + chr(0xFF0D)  # '-' full-width hyphen-minus
+        + chr(0xFF14)  # '4'
+        + chr(0xFF11)  # '1'
+        + chr(0xFF19)  # '9'
+        + chr(0xFF15)  # '5'
+    )
+    assert normalize_catalog(full_width) == normalize_catalog("BLP 4195")
+    assert parse_key(full_width) == parse_key("BLP 4195")
+
+
 # ── normalize_catalog idempotency ─────────────────────────────────────────────
 
 
@@ -232,3 +258,70 @@ def test_catalog_in_range_separator_variants() -> None:
     """Cosmetic variants of the same catalog# must compare equal for range membership."""
     assert catalog_in_range("blp-4010", "BLP 4001", "BLP 4020") is True
     assert catalog_in_range("BLP4010", "BLP 4001", "BLP 4020") is True
+
+
+# ── label_sort_key (ADR-0001 label-ordering authority) ────────────────────────
+
+# The ADR-0001 witness list, in its authoritative pyuca (UCA) order.
+_WITNESS_LABELS_SORTED: list[str] = [
+    "4AD",
+    "A&M",
+    "ABC",
+    "Ace",
+    "Blue Note",
+    "Bluebird",
+    "Éditions EG",
+    "ZZ Top Records",
+]
+
+
+def test_label_sort_key_orders_adr_witness_list() -> None:
+    """The ADR-0001 witness labels sort into their documented deterministic order.
+
+    This is the property that makes the admin picker and the estimator cut-key
+    order agree: digits first (4AD), punctuation/space significant and below
+    letters (A&M < ABC, Blue Note < Bluebird), accents fold to base primary
+    weight (Éditions EG under 'E').
+    """
+    # A fixed, deliberately out-of-order permutation of the witness list.
+    scrambled = [
+        "Éditions EG",
+        "ABC",
+        "4AD",
+        "ZZ Top Records",
+        "Ace",
+        "Bluebird",
+        "A&M",
+        "Blue Note",
+    ]
+    assert sorted(scrambled) != _WITNESS_LABELS_SORTED  # naive str sort disagrees
+    assert sorted(scrambled, key=label_sort_key) == _WITNESS_LABELS_SORTED
+
+
+def test_label_sort_key_deterministic() -> None:
+    """label_sort_key is a pure function of its input — same input, identical key."""
+    for label in _WITNESS_LABELS_SORTED:
+        assert label_sort_key(label) == label_sort_key(label)
+
+
+def test_label_sort_key_witness_pairs_strictly_ordered() -> None:
+    """Every adjacent witness pair is strictly ordered (total order, no ties)."""
+    for lo, hi in itertools.pairwise(_WITNESS_LABELS_SORTED):
+        assert label_sort_key(lo) < label_sort_key(hi), f"{lo!r} !< {hi!r}"
+
+
+def test_label_sort_key_case_insensitive() -> None:
+    """Casefold means case-variant labels collate equal (one bin, not two)."""
+    assert label_sort_key("Blue Note") == label_sort_key("BLUE NOTE")
+    assert label_sort_key("blue note") == label_sort_key("Blue Note")
+
+
+def test_label_sort_key_none_and_empty_sort_first() -> None:
+    """None / empty labels produce the minimal key and sort before any real label."""
+    assert label_sort_key(None) == label_sort_key("")
+    assert label_sort_key(None) <= label_sort_key("4AD")
+
+
+def test_label_sort_key_punctuation_below_letters() -> None:
+    """A&M sorts before ABC: '&' is significant and weighted below letters (UCA)."""
+    assert label_sort_key("A&M") < label_sort_key("ABC")

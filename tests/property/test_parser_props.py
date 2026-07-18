@@ -14,6 +14,7 @@ from hypothesis import given, settings, strategies as st
 from gruvax.estimator.normalize import (
     catalog_in_range,
     compare_catalogs,
+    label_sort_key,
     normalize_catalog,
     parse_key,
 )
@@ -168,6 +169,47 @@ def test_digit_cap_no_exception(n_digits: int, digit: int) -> None:
         assert isinstance(result, tuple)
     except Exception as exc:
         raise AssertionError(f"parse_key raised on digit-run of length {n_digits}: {exc}") from exc
+
+
+# ── label_sort_key total order (ADR-0001) ────────────────────────────────────
+
+
+@given(a=st.text(), b=st.text())
+@settings(max_examples=500)
+def test_label_sort_key_antisymmetric(a: str, b: str) -> None:
+    """label_sort_key induces a total order: exactly one of <, ==, > holds and it flips."""
+    ka = label_sort_key(a)
+    kb = label_sort_key(b)
+    if ka < kb:
+        assert kb > ka
+    elif ka > kb:
+        assert kb < ka
+    else:
+        assert ka == kb
+
+
+@given(a=st.text(), b=st.text(), c=st.text())
+@settings(max_examples=300)
+def test_label_sort_key_transitive(a: str, b: str, c: str) -> None:
+    """Transitivity of the label order: a <= b <= c implies a <= c."""
+    ka, kb, kc = label_sort_key(a), label_sort_key(b), label_sort_key(c)
+    if ka <= kb and kb <= kc:
+        assert ka <= kc
+
+
+@given(a=st.text(), b=st.text())
+@settings(max_examples=300)
+def test_label_sort_key_case_insensitive(a: str, b: str) -> None:
+    """Casefold-equal labels always produce equal sort keys (single-bin invariant)."""
+    if a.casefold() == b.casefold():
+        assert label_sort_key(a) == label_sort_key(b)
+
+
+@given(s=st.text())
+@settings(max_examples=300)
+def test_label_sort_key_deterministic(s: str) -> None:
+    """label_sort_key is pure: the same input yields an identical key every call."""
+    assert label_sort_key(s) == label_sort_key(s)
 
 
 # ── catalog_in_range consistency ──────────────────────────────────────────────

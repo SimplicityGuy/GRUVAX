@@ -1,5 +1,12 @@
 """POS-01 catalog-number normalization and comparison module.
 
+This is the single **normalization & ordering authority** for GRUVAX (ADR-0001):
+it owns both catalog-number identity (``normalize_catalog`` / ``parse_key``) and
+label ordering (``label_sort_key``). Postgres stores and retrieves but no longer
+defines string identity or sort order — the authoritative transforms live here so
+the estimator, the admin label picker, sync ingest, and the FTS index all agree by
+construction.
+
 Implements Strategy C (token-stream split) per RESEARCH.md §Pattern 2 and
 INTERPOLATION.md §3.1. Raw string comparison of catalog numbers is **forbidden**;
 all comparisons must go through ``parse_key``.
@@ -7,8 +14,12 @@ all comparisons must go through ``parse_key``.
 Decision D-13: parser strategy C delegated to researcher and confirmed here.
 Decision T-01-04: all comparisons route through parse_key (tampering mitigation).
 Decision T-01-05: digit-run capped at _DIGIT_CAP to prevent DoS on adversarial input.
+ADR-0001: pyuca is the label-ordering authority. This module is the ONLY import
+site for ``pyuca`` — every "sort labels" call site must route through
+``label_sort_key`` so the picker and the estimator's cut-key order agree.
 
 Exported symbols:
+  label_sort_key     — casefold + pyuca (UCA) sort key; total order over labels
   normalize_catalog  — NFKC + casefold + first-of-comma + separator-collapse
   parse_key          — alternating (type_tag, value) tokens; empties sort first
   compare_catalogs   — -1/0/1 total order over parse_key
@@ -19,6 +30,8 @@ from __future__ import annotations
 
 import re
 import unicodedata
+
+from pyuca import Collator
 
 
 # ---------------------------------------------------------------------------
@@ -46,10 +59,46 @@ _NONE_SENTINELS: frozenset[str] = frozenset({"none", "n/a", "n.a.", "?", "", "na
 # type-tag -1 ensures sentinel tokens sort before alpha (0) and numeric (1) tokens.
 _SENTINEL: tuple[tuple[int, int], ...] = ((-1, 0),)
 
+# Module-level Collator: constructing it loads the bundled DUCET table once
+# (ADR-0001 chose pyuca's bundled tables for determinism across environments and
+# upgrades). Reused for every label_sort_key call — do not construct per call.
+_COLLATOR: Collator = Collator()
+
 
 # ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
+
+
+def label_sort_key(label: str | None) -> tuple[tuple[int, ...], str]:
+    """Return a total-order sort key for a record label (ADR-0001 authority).
+
+    The key is ``(UCA_sort_key, casefolded_label)``:
+      1. **casefold** the label so ``blue note`` and ``Blue Note`` collate equal.
+      2. The pyuca (Unicode Collation Algorithm) sort key gives linguistically
+         correct primary/secondary/tertiary ordering — punctuation and spaces are
+         significant and sort before letters (non-ignorable DUCET weighting), so
+         ``A&M`` < ``ABC`` and ``Blue Note`` < ``Bluebird``; accented letters fold
+         to their base primary weight (``Éditions EG`` sorts under ``E``).
+      3. The casefolded string is appended as a deterministic tie-breaker so the
+         key is a strict **total** order even when two distinct strings share a UCA
+         key (canonical/compatibility equivalents) — guaranteeing antisymmetry.
+
+    Used by BOTH the admin label picker and the estimator's cut-key comparison so
+    the two orders agree by construction (ADR-0001). ``None``/empty sort first.
+
+    The returned key is a plain tuple — safe to compare directly and to embed as
+    the label component of a ``CutKey``.
+
+    Example (ADR witness list, deterministically ordered)::
+
+        >>> labels = ["ZZ Top Records", "Éditions EG", "Bluebird", "Blue Note",
+        ...           "Ace", "ABC", "A&M", "4AD"]
+        >>> sorted(labels, key=label_sort_key)
+        ['4AD', 'A&M', 'ABC', 'Ace', 'Blue Note', 'Bluebird', 'Éditions EG', 'ZZ Top Records']
+    """
+    folded: str = (label or "").casefold()
+    return (tuple(_COLLATOR.sort_key(folded)), folded)
 
 
 def normalize_catalog(raw: str | None) -> str:
