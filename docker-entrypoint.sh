@@ -129,11 +129,18 @@ PY
     fi
 fi
 
-# Seed cube boundaries (idempotent upsert on (unit_id, row, col)) so the kiosk
-# grid and /api/locate work on a fresh database. Safe to run on every start.
-# Skipped automatically if the fixtures file is absent (e.g. a future slim image).
-if [ -f fixtures/boundaries.yaml ]; then
-    echo "Seeding cube boundaries from fixtures/boundaries.yaml..."
+# Plan 01-06: dev-only synthetic cube-boundary seed.
+# gruvax-nrx2: this MUST be double-guarded exactly like the profile_collection
+# seed above — GRUVAX_ENV=development AND an already-populated check — because
+# fixtures/boundaries.yaml ships in the runtime image (Dockerfile COPY) and the
+# seed's ON CONFLICT DO UPDATE would otherwise silently overwrite admin
+# cut-point edits on the default profile with the synthetic fixture on EVERY
+# container restart, in production too. The "already populated" half lives in
+# seed_boundaries.py's seed_boundaries_guarded() / main() (queries
+# gruvax.cube_boundaries for the default profile before writing anything);
+# the GRUVAX_ENV half lives here.
+if [ "${GRUVAX_ENV:-production}" = "development" ] && [ -f fixtures/boundaries.yaml ]; then
+    echo "Seeding cube boundaries from fixtures/boundaries.yaml (skipped if already populated)..."
     "$PYTHON" -m gruvax.db.seed_boundaries fixtures/boundaries.yaml
 fi
 
