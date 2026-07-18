@@ -138,11 +138,18 @@ def configure_logging(log_level: str, ring: deque[dict[str, Any]]) -> None:
         structlog.stdlib.PositionalArgumentsFormatter(),
         structlog.processors.TimeStamper(fmt="iso", utc=True),
         structlog.processors.StackInfoRenderer(),
-        # P1: mask dscg_* PATs (T-01-PAT-leak) — broader regex covers exception messages.
-        # Placed BEFORE format_exc_info so the exception-info tuple's rendered strings
-        # flow through the substring masker on the same event_dict walk.
-        redact_dscg_tokens,
+        # format_exc_info MUST run before redact_dscg_tokens: it replaces the
+        # exc_info tuple/flag with a rendered `exception` string. Before that
+        # point exc_info is a bool or a (type, value, tb) tuple — neither a str
+        # nor a dict — so a redactor running earlier can't see (or scrub) any
+        # secret embedded in the traceback text (e.g. httpx stringifying a
+        # request's Authorization header). Redaction only has something to
+        # scan for T-01-PAT-leak once the exception has been rendered to text.
         structlog.processors.format_exc_info,
+        # P1: mask dscg_* PATs (T-01-PAT-leak) — runs AFTER format_exc_info so it
+        # sees (and scrubs) the rendered `exception` field along with every other
+        # top-level/nested string in the event_dict.
+        redact_dscg_tokens,
     ]
 
     structlog.configure(
