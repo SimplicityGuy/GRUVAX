@@ -1,5 +1,5 @@
 import type { CubeContentsResponse, CubesWithFillResponse } from './cubeTypes'
-import type { CubesResponse, LocateResult, SearchResponse, UnitsResponse } from './types'
+import type { LocateResult, SearchResponse, UnitsResponse } from './types'
 import { useSessionStore } from '../state/sessionStore'
 
 /**
@@ -85,19 +85,10 @@ export async function fetchUnits(): Promise<UnitsResponse> {
   return res.json() as Promise<UnitsResponse>
 }
 
-export async function fetchCubes(): Promise<CubesResponse> {
-  const res = await fetch(`${BASE}/api/cubes`)
-  if (!res.ok) {
-    await check403Revoke(res)
-    throw new Error(`Cubes fetch failed: ${res.status}`)
-  }
-  return res.json() as Promise<CubesResponse>
-}
-
 /**
  * Fetch all cube boundaries including fill_level from the in-memory snapshot.
  *
- * Returns the same shape as fetchCubes() but with fill_level added per cube
+ * Returns the same shape as the cubes endpoint but with fill_level added per cube
  * (CUBE-07 — used to render fill bars on the kiosk grid).
  */
 export async function fetchCubesWithFill(): Promise<CubesWithFillResponse> {
