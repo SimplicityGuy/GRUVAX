@@ -43,6 +43,7 @@ from tests.cookies import cookie_header
 _TEST_PIN = "0000"
 _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
 FINGERPRINT_COOKIE = "gruvax_device_fp"
+BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
 
 
 # ── Rate-limit reset fixtures ─────────────────────────────────────────────────
@@ -449,6 +450,87 @@ async def test_revoke_guard(client) -> None:  # type: ignore[no-untyped-def]
         assert revoked_state == "revoked", (
             f"After revoke, GET /api/devices/me must return state=revoked, got {revoked_state!r}"
         )
+
+    # gruvax-7qgx: revoking must also clear the fingerprint cookie via the
+    # resolve_profile_from_request escape path (clear_fingerprint_cookie) so the
+    # kiosk isn't permanently stuck resubmitting a dead token. GET /api/devices/me
+    # doesn't go through resolve_profile_from_request (it has its own fingerprint
+    # lookup), so exercise a route that does: /api/search.
+    search_res = await client.get(
+        "/api/search",
+        params={"q": "Blue Note"},
+        headers=cookie_header(client.cookies, fp_cookies),
+    )
+    assert search_res.status_code == 403, (
+        f"GET /api/search with a revoked fingerprint must 403 device_revoked, "
+        f"got {search_res.status_code}: {search_res.text}"
+    )
+    assert search_res.json().get("detail", {}).get("type") == "device_revoked", (
+        f"Expected detail.type == 'device_revoked', got: {search_res.json()}"
+    )
+    set_cookie_headers = search_res.headers.get_list("set-cookie")
+    fp_clear_header = next((h for h in set_cookie_headers if FINGERPRINT_COOKIE in h), None)
+    assert fp_clear_header is not None, (
+        f"403 device_revoked response must clear {FINGERPRINT_COOKIE!r} "
+        f"(gruvax-7qgx escape path via clear_fingerprint_cookie). "
+        f"Set-Cookie headers seen: {set_cookie_headers}"
+    )
+    assert "max-age=0" in fp_clear_header.lower() or "expires=" in fp_clear_header.lower(), (
+        f"{FINGERPRINT_COOKIE} Set-Cookie header must be a clear/delete directive, "
+        f"got: {fp_clear_header!r}"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_unknown_fingerprint_falls_through_to_browse_binding(client) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-7qgx: an unknown fingerprint (no gruvax.devices row) must NOT 403.
+
+    Reproduces the exact failure scenario: a kiosk visits /pair (a fingerprint
+    cookie is minted, 30-day TTL) but the pairing is never completed — no
+    gruvax.devices row is ever created for that fingerprint. Previously,
+    resolve_profile_from_request hard-403'd (device_unknown) on every
+    profile-scoped route for the fingerprint's entire lifetime, even though the
+    kiosk still had a perfectly valid browse-binding cookie. The fix folds the
+    unknown-fingerprint case into the same fall-through as an orphaned device:
+    browse-binding wins and the request succeeds.
+    """
+    unknown_fp = "unknown-fingerprint-never-persisted-to-devices-table"
+    headers = cookie_header(
+        {FINGERPRINT_COOKIE: unknown_fp, BROWSE_BINDING_COOKIE: _DEFAULT_PROFILE_UUID}
+    )
+
+    response = await client.get("/api/search", params={"q": "Blue Note"}, headers=headers)
+    assert response.status_code == 200, (
+        f"An unknown fingerprint (no device row) + valid browse-binding cookie must "
+        f"fall through to browse-binding and succeed (gruvax-7qgx), got "
+        f"{response.status_code}: {response.text}"
+    )
+    assert "items" in response.json(), f"Response missing 'items' key: {response.json()}"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_unknown_fingerprint_without_browse_binding_returns_session_unbound(
+    client,
+) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-7qgx: unknown fingerprint + no browse-binding cookie → 400, not 403.
+
+    The unknown-fingerprint fall-through (case 4) is not a free pass — with
+    no browse-binding cookie either, resolution still ends in the same
+    session_unbound outcome as no fingerprint at all (case 6). This guards
+    against accidentally treating an unknown fingerprint as implicitly
+    authorized.
+    """
+    unknown_fp = "another-unknown-fingerprint-never-persisted"
+    headers = cookie_header({FINGERPRINT_COOKIE: unknown_fp})
+
+    response = await client.get("/api/search", params={"q": "Blue Note"}, headers=headers)
+    assert response.status_code == 400, (
+        f"Unknown fingerprint with no browse-binding cookie must return 400 "
+        f"session_unbound, got {response.status_code}: {response.text}"
+    )
+    assert response.json().get("detail", {}).get("type") == "session_unbound", (
+        f"Expected detail.type == 'session_unbound', got: {response.json()}"
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")

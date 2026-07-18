@@ -13,15 +13,27 @@ import { useSessionStore } from '../state/sessionStore'
  * this module calls useSessionStore.getState().triggerRevoke() (mount-independent —
  * no React component needs to be mounted) and throws Error('device_revoked').
  * The App.tsx global revoke effect consumes revokePending as the SINGLE handler.
+ *
+ * gruvax-7qgx: an unknown-fingerprint 403 (detail.type === 'device_unknown') is surfaced
+ * to the console for diagnosability — it is NOT routed into triggerRevoke()/the offline
+ * banner. store.ts's bannerVisible is deliberately never true on a first-connection
+ * rejection (gap-closure 09-05, "never brick the kiosk on bootstrap"); the backend fix for
+ * gruvax-7qgx already makes an unknown fingerprint fall through to browse-binding instead
+ * of 403ing, so this path should be effectively dead in normal operation — this is a
+ * defensive net, not the primary fix.
  */
 
 const BASE = ''
 
 /**
- * Shared 403 device_revoked check — called by every fetch wrapper after a non-ok response.
+ * Shared 403 device_revoked/device_unknown check — called by every fetch wrapper after a
+ * non-ok response.
  *
- * Reads the JSON body; if detail.type === 'device_revoked', fires the revoke signal
- * (mount-independent) and throws Error('device_revoked').
+ * Reads the JSON body:
+ *   - detail.type === 'device_revoked' fires the revoke signal (mount-independent) and
+ *     throws Error('device_revoked').
+ *   - detail.type === 'device_unknown' logs a diagnostic (gruvax-7qgx) but does not throw
+ *     or trigger the revoke/offline UI — callers fall through to their own generic error.
  *
  * Returns the original response so the caller can continue its own error handling
  * if this check does not throw.
@@ -34,6 +46,11 @@ async function check403Revoke(res: Response): Promise<Response> {
         // Fire mount-independent revoke signal — even if no component is mounted (D-06)
         useSessionStore.getState().triggerRevoke()
         throw new Error('device_revoked')
+      }
+      if (body?.detail?.type === 'device_unknown') {
+        // gruvax-7qgx: surfaced for diagnosability only — intentionally not routed
+        // into the revoke/offline UI (see module doc comment above).
+        console.warn('check403Revoke: 403 device_unknown — unpaired/unknown device fingerprint')
       }
     } catch (err) {
       // Re-throw the intentional revoke signal AND any unexpected error;
