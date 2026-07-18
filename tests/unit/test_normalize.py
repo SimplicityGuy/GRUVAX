@@ -166,6 +166,37 @@ def test_nfkc_fullwidth_letters_and_hyphen() -> None:
     assert parse_key(full_width) == parse_key("BLP 4195")
 
 
+# ── digit saturation (gruvax-raz): 13+-digit runs saturate, not truncate ──────
+
+
+def test_digit_saturation_preserves_order_across_12_13_boundary() -> None:
+    """The raz regression: a 12-digit max must sort BELOW a 13-digit value.
+
+    The old code sliced the run to 12 digits, so '1000000000000' truncated to
+    '100000000000' (10**11) and inverted below '999999999999'. Saturation keeps
+    the 13-digit value strictly above every 12-digit value.
+    """
+    assert compare_catalogs("999999999999", "1000000000000") < 0
+    assert parse_key("999999999999") < parse_key("1000000000000")
+
+
+def test_digit_saturation_no_prefix_collapse() -> None:
+    """Distinct 13-digit runs no longer collapse to one key via a shared 12-prefix.
+
+    Both saturate to the ceiling (they are above the cap), so they compare EQUAL
+    to each other — but critically both sort ABOVE every 12-digit catalog rather
+    than being sliced back below them.
+    """
+    assert parse_key("1000000000001") == parse_key("1000000000002")  # both saturated
+    assert parse_key("999999999999") < parse_key("1000000000001")
+
+
+def test_digit_saturation_true_numeric_below_cap() -> None:
+    """Below the saturation point, barcode-length runs keep true numeric order."""
+    assert parse_key("100000000000") < parse_key("100000000001")  # 12-digit, exact
+    assert parse_key("99999999999") < parse_key("999999999999")  # 11 < 12 digit
+
+
 # ── normalize_catalog idempotency ─────────────────────────────────────────────
 
 

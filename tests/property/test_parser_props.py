@@ -171,6 +171,55 @@ def test_digit_cap_no_exception(n_digits: int, digit: int) -> None:
         raise AssertionError(f"parse_key raised on digit-run of length {n_digits}: {exc}") from exc
 
 
+# ── digit saturation ordering across the 12/13-digit boundary (gruvax-raz) ────
+#
+# The old code SLICED runs to 12 digits, so 13+-digit values inverted below
+# 12-digit ones. These properties assert the *ordering* the fix guarantees —
+# not merely that parse_key "does not raise" above the cap.
+
+
+@given(
+    lo=st.integers(min_value=0, max_value=10**12 - 1),
+    hi=st.integers(min_value=10**12, max_value=10**18),
+)
+@settings(max_examples=300)
+def test_saturation_below_cap_sorts_before_above_cap(lo: int, hi: int) -> None:
+    """Every value representable within the 12-digit cap sorts before any value above it.
+
+    ``lo`` (<= 12 digits) must always be strictly less than ``hi`` (>= 13 digits),
+    which the truncating slice violated (e.g. 999999999999 vs 1000000000000).
+    """
+    assert parse_key(str(lo)) < parse_key(str(hi)), (
+        f"Saturation boundary violated: parse_key({lo!r}) >= parse_key({hi!r})"
+    )
+
+
+def test_saturation_exact_12_13_boundary() -> None:
+    """The exact ADR regression case: 999999999999 < 1000000000000."""
+    assert compare_catalogs("999999999999", "1000000000000") < 0
+
+
+@given(
+    a=st.integers(min_value=10**12, max_value=10**20),
+    b=st.integers(min_value=10**12, max_value=10**20),
+)
+@settings(max_examples=200)
+def test_saturation_collapses_above_cap(a: int, b: int) -> None:
+    """Above the saturation ceiling, magnitudes collapse — all keys compare equal.
+
+    This is the intended DoS-bounded behavior: distinct over-cap barcodes no
+    longer invert, they tie at the top (monotonic, non-strict).
+    """
+    assert parse_key(str(a)) == parse_key(str(b))
+
+
+@given(a=st.integers(min_value=0, max_value=10**12 - 2))
+@settings(max_examples=300)
+def test_pure_numeric_monotone_up_to_cap(a: int) -> None:
+    """Below the saturation point, consecutive pure-numeric catalogs stay ordered."""
+    assert parse_key(str(a)) < parse_key(str(a + 1))
+
+
 # ── label_sort_key total order (ADR-0001) ────────────────────────────────────
 
 

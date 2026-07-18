@@ -50,6 +50,17 @@ _TOKEN: re.Pattern[str] = re.compile(r"([A-Za-z]+|\d+)")
 # catalog numbers; barcodes/ISRCs are 12-13+ digits and are placeholders in Discogs.
 _DIGIT_CAP: int = 12
 
+# Saturation ceiling for over-long digit runs (ADR-0001 / gruvax-raz). Any run
+# with MORE than _DIGIT_CAP digits saturates to this single value, which is
+# strictly greater than every representable <=_DIGIT_CAP-digit number
+# (max is 10**_DIGIT_CAP - 1). This is a *saturating clamp*, not a prefix slice:
+# it preserves numeric monotonicity — a 13+-digit catalog sorts AFTER all
+# 12-digit catalogs instead of being truncated back below them — while still
+# bounding int() cost on adversarial input (the DoS guard). Runs above the cap
+# collapse together at the top; runs at/below it keep true numeric order, so e.g.
+# 999999999999 < 1000000000000.
+_DIGIT_SATURATION: int = 10**_DIGIT_CAP
+
 # Values that represent "no catalog number" — sort before all real catalogs.
 # Includes both raw forms and their normalized equivalents (after separator collapse):
 #   "n/a" → "na", "n.a." → "na" (same result after separator collapse)
@@ -149,7 +160,8 @@ def parse_key(catalog: str | None) -> tuple[tuple[int, int | str], ...]:
     Normalizes via ``normalize_catalog`` then splits into alternating
     alpha/numeric tokens:
       - Alpha tokens: (0, <casefolded string>)  — lexicographic
-      - Numeric tokens: (1, <int>)               — numeric (capped at _DIGIT_CAP)
+      - Numeric tokens: (1, <int>)               — numeric; runs longer than
+        _DIGIT_CAP digits saturate to _DIGIT_SATURATION (monotonic, DoS-bounded)
 
     Empty / sentinel values return ``_SENTINEL`` and sort before all real catalogs.
 
@@ -169,9 +181,13 @@ def parse_key(catalog: str | None) -> tuple[tuple[int, int | str], ...]:
     out: list[tuple[int, int | str]] = []
     for tok in tokens:
         if tok.isdigit():
-            # Cap long digit runs before converting to int (T-01-05 DoS guard).
-            capped: str = tok if len(tok) <= _DIGIT_CAP else tok[:_DIGIT_CAP]
-            out.append((1, int(capped)))
+            # Saturating clamp (gruvax-raz): runs longer than the cap saturate to
+            # _DIGIT_SATURATION, which is strictly greater than any <=_DIGIT_CAP
+            # digit value — so 13+-digit barcodes sort AFTER every 12-digit
+            # catalog (monotonic) rather than being sliced back below them. The
+            # length check also keeps int() off adversarial mega-runs (T-01-05).
+            value: int = _DIGIT_SATURATION if len(tok) > _DIGIT_CAP else int(tok)
+            out.append((1, value))
         else:
             # Already casefolded by normalize_catalog.
             out.append((0, tok))
