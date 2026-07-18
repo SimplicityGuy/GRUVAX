@@ -63,8 +63,14 @@ _SELECT_PROFILE_BY_ID = "SELECT 1 FROM gruvax.profiles WHERE id = %s::uuid AND d
 #   - Expose device_id (non-secret) in the session response (D3-05)
 #   - Treat revoked devices as unpaired (no override) — T-03-14
 #   - Never put the fingerprint value in the response (T-03-14)
+# gruvax-gqe: idx_devices_fingerprint_active (migration 0011) only enforces
+# uniqueness among ACTIVE rows, so a revoked row can coexist with an active one
+# for the same fingerprint. Without an ORDER BY, fetchone() is nondeterministic —
+# prefer the active row, tie-break on the most recently created row.
 _SELECT_DEVICE_BY_FINGERPRINT = (
     "SELECT id, profile_id, revoked_at FROM gruvax.devices WHERE fingerprint = %s"
+    " ORDER BY revoked_at IS NULL DESC, created_at DESC"
+    " LIMIT 1"
 )
 
 
