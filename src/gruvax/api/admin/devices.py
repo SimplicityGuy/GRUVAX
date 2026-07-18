@@ -86,13 +86,15 @@ _BIND_CODE = (
     " RETURNING fingerprint"
 )
 
-# The bind path uses an explicit three-step upsert below
-# (_UPDATE_DEVICE_BY_FINGERPRINT → _UPDATE_DEVICE_BY_PROFILE → _INSERT_DEVICE),
+# The bind path uses an explicit four-step upsert below (_UPDATE_DEVICE_BY_FINGERPRINT
+# → _REACTIVATE_DEVICE_BY_FINGERPRINT → _UPDATE_DEVICE_BY_PROFILE → _INSERT_DEVICE),
 # all within a single transaction (see bind_device). The fingerprint is only ever
 # a query parameter — it is never returned in any response (T-03-08).
 
-# Insert a new device row (re-pair / first pair). On conflict with the partial-unique
-# active-device indexes, surfaces a UniqueViolation that bind_device maps to a clean 409.
+# Insert a new device row (first pair only — a re-pair after revoke now reactivates
+# the existing row via _REACTIVATE_DEVICE_BY_FINGERPRINT below, gruvax-gqe). On
+# conflict with the partial-unique active-device indexes, surfaces a UniqueViolation
+# that bind_device maps to a clean 409.
 _INSERT_DEVICE = (
     "INSERT INTO gruvax.devices (fingerprint, profile_id, display_name)"
     " VALUES (%s, %s::uuid, %s)"
@@ -104,6 +106,32 @@ _UPDATE_DEVICE_BY_FINGERPRINT = (
     "  profile_id = %s::uuid,"
     "  display_name = %s"
     " WHERE fingerprint = %s AND revoked_at IS NULL"
+    " RETURNING id, profile_id, display_name, revoked_at, last_seen_at, created_at"
+)
+
+# gruvax-gqe: re-pair after revoke. _UPDATE_DEVICE_BY_FINGERPRINT above only matches
+# an ACTIVE row for this fingerprint; a revoked device's fingerprint is still reused
+# by the kiosk (generate_pairing_code never mints a fresh one for an existing cookie),
+# so without this step both upserts miss and _INSERT_DEVICE creates a SECOND row for
+# the same fingerprint — idx_devices_fingerprint_active only forbids duplicate ACTIVE
+# rows, so the duplicate silently succeeds. Reads with no ORDER BY then nondeterministically
+# resolve to either row, which can permanently 403 the legitimately re-paired kiosk
+# (D3-07). Reactivate the most-recently-revoked row for this fingerprint instead —
+# scoped via an id subquery (not a bare fingerprint match) so that if a legacy
+# duplicate already exists from before this fix, only ONE row is ever reactivated in
+# a single UPDATE (an UPDATE matching >1 row here would itself violate the partial
+# unique index mid-statement).
+_REACTIVATE_DEVICE_BY_FINGERPRINT = (
+    "UPDATE gruvax.devices SET"
+    "  profile_id = %s::uuid,"
+    "  display_name = %s,"
+    "  revoked_at = NULL"
+    " WHERE id = ("
+    "   SELECT id FROM gruvax.devices"
+    "   WHERE fingerprint = %s AND revoked_at IS NOT NULL"
+    "   ORDER BY revoked_at DESC"
+    "   LIMIT 1"
+    " )"
     " RETURNING id, profile_id, display_name, revoked_at, last_seen_at, created_at"
 )
 
@@ -282,8 +310,11 @@ async def bind_device(
     # device upsert raises, the whole transaction rolls back — the code is NOT burned.
     # UPSERT priority:
     #   1. UPDATE an existing active row for this fingerprint (re-pairing).
-    #   2. Else UPDATE the profile's existing active device to this fingerprint (rebind).
-    #   3. Else INSERT a new row.
+    #   2. Else REACTIVATE a revoked row for this fingerprint (re-pair after revoke,
+    #      gruvax-gqe) — never INSERT a second row for a fingerprint that already has
+    #      one, active or not.
+    #   3. Else UPDATE the profile's existing active device to this fingerprint (rebind).
+    #   4. Else INSERT a new row (first pair for this fingerprint).
     # fingerprint is only ever a query parameter — never returned (T-03-08).
     device_row: tuple[Any, ...] | None = None
     try:
@@ -304,6 +335,15 @@ async def bind_device(
                 _UPDATE_DEVICE_BY_FINGERPRINT, (profile_id_str, display_name, fingerprint)
             )
             device_row = await cur.fetchone()
+
+            if device_row is None:
+                # gruvax-gqe: reactivate a revoked row for this exact fingerprint
+                # before ever considering an INSERT — prevents the duplicate-row bug.
+                await cur.execute(
+                    _REACTIVATE_DEVICE_BY_FINGERPRINT,
+                    (profile_id_str, display_name, fingerprint),
+                )
+                device_row = await cur.fetchone()
 
             if device_row is None and profile_id_str:
                 await cur.execute(
@@ -512,13 +552,28 @@ async def reinstate_device(
     pool: Any = Depends(get_pool),
     _admin: dict[str, Any] = Depends(require_admin),
 ) -> JSONResponse:
-    """Reinstate a revoked device: clear revoked_at."""
+    """Reinstate a revoked device: clear revoked_at.
+
+    Raises 409 conflict (gruvax-gqe), not an uncaught 500, when reinstating
+    would violate a partial-unique active-device index: either
+    idx_devices_fingerprint_active (another active device already holds this
+    fingerprint — the ambiguous-duplicate-row scenario) or
+    idx_devices_profile_active (the profile already has a different active
+    device — e.g. a replacement was paired after this one was revoked).
+    Mirrors bind_device's UniqueViolation → 409 mapping exactly (:319-326).
+    """
     uid = _parse_uuid(device_id)
 
-    async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(_REINSTATE_DEVICE, (str(uid),))
-        row = await cur.fetchone()
-        await conn.commit()
+    try:
+        async with pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(_REINSTATE_DEVICE, (str(uid),))
+            row = await cur.fetchone()
+            await conn.commit()
+    except psycopg.errors.UniqueViolation:
+        raise HTTPException(
+            status_code=status.HTTP_409_CONFLICT,
+            detail={"type": "reinstate_conflict"},
+        ) from None
 
     if row is None:
         raise HTTPException(

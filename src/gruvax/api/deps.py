@@ -173,9 +173,19 @@ def get_event_bus(request: Request) -> Any:
 # Pitfall 10 / D3-13 preserved: for SSE the pool is acquired + released INSIDE
 # this dep; the generator body reads only the asyncio.Queue — zero pool holding.
 
-# SQL used by resolve_profile_from_request (module-level constant, parameterised %s)
+# SQL used by resolve_profile_from_request (module-level constant, parameterised %s).
+#
+# gruvax-gqe: idx_devices_fingerprint_active (migration 0011) is a PARTIAL unique
+# index — WHERE revoked_at IS NULL — so a revoked row and an active row (or, pre-fix,
+# multiple revoked rows) CAN coexist for the same fingerprint. Without an ORDER BY,
+# fetchone() returns whichever row Postgres's scan happens to yield first — heap scan
+# order tends to favor the OLDER row, i.e. the revoked one, causing a legitimately
+# re-paired device to see a permanent 403 device_revoked. Prefer the active row
+# deterministically; break remaining ties with the most recently created row.
 _SELECT_DEVICE_FOR_RESOLUTION = (
     "SELECT id, profile_id, revoked_at FROM gruvax.devices WHERE fingerprint = %s"
+    " ORDER BY revoked_at IS NULL DESC, created_at DESC"
+    " LIMIT 1"
 )
 
 # Throttled last_seen_at update — at most once per 60 s per device (Open Question 3)
