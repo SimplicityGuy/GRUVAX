@@ -1,20 +1,24 @@
 """Plan 02 Task 1 — structlog redactor masks every dscg_* substring.
 
-Tests 1-5 + Test 7 (per PLAN.md):
+Tests 1-5 + Test 7 (per PLAN.md), plus Test 6 (gruvax-dxd regression):
   1. Bearer-prefixed PAT in a top-level string is masked.
   2. Bare dscg_<token> in a top-level string is masked.
   3. Nested dicts (event_dict["request"]["headers"]["Authorization"]) are walked.
   4. Hypothesis fuzz: 100+ generated PATs never survive in the output.
   5. End-to-end: configured logger's stdout output does NOT contain the PAT
      (wires through configure_logging — proves the processor is slotted in).
-  7. Exception-message coverage: an exception whose str() contains a leaked
-     PAT does NOT render the PAT in the captured stdout when logged via
-     logger.exception().
+  6. Nested lists/tuples (e.g. a dict_tracebacks-shaped frame list) are walked.
+  7. Exception-message coverage: an exception logged via logger.exception()
+     (the traceback-rendering path, not just str(exc)) does NOT render the
+     PAT in the captured stdout — this is the gruvax-dxd regression: the
+     redactor must run AFTER format_exc_info so it can see the rendered
+     exception field.
 """
 
 from __future__ import annotations
 
 from collections import deque
+import io
 import json
 import logging
 import string
@@ -77,6 +81,31 @@ def test_nested_dict_walking() -> None:
     assert out["request"]["method"] == "GET"
 
 
+def test_nested_list_and_tuple_walking() -> None:
+    """Test 6 (gruvax-dxd regression): redact recursively masks dscg_* inside
+    nested lists/tuples, e.g. the frame-list shape
+    ``structlog.processors.dict_tracebacks`` would produce (a list of frame
+    dicts, each potentially containing a list of local-variable dicts).
+    """
+    event_dict: dict[str, Any] = {
+        "event": "traceback",
+        "exception": [
+            {
+                "exc_type": "RuntimeError",
+                "frames": [
+                    {"locals": {"token": "dscg_frame_local_secret"}},
+                ],
+            },
+        ],
+        "headers": ("Authorization", "Bearer dscg_tuple_secret"),
+    }
+    out = redact_dscg_tokens(None, "info", event_dict)
+    serialized = json.dumps(out)
+    assert "dscg_frame_local_secret" not in serialized
+    assert "dscg_tuple_secret" not in serialized
+    assert out["headers"] == ("Authorization", "[REDACTED]")
+
+
 @settings(max_examples=120, deadline=None)
 @given(
     st.text(
@@ -113,48 +142,75 @@ def test_property_pat_never_survives_in_rendered_output(
 
 
 @pytest.fixture
-def configured_logging_ring() -> deque[dict[str, Any]]:
-    """Fresh ring buffer + configure_logging() call. Returns the ring."""
+def logging_stream(monkeypatch: pytest.MonkeyPatch) -> io.StringIO:
+    """Fresh ring buffer + ``configure_logging()`` call, capturing stdout via
+    an owned ``io.StringIO()`` rather than pytest's ``capsys``/``capfd``.
+
+    ``configure_logging()`` builds a ``logging.StreamHandler()`` whose
+    ``stream`` attribute is bound to whatever ``sys.stderr`` object is current
+    at *construction* time — it does not re-read ``sys.stderr`` on each write.
+    That makes pytest's capture fixtures unreliable here:
+
+      - ``capsys`` monkeypatches the ``sys.stdout``/``sys.stderr`` Python
+        objects. If ``configure_logging()`` runs (via a same-scope fixture)
+        before ``capsys``'s own per-test swap takes effect, the handler keeps
+        writing to the pre-``capsys`` object and ``capsys.readouterr()``
+        silently returns empty — a vacuously passing test regardless of
+        whether redaction actually worked.
+      - ``capfd`` is OS-fd-level and in principle order-independent, but
+        forcing it to run before this fixture (to fix the above) instead hits
+        a *different* problem: pytest rotates/closes the underlying fd-backed
+        file object between capture phases, so a handler holding a stale
+        reference to it raises ``ValueError: I/O operation on closed file``
+        mid-test.
+
+    Monkeypatching ``sys.stderr`` to a plain ``io.StringIO()`` we control
+    directly sidesteps both failure modes: the handler binds to *our* object,
+    which we simply read via ``.getvalue()`` after the log call — no pytest
+    capture-fixture ordering or lifecycle involved.
+    """
+    buffer = io.StringIO()
+    monkeypatch.setattr("sys.stderr", buffer)
     ring: deque[dict[str, Any]] = deque(maxlen=200)
     configure_logging("INFO", ring)
-    return ring
+    return buffer
 
 
-def test_pat_does_not_appear_in_captured_stdout(
-    configured_logging_ring: deque[dict[str, Any]],
-    capsys: pytest.CaptureFixture[str],
-) -> None:
+def test_pat_does_not_appear_in_captured_stdout(logging_stream: io.StringIO) -> None:
     """Test 5: the configured logger's stdout output does NOT contain the PAT
     plaintext anywhere in the rendered JSON.
 
-    Uses ``capsys`` (NOT ``caplog``) — caplog can bypass structlog processors
-    by hooking into stdlib's handler stack before format runs.
+    Reads the owned ``io.StringIO()`` the ``logging_stream`` fixture installs
+    as ``sys.stderr`` — NOT ``caplog`` (which can bypass structlog processors
+    by hooking into stdlib's handler stack before format runs) and NOT
+    ``capsys``/``capfd`` (see ``logging_stream``'s docstring for why both are
+    unreliable against a handler built by ``configure_logging()``).
     """
     secret_pat = "dscg_secret_abc123_DO_NOT_LEAK"
     logger = logging.getLogger("gruvax.test_log_redaction")
     logger.error("auth attempt with header=%s", f"Bearer {secret_pat}")
 
-    captured = capsys.readouterr()
-    combined = captured.out + captured.err
+    combined = logging_stream.getvalue()
     assert secret_pat not in combined, f"PAT plaintext leaked into stdout/stderr: {combined!r}"
+    # Sanity: prove the log line actually reached the captured stream —
+    # otherwise this would pass vacuously if logging were broken rather than
+    # because redaction worked.
+    assert "[REDACTED]" in combined
 
 
-def test_pat_does_not_appear_in_exception_message(
-    configured_logging_ring: deque[dict[str, Any]],
-    capsys: pytest.CaptureFixture[str],
-) -> None:
-    """Test 7 (Open Q4 RESOLVED — exception-message coverage):
+def test_pat_does_not_appear_in_exception_message(logging_stream: io.StringIO) -> None:
+    """Test 7 (gruvax-dxd regression — traceback-rendering coverage):
 
     Construct an exception whose ``str()`` contains a synthetic 'request
     failed: ... Authorization: Bearer dscg_secret_LEAK_xyz ...' message.
-    Log it via ``logger.exception()`` so structlog's format_exc_info renders
-    the traceback. The redactor runs BEFORE format_exc_info, so the
-    exception-derived string flowing into the event_dict must also be masked.
-
-    Practically: the redactor walks the event_dict on each log call. The
-    ``logger.error("msg %s", str(exc))`` form puts the exception's str into
-    a positional arg that PositionalArgumentsFormatter merges into the event
-    key, where the redactor catches it on the recursive walk.
+    Log it via ``logger.exception()`` — the stdlib/structlog idiom for
+    exception logging — so ``format_exc_info`` renders the *traceback* (not
+    just the exception's ``str()``) into the ``exception`` field. Regression
+    coverage for gruvax-dxd: ``redact_dscg_tokens`` must run AFTER
+    ``format_exc_info`` so it can see and scrub that rendered field; this is
+    the exact vector the redactor exists for (e.g. httpx stringifying a
+    request's Authorization header into an exception message that then ends
+    up embedded in the traceback text).
     """
     secret_pat = "dscg_secret_LEAK_DETECTOR_xyz"
     exc_message = (
@@ -163,16 +219,21 @@ def test_pat_does_not_appear_in_exception_message(
     logger = logging.getLogger("gruvax.test_log_redaction_exc")
     try:
         raise RuntimeError(exc_message)
-    except RuntimeError as exc:
-        # Log the message string (which contains the PAT). The redactor must
-        # mask the substring regardless of how it arrived in the event_dict.
-        logger.error("upstream failed: %s", str(exc))
+    except RuntimeError:
+        # logger.exception() sets exc_info=True, which format_exc_info renders
+        # into a full traceback string under the "exception" key — this is
+        # the path that leaked PATs before the processor-ordering fix.
+        logger.exception("upstream failed")
 
-    captured = capsys.readouterr()
-    combined = captured.out + captured.err
+    combined = logging_stream.getvalue()
     assert secret_pat not in combined, (
         f"PAT plaintext leaked through exception logging path: {combined!r}"
     )
+    # Sanity: prove the traceback (with the exception message) actually made
+    # it into the captured output — otherwise this test would pass vacuously
+    # if logging were broken rather than because redaction worked.
+    assert "RuntimeError" in combined
+    assert "[REDACTED]" in combined
 
 
 # ── Regex-self-test sanity ──────────────────────────────────────────────────
