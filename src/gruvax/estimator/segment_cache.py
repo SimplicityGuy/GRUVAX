@@ -55,7 +55,8 @@ class LabelSegment:
     LabelSegments within the same SegmentBin always sum to 1.0 (within 1e-6).
     """
 
-    label: str
+    label: str  # casefolded identity key — internal matching ONLY (gruvax-rn7l.3)
+    label_display: str  # original-case label as it appears in the collection — UI-facing
     first_rank_in_label: int  # 0-indexed rank of first record in this bin
     last_rank_in_label: int  # 0-indexed rank of last record in this bin (inclusive)
     segment_count: int  # = last_rank - first_rank + 1; row-count, never arithmetic
@@ -327,10 +328,16 @@ class SegmentCache:
             # Group records in this bin by label (casefold), preserving insertion order
             # by iterating records_in_bin which is already globally sorted
             label_groups: dict[str, list[tuple[int, RecordRow]]] = {}
+            # gruvax-rn7l.3: original-case display string per casefold group, taken
+            # from the FIRST collection record seen for that label — this is the
+            # single original-case source of truth (never an override's stored
+            # value, which is itself a casefolded storage key post-fix).
+            label_display: dict[str, str] = {}
             for record in records_in_bin:
                 lk = record.label.casefold()
                 if lk not in label_groups:
                     label_groups[lk] = []
+                    label_display[lk] = record.label
                 label_groups[lk].append((0, record))  # placeholder rank
 
             # Compute actual ranks within each label (across ALL bins, not just this bin)
@@ -461,6 +468,7 @@ class SegmentCache:
             for lk in ordered_labels:
                 seg = LabelSegment(
                     label=lk,  # stored as casefold for consistency
+                    label_display=label_display[lk],  # original case (gruvax-rn7l.3)
                     first_rank_in_label=label_first_ranks[lk],
                     last_rank_in_label=label_last_ranks[lk],
                     segment_count=label_counts[lk],

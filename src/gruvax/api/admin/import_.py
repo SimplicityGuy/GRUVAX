@@ -554,21 +554,30 @@ async def import_boundaries(
         # Upsert segment_overrides for entries with overrides (Pitfall 4 — inside txn).
         # CR-02: use the resolved profile_id so overrides land in the correct profile's
         # rows, not the hardcoded default profile.
+        # gruvax-rn7l.3 (ADR-0001 item 4): casefold the storage KEY here too, so an
+        # imported YAML/CSV override normalizes to the same PK row a POST /overrides
+        # write would use, and carry the original-case label separately in
+        # label_display for the admin UI (never used in a WHERE/PK comparison).
         for entry in entries:
             if entry.overrides and not entry.is_empty:
                 for label, fraction in entry.overrides.items():
+                    display = label.strip()
+                    label_key = display.casefold()
                     await conn.execute(
                         "INSERT INTO gruvax.segment_overrides"
-                        " (profile_id, unit_id, row, col, label, fraction, updated_at)"
-                        " VALUES (%s::uuid, %s, %s, %s, %s, %s, now())"
+                        " (profile_id, unit_id, row, col, label, label_display, fraction, updated_at)"
+                        " VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, now())"
                         " ON CONFLICT (profile_id, unit_id, row, col, label)"
-                        " DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()",
+                        " DO UPDATE SET fraction = EXCLUDED.fraction,"
+                        "               label_display = EXCLUDED.label_display,"
+                        "               updated_at = now()",
                         (
                             profile_id,
                             entry.unit_id,
                             entry.row,
                             entry.col,
-                            label,
+                            label_key,
+                            display,
                             fraction,
                         ),
                     )
