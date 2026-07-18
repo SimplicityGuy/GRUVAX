@@ -19,6 +19,7 @@ from __future__ import annotations
 import pytest
 
 from fixtures.synth_collection import make_multi_label_bin, make_straddle
+from gruvax.estimator.collection_snapshot import RecordRow
 
 
 # ── Session-scoped synth fixtures ─────────────────────────────────────────────
@@ -395,3 +396,183 @@ def test_contiguity_validation() -> None:
     assert result_adjacent is None, (
         f"validate_contiguity must accept adjacent multi-bin spans (SEG-05 D-09), got: {result_adjacent}"
     )
+
+
+# ── gruvax-trl: cut-key scan robustness (empty bins + physical disorder) ──────
+
+
+def _derive(rows, records):  # type: ignore[no-untyped-def]
+    """Helper: build a SegmentCache from raw BoundaryRow + label→records inputs."""
+    from gruvax.estimator.boundary_cache import BoundaryCache
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot
+    from gruvax.estimator.segment_cache import SegmentCache
+
+    cache = BoundaryCache()
+    cache._load_rows(rows)
+    snapshot = CollectionSnapshot()
+    snapshot._load_snapshot(records)
+    sc = SegmentCache()
+    sc.derive(cache, snapshot, {})
+    return sc
+
+
+def test_empty_bin_does_not_swallow_preceding_cube() -> None:
+    """gruvax-trl M1: a mid-shelf empty bin must not capture (and drop) records.
+
+    Before the fix, ``_cut_key`` returned the global-minimum sentinel
+    ``("", ((-1, 0),))`` for an empty bin, so it satisfied ``cut_key <= rec_key``
+    for every record and — being later in the physical walk — won assignment; the
+    build loop then dropped those records as empty. The preceding non-empty cube
+    derived ZERO records. The empty bin is placed BETWEEN two occupied cubes,
+    exactly the deliberate mid-shelf empty layout in fixtures/boundaries.yaml.
+    """
+    from gruvax.estimator.boundary_cache import BoundaryRow
+
+    rows = [
+        BoundaryRow(
+            unit_id=1,
+            row=0,
+            col=0,
+            first_label="Riverside",
+            first_catalog="RLP 1000",
+            is_empty=False,
+        ),
+        BoundaryRow(unit_id=1, row=0, col=1, first_label=None, first_catalog=None, is_empty=True),
+        BoundaryRow(
+            unit_id=1, row=0, col=2, first_label="Verve", first_catalog="MGV 1000", is_empty=False
+        ),
+    ]
+    records = {
+        "riverside": [
+            RecordRow(release_id=i, label="Riverside", catalog_number=f"RLP {1000 + i}")
+            for i in range(1, 6)
+        ],
+        "verve": [
+            RecordRow(release_id=10 + i, label="Verve", catalog_number=f"MGV {1000 + i}")
+            for i in range(1, 4)
+        ],
+    }
+    sc = _derive(rows, records)
+
+    riverside_bin = sc.get_bin(1, 0, 0)
+    assert riverside_bin is not None
+    assert len(riverside_bin.segments) == 1, "Riverside cube must keep its single segment"
+    assert riverside_bin.segments[0].segment_count == 5, (
+        "the mid-shelf empty bin swallowed the preceding cube's records (M1 regression)"
+    )
+
+    empty_bin = sc.get_bin(1, 0, 1)
+    assert empty_bin is not None
+    assert empty_bin.segments == (), "empty cube must stay empty"
+
+    verve_bin = sc.get_bin(1, 0, 2)
+    assert verve_bin is not None
+    assert verve_bin.segments[0].segment_count == 3
+
+    # Conservation: no record dropped.
+    total = sum(seg.segment_count for b in sc._bins for seg in b.segments)
+    assert total == 8, f"records were dropped by the scan: got {total}, expected 8"
+
+
+def test_cross_unit_disorder_assigns_correct_cube_and_warns(caplog) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-trl M2: an alphabetically-earlier cut in a later physical unit.
+
+    Unit 2's "Padding" cut sorts BEFORE unit 1's later "Riverside"/"Verve" cuts.
+    The old physical-order scan stopped at the first cut greater than the record
+    and misfiled Padding into an earlier unit-1 cube at high confidence. Records
+    must instead land in the cube whose cut point they actually follow — here
+    unit 2 (2,0,0) — and the disorder must be surfaced with a loud warning rather
+    than a silent misfile.
+    """
+    import logging
+
+    from gruvax.estimator.boundary_cache import BoundaryRow
+
+    rows = [
+        BoundaryRow(
+            unit_id=1,
+            row=0,
+            col=0,
+            first_label="Riverside",
+            first_catalog="RLP 1000",
+            is_empty=False,
+        ),
+        BoundaryRow(
+            unit_id=1, row=0, col=1, first_label="Verve", first_catalog="MGV 1000", is_empty=False
+        ),
+        BoundaryRow(
+            unit_id=2, row=0, col=0, first_label="Padding", first_catalog="PAD 0001", is_empty=False
+        ),
+    ]
+    records = {
+        "riverside": [
+            RecordRow(release_id=i, label="Riverside", catalog_number=f"RLP {1000 + i}")
+            for i in range(1, 4)
+        ],
+        "verve": [
+            RecordRow(release_id=10 + i, label="Verve", catalog_number=f"MGV {1000 + i}")
+            for i in range(1, 4)
+        ],
+        "padding": [
+            RecordRow(release_id=20 + i, label="Padding", catalog_number=f"PAD {i:04d}")
+            for i in range(1, 4)
+        ],
+    }
+
+    with caplog.at_level(logging.WARNING, logger="gruvax.estimator.segment_cache"):
+        sc = _derive(rows, records)
+
+    # Padding lands in its own physically-later cube, NOT an earlier unit-1 cube.
+    padding_bins = sc.get_bins_for_label("Padding")
+    assert [(b.unit_id, b.row, b.col) for b in padding_bins] == [(2, 0, 0)], (
+        "Padding records misfiled into the wrong unit (M2 regression)"
+    )
+    padding_bin = sc.get_bin(2, 0, 0)
+    assert padding_bin is not None and padding_bin.segments[0].segment_count == 3
+
+    # Unit-1 cubes keep exactly their own records — no Padding contamination.
+    assert sc.get_bin(1, 0, 0).segments[0].label == "riverside"  # type: ignore[union-attr]
+    assert sc.get_bin(1, 0, 1).segments[0].label == "verve"  # type: ignore[union-attr]
+
+    # Conservation across all cubes.
+    total = sum(seg.segment_count for b in sc._bins for seg in b.segments)
+    assert total == 9
+
+    # The physical disorder was surfaced loudly.
+    assert any("not monotonically non-decreasing" in rec.message for rec in caplog.records), (
+        "cross-unit disorder must emit a loud warning, not misfile silently"
+    )
+
+
+def test_monotonic_layout_emits_no_warning(caplog) -> None:  # type: ignore[no-untyped-def]
+    """A well-ordered shelf (with a trailing empty) derives cleanly and silently."""
+    import logging
+
+    from gruvax.estimator.boundary_cache import BoundaryRow
+
+    rows = [
+        BoundaryRow(
+            unit_id=1, row=0, col=0, first_label="Alpha", first_catalog="A 001", is_empty=False
+        ),
+        BoundaryRow(
+            unit_id=1, row=0, col=1, first_label="Bravo", first_catalog="B 001", is_empty=False
+        ),
+        BoundaryRow(unit_id=1, row=0, col=2, first_label=None, first_catalog=None, is_empty=True),
+    ]
+    records = {
+        "alpha": [
+            RecordRow(release_id=i, label="Alpha", catalog_number=f"A {i:03d}") for i in range(1, 4)
+        ],
+        "bravo": [
+            RecordRow(release_id=10 + i, label="Bravo", catalog_number=f"B {i:03d}")
+            for i in range(1, 4)
+        ],
+    }
+    with caplog.at_level(logging.WARNING, logger="gruvax.estimator.segment_cache"):
+        sc = _derive(rows, records)
+
+    assert not any("not monotonically non-decreasing" in rec.message for rec in caplog.records), (
+        "a monotonic layout must not warn"
+    )
+    total = sum(seg.segment_count for b in sc._bins for seg in b.segments)
+    assert total == 6
