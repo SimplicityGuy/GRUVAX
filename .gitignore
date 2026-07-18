@@ -252,3 +252,13 @@ backups/
 *.db
 .beads-credential-key
 .beads/
+
+# bv (beads viewer) local config and caches
+.bv/
+
+# Repowise codebase index (local-only)
+.repowise/
+
+# Local editor and MCP configuration
+.vscode/
+.mcp.json
