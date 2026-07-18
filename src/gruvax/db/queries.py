@@ -156,8 +156,10 @@ async def search_collection(
     Two parallel search paths (RESEARCH §Pattern 1):
 
     Path A — FTS (with optional catalog boost):
-        ``fts_vector @@ websearch_to_tsquery('english', %s)``
-        Scored by ``ts_rank_cd(fts_vector, query, 4)``.
+        ``fts_vector @@ websearch_to_tsquery('gruvax.gruvax_fts', %s)``
+        Scored by ``ts_rank_cd(fts_vector, query, 4)``.  The ``gruvax.gruvax_fts``
+        config folds accents (unaccent → english_stem, migration 0013) so an
+        ASCII query like ``Bjork`` matches the stored ``Björk`` (gruvax-w4a7).
         When ``is_catalog_query(q)`` is True (SRCH-08/D-12), catalog_number
         tokens are re-weighted to 'A' (highest) so catalog matches rank above
         text matches.
@@ -201,7 +203,7 @@ async def search_collection(
         suggestion string (or None) returned only when ``rows`` is empty.
     """
     # SRCH-08: catalog-like queries boost catalog_number field weight.
-    # setweight(to_tsvector('english', catalog_number), 'A') promotes catalog
+    # setweight(to_tsvector('gruvax.gruvax_fts', catalog_number), 'A') promotes catalog
     # tokens to the highest weight tier so ts_rank_cd scores them above body
     # text — catalog match ranks above text match for "BLP 4195".
     # All %s placeholders are fully parameterized (T-01-07, T-02-07,
@@ -219,16 +221,16 @@ WITH fts AS (
         NULL::text   AS format,
         v.year,
         ts_rank_cd(
-            setweight(to_tsvector('english', coalesce(v.catalog_number, '')), 'A')
+            setweight(to_tsvector('gruvax.gruvax_fts', coalesce(v.catalog_number, '')), 'A')
             || setweight(v.fts_vector, 'C'),
             tsq.query,
             4
         ) AS score
     FROM gruvax.profile_collection v
-    CROSS JOIN websearch_to_tsquery('english', %s) AS tsq(query)
+    CROSS JOIN websearch_to_tsquery('gruvax.gruvax_fts', %s) AS tsq(query)
     WHERE v.profile_id = %s::uuid
       AND (
-        setweight(to_tsvector('english', coalesce(v.catalog_number, '')), 'A')
+        setweight(to_tsvector('gruvax.gruvax_fts', coalesce(v.catalog_number, '')), 'A')
         || setweight(v.fts_vector, 'C')
       ) @@ tsq.query
     LIMIT 40
@@ -295,7 +297,7 @@ WITH fts AS (
         v.year,
         ts_rank_cd(v.fts_vector, tsq.query, 4) AS score
     FROM gruvax.profile_collection v
-    CROSS JOIN websearch_to_tsquery('english', %s) AS tsq(query)
+    CROSS JOIN websearch_to_tsquery('gruvax.gruvax_fts', %s) AS tsq(query)
     WHERE v.profile_id = %s::uuid
       AND v.fts_vector @@ tsq.query
     LIMIT 40
