@@ -25,6 +25,8 @@ algorithm works in six steps:
 from __future__ import annotations
 
 from dataclasses import dataclass
+from itertools import pairwise
+import logging
 from typing import TYPE_CHECKING
 
 
@@ -33,6 +35,16 @@ if TYPE_CHECKING:
     from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
 
 from gruvax.estimator.normalize import parse_key
+
+
+logger = logging.getLogger(__name__)
+
+# Global sort key for a cut point: (label.casefold(), parse_key(catalog)).
+# This alias names the ONE cut-key comparison contract the record→bin scan relies
+# on. The record-side key is built identically. A future collation fix
+# (gruvax-icc5: Postgres-collation vs Python-codepoint ordering) swaps how these
+# keys order records — keeping the shape localized here avoids painting it in.
+CutKey = tuple[str, tuple[tuple[int, int | str], ...]]
 
 
 @dataclass(frozen=True)
@@ -210,29 +222,84 @@ class SegmentCache:
         #   (B is the last bin OR global_key(record) < global_key(cut_{B+1}))
         # where global_key = (label.casefold(), parse_key(catalog_number))
 
-        def _cut_key(row: BoundaryRow) -> tuple[str, tuple[tuple[int, int | str], ...]]:
-            """Compute the global sort key for a bin's cut point."""
-            if row.first_label is None or row.first_catalog is None:
-                return ("", ((-1, 0),))
+        def _cut_key(row: BoundaryRow) -> CutKey | None:
+            """Global sort key for a bin's cut point, or None if the bin has none.
+
+            An empty bin (``is_empty``) or one with a null cut label/catalog does
+            not define a cut point — it never starts a record run. Returning None,
+            rather than the former ``("", ((-1, 0),))`` global-minimum sentinel,
+            keeps such bins OUT of the record→bin assignment entirely. Previously a
+            mid-shelf empty bin's minimum key satisfied ``cut_key <= rec_key`` for
+            every record and (being later in the physical walk) won assignment, then
+            the build loop dropped those records as empty — silently swallowing the
+            preceding cube's collection (manifestation 1).
+            """
+            if row.is_empty or row.first_label is None or row.first_catalog is None:
+                return None
             return (row.first_label.casefold(), parse_key(row.first_catalog))
 
         cut_keys = [_cut_key(row) for row in boundary_rows]
 
+        # Only cut-bearing bins receive records, paired with their physical index.
+        # Empty / null-cut bins are absent here, so they cannot capture records.
+        cut_bins: list[tuple[int, CutKey]] = [
+            (i, key) for i, key in enumerate(cut_keys) if key is not None
+        ]
+
+        # A record belongs to the cube whose cut point most-immediately precedes it
+        # in GLOBAL cut-key order — NOT in physical (unit, row, col) walk order.
+        # The two coincide only when the shelf is physically arranged in alphabetical
+        # order. The old scan walked bins physically and stopped at the first cut
+        # greater than the record; when a later physical cube carried an
+        # alphabetically-earlier cut (e.g. a second Kallax unit holding
+        # earlier-label records), that early stop misfiled records into an earlier
+        # unit's cube at high confidence (manifestation 2). Scanning in cut-key order
+        # instead assigns every record to the correct cube regardless of walk order.
+        cut_bins_by_key = sorted(cut_bins, key=lambda pair: pair[1])
+
+        # Loudly surface a physically-disordered shelf instead of misfiling silently:
+        # if the physical walk does not present cut points in non-decreasing order,
+        # the collection is not shelved in the alphabetical order the position
+        # estimate assumes. Assignment below stays correct (it uses cut-key order),
+        # but the divergence is real boundary-data / fixture rot worth flagging.
+        for (pa_idx, ka), (pb_idx, kb) in pairwise(cut_bins):
+            if kb < ka:
+                ra = boundary_rows[pa_idx]
+                rb = boundary_rows[pb_idx]
+                logger.warning(
+                    "SegmentCache.derive: cut points are not monotonically "
+                    "non-decreasing along the physical shelf walk — bin "
+                    "(%d,%d,%d) cut %r sorts before the preceding bin (%d,%d,%d) "
+                    "cut %r. The collection is expected to be shelved in global "
+                    "label/catalog order; records are still assigned by cut-key "
+                    "order, but this layout indicates boundary data that no longer "
+                    "matches the physical shelf.",
+                    rb.unit_id,
+                    rb.row,
+                    rb.col,
+                    kb,
+                    ra.unit_id,
+                    ra.row,
+                    ra.col,
+                    ka,
+                )
+                break
+
         # Build a list of (record, global_sort_key) pairs, sorted globally
-        record_global_pairs: list[
-            tuple[RecordRow, tuple[str, tuple[tuple[int, int | str], ...]]]
-        ] = [(r, (r.label.casefold(), parse_key(r.catalog_number))) for r in all_records]
+        record_global_pairs: list[tuple[RecordRow, CutKey]] = [
+            (r, (r.label.casefold(), parse_key(r.catalog_number))) for r in all_records
+        ]
         record_global_pairs.sort(key=lambda x: x[1])
 
         # For each record, determine which bin it belongs to using bisect-style logic
         bin_records: list[list[RecordRow]] = [[] for _ in range(n_bins)]
 
         for record, rec_key in record_global_pairs:
-            # Find the last bin whose cut_key <= rec_key
+            # Last cut-bearing bin (in cut-key order) whose cut_key <= rec_key wins.
             assigned_bin = -1
-            for i in range(n_bins):
-                if cut_keys[i] <= rec_key:
-                    assigned_bin = i
+            for phys_idx, key in cut_bins_by_key:
+                if key <= rec_key:
+                    assigned_bin = phys_idx
                 else:
                     break
             if assigned_bin >= 0:
