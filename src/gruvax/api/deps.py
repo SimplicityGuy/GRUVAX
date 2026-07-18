@@ -10,12 +10,13 @@ from datetime import UTC, datetime, timedelta
 import secrets
 from typing import TYPE_CHECKING, Any
 
-from fastapi import Depends, HTTPException, Request, status
+from fastapi import Depends, HTTPException, Request, Response, status
 
 from gruvax.auth.sessions import (
     BROWSE_BINDING_COOKIE,
     CSRF_COOKIE,
     FINGERPRINT_COOKIE,
+    clear_fingerprint_cookie,
     get_session_id,
 )
 from gruvax.settings import settings
@@ -150,13 +151,22 @@ def get_event_bus(request: Request) -> Any:
 # profile_id from an incoming request.  It checks the device fingerprint cookie
 # first (D3-05 — device binding wins over browse-binding).
 #
-# Resolution precedence (D3-05):
+# Resolution precedence (D3-05, revised by gruvax-7qgx):
 #   1. Fingerprint present + device row exists + not revoked + profile_id IS NOT NULL
 #      → return (device.profile_id, device.id)  — paired device, device binding wins
 #   2. Fingerprint present + device row exists + not revoked + profile_id IS NULL
 #      → orphaned device, fall through to browse-binding (picker reverts, D3-03)
-#   3. Fingerprint present + device row is REVOKED  → 403 device_revoked  (D3-07)
-#   4. Fingerprint present + no device row          → 403 device_unknown   (D3-07)
+#   3. Fingerprint present + device row is REVOKED  → 403 device_revoked  (D3-07).
+#      The response also clears the fingerprint cookie (escape path, gruvax-7qgx) so a
+#      revoked device is never permanently stuck resubmitting the same dead token —
+#      the next request presents no fingerprint and resolves via case 5/6 below.
+#   4. Fingerprint present + NO device row → fall through to browse-binding, same as
+#      case 2 (gruvax-7qgx). An unknown fingerprint means "not a device yet" — e.g. a
+#      /pair visit that issued the 30-day cookie but never completed a bind — NOT a
+#      security violation. Previously this hard-403'd (device_unknown) and silently
+#      broke every profile-scoped route (search/locate/SSE) for the cookie's 30-day
+#      lifetime with no client-visible signal (gruvax-7qgx). Only a REVOKED row (case
+#      3) is a hard stop now.
 #   5. No fingerprint → fall through to browse-binding cookie
 #   6. No browse-binding cookie                     → 400 session_unbound
 #
@@ -176,6 +186,25 @@ _UPDATE_LAST_SEEN = (
 )
 
 
+def _revoked_device_cookie_headers() -> dict[str, str]:
+    """Build the Set-Cookie header that clears the fingerprint cookie on a 403.
+
+    ``resolve_profile_from_request`` is called directly by its callers (not
+    injected as a FastAPI dependency with a live ``Response``), so there is no
+    outgoing response to attach ``clear_fingerprint_cookie`` to directly. Render
+    it against a scratch ``Response`` and lift just the ``Set-Cookie`` header
+    onto the ``HTTPException`` — this is ``clear_fingerprint_cookie``'s escape
+    path (gruvax-7qgx): it previously had zero callers, so a revoked device's
+    30-day fingerprint cookie never cleared and the kiosk looped on the same
+    dead token forever. Only the Set-Cookie header is lifted (not the scratch
+    response's Content-Length/Content-Type) so it doesn't clobber the real
+    JSON error body FastAPI's exception handler renders.
+    """
+    scratch = Response()
+    clear_fingerprint_cookie(scratch)
+    return {"set-cookie": scratch.headers["set-cookie"]}
+
+
 async def resolve_profile_from_request(
     request: Request,
     pool: Any,
@@ -183,18 +212,21 @@ async def resolve_profile_from_request(
     """D3-07: derive (profile_id, device_id|None) from the incoming request.
 
     Checks the fingerprint cookie first (device binding wins, D3-05); falls
-    back to the browse-binding cookie.  Raises 403 for revoked/unknown
-    fingerprints; raises 400 if neither binding source is present.
+    back to the browse-binding cookie.  Raises 403 for a revoked fingerprint
+    (also clearing the stale cookie, gruvax-7qgx); raises 400 if neither
+    binding source is present. An UNKNOWN fingerprint (no device row at all)
+    is treated as "not a device yet" and falls through to browse-binding,
+    same as an orphaned device (gruvax-7qgx) — it is not an error condition.
 
     The pool is acquired and released atomically inside this function — callers
     must NOT hold the pool across a generator boundary (Pitfall 10 / D3-13).
 
     Returns:
         (profile_id_str, device_id_str) when a paired device is recognised.
-        (browse_cookie_str, None)        when browse-binding is used.
+        (browse_cookie_str, None)        when browse-binding is used (including
+        an unknown or orphaned fingerprint, gruvax-7qgx).
 
     Raises:
-        HTTP 403 device_unknown  — fingerprint present but no matching device row.
         HTTP 403 device_revoked  — fingerprint maps to a revoked device.
         HTTP 400 session_unbound — no fingerprint and no browse-binding cookie.
     """
@@ -203,25 +235,24 @@ async def resolve_profile_from_request(
         async with pool.connection() as conn, conn.cursor() as cur:
             await cur.execute(_SELECT_DEVICE_FOR_RESOLUTION, (fp,))
             row = await cur.fetchone()
-        if row is None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={"type": "device_unknown"},
-            )
-        device_id, profile_id, revoked_at = row
-        if revoked_at is not None:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={"type": "device_revoked"},
-            )
-        if profile_id is not None:
-            # Throttled last_seen_at touch (at most once per 60s — Open Question 3)
-            async with pool.connection() as conn:
-                await conn.execute(_UPDATE_LAST_SEEN, (str(device_id),))
-                await conn.commit()
-            return str(profile_id), str(device_id)
-        # Orphaned device (profile soft-deleted) — fall through to browse-binding
-        # so kiosk reverts to picker (D3-03 / D3-05).
+        if row is not None:
+            device_id, profile_id, revoked_at = row
+            if revoked_at is not None:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail={"type": "device_revoked"},
+                    headers=_revoked_device_cookie_headers(),
+                )
+            if profile_id is not None:
+                # Throttled last_seen_at touch (at most once per 60s — Open Question 3)
+                async with pool.connection() as conn:
+                    await conn.execute(_UPDATE_LAST_SEEN, (str(device_id),))
+                    await conn.commit()
+                return str(profile_id), str(device_id)
+            # Orphaned device (profile soft-deleted) — fall through to browse-binding
+            # so kiosk reverts to picker (D3-03 / D3-05).
+        # else: unknown fingerprint (no device row) — fall through to browse-binding
+        # too (gruvax-7qgx). "Not a device yet" is not the same as "revoked".
 
     # Fall back to browse-binding cookie
     bound = request.cookies.get(BROWSE_BINDING_COOKIE)
@@ -241,11 +272,13 @@ async def resolve_profile_from_request(
 #
 # Error taxonomy (T-02-02-01 / D2-04 / D3-07):
 #   400 session_unbound  — no fingerprint and no browse-binding cookie
-#   403 device_unknown   — fingerprint present but no matching device row (D3-07)
 #   403 device_revoked   — fingerprint maps to a revoked device (D3-07)
 #   403 profile_mismatch — resolved profile_id != path profile_id (spoofing)
 #   503 registry missing — registry attr not on app.state (races lifespan)
 #   404 profile_not_found — profile_id not in registry (deleted / unknown)
+#
+# NOTE (gruvax-7qgx): an unknown fingerprint (no device row) is no longer an
+# error — resolve_profile_from_request falls through to browse-binding for it.
 
 
 async def get_boundary_cache_for_profile(
@@ -261,7 +294,6 @@ async def get_boundary_cache_for_profile(
 
     Raises:
         HTTP 400 (session_unbound)    — no fingerprint and no browse-binding cookie.
-        HTTP 403 (device_unknown)     — unknown fingerprint (D3-07).
         HTTP 403 (device_revoked)     — revoked device fingerprint (D3-07).
         HTTP 403 (profile_mismatch)   — resolved profile_id != path profile_id.
         HTTP 503 (registry not ready) — registry attr missing on app.state.
@@ -410,7 +442,6 @@ async def get_write_target(
     Calls ``resolve_profile_from_request`` and propagates its errors verbatim
     (D-02 — no default-profile fallback):
       HTTP 400 session_unbound  — no fingerprint cookie AND no browse-binding cookie.
-      HTTP 403 device_unknown   — fingerprint present but no matching device row.
       HTTP 403 device_revoked   — fingerprint maps to a revoked device.
 
     After resolving the profile_id:
