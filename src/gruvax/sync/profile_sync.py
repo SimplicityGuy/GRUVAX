@@ -54,6 +54,7 @@ from gruvax.discogsography.errors import (
     ServerError,
     SyncInProgress,
 )
+from gruvax.estimator.normalize import normalize_catalog_storage
 from gruvax.settings import settings
 from gruvax.sync.pat_crypto import decrypt_pat
 
@@ -127,18 +128,35 @@ def _release_to_tuple(rel: dict[str, Any]) -> tuple[Any, ...]:
     to 0 when absent so the composite PK never sees NULL — Postgres
     treats NULL PK columns as a UNIQUE-violation-skipping value, which
     would silently corrupt the swap).
+
+    ``catalog_number`` is NFKC-normalized via
+    ``normalize_catalog_storage`` (ADR-0001 / gruvax-rn7l.6) before it is
+    written: without this, a full-width source catalog (e.g. the
+    fullwidth-Latin/fullwidth-digit spelling of "BLP-4195") is stored
+    verbatim and is unfindable by an ASCII query through either search
+    path (the FTS generated column and the catalog LIKE path both only
+    fold *case*, not full-width/compatibility characters). NFKC-folding
+    at ingest keeps the stored value the single
+    normalization authority agrees with everywhere: the estimator's
+    ``parse_key`` already NFKC-folds on read regardless, so this only
+    changes the SQL-visible identity of the column, not estimator
+    behavior. A ``None``/absent catalog stays ``None`` (nullable column;
+    an empty string would be a different, search-meaningful value).
     """
     folder_id = rel.get("folder_id")
     if folder_id is None:
         # Composite PK rejects NULL in folder_id; coerce to 0 sentinel.
         folder_id = 0
+    catalog_number = rel.get("catalog_number")
+    if catalog_number is not None:
+        catalog_number = normalize_catalog_storage(catalog_number)
     return (
         int(rel["id"]),
         folder_id,
         rel.get("artist"),
         rel.get("title"),
         rel.get("label"),
-        rel.get("catalog_number"),
+        catalog_number,
         rel.get("year"),
     )
 

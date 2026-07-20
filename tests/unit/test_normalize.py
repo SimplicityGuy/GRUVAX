@@ -21,6 +21,7 @@ from gruvax.estimator.normalize import (
     compare_catalogs,
     label_sort_key,
     normalize_catalog,
+    normalize_catalog_storage,
     parse_key,
 )
 
@@ -164,6 +165,77 @@ def test_nfkc_fullwidth_letters_and_hyphen() -> None:
     )
     assert normalize_catalog(full_width) == normalize_catalog("BLP 4195")
     assert parse_key(full_width) == parse_key("BLP 4195")
+
+
+# ── normalize_catalog_storage (gruvax-rn7l.6) ─────────────────────────────────
+
+
+def _fullwidth_blp_4195() -> str:
+    """The ADR-0001 witness string, built via chr() to keep the source pure-ASCII."""
+    return (
+        chr(0xFF22)  # 'B'
+        + chr(0xFF2C)  # 'L'
+        + chr(0xFF30)  # 'P'
+        + chr(0xFF0D)  # '-' full-width hyphen-minus
+        + chr(0xFF14)  # '4'
+        + chr(0xFF11)  # '1'
+        + chr(0xFF19)  # '9'
+        + chr(0xFF15)  # '5'
+    )
+
+
+def test_storage_form_folds_fullwidth_to_ascii() -> None:
+    """A full-width catalog NFKC-folds to plain ASCII — the identity fix (gruvax-rn7l.6)."""
+    assert normalize_catalog_storage(_fullwidth_blp_4195()) == "BLP-4195"
+
+
+def test_storage_form_preserves_case() -> None:
+    """Unlike normalize_catalog's key form, the storage form keeps original casing."""
+    assert normalize_catalog_storage("Blp-4195") == "Blp-4195"
+    assert normalize_catalog_storage(_fullwidth_blp_4195()) != normalize_catalog(
+        _fullwidth_blp_4195()
+    )
+
+
+def test_storage_form_preserves_separators() -> None:
+    """Unlike normalize_catalog, the storage form does not collapse separators.
+
+    This matters for FTS tokenization (migration 0014): the generated
+    fts_vector column relies on a separator being present between the alpha
+    and digit runs to split them into two lexemes.
+    """
+    assert normalize_catalog_storage("BLP-4195") == "BLP-4195"
+    assert normalize_catalog_storage("BLP 4195") == "BLP 4195"
+
+
+def test_storage_form_agrees_with_estimator_after_reload() -> None:
+    """Storing the NFKC-only form and re-parsing it must match direct full-width parsing.
+
+    This is the property that makes the ingest fix correct: whatever the
+    estimator would have computed from the raw full-width source, it
+    computes identically from the persisted, NFKC-folded storage form.
+    """
+    raw = _fullwidth_blp_4195()
+    stored = normalize_catalog_storage(raw)
+    assert parse_key(stored) == parse_key(raw)
+    assert parse_key(stored) == parse_key("BLP 4195")
+
+
+def test_storage_form_idempotent() -> None:
+    assert normalize_catalog_storage(normalize_catalog_storage("BLP-4195")) == "BLP-4195"
+    full_width = _fullwidth_blp_4195()
+    once = normalize_catalog_storage(full_width)
+    assert normalize_catalog_storage(once) == once
+
+
+def test_storage_form_none_and_blank() -> None:
+    assert normalize_catalog_storage(None) == ""
+    assert normalize_catalog_storage("") == ""
+    assert normalize_catalog_storage("   ") == ""
+
+
+def test_storage_form_strips_surrounding_whitespace() -> None:
+    assert normalize_catalog_storage("  BLP-4195  ") == "BLP-4195"
 
 
 # ── digit saturation (gruvax-raz): 13+-digit runs saturate, not truncate ──────

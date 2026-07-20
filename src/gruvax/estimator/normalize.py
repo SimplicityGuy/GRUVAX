@@ -19,11 +19,12 @@ site for ``pyuca`` — every "sort labels" call site must route through
 ``label_sort_key`` so the picker and the estimator's cut-key order agree.
 
 Exported symbols:
-  label_sort_key     — casefold + pyuca (UCA) sort key; total order over labels
-  normalize_catalog  — NFKC + casefold + first-of-comma + separator-collapse
-  parse_key          — alternating (type_tag, value) tokens; empties sort first
-  compare_catalogs   — -1/0/1 total order over parse_key
-  catalog_in_range   — True iff parse_key(first) <= parse_key(catalog) <= parse_key(last)
+  label_sort_key           — casefold + pyuca (UCA) sort key; total order over labels
+  normalize_catalog        — NFKC + casefold + first-of-comma + separator-collapse
+  normalize_catalog_storage — NFKC-fold only; preserves case/separators (gruvax-rn7l.6)
+  parse_key                — alternating (type_tag, value) tokens; empties sort first
+  compare_catalogs         — -1/0/1 total order over parse_key
+  catalog_in_range         — True iff parse_key(first) <= parse_key(catalog) <= parse_key(last)
 """
 
 from __future__ import annotations
@@ -152,6 +153,62 @@ def normalize_catalog(raw: str | None) -> str:
     # so this cannot reintroduce a separator or comma.
     s = unicodedata.normalize("NFKC", s)
     return s
+
+
+def normalize_catalog_storage(raw: str | None) -> str:
+    """Normalize a catalog number for **persistence** (gruvax-rn7l.6 / ADR-0001).
+
+    ``normalize_catalog`` above produces the estimator's fully-collapsed
+    comparison *key* (casefolded, separators stripped entirely) — the right
+    shape for ``parse_key``/sorting, but the WRONG shape to persist verbatim:
+
+      - It would defeat FTS tokenization. The ``fts_vector`` generated column
+        (migrations 0013/0014) rewrites ``catalog_number`` separators to a
+        single space (``regexp_replace(catalog_number, '[\\s\\-_./]+', ' ',
+        'g')``) *before* ``to_tsvector`` so a hyphenated catalog like
+        ``BLP-1016`` tokenizes into TWO lexemes (``blp`` + ``1016``) and a
+        bare-number query (``1016``) matches. If the stored value already had
+        every separator removed (``blp1016``), that regexp_replace has
+        nothing left to split on and Postgres's parser tokenizes the whole
+        alphanumeric run as ONE ``numword`` lexeme — silently breaking
+        bare-number search for every full-width-sourced catalog.
+      - It would casefold the display value. Every read site (search
+        results, the admin cubes picker, ``get_catalogs_for_label``) returns
+        ``catalog_number`` verbatim to the UI; downstream comparisons
+        already wrap in SQL ``lower()`` (the LIKE path, the trigram
+        near-miss path) or fold case internally (``to_tsvector`` lexemes are
+        lowercased by the text-search dictionary), so nothing downstream
+        *needs* the stored value pre-casefolded.
+
+    So this function applies **only** the character-identity fold — NFKC —
+    the piece that actually caused the bug (a full-width catalog, e.g. the
+    fullwidth-Latin/fullwidth-digit spelling of "BLP-4195", stores
+    compatibility characters that no SQL-side ``lower()``/
+    ``regexp_replace()`` call folds to ASCII). NFKC alone maps fullwidth
+    Latin letters/digits/punctuation to their canonical ASCII forms while
+    preserving case and existing separator characters (the fullwidth
+    hyphen U+FF0D decomposes to ASCII ``-``), so that fullwidth spelling
+    normalizes to the human-readable ``"BLP-4195"`` — findable by both
+    search paths and identical, once re-normalized by ``parse_key``, to
+    what the estimator already computes for it.
+
+    A single NFKC pass is idempotent and sufficient here: unlike
+    ``normalize_catalog``, no casefold step follows that could reintroduce a
+    compatibility character needing a second pass.
+
+    Args:
+        raw: Raw catalog-number string from the sync source (may be None).
+
+    Returns:
+        The NFKC-normalized string (``""`` for ``None``/blank input),
+        case and separators preserved.
+    """
+    if raw is None:
+        return ""
+    s: str = raw.strip()
+    if not s:
+        return ""
+    return unicodedata.normalize("NFKC", s)
 
 
 def parse_key(catalog: str | None) -> tuple[tuple[int, int | str], ...]:
