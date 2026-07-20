@@ -56,9 +56,7 @@ _CREATE_UNACCENT = "CREATE EXTENSION IF NOT EXISTS unaccent WITH SCHEMA public"
 # Fresh copy of the english config, then prepend the unaccent dictionary to the
 # word/hword token mappings so accents are folded before english_stem runs.
 _DROP_CONFIG = "DROP TEXT SEARCH CONFIGURATION IF EXISTS gruvax.gruvax_fts"
-_CREATE_CONFIG = (
-    "CREATE TEXT SEARCH CONFIGURATION gruvax.gruvax_fts ( COPY = pg_catalog.english )"
-)
+_CREATE_CONFIG = "CREATE TEXT SEARCH CONFIGURATION gruvax.gruvax_fts ( COPY = pg_catalog.english )"
 _ALTER_MAPPING = """
 ALTER TEXT SEARCH CONFIGURATION gruvax.gruvax_fts
     ALTER MAPPING FOR hword, hword_part, word

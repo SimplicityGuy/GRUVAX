@@ -6,7 +6,8 @@ Create Date: 2026-07-19
 
 Bug gruvax-rn7l.6 (supersedes gruvax-pjyz): sync ingest (``profile_sync.
 _release_to_tuple``) stored ``catalog_number`` verbatim, so a full-width
-catalog (e.g. ``ＢＬＰ－４１９５``) landed in the column with its
+catalog (e.g. "BLP-4195" typed as FULLWIDTH characters, U+FF22 U+FF2C
+U+FF30 U+FF0D U+FF14 U+FF11 U+FF19 U+FF15) landed in the column with its
 compatibility characters intact. The estimator's ``parse_key`` NFKC-folds on
 every read and so was never fooled, but BOTH SQL-side search paths only fold
 *case*, not width/compatibility form:

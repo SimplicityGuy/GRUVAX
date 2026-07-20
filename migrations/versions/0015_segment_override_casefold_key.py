@@ -68,7 +68,9 @@ branch_labels: str | None = None
 depends_on: str | None = None
 
 
-_ADD_LABEL_DISPLAY = "ALTER TABLE gruvax.segment_overrides ADD COLUMN IF NOT EXISTS label_display TEXT"
+_ADD_LABEL_DISPLAY = (
+    "ALTER TABLE gruvax.segment_overrides ADD COLUMN IF NOT EXISTS label_display TEXT"
+)
 
 _BACKFILL_LABEL_DISPLAY = (
     "UPDATE gruvax.segment_overrides SET label_display = label WHERE label_display IS NULL"
