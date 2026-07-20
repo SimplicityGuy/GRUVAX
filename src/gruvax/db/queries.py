@@ -47,6 +47,8 @@ from typing import TYPE_CHECKING, Any
 
 import psycopg.errors
 
+from gruvax.estimator.normalize import label_sort_key, parse_key
+
 
 if TYPE_CHECKING:
     from psycopg_pool import AsyncConnectionPool
@@ -637,6 +639,15 @@ async def get_distinct_labels(
     (D-06).  Source is exclusively profile_collection for the active profile
     (Pitfall 5 — never reads raw discogsography tables).
 
+    Ordering authority (ADR-0001 / gruvax-icc5): the returned list is sorted in
+    Python by ``label_sort_key`` (pyuca UCA), NOT by the SQL ``ORDER BY label``
+    (Postgres glibc collation). The SQL ordering is no longer load-bearing — it
+    only stabilizes DISTINCT dedup. This is the picker half of the fix: the admin
+    label picker and the estimator's cut-key comparison now sort labels by the
+    same authority, so a label the picker shows in position N lights the cube the
+    estimator derived for position N. Under the old glibc order the two disagreed
+    for real labels (A&M/Ace, Blue Note/Bluebird, Éditions EG), mis-lighting cubes.
+
     All SQL uses %s placeholders (T-03-16, T-01-sqli-rewire).
 
     Args:
@@ -646,6 +657,9 @@ async def get_distinct_labels(
     Returns:
         Sorted list of distinct label strings.
     """
+    # ORDER BY label kept only for stable DISTINCT output; the authoritative
+    # ordering is applied in Python below (ADR-0001 — Postgres ordering is not
+    # load-bearing).
     sql = """
 SELECT DISTINCT label
 FROM gruvax.profile_collection
@@ -655,7 +669,7 @@ ORDER BY label
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(sql, (profile_id,))
         rows = await cur.fetchall()
-    return [str(row[0]) for row in rows]
+    return sorted((str(row[0]) for row in rows), key=label_sort_key)
 
 
 async def get_catalogs_for_label(
@@ -679,8 +693,14 @@ async def get_catalogs_for_label(
 
     Returns:
         List of dicts with keys ``release_id`` (int) and ``catalog_number`` (str),
-        ordered by catalog_number.
+        ordered by ``parse_key(catalog_number)`` (ADR-0001 authority — numeric-aware,
+        separator-invariant), NOT the SQL lexical ``ORDER BY catalog_number``. This
+        gives the catalog picker the same within-label order the estimator uses to
+        rank records into cubes, so the picker and the position estimate agree
+        (sibling to ``get_distinct_labels``; Postgres ordering is not load-bearing).
     """
+    # ORDER BY catalog_number kept only for a stable pre-sort; the authoritative
+    # ordering is applied in Python below via parse_key (numeric-aware).
     sql = """
 SELECT release_id, catalog_number
 FROM gruvax.profile_collection
@@ -690,7 +710,9 @@ ORDER BY catalog_number
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(sql, (profile_id, label))
         rows = await cur.fetchall()
-    return [{"release_id": int(row[0]), "catalog_number": str(row[1])} for row in rows]
+    result = [{"release_id": int(row[0]), "catalog_number": str(row[1])} for row in rows]
+    result.sort(key=lambda r: parse_key(str(r["catalog_number"])))
+    return result
 
 
 # ── Admin bulk-write + history + idempotency queries (Phase 3 Plan 05) ────────

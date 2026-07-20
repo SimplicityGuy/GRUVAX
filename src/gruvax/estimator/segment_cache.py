@@ -12,7 +12,9 @@ algorithm works in six steps:
 
   1. Sort cut points by (unit_id, row, col).
   2. For each label, sort its records by parse_key(catalog_number) to get a
-     globally ordered list. Labels are compared by .casefold() only.
+     globally ordered list. Labels are ORDERED by label_sort_key (pyuca / UCA,
+     ADR-0001) so the cut-key order matches the admin picker; label IDENTITY
+     (grouping, override matching) is still .casefold().
   3. Assign each label's records to bins by comparing the record's row-rank
      against each bin's cut-point rank within that label's sorted run.
   4. Per bin, sum segment_counts → bin_total; auto_fraction = count / total.
@@ -34,17 +36,37 @@ if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
     from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
 
-from gruvax.estimator.normalize import parse_key
+from gruvax.estimator.normalize import label_sort_key, parse_key
 
 
 logger = logging.getLogger(__name__)
 
-# Global sort key for a cut point: (label.casefold(), parse_key(catalog)).
+# The pyuca (UCA) sort key type produced by ``label_sort_key`` for a label — the
+# label component of every CutKey. See ``normalize.label_sort_key``.
+LabelKey = tuple[tuple[int, ...], str]
+
+# Global sort key for a cut point: (label_sort_key(label), parse_key(catalog)).
 # This alias names the ONE cut-key comparison contract the record→bin scan relies
-# on. The record-side key is built identically. A future collation fix
-# (gruvax-icc5: Postgres-collation vs Python-codepoint ordering) swaps how these
-# keys order records — keeping the shape localized here avoids painting it in.
-CutKey = tuple[str, tuple[tuple[int, int | str], ...]]
+# on. The record-side key is built identically (via ``_label_key`` below).
+#
+# gruvax-icc5 / ADR-0001: the label component is now the pyuca ``label_sort_key``,
+# NOT a bare ``.casefold()`` codepoint string. This is the load-bearing swap that
+# makes the estimator's record→bin ordering agree with the admin label picker
+# (``get_distinct_labels``, which sorts by the same authority). Under the old
+# casefold-codepoint order the two disagreed for real labels (A&M/Ace,
+# Blue Note/Bluebird, Éditions EG), silently mis-lighting cubes. Keeping the shape
+# localized behind this alias + ``_label_key`` confines the contract to one place.
+CutKey = tuple[LabelKey, tuple[tuple[int, int | str], ...]]
+
+
+def _label_key(label: str | None) -> LabelKey:
+    """The label component of a CutKey — the single ADR-0001 ordering authority.
+
+    Routes every "order labels" site in the estimator through
+    ``label_sort_key`` (pyuca UCA), so a cut point's label key and a record's
+    label key are built identically and order the same way the admin picker does.
+    """
+    return label_sort_key(label)
 
 
 @dataclass(frozen=True)
@@ -71,9 +93,9 @@ class LabelSegment:
 class SegmentBin:
     """One Kallax cube with its ordered list of label segments.
 
-    Segments are ordered by global label casefold. The applied_fractions of all
-    segments always sum to 1.0 (within 1e-6). An empty cube (is_empty=True from
-    BoundaryRow) will have an empty segments tuple.
+    Segments are ordered by global label order (label_sort_key / pyuca, ADR-0001).
+    The applied_fractions of all segments always sum to 1.0 (within 1e-6). An empty
+    cube (is_empty=True from BoundaryRow) will have an empty segments tuple.
     """
 
     unit_id: int
@@ -81,7 +103,7 @@ class SegmentBin:
     col: int
     cut_label: str | None  # = BoundaryRow.first_label (the cut point)
     cut_catalog: str | None  # = BoundaryRow.first_catalog (the cut point)
-    segments: tuple[LabelSegment, ...]  # ordered by label.casefold()
+    segments: tuple[LabelSegment, ...]  # ordered by label_sort_key (pyuca)
 
 
 class SegmentCache:
@@ -189,9 +211,9 @@ class SegmentCache:
         for records in by_label.values():
             all_records.extend(records)
 
-        # Sort all records globally by (label casefold, parse_key(catalog_number))
+        # Sort all records globally by (label_sort_key(label), parse_key(catalog))
         # This gives us the global ordering needed to assign records to bins.
-        all_records.sort(key=lambda r: (r.label.casefold(), parse_key(r.catalog_number)))
+        all_records.sort(key=lambda r: (_label_key(r.label), parse_key(r.catalog_number)))
 
         # Build per-label sorted record lists (for rank assignment within each label)
         label_sorted_records: dict[str, list[RecordRow]] = {}
@@ -228,16 +250,16 @@ class SegmentCache:
 
             An empty bin (``is_empty``) or one with a null cut label/catalog does
             not define a cut point — it never starts a record run. Returning None,
-            rather than the former ``("", ((-1, 0),))`` global-minimum sentinel,
-            keeps such bins OUT of the record→bin assignment entirely. Previously a
-            mid-shelf empty bin's minimum key satisfied ``cut_key <= rec_key`` for
-            every record and (being later in the physical walk) won assignment, then
-            the build loop dropped those records as empty — silently swallowing the
-            preceding cube's collection (manifestation 1).
+            rather than a global-minimum sentinel, keeps such bins OUT of the
+            record→bin assignment entirely. Previously a mid-shelf empty bin's
+            minimum key satisfied ``cut_key <= rec_key`` for every record and
+            (being later in the physical walk) won assignment, then the build loop
+            dropped those records as empty — silently swallowing the preceding
+            cube's collection (manifestation 1).
             """
             if row.is_empty or row.first_label is None or row.first_catalog is None:
                 return None
-            return (row.first_label.casefold(), parse_key(row.first_catalog))
+            return (_label_key(row.first_label), parse_key(row.first_catalog))
 
         cut_keys = [_cut_key(row) for row in boundary_rows]
 
@@ -263,6 +285,15 @@ class SegmentCache:
         # the collection is not shelved in the alphabetical order the position
         # estimate assumes. Assignment below stays correct (it uses cut-key order),
         # but the divergence is real boundary-data / fixture rot worth flagging.
+        #
+        # gruvax-icc5: because the cut key now orders labels by pyuca (label_sort_key,
+        # ADR-0001), a shelf that was physically laid out under Postgres's OLD glibc
+        # collation — which disagrees with pyuca for real labels (e.g. glibc's
+        # punctuation-ignoring order puts ABC, Ace before A&M, whereas pyuca sorts
+        # A&M first) — presents cut points that are non-monotonic in pyuca order and
+        # trips this guard. That is exactly the intent: the owner sees a loud,
+        # admin-visible warning that the boundaries need re-deriving under the new
+        # authority, instead of a cube silently lighting for the wrong label.
         for (pa_idx, ka), (pb_idx, kb) in pairwise(cut_bins):
             if kb < ka:
                 ra = boundary_rows[pa_idx]
@@ -288,7 +319,7 @@ class SegmentCache:
 
         # Build a list of (record, global_sort_key) pairs, sorted globally
         record_global_pairs: list[tuple[RecordRow, CutKey]] = [
-            (r, (r.label.casefold(), parse_key(r.catalog_number))) for r in all_records
+            (r, (_label_key(r.label), parse_key(r.catalog_number))) for r in all_records
         ]
         record_global_pairs.sort(key=lambda x: x[1])
 
@@ -345,8 +376,11 @@ class SegmentCache:
             # globally sorted record list
             bin_total = len(records_in_bin)
 
-            # Build ordered label list (sorted by label casefold)
-            ordered_labels = sorted(label_groups.keys())
+            # Build ordered label list. Order segments within a bin by the same
+            # pyuca authority (_label_key) used for the global cut-key order, so a
+            # multi-label cube's segment order matches the shelf's global label
+            # order (gruvax-icc5) rather than bare codepoint order.
+            ordered_labels = sorted(label_groups.keys(), key=_label_key)
 
             # Step 4: compute raw counts (= row-count, never arithmetic)
             label_counts: dict[str, int] = {}
