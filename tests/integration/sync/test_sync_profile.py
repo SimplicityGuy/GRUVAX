@@ -34,6 +34,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax._internal.fake_discogsography import create_fake_app
+from gruvax.db.queries import _catalog_like_pattern, search_collection
 from gruvax.discogsography.client import DiscogsographyClient
 from gruvax.discogsography.errors import (
     NetworkError,
@@ -550,3 +551,99 @@ async def test_sync_lock_released_on_unexpected_exception(  # type: ignore[no-un
             await cur.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
     finally:
         await conn.close()
+
+
+# ── NFKC catalog normalization at ingest (gruvax-rn7l.6, supersedes gruvax-pjyz) ──
+
+
+def _fullwidth_blp_4195() -> str:
+    """ADR-0001 witness string: full-width 'BLP-4195', built via chr() to keep
+    the source pure-ASCII (mirrors tests/unit/test_normalize.py)."""
+    return (
+        chr(0xFF22)  # 'B'
+        + chr(0xFF2C)  # 'L'
+        + chr(0xFF30)  # 'P'
+        + chr(0xFF0D)  # '-' full-width hyphen-minus
+        + chr(0xFF14)  # '4'
+        + chr(0xFF11)  # '1'
+        + chr(0xFF19)  # '9'
+        + chr(0xFF15)  # '5'
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sync_nfkc_normalizes_fullwidth_catalog_at_ingest(  # type: ignore[no-untyped-def]
+    db_pool, clean_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gruvax-rn7l.6: a full-width catalog synced through profile_sync is stored
+    NFKC-normalized (human-readable ASCII) and findable via 'BLP 4195',
+    'BLP-4195', and 'blp4195' through BOTH search paths (FTS and catalog LIKE).
+    """
+    release_id = 555501
+    seed = [
+        {
+            "id": str(release_id),
+            "title": "Fullwidth Catalog Test",
+            "year": 1960,
+            "catalog_number": _fullwidth_blp_4195(),
+            "artist": "Test Artist",
+            "label": "Blue Note",
+            "folder_id": 1,
+        }
+    ]
+    app = create_fake_app(seed=seed)
+    monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app))
+
+    result = await sync_profile(DEFAULT_UUID, _make_app_state(db_pool))
+    assert result["item_count"] == 1
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        # Stored value is NFKC-normalized to plain, human-readable ASCII —
+        # NOT the estimator's fully-collapsed/casefolded key form.
+        await cur.execute(
+            "SELECT catalog_number FROM gruvax.profile_collection "
+            "WHERE profile_id = %s::uuid AND release_id = %s",
+            (DEFAULT_UUID, release_id),
+        )
+        stored = (await cur.fetchone())[0]
+        assert stored == "BLP-4195", f"expected NFKC-normalized 'BLP-4195', got {stored!r}"
+
+        # Path A — FTS: fts_vector (regenerated from the new catalog_number by
+        # the GENERATED STORED column) matches a bare-number query. This is
+        # the same proof pattern as migration 0014's own regression test
+        # (test_fts_catalog_hyphen.py) — the catalog A-weight is tokenized
+        # from a separator-normalized form, so 'BLP-4195' splits into 'blp'
+        # + '4195' lexemes and a bare-number query hits it. Before the
+        # ingest-side NFKC fix, the full-width source would still carry
+        # compatibility characters here and this tokenization would not
+        # produce an ASCII '4195' lexeme at all.
+        await cur.execute(
+            "SELECT fts_vector @@ websearch_to_tsquery('gruvax.gruvax_fts', %s) "
+            "FROM gruvax.profile_collection "
+            "WHERE profile_id = %s::uuid AND release_id = %s",
+            ("4195", DEFAULT_UUID, release_id),
+        )
+        fts_hit = (await cur.fetchone())[0]
+        assert fts_hit, f"FTS path did not match bare number '4195' against stored {stored!r}"
+
+        # Path B — catalog LIKE: the same separator-collapse + lower()
+        # transform the search endpoint uses, for all three query spellings.
+        for q in ("BLP 4195", "BLP-4195", "blp4195"):
+            await cur.execute(
+                "SELECT lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g')) "
+                "LIKE %s ESCAPE '\\' "
+                "FROM gruvax.profile_collection "
+                "WHERE profile_id = %s::uuid AND release_id = %s",
+                (_catalog_like_pattern(q), DEFAULT_UUID, release_id),
+            )
+            like_hit = (await cur.fetchone())[0]
+            assert like_hit, f"catalog LIKE path did not match {q!r} against stored {stored!r}"
+
+    # End-to-end: search_collection (the actual API-facing union of both
+    # paths) returns the record for all three query spellings.
+    for q in ("BLP 4195", "BLP-4195", "blp4195"):
+        rows, _took_ms, _dym = await search_collection(db_pool, q, 20, DEFAULT_UUID)
+        found_ids = [row["release_id"] for row in rows]
+        assert release_id in found_ids, (
+            f"search_collection({q!r}) did not return release_id={release_id}; got {found_ids!r}"
+        )
