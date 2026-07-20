@@ -12,12 +12,16 @@ Tests the golden cases described in PLAN.md §Task 1 <behavior>:
 
 from __future__ import annotations
 
+import itertools
+
 import pytest
 
 from gruvax.estimator.normalize import (
     catalog_in_range,
     compare_catalogs,
+    label_sort_key,
     normalize_catalog,
+    normalize_catalog_storage,
     parse_key,
 )
 
@@ -140,6 +144,131 @@ def test_nfkc_fullwidth_digits() -> None:
     assert parse_key(full_width) == parse_key("BLP 4195")
 
 
+def test_nfkc_fullwidth_letters_and_hyphen() -> None:
+    """ADR-0001 witness: a full-width "BLP-4195" folds to the same key as 'BLP 4195'.
+
+    Exercises normalize_catalog / parse_key across full-width LETTERS (U+FF22 'B',
+    U+FF2C 'L', U+FF30 'P'), a full-width hyphen-minus (U+FF0D, separator), and
+    full-width DIGITS (U+FF14/FF11/FF19/FF15) — the shelved-vs-searchable identity
+    gap the authority closes. Built via chr() so the source stays pure-ASCII.
+    """
+    # chr() avoids RUF001/RUF002 ambiguous-character linter warnings on full-width forms.
+    full_width = (
+        chr(0xFF22)  # 'B'
+        + chr(0xFF2C)  # 'L'
+        + chr(0xFF30)  # 'P'
+        + chr(0xFF0D)  # '-' full-width hyphen-minus
+        + chr(0xFF14)  # '4'
+        + chr(0xFF11)  # '1'
+        + chr(0xFF19)  # '9'
+        + chr(0xFF15)  # '5'
+    )
+    assert normalize_catalog(full_width) == normalize_catalog("BLP 4195")
+    assert parse_key(full_width) == parse_key("BLP 4195")
+
+
+# ── normalize_catalog_storage (gruvax-rn7l.6) ─────────────────────────────────
+
+
+def _fullwidth_blp_4195() -> str:
+    """The ADR-0001 witness string, built via chr() to keep the source pure-ASCII."""
+    return (
+        chr(0xFF22)  # 'B'
+        + chr(0xFF2C)  # 'L'
+        + chr(0xFF30)  # 'P'
+        + chr(0xFF0D)  # '-' full-width hyphen-minus
+        + chr(0xFF14)  # '4'
+        + chr(0xFF11)  # '1'
+        + chr(0xFF19)  # '9'
+        + chr(0xFF15)  # '5'
+    )
+
+
+def test_storage_form_folds_fullwidth_to_ascii() -> None:
+    """A full-width catalog NFKC-folds to plain ASCII — the identity fix (gruvax-rn7l.6)."""
+    assert normalize_catalog_storage(_fullwidth_blp_4195()) == "BLP-4195"
+
+
+def test_storage_form_preserves_case() -> None:
+    """Unlike normalize_catalog's key form, the storage form keeps original casing."""
+    assert normalize_catalog_storage("Blp-4195") == "Blp-4195"
+    assert normalize_catalog_storage(_fullwidth_blp_4195()) != normalize_catalog(
+        _fullwidth_blp_4195()
+    )
+
+
+def test_storage_form_preserves_separators() -> None:
+    """Unlike normalize_catalog, the storage form does not collapse separators.
+
+    This matters for FTS tokenization (migration 0014): the generated
+    fts_vector column relies on a separator being present between the alpha
+    and digit runs to split them into two lexemes.
+    """
+    assert normalize_catalog_storage("BLP-4195") == "BLP-4195"
+    assert normalize_catalog_storage("BLP 4195") == "BLP 4195"
+
+
+def test_storage_form_agrees_with_estimator_after_reload() -> None:
+    """Storing the NFKC-only form and re-parsing it must match direct full-width parsing.
+
+    This is the property that makes the ingest fix correct: whatever the
+    estimator would have computed from the raw full-width source, it
+    computes identically from the persisted, NFKC-folded storage form.
+    """
+    raw = _fullwidth_blp_4195()
+    stored = normalize_catalog_storage(raw)
+    assert parse_key(stored) == parse_key(raw)
+    assert parse_key(stored) == parse_key("BLP 4195")
+
+
+def test_storage_form_idempotent() -> None:
+    assert normalize_catalog_storage(normalize_catalog_storage("BLP-4195")) == "BLP-4195"
+    full_width = _fullwidth_blp_4195()
+    once = normalize_catalog_storage(full_width)
+    assert normalize_catalog_storage(once) == once
+
+
+def test_storage_form_none_and_blank() -> None:
+    assert normalize_catalog_storage(None) == ""
+    assert normalize_catalog_storage("") == ""
+    assert normalize_catalog_storage("   ") == ""
+
+
+def test_storage_form_strips_surrounding_whitespace() -> None:
+    assert normalize_catalog_storage("  BLP-4195  ") == "BLP-4195"
+
+
+# ── digit saturation (gruvax-raz): 13+-digit runs saturate, not truncate ──────
+
+
+def test_digit_saturation_preserves_order_across_12_13_boundary() -> None:
+    """The raz regression: a 12-digit max must sort BELOW a 13-digit value.
+
+    The old code sliced the run to 12 digits, so '1000000000000' truncated to
+    '100000000000' (10**11) and inverted below '999999999999'. Saturation keeps
+    the 13-digit value strictly above every 12-digit value.
+    """
+    assert compare_catalogs("999999999999", "1000000000000") < 0
+    assert parse_key("999999999999") < parse_key("1000000000000")
+
+
+def test_digit_saturation_no_prefix_collapse() -> None:
+    """Distinct 13-digit runs no longer collapse to one key via a shared 12-prefix.
+
+    Both saturate to the ceiling (they are above the cap), so they compare EQUAL
+    to each other — but critically both sort ABOVE every 12-digit catalog rather
+    than being sliced back below them.
+    """
+    assert parse_key("1000000000001") == parse_key("1000000000002")  # both saturated
+    assert parse_key("999999999999") < parse_key("1000000000001")
+
+
+def test_digit_saturation_true_numeric_below_cap() -> None:
+    """Below the saturation point, barcode-length runs keep true numeric order."""
+    assert parse_key("100000000000") < parse_key("100000000001")  # 12-digit, exact
+    assert parse_key("99999999999") < parse_key("999999999999")  # 11 < 12 digit
+
+
 # ── normalize_catalog idempotency ─────────────────────────────────────────────
 
 
@@ -232,3 +361,70 @@ def test_catalog_in_range_separator_variants() -> None:
     """Cosmetic variants of the same catalog# must compare equal for range membership."""
     assert catalog_in_range("blp-4010", "BLP 4001", "BLP 4020") is True
     assert catalog_in_range("BLP4010", "BLP 4001", "BLP 4020") is True
+
+
+# ── label_sort_key (ADR-0001 label-ordering authority) ────────────────────────
+
+# The ADR-0001 witness list, in its authoritative pyuca (UCA) order.
+_WITNESS_LABELS_SORTED: list[str] = [
+    "4AD",
+    "A&M",
+    "ABC",
+    "Ace",
+    "Blue Note",
+    "Bluebird",
+    "Éditions EG",
+    "ZZ Top Records",
+]
+
+
+def test_label_sort_key_orders_adr_witness_list() -> None:
+    """The ADR-0001 witness labels sort into their documented deterministic order.
+
+    This is the property that makes the admin picker and the estimator cut-key
+    order agree: digits first (4AD), punctuation/space significant and below
+    letters (A&M < ABC, Blue Note < Bluebird), accents fold to base primary
+    weight (Éditions EG under 'E').
+    """
+    # A fixed, deliberately out-of-order permutation of the witness list.
+    scrambled = [
+        "Éditions EG",
+        "ABC",
+        "4AD",
+        "ZZ Top Records",
+        "Ace",
+        "Bluebird",
+        "A&M",
+        "Blue Note",
+    ]
+    assert sorted(scrambled) != _WITNESS_LABELS_SORTED  # naive str sort disagrees
+    assert sorted(scrambled, key=label_sort_key) == _WITNESS_LABELS_SORTED
+
+
+def test_label_sort_key_deterministic() -> None:
+    """label_sort_key is a pure function of its input — same input, identical key."""
+    for label in _WITNESS_LABELS_SORTED:
+        assert label_sort_key(label) == label_sort_key(label)
+
+
+def test_label_sort_key_witness_pairs_strictly_ordered() -> None:
+    """Every adjacent witness pair is strictly ordered (total order, no ties)."""
+    for lo, hi in itertools.pairwise(_WITNESS_LABELS_SORTED):
+        assert label_sort_key(lo) < label_sort_key(hi), f"{lo!r} !< {hi!r}"
+
+
+def test_label_sort_key_case_insensitive() -> None:
+    """Casefold means case-variant labels collate equal (one bin, not two)."""
+    assert label_sort_key("Blue Note") == label_sort_key("BLUE NOTE")
+    assert label_sort_key("blue note") == label_sort_key("Blue Note")
+
+
+def test_label_sort_key_none_and_empty_sort_first() -> None:
+    """None / empty labels produce the minimal key and sort before any real label."""
+    assert label_sort_key(None) == label_sort_key("")
+    assert label_sort_key(None) <= label_sort_key("4AD")
+
+
+def test_label_sort_key_punctuation_below_letters() -> None:
+    """A&M sorts before ABC: '&' is significant and weighted below letters (UCA)."""
+    assert label_sort_key("A&M") < label_sort_key("ABC")

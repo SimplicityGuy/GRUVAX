@@ -47,6 +47,8 @@ from typing import TYPE_CHECKING, Any
 
 import psycopg.errors
 
+from gruvax.estimator.normalize import label_sort_key, parse_key
+
 
 if TYPE_CHECKING:
     from psycopg_pool import AsyncConnectionPool
@@ -66,6 +68,51 @@ _PREFIX_DIGITS = re.compile(r"^[A-Za-z]+\s*\d")
 
 # ── Did-you-mean threshold (D-11 — conservative) ─────────────────────────────
 DID_YOU_MEAN_THRESHOLD: float = 0.35
+
+# ── Catalog prefix-match LIKE pattern (Path B / SRCH-08) ─────────────────────
+# Mirrors the separator-collapse regex class used by the SQL-side
+# regexp_replace() calls on catalog_number below, so the Python-computed LIKE
+# pattern and the SQL-normalized column stay in lockstep: "BLP 4195",
+# "BLP-4195", and "blp4195" all collapse to the same string.
+_SEP_COLLAPSE = re.compile(r"[\s\-_./]+")
+# LIKE metacharacters that must be backslash-escaped before landing in a LIKE
+# pattern: % and _ are wildcards, \ is the escape character itself. Without
+# this, a bare "%" query survives separator-collapse untouched (it isn't in
+# _SEP_COLLAPSE) and becomes the pattern "%" plus a trailing wildcard "%" —
+# matching every non-null catalog_number at the fixed Path B score (gruvax-
+# rn7l.4, supersedes gruvax-efe).
+_LIKE_METACHAR = re.compile(r"[%_\\]")
+
+
+def _catalog_like_pattern(q: str) -> str:
+    r"""Build a safe catalog-number prefix-match LIKE pattern from raw input.
+
+    Paired with an ``ESCAPE '\'`` clause at the call site (SRCH-08 Path B):
+
+    1. Collapse separator runs (``[\s\-_./]+``) exactly as the SQL side does
+       to ``catalog_number`` — keeps ``BLP 4195`` / ``BLP-4195`` / ``blp4195``
+       equivalent.
+    2. Lowercase (the SQL side compares via ``lower(...)``).
+    3. Backslash-escape ``%``, ``_``, and ``\`` so a literal occurrence of any
+       of them in the query can never act as a LIKE wildcard (gruvax-rn7l.4).
+    4. Append the trailing, intentionally-unescaped ``%`` for the prefix
+       match.
+
+    A query of bare ``%`` normalizes to an escaped-empty prefix, so the
+    resulting pattern is ``\%%`` — "catalog number starts with a literal %"
+    — not a wildcard-match-all.
+
+    Args:
+        q: Raw user query string.
+
+    Returns:
+        A LIKE pattern string safe to bind as the sole parameter of
+        ``... LIKE %s ESCAPE '\'``.
+    """
+    collapsed = _SEP_COLLAPSE.sub("", q).lower()
+    escaped = _LIKE_METACHAR.sub(lambda m: "\\" + m.group(0), collapsed)
+    return escaped + "%"
+
 
 # ── Search result shape ───────────────────────────────────────────────────────
 
@@ -166,8 +213,14 @@ async def search_collection(
 
     Path B — Catalog prefix:
         ``lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
-          LIKE lower(regexp_replace(%s, ...)) || '%'``
-        Fixed score 0.9 (reliably hits ``BLP 4195`` from ``blp4195``).
+          LIKE %s ESCAPE '\\'``
+        Fixed score 0.9 (reliably hits ``BLP 4195`` from ``blp4195``). The
+        LIKE pattern is built by ``_catalog_like_pattern`` (Python-side),
+        which collapses separators the same way as the column-side
+        ``regexp_replace`` and backslash-escapes ``%``/``_``/``\\`` so a
+        literal LIKE metacharacter in the query (e.g. a bare ``%`` query)
+        can never widen the match into a wildcard-match-all
+        (gruvax-rn7l.4, supersedes gruvax-efe).
 
     The separator-collapse pattern ``[\\s\\-_./]+`` mirrors
     ``normalize_catalog``'s ``_SEP_COLLAPSE`` regex so ``blp4195``,
@@ -250,7 +303,7 @@ cat AS (
     FROM gruvax.profile_collection
     WHERE profile_id = %s::uuid
       AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
-          LIKE lower(regexp_replace(%s, '[\\s\\-_./]+', '', 'g')) || '%%'
+          LIKE %s ESCAPE '\\'
     ORDER BY score DESC
     LIMIT 20
 ),
@@ -293,7 +346,13 @@ FROM (
 ORDER BY rank DESC
 LIMIT %s
 """
-        params: tuple[Any, ...] = (q, profile_id, profile_id, q, limit)
+        params: tuple[Any, ...] = (
+            q,
+            profile_id,
+            profile_id,
+            _catalog_like_pattern(q),
+            limit,
+        )
     else:
         # Standard FTS path (non-catalog query).
         # psycopg uses %s as the placeholder style (Python DB-API 2.0).
@@ -335,7 +394,7 @@ cat AS (
     FROM gruvax.profile_collection
     WHERE profile_id = %s::uuid
       AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
-          LIKE lower(regexp_replace(%s, '[\\s\\-_./]+', '', 'g')) || '%%'
+          LIKE %s ESCAPE '\\'
     ORDER BY score DESC
     LIMIT 20
 ),
@@ -380,7 +439,7 @@ FROM (
 ORDER BY rank DESC
 LIMIT %s
 """
-        params = (q, profile_id, profile_id, q, limit)
+        params = (q, profile_id, profile_id, _catalog_like_pattern(q), limit)
 
     t0 = time.perf_counter()
     async with pool.connection() as conn, conn.cursor() as cur:
@@ -580,6 +639,15 @@ async def get_distinct_labels(
     (D-06).  Source is exclusively profile_collection for the active profile
     (Pitfall 5 — never reads raw discogsography tables).
 
+    Ordering authority (ADR-0001 / gruvax-icc5): the returned list is sorted in
+    Python by ``label_sort_key`` (pyuca UCA), NOT by the SQL ``ORDER BY label``
+    (Postgres glibc collation). The SQL ordering is no longer load-bearing — it
+    only stabilizes DISTINCT dedup. This is the picker half of the fix: the admin
+    label picker and the estimator's cut-key comparison now sort labels by the
+    same authority, so a label the picker shows in position N lights the cube the
+    estimator derived for position N. Under the old glibc order the two disagreed
+    for real labels (A&M/Ace, Blue Note/Bluebird, Éditions EG), mis-lighting cubes.
+
     All SQL uses %s placeholders (T-03-16, T-01-sqli-rewire).
 
     Args:
@@ -589,6 +657,9 @@ async def get_distinct_labels(
     Returns:
         Sorted list of distinct label strings.
     """
+    # ORDER BY label kept only for stable DISTINCT output; the authoritative
+    # ordering is applied in Python below (ADR-0001 — Postgres ordering is not
+    # load-bearing).
     sql = """
 SELECT DISTINCT label
 FROM gruvax.profile_collection
@@ -598,7 +669,7 @@ ORDER BY label
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(sql, (profile_id,))
         rows = await cur.fetchall()
-    return [str(row[0]) for row in rows]
+    return sorted((str(row[0]) for row in rows), key=label_sort_key)
 
 
 async def get_catalogs_for_label(
@@ -622,8 +693,14 @@ async def get_catalogs_for_label(
 
     Returns:
         List of dicts with keys ``release_id`` (int) and ``catalog_number`` (str),
-        ordered by catalog_number.
+        ordered by ``parse_key(catalog_number)`` (ADR-0001 authority — numeric-aware,
+        separator-invariant), NOT the SQL lexical ``ORDER BY catalog_number``. This
+        gives the catalog picker the same within-label order the estimator uses to
+        rank records into cubes, so the picker and the position estimate agree
+        (sibling to ``get_distinct_labels``; Postgres ordering is not load-bearing).
     """
+    # ORDER BY catalog_number kept only for a stable pre-sort; the authoritative
+    # ordering is applied in Python below via parse_key (numeric-aware).
     sql = """
 SELECT release_id, catalog_number
 FROM gruvax.profile_collection
@@ -633,7 +710,9 @@ ORDER BY catalog_number
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(sql, (profile_id, label))
         rows = await cur.fetchall()
-    return [{"release_id": int(row[0]), "catalog_number": str(row[1])} for row in rows]
+    result = [{"release_id": int(row[0]), "catalog_number": str(row[1])} for row in rows]
+    result.sort(key=lambda r: parse_key(str(r["catalog_number"])))
+    return result
 
 
 # ── Admin bulk-write + history + idempotency queries (Phase 3 Plan 05) ────────

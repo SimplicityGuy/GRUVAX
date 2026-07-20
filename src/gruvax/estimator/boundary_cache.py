@@ -101,11 +101,18 @@ class BoundaryCache:
             self._rows = [BoundaryRow(*row) for row in rows_raw]  # type: ignore[misc]
 
         # Second SELECT: segment overrides (Phase 5 addition — SEG-04)
+        # gruvax-rn7l.3: ORDER BY makes the row order deterministic. The PK
+        # (profile_id, unit_id, row, col, label) already guarantees at most one
+        # row per casefolded label post-migration-0015, so this dict comprehension
+        # can no longer silently pick a heap-order "winner" among case-variant
+        # duplicates — the ORDER BY is defense-in-depth against exactly that
+        # class of nondeterminism (belt-and-braces with the PK/dedupe fix).
         async with pool.connection() as conn, conn.cursor() as cur:
             await cur.execute(
                 "SELECT unit_id, row, col, label, fraction"
                 " FROM gruvax.segment_overrides"
-                " WHERE profile_id = %s::uuid",
+                " WHERE profile_id = %s::uuid"
+                " ORDER BY unit_id, row, col, label",
                 (profile_id,),
             )
             overrides_raw = await cur.fetchall()
