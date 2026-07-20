@@ -47,6 +47,8 @@ from typing import TYPE_CHECKING, Any
 
 import psycopg.errors
 
+from gruvax.estimator.normalize import label_sort_key, parse_key
+
 
 if TYPE_CHECKING:
     from psycopg_pool import AsyncConnectionPool
@@ -66,6 +68,51 @@ _PREFIX_DIGITS = re.compile(r"^[A-Za-z]+\s*\d")
 
 # ── Did-you-mean threshold (D-11 — conservative) ─────────────────────────────
 DID_YOU_MEAN_THRESHOLD: float = 0.35
+
+# ── Catalog prefix-match LIKE pattern (Path B / SRCH-08) ─────────────────────
+# Mirrors the separator-collapse regex class used by the SQL-side
+# regexp_replace() calls on catalog_number below, so the Python-computed LIKE
+# pattern and the SQL-normalized column stay in lockstep: "BLP 4195",
+# "BLP-4195", and "blp4195" all collapse to the same string.
+_SEP_COLLAPSE = re.compile(r"[\s\-_./]+")
+# LIKE metacharacters that must be backslash-escaped before landing in a LIKE
+# pattern: % and _ are wildcards, \ is the escape character itself. Without
+# this, a bare "%" query survives separator-collapse untouched (it isn't in
+# _SEP_COLLAPSE) and becomes the pattern "%" plus a trailing wildcard "%" —
+# matching every non-null catalog_number at the fixed Path B score (gruvax-
+# rn7l.4, supersedes gruvax-efe).
+_LIKE_METACHAR = re.compile(r"[%_\\]")
+
+
+def _catalog_like_pattern(q: str) -> str:
+    r"""Build a safe catalog-number prefix-match LIKE pattern from raw input.
+
+    Paired with an ``ESCAPE '\'`` clause at the call site (SRCH-08 Path B):
+
+    1. Collapse separator runs (``[\s\-_./]+``) exactly as the SQL side does
+       to ``catalog_number`` — keeps ``BLP 4195`` / ``BLP-4195`` / ``blp4195``
+       equivalent.
+    2. Lowercase (the SQL side compares via ``lower(...)``).
+    3. Backslash-escape ``%``, ``_``, and ``\`` so a literal occurrence of any
+       of them in the query can never act as a LIKE wildcard (gruvax-rn7l.4).
+    4. Append the trailing, intentionally-unescaped ``%`` for the prefix
+       match.
+
+    A query of bare ``%`` normalizes to an escaped-empty prefix, so the
+    resulting pattern is ``\%%`` — "catalog number starts with a literal %"
+    — not a wildcard-match-all.
+
+    Args:
+        q: Raw user query string.
+
+    Returns:
+        A LIKE pattern string safe to bind as the sole parameter of
+        ``... LIKE %s ESCAPE '\'``.
+    """
+    collapsed = _SEP_COLLAPSE.sub("", q).lower()
+    escaped = _LIKE_METACHAR.sub(lambda m: "\\" + m.group(0), collapsed)
+    return escaped + "%"
+
 
 # ── Search result shape ───────────────────────────────────────────────────────
 
@@ -156,16 +203,24 @@ async def search_collection(
     Two parallel search paths (RESEARCH §Pattern 1):
 
     Path A — FTS (with optional catalog boost):
-        ``fts_vector @@ websearch_to_tsquery('english', %s)``
-        Scored by ``ts_rank_cd(fts_vector, query, 4)``.
+        ``fts_vector @@ websearch_to_tsquery('gruvax.gruvax_fts', %s)``
+        Scored by ``ts_rank_cd(fts_vector, query, 4)``.  The ``gruvax.gruvax_fts``
+        config folds accents (unaccent → english_stem, migration 0013) so an
+        ASCII query like ``Bjork`` matches the stored ``Björk`` (gruvax-w4a7).
         When ``is_catalog_query(q)`` is True (SRCH-08/D-12), catalog_number
         tokens are re-weighted to 'A' (highest) so catalog matches rank above
         text matches.
 
     Path B — Catalog prefix:
         ``lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
-          LIKE lower(regexp_replace(%s, ...)) || '%'``
-        Fixed score 0.9 (reliably hits ``BLP 4195`` from ``blp4195``).
+          LIKE %s ESCAPE '\\'``
+        Fixed score 0.9 (reliably hits ``BLP 4195`` from ``blp4195``). The
+        LIKE pattern is built by ``_catalog_like_pattern`` (Python-side),
+        which collapses separators the same way as the column-side
+        ``regexp_replace`` and backslash-escapes ``%``/``_``/``\\`` so a
+        literal LIKE metacharacter in the query (e.g. a bare ``%`` query)
+        can never widen the match into a wildcard-match-all
+        (gruvax-rn7l.4, supersedes gruvax-efe).
 
     The separator-collapse pattern ``[\\s\\-_./]+`` mirrors
     ``normalize_catalog``'s ``_SEP_COLLAPSE`` regex so ``blp4195``,
@@ -201,7 +256,7 @@ async def search_collection(
         suggestion string (or None) returned only when ``rows`` is empty.
     """
     # SRCH-08: catalog-like queries boost catalog_number field weight.
-    # setweight(to_tsvector('english', catalog_number), 'A') promotes catalog
+    # setweight(to_tsvector('gruvax.gruvax_fts', catalog_number), 'A') promotes catalog
     # tokens to the highest weight tier so ts_rank_cd scores them above body
     # text — catalog match ranks above text match for "BLP 4195".
     # All %s placeholders are fully parameterized (T-01-07, T-02-07,
@@ -219,18 +274,19 @@ WITH fts AS (
         NULL::text   AS format,
         v.year,
         ts_rank_cd(
-            setweight(to_tsvector('english', coalesce(v.catalog_number, '')), 'A')
+            setweight(to_tsvector('gruvax.gruvax_fts', coalesce(v.catalog_number, '')), 'A')
             || setweight(v.fts_vector, 'C'),
             tsq.query,
             4
         ) AS score
     FROM gruvax.profile_collection v
-    CROSS JOIN websearch_to_tsquery('english', %s) AS tsq(query)
+    CROSS JOIN websearch_to_tsquery('gruvax.gruvax_fts', %s) AS tsq(query)
     WHERE v.profile_id = %s::uuid
       AND (
-        setweight(to_tsvector('english', coalesce(v.catalog_number, '')), 'A')
+        setweight(to_tsvector('gruvax.gruvax_fts', coalesce(v.catalog_number, '')), 'A')
         || setweight(v.fts_vector, 'C')
       ) @@ tsq.query
+    ORDER BY score DESC
     LIMIT 40
 ),
 cat AS (
@@ -247,7 +303,8 @@ cat AS (
     FROM gruvax.profile_collection
     WHERE profile_id = %s::uuid
       AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
-          LIKE lower(regexp_replace(%s, '[\\s\\-_./]+', '', 'g')) || '%%'
+          LIKE %s ESCAPE '\\'
+    ORDER BY score DESC
     LIMIT 20
 ),
 combined AS (
@@ -259,21 +316,43 @@ combined AS (
            label, catalog_number, format, year, score
     FROM cat
 )
-SELECT DISTINCT ON (release_id)
-    release_id,
-    collection_item_id,
-    title,
-    primary_artist,
-    label,
-    catalog_number,
-    format,
-    year,
-    score AS rank
-FROM combined
-ORDER BY release_id, score DESC
+SELECT release_id,
+       collection_item_id,
+       title,
+       primary_artist,
+       label,
+       catalog_number,
+       format,
+       year,
+       rank
+FROM (
+    -- DISTINCT ON keeps the highest-scoring row per release_id, but forces the
+    -- ORDER BY to lead with release_id.  Wrapping it in a subquery lets the
+    -- OUTER query re-order by rank DESC before LIMIT, so the LIMIT keeps the
+    -- top-scored matches rather than the lowest release_ids (gruvax-07a).
+    SELECT DISTINCT ON (release_id)
+        release_id,
+        collection_item_id,
+        title,
+        primary_artist,
+        label,
+        catalog_number,
+        format,
+        year,
+        score AS rank
+    FROM combined
+    ORDER BY release_id, score DESC
+) deduped
+ORDER BY rank DESC
 LIMIT %s
 """
-        params: tuple[Any, ...] = (q, profile_id, profile_id, q, limit)
+        params: tuple[Any, ...] = (
+            q,
+            profile_id,
+            profile_id,
+            _catalog_like_pattern(q),
+            limit,
+        )
     else:
         # Standard FTS path (non-catalog query).
         # psycopg uses %s as the placeholder style (Python DB-API 2.0).
@@ -295,9 +374,10 @@ WITH fts AS (
         v.year,
         ts_rank_cd(v.fts_vector, tsq.query, 4) AS score
     FROM gruvax.profile_collection v
-    CROSS JOIN websearch_to_tsquery('english', %s) AS tsq(query)
+    CROSS JOIN websearch_to_tsquery('gruvax.gruvax_fts', %s) AS tsq(query)
     WHERE v.profile_id = %s::uuid
       AND v.fts_vector @@ tsq.query
+    ORDER BY score DESC
     LIMIT 40
 ),
 cat AS (
@@ -314,7 +394,8 @@ cat AS (
     FROM gruvax.profile_collection
     WHERE profile_id = %s::uuid
       AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
-          LIKE lower(regexp_replace(%s, '[\\s\\-_./]+', '', 'g')) || '%%'
+          LIKE %s ESCAPE '\\'
+    ORDER BY score DESC
     LIMIT 20
 ),
 -- UNION ALL the two paths, then DISTINCT ON keeps the highest-scoring row
@@ -328,21 +409,37 @@ combined AS (
            label, catalog_number, format, year, score
     FROM cat
 )
-SELECT DISTINCT ON (release_id)
-    release_id,
-    collection_item_id,
-    title,
-    primary_artist,
-    label,
-    catalog_number,
-    format,
-    year,
-    score AS rank
-FROM combined
-ORDER BY release_id, score DESC
+SELECT release_id,
+       collection_item_id,
+       title,
+       primary_artist,
+       label,
+       catalog_number,
+       format,
+       year,
+       rank
+FROM (
+    -- DISTINCT ON keeps the highest-scoring row per release_id, but forces the
+    -- ORDER BY to lead with release_id.  Wrapping it in a subquery lets the
+    -- OUTER query re-order by rank DESC before LIMIT, so the LIMIT keeps the
+    -- top-scored matches rather than the lowest release_ids (gruvax-07a).
+    SELECT DISTINCT ON (release_id)
+        release_id,
+        collection_item_id,
+        title,
+        primary_artist,
+        label,
+        catalog_number,
+        format,
+        year,
+        score AS rank
+    FROM combined
+    ORDER BY release_id, score DESC
+) deduped
+ORDER BY rank DESC
 LIMIT %s
 """
-        params = (q, profile_id, profile_id, q, limit)
+        params = (q, profile_id, profile_id, _catalog_like_pattern(q), limit)
 
     t0 = time.perf_counter()
     async with pool.connection() as conn, conn.cursor() as cur:
@@ -354,7 +451,9 @@ LIMIT %s
 
     rows: list[SearchRow] = [dict(zip(cols, row, strict=True)) for row in rows_raw]
 
-    # Re-sort the de-duplicated rows by rank DESC (DISTINCT ON breaks ORDER BY)
+    # The SQL now returns rows already ordered by rank DESC (the DISTINCT ON is
+    # wrapped so the outer LIMIT keeps the top-scored matches — gruvax-07a).
+    # This re-sort is a cheap, defensive no-op that also guards the None-rank case.
     rows.sort(key=lambda r: r.get("rank", 0) or 0, reverse=True)
 
     # SRCH-07 / D-11: only trigger did-you-mean when FTS finds nothing strong.
@@ -540,6 +639,15 @@ async def get_distinct_labels(
     (D-06).  Source is exclusively profile_collection for the active profile
     (Pitfall 5 — never reads raw discogsography tables).
 
+    Ordering authority (ADR-0001 / gruvax-icc5): the returned list is sorted in
+    Python by ``label_sort_key`` (pyuca UCA), NOT by the SQL ``ORDER BY label``
+    (Postgres glibc collation). The SQL ordering is no longer load-bearing — it
+    only stabilizes DISTINCT dedup. This is the picker half of the fix: the admin
+    label picker and the estimator's cut-key comparison now sort labels by the
+    same authority, so a label the picker shows in position N lights the cube the
+    estimator derived for position N. Under the old glibc order the two disagreed
+    for real labels (A&M/Ace, Blue Note/Bluebird, Éditions EG), mis-lighting cubes.
+
     All SQL uses %s placeholders (T-03-16, T-01-sqli-rewire).
 
     Args:
@@ -549,6 +657,9 @@ async def get_distinct_labels(
     Returns:
         Sorted list of distinct label strings.
     """
+    # ORDER BY label kept only for stable DISTINCT output; the authoritative
+    # ordering is applied in Python below (ADR-0001 — Postgres ordering is not
+    # load-bearing).
     sql = """
 SELECT DISTINCT label
 FROM gruvax.profile_collection
@@ -558,7 +669,7 @@ ORDER BY label
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(sql, (profile_id,))
         rows = await cur.fetchall()
-    return [str(row[0]) for row in rows]
+    return sorted((str(row[0]) for row in rows), key=label_sort_key)
 
 
 async def get_catalogs_for_label(
@@ -582,8 +693,14 @@ async def get_catalogs_for_label(
 
     Returns:
         List of dicts with keys ``release_id`` (int) and ``catalog_number`` (str),
-        ordered by catalog_number.
+        ordered by ``parse_key(catalog_number)`` (ADR-0001 authority — numeric-aware,
+        separator-invariant), NOT the SQL lexical ``ORDER BY catalog_number``. This
+        gives the catalog picker the same within-label order the estimator uses to
+        rank records into cubes, so the picker and the position estimate agree
+        (sibling to ``get_distinct_labels``; Postgres ordering is not load-bearing).
     """
+    # ORDER BY catalog_number kept only for a stable pre-sort; the authoritative
+    # ordering is applied in Python below via parse_key (numeric-aware).
     sql = """
 SELECT release_id, catalog_number
 FROM gruvax.profile_collection
@@ -593,7 +710,9 @@ ORDER BY catalog_number
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(sql, (profile_id, label))
         rows = await cur.fetchall()
-    return [{"release_id": int(row[0]), "catalog_number": str(row[1])} for row in rows]
+    result = [{"release_id": int(row[0]), "catalog_number": str(row[1])} for row in rows]
+    result.sort(key=lambda r: parse_key(str(r["catalog_number"])))
+    return result
 
 
 # ── Admin bulk-write + history + idempotency queries (Phase 3 Plan 05) ────────

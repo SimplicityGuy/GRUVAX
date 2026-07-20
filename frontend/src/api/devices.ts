@@ -58,15 +58,6 @@ export interface BindDeviceError {
   }
 }
 
-/** POST /api/devices/pairing-codes — issue a new pairing code (kiosk-facing, no PIN). */
-export async function postPairingCode(): Promise<PairingCodeResponse> {
-  const res = await fetch('/api/devices/pairing-codes', { method: 'POST' })
-  if (!res.ok) {
-    throw new Error(`Failed to fetch pairing code: ${res.status}`)
-  }
-  return res.json() as Promise<PairingCodeResponse>
-}
-
 /** GET /api/devices/me — get device state for the current fingerprint cookie. */
 export async function getDeviceMe(): Promise<DeviceMeResponse> {
   const res = await fetch('/api/devices/me')

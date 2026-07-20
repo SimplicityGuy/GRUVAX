@@ -459,3 +459,91 @@ def test_cosmetic_stability(extra_spaces: int, uppercase: bool) -> None:
         assert (canonical_result.sub_cube_interval is None) == (
             variant_result.sub_cube_interval is None
         ), f"Cosmetic variant '{variant}' disagrees on sub_cube_interval presence"
+
+
+# ── gruvax-icc5: picker order == estimator cut-key order ─────────────────────
+
+
+@settings(max_examples=200, deadline=None)
+@given(
+    labels=st.lists(
+        st.text(
+            alphabet=st.characters(
+                min_codepoint=0x20,
+                max_codepoint=0x2FF,
+                blacklist_categories=("Cs", "Cc"),
+            ),
+            min_size=1,
+            max_size=8,
+        ),
+        min_size=1,
+        max_size=12,
+        unique_by=lambda s: s.casefold(),
+    )
+)
+def test_picker_order_equals_estimator_cut_key_order(labels: list[str]) -> None:
+    """gruvax-icc5 property: the admin picker order == the estimator cut-key order.
+
+    For an ARBITRARY set of labels, the order the admin label picker returns
+    (get_distinct_labels → sorted by label_sort_key) must be exactly the order the
+    estimator lays records into cubes (the label component of its CutKey). Both now
+    route through the single pyuca authority (label_sort_key / ADR-0001), so a shelf
+    laid out in picker order derives one cube per label, in that same order, with no
+    monotonicity divergence warning — the guarantee that closes the mis-lighting bug.
+    """
+    import logging
+
+    from gruvax.estimator.boundary_cache import BoundaryRow
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
+    from gruvax.estimator.normalize import label_sort_key
+    from gruvax.estimator.segment_cache import SegmentCache
+
+    # Picker order == what get_distinct_labels returns for this label set.
+    picker_order = sorted(labels, key=label_sort_key)
+
+    # Lay the shelf out physically in picker order, one label per cube.
+    rows = [
+        BoundaryRow(
+            unit_id=1, row=0, col=col, first_label=label, first_catalog="CAT 001", is_empty=False
+        )
+        for col, label in enumerate(picker_order)
+    ]
+    records = {
+        label.casefold(): [RecordRow(release_id=col + 1, label=label, catalog_number="CAT 001")]
+        for col, label in enumerate(picker_order)
+    }
+
+    from gruvax.estimator.boundary_cache import BoundaryCache
+
+    cache = BoundaryCache()
+    cache._load_rows(rows)
+    snapshot = CollectionSnapshot()
+    snapshot._load_snapshot(records)
+    sc = SegmentCache()
+
+    caplog_records: list[logging.LogRecord] = []
+
+    class _Capture(logging.Handler):
+        def emit(self, record: logging.LogRecord) -> None:
+            caplog_records.append(record)
+
+    logger = logging.getLogger("gruvax.estimator.segment_cache")
+    handler = _Capture()
+    logger.addHandler(handler)
+    try:
+        sc.derive(cache, snapshot, {})
+    finally:
+        logger.removeHandler(handler)
+
+    # A picker-order layout must derive silently: picker order == cut-key order.
+    assert not any("not monotonically non-decreasing" in r.getMessage() for r in caplog_records), (
+        f"picker order and cut-key order disagree for {picker_order!r}"
+    )
+
+    # The physical cube order (== picker order) must match the estimator's label
+    # assignment: cube at column N holds the label the picker placed at position N.
+    for col, label in enumerate(picker_order):
+        bins = sc.get_bins_for_label(label)
+        assert [(b.unit_id, b.row, b.col) for b in bins] == [(1, 0, col)], (
+            f"{label!r} (picker pos {col}) lit the wrong cube: {bins}"
+        )

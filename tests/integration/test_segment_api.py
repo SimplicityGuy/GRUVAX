@@ -325,6 +325,270 @@ async def test_set_override_rejects_phantom_label(client) -> None:  # type: igno
     )
 
 
+# ── gruvax-rn7l.3: one casefold boundary for segment override labels ─────────
+# ADR-0001 item 4 (docs/design/adr-0001-normalization-authority.md). Python
+# normalizes the segment_overrides storage KEY (casefold) uniformly at every
+# write site; the original-case label is carried separately for the UI.
+
+
+# These tests deliberately use bin (1,0,2) — "Columbia" — rather than (1,0,0),
+# which an EARLIER test in this module (test_put_cut_accepted) already moved
+# off the fixture's original cut point. (1,0,2) is untouched by any other test
+# in this file, so its derived segments stay stable and predictable.
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_override_second_put_different_case_updates_not_duplicates(
+    client,  # type: ignore[no-untyped-def]
+    db_pool,
+) -> None:
+    """gruvax-rn7l.3: a second PUT with different casing UPDATES the row, no duplicate.
+
+    Sets an override for "Columbia" then re-sets it for "COLUMBIA" (same
+    logical label, different case). Both calls must casefold to the SAME
+    storage key, so the second call is an UPDATE of the first row, not an
+    INSERT of a second one — the PK is case-sensitive but every application
+    write site now normalizes the key before writing.
+    """
+    await _seed_test_pin(db_pool)
+    auth = await _login(client)
+    assert auth, "login should succeed after seeding the test PIN"
+
+    headers = {"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])}
+
+    first = await client.post(
+        "/api/admin/cubes/1/0/2/overrides",
+        json={"overrides": [{"label": "Columbia", "fraction": 1.0}]},
+        headers=headers,
+    )
+    assert first.status_code == 200, f"first PUT failed: {first.text}"
+
+    second = await client.post(
+        "/api/admin/cubes/1/0/2/overrides",
+        json={"overrides": [{"label": "COLUMBIA", "fraction": 1.0}]},
+        headers=headers,
+    )
+    assert second.status_code == 200, f"second PUT (different case) failed: {second.text}"
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT label, label_display FROM gruvax.segment_overrides"
+            " WHERE profile_id = %s::uuid AND unit_id = 1 AND row = 0 AND col = 2",
+            ("00000000-0000-0000-0000-000000000001",),
+        )
+        rows = await cur.fetchall()
+
+    assert len(rows) == 1, (
+        f"Expected exactly one segment_overrides row for (1,0,2), got {rows!r} — "
+        "a second PUT with different casing must UPDATE, not duplicate"
+    )
+    label, label_display = rows[0]
+    assert label == "columbia", f"storage key should be casefolded, got {label!r}"
+    assert label_display == "COLUMBIA", (
+        f"label_display should reflect the most-recently-submitted casing, got {label_display!r}"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_override_delete_symmetric_with_different_case(
+    client,  # type: ignore[no-untyped-def]
+    db_pool,
+) -> None:
+    """gruvax-rn7l.3: DELETE (fraction=None) uses the SAME casefolded key as INSERT.
+
+    Sets an override with one casing, then clears it (fraction=None) with a
+    DIFFERENT casing. Pre-fix, DELETE used ``lower(label) = lower(%s)`` against
+    a case-sensitive PK while INSERT's ON CONFLICT target was case-sensitive —
+    symmetric only by accident when casing happened to match exactly. Both
+    sides must now resolve to the identical row regardless of casing.
+    """
+    await _seed_test_pin(db_pool)
+    auth = await _login(client)
+    assert auth, "login should succeed after seeding the test PIN"
+
+    headers = {"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])}
+
+    set_res = await client.post(
+        "/api/admin/cubes/1/0/2/overrides",
+        json={"overrides": [{"label": "Columbia", "fraction": 1.0}]},
+        headers=headers,
+    )
+    assert set_res.status_code == 200, f"set override failed: {set_res.text}"
+
+    clear_res = await client.post(
+        "/api/admin/cubes/1/0/2/overrides",
+        json={"overrides": [{"label": "COLUMBIA", "fraction": None}]},
+        headers=headers,
+    )
+    assert clear_res.status_code == 200, f"clear override (different case) failed: {clear_res.text}"
+    assert clear_res.json().get("cleared") == 1, (
+        f"DELETE must resolve to the SAME row INSERT targeted, got {clear_res.json()!r}"
+    )
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT count(*) FROM gruvax.segment_overrides"
+            " WHERE profile_id = %s::uuid AND unit_id = 1 AND row = 0 AND col = 2",
+            ("00000000-0000-0000-0000-000000000001",),
+        )
+        (count,) = await cur.fetchone()
+    assert count == 0, f"expected the override row to be fully cleared, got count={count}"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_get_segments_label_is_original_case(client) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-rn7l.3: GET /segments returns the original-case label, never casefolded.
+
+    ``LabelSegment.label`` is the internal casefolded identity key used for
+    matching; ``label_display`` (original case, consistent with
+    ``SegmentBin.cut_label``) is what the API must serialize as ``"label"``.
+    Leaking the casefolded key here is exactly what let it round-trip back
+    into POST /overrides and get persisted (ADR-0001 item 4).
+    """
+    auth = await _login(client)
+    if not auth:
+        pytest.skip("Login not implemented — skipping GET segments casing test")
+
+    response = await client.get(
+        "/api/admin/cubes/1/0/2/segments",
+        headers=cookie_header(auth["cookies"]),
+    )
+    if response.status_code in (404, 405):
+        pytest.skip("GET segments endpoint not yet implemented")
+
+    assert response.status_code == 200, f"GET segments failed: {response.text}"
+    segments = response.json().get("segments", [])
+    assert segments, "Need at least one segment in bin (1,0,2) for this assertion"
+    assert segments[0]["label"] == "Columbia", (
+        f"GET segments must return the original-case label 'Columbia', got {segments[0]['label']!r}"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_put_boundary_does_not_duplicate_existing_override(
+    client,  # type: ignore[no-untyped-def]
+    db_pool,
+) -> None:
+    """gruvax-rn7l.3: cubes.py single-cube write path re-derives without duplicating overrides.
+
+    ``put_cube_boundary`` (PUT /boundary) carries forward the bin's active
+    override(s) into the post-commit SegmentCache re-derive. That carry-forward
+    reads ``seg.label`` (the internal casefolded key) — this test proves a
+    write through THIS path does not reintroduce a case-variant duplicate row
+    in ``gruvax.segment_overrides``.
+    """
+    await _seed_test_pin(db_pool)
+    auth = await _login(client)
+    assert auth, "login should succeed after seeding the test PIN"
+
+    headers = {"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])}
+
+    ov_res = await client.post(
+        "/api/admin/cubes/1/0/2/overrides",
+        json={"overrides": [{"label": "Columbia", "fraction": 1.0}]},
+        headers=headers,
+    )
+    assert ov_res.status_code == 200, f"override set failed: {ov_res.text}"
+
+    # Read the CURRENT boundary and PUT it back unchanged — a true no-op write
+    # that still exercises put_cube_boundary's post-commit re-derive path
+    # without perturbing which records fall into this bin.
+    boundary_res = await client.get(
+        "/api/admin/cubes/1/0/2/boundary", headers=cookie_header(auth["cookies"])
+    )
+    assert boundary_res.status_code == 200, f"GET boundary failed: {boundary_res.text}"
+    boundary = boundary_res.json()
+
+    put_res = await client.put(
+        "/api/admin/cubes/1/0/2/boundary",
+        json={
+            "first_label": boundary["first_label"],
+            "first_catalog": boundary["first_catalog"],
+            "is_empty": boundary["is_empty"],
+            "force": True,
+        },
+        headers=headers,
+    )
+    if put_res.status_code == 405:
+        pytest.skip("PUT /boundary endpoint not yet implemented")
+    assert put_res.status_code == 200, f"PUT boundary failed: {put_res.text}"
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT count(*) FROM gruvax.segment_overrides"
+            " WHERE profile_id = %s::uuid AND unit_id = 1 AND row = 0 AND col = 2",
+            ("00000000-0000-0000-0000-000000000001",),
+        )
+        (count,) = await cur.fetchone()
+    assert count == 1, (
+        f"PUT /boundary's override carry-forward must not duplicate the row, got count={count}"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_bulk_write_does_not_duplicate_existing_override(
+    client,  # type: ignore[no-untyped-def]
+    db_pool,
+) -> None:
+    """gruvax-rn7l.3: cubes.py bulk write path re-derives without duplicating overrides.
+
+    ``bulk_write_cubes`` (POST /bulk) carries forward each edited bin's active
+    override(s) the same way ``put_cube_boundary`` does (cubes.py's bulk
+    override-carry site). Proves a bulk write through this path does not
+    reintroduce a case-variant duplicate row in ``gruvax.segment_overrides``.
+    """
+    await _seed_test_pin(db_pool)
+    auth = await _login(client)
+    assert auth, "login should succeed after seeding the test PIN"
+
+    headers = {"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])}
+
+    ov_res = await client.post(
+        "/api/admin/cubes/1/0/2/overrides",
+        json={"overrides": [{"label": "Columbia", "fraction": 1.0}]},
+        headers=headers,
+    )
+    assert ov_res.status_code == 200, f"override set failed: {ov_res.text}"
+
+    boundary_res = await client.get(
+        "/api/admin/cubes/1/0/2/boundary", headers=cookie_header(auth["cookies"])
+    )
+    assert boundary_res.status_code == 200, f"GET boundary failed: {boundary_res.text}"
+    boundary = boundary_res.json()
+
+    bulk_res = await client.post(
+        "/api/admin/cubes/bulk",
+        json={
+            "updates": [
+                {
+                    "unit_id": 1,
+                    "row": 0,
+                    "col": 2,
+                    "first_label": boundary["first_label"],
+                    "first_catalog": boundary["first_catalog"],
+                    "is_empty": boundary["is_empty"],
+                    "force": True,
+                }
+            ]
+        },
+        headers=headers,
+    )
+    if bulk_res.status_code == 405:
+        pytest.skip("POST /bulk endpoint not yet implemented")
+    assert bulk_res.status_code == 200, f"POST /bulk failed: {bulk_res.text}"
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT count(*) FROM gruvax.segment_overrides"
+            " WHERE profile_id = %s::uuid AND unit_id = 1 AND row = 0 AND col = 2",
+            ("00000000-0000-0000-0000-000000000001",),
+        )
+        (count,) = await cur.fetchone()
+    assert count == 1, (
+        f"POST /bulk's override carry-forward must not duplicate the row, got count={count}"
+    )
+
+
 # ── SEG-08: POST /api/admin/cubes/insert-cut ─────────────────────────────────
 
 

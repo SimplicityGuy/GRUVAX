@@ -49,8 +49,9 @@ async def stream_events(
     the device fingerprint + revoke guard check acquires + releases the pool BEFORE this
     handler runs (D3-04, D3-07).  The generator body reads ONLY the asyncio.Queue — zero
     pool interaction (Pitfall 10 / T-03-13 preserved).
-    Error taxonomy: 400 session_unbound / 403 device_unknown / 403 device_revoked /
-    403 profile_mismatch / 503 registry not ready / 404 profile_not_found.
+    Error taxonomy: 400 session_unbound / 403 device_revoked / 403 profile_mismatch /
+    503 registry not ready / 404 profile_not_found. An unknown fingerprint (no device
+    row) falls through to browse-binding rather than erroring (gruvax-7qgx).
     Each connected client gets its own asyncio.Queue subscriber on the profile's bus.
     The generator unsubscribes on disconnect via the finally-block.
     ping=15 flushes nginx/reverse-proxy buffers (Pitfall 8).

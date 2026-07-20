@@ -155,6 +155,12 @@ async def get_bin_segments(
     ``{segments: [{label, fraction, is_override, auto_fraction, continues,
                    segment_count, first_rank_in_label, last_rank_in_label}]}``
 
+    gruvax-rn7l.3: ``label`` is ``LabelSegment.label_display`` — the original-case
+    string as it appears in the collection (consistent with ``SegmentBin.cut_label``)
+    — NEVER ``LabelSegment.label``, which is the internal casefolded identity key.
+    Round-tripping a casefolded label back through POST /overrides is exactly the
+    leak this fixes (see ADR-0001 item 4).
+
     HTTP 404 if no bin exists at the given coordinates.
     """
     seg_bin = segment_cache.get_bin(unit_id, row, col)
@@ -171,7 +177,7 @@ async def get_bin_segments(
 
     segments = [
         {
-            "label": seg.label,
+            "label": seg.label_display,
             "fraction": seg.applied_fraction,
             "auto_fraction": seg.auto_fraction,
             "is_override": seg.is_override,
@@ -390,10 +396,14 @@ async def set_bin_overrides(
         )
 
     # ── Phantom override injection guard (T-05-04-02) ─────────────────────────
-    # Build the set of labels currently derived in this bin (casefold comparison)
-    bin_labels = {seg.label.casefold() for seg in seg_bin.segments}
+    # seg.label is ALWAYS the internal casefolded identity key (gruvax-rn7l.3);
+    # no extra .casefold() is needed on the bin side, but the client-supplied
+    # label is arbitrary-case input, so it's normalized before comparing.
+    bin_labels = {seg.label for seg in seg_bin.segments}
 
-    phantom_labels = [ov.label for ov in body.overrides if ov.label.casefold() not in bin_labels]
+    phantom_labels = [
+        ov.label for ov in body.overrides if ov.label.strip().casefold() not in bin_labels
+    ]
     if phantom_labels:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
@@ -411,28 +421,45 @@ async def set_bin_overrides(
     # CR-02: use the resolved profile_id (from get_write_target) for both the
     # DELETE and the INSERT ON CONFLICT.  The old stub hardcoded DEFAULT_PROFILE_UUID
     # which silently wrote profile B's overrides into profile A's rows.
+    #
+    # gruvax-rn7l.3 (ADR-0001 item 4): Python is the normalization authority.
+    # `key` is the casefolded STORAGE KEY — computed ONCE here and used
+    # identically by both the DELETE and the INSERT, so a clear followed by a
+    # re-set (or two PUTs that differ only in case) always resolve to the SAME
+    # PK row instead of DELETE missing what INSERT/ON CONFLICT would target
+    # under a different casing. `display` is the original-case string,
+    # persisted separately for the admin UI (never used in a WHERE clause).
     async with pool.connection() as conn, conn.transaction():
         for ov in body.overrides:
+            display = ov.label.strip()
+            key = display.casefold()
             if ov.fraction is None:
-                # Clear the override for this label (DELETE)
+                # Clear the override for this label (DELETE) — symmetric key
+                # with the INSERT below (T-05-04-XX casefold boundary fix).
                 sql_del = """
 DELETE FROM gruvax.segment_overrides
 WHERE profile_id = %s::uuid
-  AND unit_id = %s AND row = %s AND col = %s AND lower(label) = lower(%s)
+  AND unit_id = %s AND row = %s AND col = %s AND label = %s
 """
-                result = await conn.execute(sql_del, (profile_id, unit_id, row, col, ov.label))
+                result = await conn.execute(sql_del, (profile_id, unit_id, row, col, key))
                 if result.rowcount and result.rowcount > 0:
                     cleared += 1
             else:
-                # Upsert the override fraction (INSERT ON CONFLICT DO UPDATE)
+                # Upsert the override fraction (INSERT ON CONFLICT DO UPDATE).
+                # label_display is refreshed on every write so the UI always
+                # reflects the most-recently-submitted casing.
                 sql_upsert = """
-INSERT INTO gruvax.segment_overrides (profile_id, unit_id, row, col, label, fraction, updated_at)
-VALUES (%s::uuid, %s, %s, %s, %s, %s, now())
+INSERT INTO gruvax.segment_overrides
+    (profile_id, unit_id, row, col, label, label_display, fraction, updated_at)
+VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, now())
 ON CONFLICT (profile_id, unit_id, row, col, label)
-DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()
+DO UPDATE SET fraction = EXCLUDED.fraction,
+              label_display = EXCLUDED.label_display,
+              updated_at = now()
 """
                 await conn.execute(
-                    sql_upsert, (profile_id, unit_id, row, col, ov.label, ov.fraction)
+                    sql_upsert,
+                    (profile_id, unit_id, row, col, key, display, ov.fraction),
                 )
                 applied += 1
 
@@ -462,6 +489,7 @@ DO UPDATE SET fraction = EXCLUDED.fraction, updated_at = now()
 SELECT unit_id, row, col, label, fraction
 FROM gruvax.segment_overrides
 WHERE profile_id = %s::uuid
+ORDER BY unit_id, row, col, label
 """
             async with conn2.cursor() as cur:
                 await cur.execute(sql_overrides, (profile_id,))
@@ -709,6 +737,7 @@ async def insert_cut(
 SELECT unit_id, row, col, label, fraction
 FROM gruvax.segment_overrides
 WHERE profile_id = %s::uuid
+ORDER BY unit_id, row, col, label
 """
             async with conn2.cursor() as cur:
                 await cur.execute(sql_overrides, (profile_id,))

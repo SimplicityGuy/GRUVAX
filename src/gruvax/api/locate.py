@@ -86,7 +86,8 @@ async def locate_endpoint(
     The profile_id query parameter is optional; defaults to the bound profile from the
     gruvax_browse_binding cookie (D2-04, B-02).  When omitted, the authoritative profile
     is resolved via resolve_profile_from_request (cookie/device authoritative): 400 if
-    unbound, 403 if device_unknown/device_revoked.  When supplied, the resolved profile
+    unbound, 403 if device_revoked (an unknown fingerprint falls through to
+    browse-binding, gruvax-7qgx).  When supplied, the resolved profile
     must match the supplied value (403 profile_mismatch on mismatch).
 
     Uses the profile's per-profile segment_cache and snapshot for position estimation
@@ -110,8 +111,8 @@ async def locate_endpoint(
     t0 = time.perf_counter()
 
     # B-02: resolve the authoritative profile from the request (cookie/device wins).
-    # resolve_profile_from_request raises 400 session_unbound or 403 device_unknown/
-    # device_revoked automatically — these propagate as HTTP errors.
+    # resolve_profile_from_request raises 400 session_unbound or 403 device_revoked
+    # automatically — these propagate as HTTP errors.
     resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
 
     if profile_id is None:

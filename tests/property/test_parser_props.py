@@ -14,6 +14,7 @@ from hypothesis import given, settings, strategies as st
 from gruvax.estimator.normalize import (
     catalog_in_range,
     compare_catalogs,
+    label_sort_key,
     normalize_catalog,
     parse_key,
 )
@@ -168,6 +169,96 @@ def test_digit_cap_no_exception(n_digits: int, digit: int) -> None:
         assert isinstance(result, tuple)
     except Exception as exc:
         raise AssertionError(f"parse_key raised on digit-run of length {n_digits}: {exc}") from exc
+
+
+# ── digit saturation ordering across the 12/13-digit boundary (gruvax-raz) ────
+#
+# The old code SLICED runs to 12 digits, so 13+-digit values inverted below
+# 12-digit ones. These properties assert the *ordering* the fix guarantees —
+# not merely that parse_key "does not raise" above the cap.
+
+
+@given(
+    lo=st.integers(min_value=0, max_value=10**12 - 1),
+    hi=st.integers(min_value=10**12, max_value=10**18),
+)
+@settings(max_examples=300)
+def test_saturation_below_cap_sorts_before_above_cap(lo: int, hi: int) -> None:
+    """Every value representable within the 12-digit cap sorts before any value above it.
+
+    ``lo`` (<= 12 digits) must always be strictly less than ``hi`` (>= 13 digits),
+    which the truncating slice violated (e.g. 999999999999 vs 1000000000000).
+    """
+    assert parse_key(str(lo)) < parse_key(str(hi)), (
+        f"Saturation boundary violated: parse_key({lo!r}) >= parse_key({hi!r})"
+    )
+
+
+def test_saturation_exact_12_13_boundary() -> None:
+    """The exact ADR regression case: 999999999999 < 1000000000000."""
+    assert compare_catalogs("999999999999", "1000000000000") < 0
+
+
+@given(
+    a=st.integers(min_value=10**12, max_value=10**20),
+    b=st.integers(min_value=10**12, max_value=10**20),
+)
+@settings(max_examples=200)
+def test_saturation_collapses_above_cap(a: int, b: int) -> None:
+    """Above the saturation ceiling, magnitudes collapse — all keys compare equal.
+
+    This is the intended DoS-bounded behavior: distinct over-cap barcodes no
+    longer invert, they tie at the top (monotonic, non-strict).
+    """
+    assert parse_key(str(a)) == parse_key(str(b))
+
+
+@given(a=st.integers(min_value=0, max_value=10**12 - 2))
+@settings(max_examples=300)
+def test_pure_numeric_monotone_up_to_cap(a: int) -> None:
+    """Below the saturation point, consecutive pure-numeric catalogs stay ordered."""
+    assert parse_key(str(a)) < parse_key(str(a + 1))
+
+
+# ── label_sort_key total order (ADR-0001) ────────────────────────────────────
+
+
+@given(a=st.text(), b=st.text())
+@settings(max_examples=500)
+def test_label_sort_key_antisymmetric(a: str, b: str) -> None:
+    """label_sort_key induces a total order: exactly one of <, ==, > holds and it flips."""
+    ka = label_sort_key(a)
+    kb = label_sort_key(b)
+    if ka < kb:
+        assert kb > ka
+    elif ka > kb:
+        assert kb < ka
+    else:
+        assert ka == kb
+
+
+@given(a=st.text(), b=st.text(), c=st.text())
+@settings(max_examples=300)
+def test_label_sort_key_transitive(a: str, b: str, c: str) -> None:
+    """Transitivity of the label order: a <= b <= c implies a <= c."""
+    ka, kb, kc = label_sort_key(a), label_sort_key(b), label_sort_key(c)
+    if ka <= kb and kb <= kc:
+        assert ka <= kc
+
+
+@given(a=st.text(), b=st.text())
+@settings(max_examples=300)
+def test_label_sort_key_case_insensitive(a: str, b: str) -> None:
+    """Casefold-equal labels always produce equal sort keys (single-bin invariant)."""
+    if a.casefold() == b.casefold():
+        assert label_sort_key(a) == label_sort_key(b)
+
+
+@given(s=st.text())
+@settings(max_examples=300)
+def test_label_sort_key_deterministic(s: str) -> None:
+    """label_sort_key is pure: the same input yields an identical key every call."""
+    assert label_sort_key(s) == label_sort_key(s)
 
 
 # ── catalog_in_range consistency ──────────────────────────────────────────────

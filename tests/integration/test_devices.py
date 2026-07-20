@@ -6,6 +6,10 @@ Tests:
   - test_bind_success: POST /api/admin/devices/bind with valid code → 200, device row created
   - test_bind_rate_limit: 11th bind attempt → 429 {type:"rate_limited"}
   - test_revoke_guard: revoking a device → next request from that fingerprint → 403
+  - test_repair_after_revoke_reactivates_row_not_duplicate: re-pair after revoke reuses
+    the fingerprint's row instead of creating a duplicate (gruvax-gqe)
+  - test_reinstate_conflict_when_profile_has_new_active_device: reinstate → 409 (not
+    500) when the profile already has a new active device (gruvax-gqe)
   - test_profile_soft_delete_detaches: soft-delete of profile → device profile_id becomes NULL
   - test_concurrent_bind: two simultaneous binds on same code → exactly one 200, one 404
   - test_session_returns_device: GET /api/session returns device_id + is_device_paired for paired device
@@ -43,6 +47,7 @@ from tests.cookies import cookie_header
 _TEST_PIN = "0000"
 _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
 FINGERPRINT_COOKIE = "gruvax_device_fp"
+BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
 
 
 # ── Rate-limit reset fixtures ─────────────────────────────────────────────────
@@ -449,6 +454,299 @@ async def test_revoke_guard(client) -> None:  # type: ignore[no-untyped-def]
         assert revoked_state == "revoked", (
             f"After revoke, GET /api/devices/me must return state=revoked, got {revoked_state!r}"
         )
+
+    # gruvax-7qgx: revoking must also clear the fingerprint cookie via the
+    # resolve_profile_from_request escape path (clear_fingerprint_cookie) so the
+    # kiosk isn't permanently stuck resubmitting a dead token. GET /api/devices/me
+    # doesn't go through resolve_profile_from_request (it has its own fingerprint
+    # lookup), so exercise a route that does: /api/search.
+    search_res = await client.get(
+        "/api/search",
+        params={"q": "Blue Note"},
+        headers=cookie_header(client.cookies, fp_cookies),
+    )
+    assert search_res.status_code == 403, (
+        f"GET /api/search with a revoked fingerprint must 403 device_revoked, "
+        f"got {search_res.status_code}: {search_res.text}"
+    )
+    assert search_res.json().get("detail", {}).get("type") == "device_revoked", (
+        f"Expected detail.type == 'device_revoked', got: {search_res.json()}"
+    )
+    set_cookie_headers = search_res.headers.get_list("set-cookie")
+    fp_clear_header = next((h for h in set_cookie_headers if FINGERPRINT_COOKIE in h), None)
+    assert fp_clear_header is not None, (
+        f"403 device_revoked response must clear {FINGERPRINT_COOKIE!r} "
+        f"(gruvax-7qgx escape path via clear_fingerprint_cookie). "
+        f"Set-Cookie headers seen: {set_cookie_headers}"
+    )
+    assert "max-age=0" in fp_clear_header.lower() or "expires=" in fp_clear_header.lower(), (
+        f"{FINGERPRINT_COOKIE} Set-Cookie header must be a clear/delete directive, "
+        f"got: {fp_clear_header!r}"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_unknown_fingerprint_falls_through_to_browse_binding(client) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-7qgx: an unknown fingerprint (no gruvax.devices row) must NOT 403.
+
+    Reproduces the exact failure scenario: a kiosk visits /pair (a fingerprint
+    cookie is minted, 30-day TTL) but the pairing is never completed — no
+    gruvax.devices row is ever created for that fingerprint. Previously,
+    resolve_profile_from_request hard-403'd (device_unknown) on every
+    profile-scoped route for the fingerprint's entire lifetime, even though the
+    kiosk still had a perfectly valid browse-binding cookie. The fix folds the
+    unknown-fingerprint case into the same fall-through as an orphaned device:
+    browse-binding wins and the request succeeds.
+    """
+    unknown_fp = "unknown-fingerprint-never-persisted-to-devices-table"
+    headers = cookie_header(
+        {FINGERPRINT_COOKIE: unknown_fp, BROWSE_BINDING_COOKIE: _DEFAULT_PROFILE_UUID}
+    )
+
+    response = await client.get("/api/search", params={"q": "Blue Note"}, headers=headers)
+    assert response.status_code == 200, (
+        f"An unknown fingerprint (no device row) + valid browse-binding cookie must "
+        f"fall through to browse-binding and succeed (gruvax-7qgx), got "
+        f"{response.status_code}: {response.text}"
+    )
+    assert "items" in response.json(), f"Response missing 'items' key: {response.json()}"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_unknown_fingerprint_without_browse_binding_returns_session_unbound(
+    client,
+) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-7qgx: unknown fingerprint + no browse-binding cookie → 400, not 403.
+
+    The unknown-fingerprint fall-through (case 4) is not a free pass — with
+    no browse-binding cookie either, resolution still ends in the same
+    session_unbound outcome as no fingerprint at all (case 6). This guards
+    against accidentally treating an unknown fingerprint as implicitly
+    authorized.
+    """
+    unknown_fp = "another-unknown-fingerprint-never-persisted"
+    headers = cookie_header({FINGERPRINT_COOKIE: unknown_fp})
+
+    response = await client.get("/api/search", params={"q": "Blue Note"}, headers=headers)
+    assert response.status_code == 400, (
+        f"Unknown fingerprint with no browse-binding cookie must return 400 "
+        f"session_unbound, got {response.status_code}: {response.text}"
+    )
+    assert response.json().get("detail", {}).get("type") == "session_unbound", (
+        f"Expected detail.type == 'session_unbound', got: {response.json()}"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_repair_after_revoke_reactivates_row_not_duplicate(  # type: ignore[no-untyped-def]
+    client, db_pool
+) -> None:
+    """gruvax-gqe: re-pairing after revoke must reactivate the row, not duplicate it.
+
+    idx_devices_fingerprint_active (migration 0011) is a PARTIAL unique index —
+    WHERE revoked_at IS NULL — so it does NOT stop a second row from being
+    inserted for a fingerprint that already has a REVOKED row. Before the fix,
+    bind_device's upsert only ever UPDATEd an ACTIVE row by fingerprint; a
+    revoked row always missed and fell through to _INSERT_DEVICE, producing
+    two rows (one revoked, one active) for the same fingerprint. Reads with no
+    ORDER BY then nondeterministically resolved to either row, which could
+    permanently 403 device_revoked a legitimately re-paired kiosk.
+
+    Flow:
+    1. Generate + bind device D1 (fingerprint F, default profile).
+    2. Admin revokes D1.
+    3. Kiosk generates a NEW pairing code re-using the SAME fingerprint cookie F
+       (matches reality: generate_pairing_code only mints a fresh fingerprint
+       when none is present — a revoked device's cookie is untouched by revoke).
+    4. Admin binds the new code.
+
+    Assertions:
+    - The bind response's device id is THE SAME as D1's id (reactivated, not a
+      new row).
+    - Exactly one gruvax.devices row exists for fingerprint F.
+    - GET /api/devices/me with the (still revoked-then-reactivated) fingerprint
+      cookie now reports state=paired — the kiosk is unstuck.
+    """
+    # Step 1: generate + bind device D1. Empty Cookie header (not a bare call) —
+    # the shared module-scoped `client` may already carry a fingerprint cookie in
+    # its jar from an earlier test in this module, which would suppress the
+    # Set-Cookie this test needs to read (generate_pairing_code only mints a
+    # fresh fingerprint when the request presents none at all).
+    gen_res = await client.post("/api/devices/pairing-codes", headers={"Cookie": ""})
+    assert gen_res.status_code == 200, (
+        f"POST /api/devices/pairing-codes expected 200, got {gen_res.status_code}: {gen_res.text}"
+    )
+    code_1 = gen_res.json()["code"]
+    fp_value = gen_res.cookies.get(FINGERPRINT_COOKIE)
+    assert fp_value, "pairing-codes response must set the fingerprint cookie"
+
+    admin = await _admin_login(client)
+    bind_res_1 = await client.post(
+        "/api/admin/devices/bind",
+        json={"code": code_1},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
+    )
+    assert bind_res_1.status_code == 200, (
+        f"First bind expected 200, got {bind_res_1.status_code}: {bind_res_1.text}"
+    )
+    device_id_1 = bind_res_1.json().get("id")
+    assert device_id_1, f"Bind response missing device id: {bind_res_1.json()}"
+
+    # Step 2: revoke D1.
+    revoke_res = await client.post(
+        f"/api/admin/devices/{device_id_1}/revoke",
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
+    )
+    assert revoke_res.status_code == 200, (
+        f"Revoke expected 200, got {revoke_res.status_code}: {revoke_res.text}"
+    )
+
+    # Step 3: kiosk generates a new code, re-using the SAME (now-revoked) fingerprint —
+    # the real generate_pairing_code path only mints a fresh fingerprint when the
+    # request presents none at all; revoke never clears the kiosk's cookie.
+    gen_res_2 = await client.post(
+        "/api/devices/pairing-codes",
+        headers=cookie_header({FINGERPRINT_COOKIE: fp_value}),
+    )
+    assert gen_res_2.status_code == 200, (
+        f"Second pairing-codes call expected 200, got {gen_res_2.status_code}: {gen_res_2.text}"
+    )
+    code_2 = gen_res_2.json()["code"]
+    # No fresh fingerprint cookie should be minted — the caller already presented one.
+    assert FINGERPRINT_COOKIE not in gen_res_2.cookies, (
+        "generate_pairing_code must not re-mint a fingerprint cookie when one is "
+        "already present on the request"
+    )
+
+    # Step 4: admin binds the new code.
+    bind_res_2 = await client.post(
+        "/api/admin/devices/bind",
+        json={"code": code_2},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
+    )
+    assert bind_res_2.status_code == 200, (
+        f"Re-pair bind expected 200 (reactivate, not conflict), got "
+        f"{bind_res_2.status_code}: {bind_res_2.text}"
+    )
+    device_id_2 = bind_res_2.json().get("id")
+    assert device_id_2 == device_id_1, (
+        f"Re-pair after revoke must REACTIVATE the same device row (gruvax-gqe), "
+        f"got a different id: original={device_id_1!r}, re-pair={device_id_2!r}"
+    )
+
+    # Exactly one row must exist for this fingerprint — no duplicate.
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute("SELECT COUNT(*) FROM gruvax.devices WHERE fingerprint = %s", (fp_value,))
+        (row_count,) = await cur.fetchone()
+    assert row_count == 1, (
+        f"Expected exactly 1 gruvax.devices row for the fingerprint after re-pair, "
+        f"got {row_count} (duplicate-row bug, gruvax-gqe)"
+    )
+
+    # The kiosk must be unstuck: /api/devices/me with the reactivated fingerprint
+    # cookie now reports state=paired, not revoked/403.
+    me_res = await client.get(
+        "/api/devices/me", headers=cookie_header({FINGERPRINT_COOKIE: fp_value})
+    )
+    assert me_res.status_code == 200, (
+        f"GET /api/devices/me after re-pair expected 200, got {me_res.status_code}: {me_res.text}"
+    )
+    assert me_res.json().get("state") == "paired", (
+        f"After re-pair, device state must be 'paired' (unstuck), got: {me_res.json()}"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_reinstate_conflict_when_profile_has_new_active_device(  # type: ignore[no-untyped-def]
+    client,
+) -> None:
+    """gruvax-gqe: reinstating a revoked device whose profile has a NEW active
+    device must return 409, not an uncaught 500.
+
+    Flow (the "MORE REACHABLE" trigger from the bead — no duplicate fingerprint
+    row needed):
+    1. Pair device A (fingerprint F) to the default profile.
+    2. Revoke A.
+    3. Pair a REPLACEMENT device B (fresh fingerprint G) to the SAME profile —
+       B becomes the profile's active device.
+    4. Reinstate A → violates idx_devices_profile_active (one active device per
+       profile) → must be mapped to 409 {type: reinstate_conflict}, mirroring
+       bind_device's UniqueViolation → 409 handling, not a bare 500.
+    """
+    # Step 1: pair device A. Empty Cookie header forces a fresh fingerprint,
+    # independent of whatever the shared module-scoped `client` jar already
+    # carries from earlier tests in this module.
+    gen_res_a = await client.post("/api/devices/pairing-codes", headers={"Cookie": ""})
+    assert gen_res_a.status_code == 200, gen_res_a.text
+    code_a = gen_res_a.json()["code"]
+
+    admin = await _admin_login(client)
+    bind_res_a = await client.post(
+        "/api/admin/devices/bind",
+        json={"code": code_a},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
+    )
+    assert bind_res_a.status_code == 200, bind_res_a.text
+    device_id_a = bind_res_a.json()["id"]
+
+    # Step 2: revoke A.
+    revoke_res_a = await client.post(
+        f"/api/admin/devices/{device_id_a}/revoke",
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
+    )
+    assert revoke_res_a.status_code == 200, revoke_res_a.text
+
+    # Step 3: pair a REPLACEMENT device B with a FRESH fingerprint (empty Cookie
+    # header — no fingerprint presented — so generate_pairing_code mints a new
+    # one, simulating a different physical kiosk/browser) to the same profile.
+    gen_res_b = await client.post("/api/devices/pairing-codes", headers={"Cookie": ""})
+    assert gen_res_b.status_code == 200, gen_res_b.text
+    code_b = gen_res_b.json()["code"]
+    fp_b = gen_res_b.cookies.get(FINGERPRINT_COOKIE)
+    assert fp_b, "device B pairing-codes response must set a fresh fingerprint cookie"
+
+    bind_res_b = await client.post(
+        "/api/admin/devices/bind",
+        json={"code": code_b},
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
+    )
+    assert bind_res_b.status_code == 200, bind_res_b.text
+    device_id_b = bind_res_b.json()["id"]
+    assert device_id_b != device_id_a, "device B must be a distinct row from revoked device A"
+
+    # Step 4: reinstate A while B is active for the same profile → 409, not 500.
+    reinstate_res = await client.post(
+        f"/api/admin/devices/{device_id_a}/reinstate",
+        headers={
+            "X-CSRF-Token": admin["csrf_token"],
+            **cookie_header(admin["cookies"]),
+        },
+    )
+    assert reinstate_res.status_code == 409, (
+        f"Reinstating a device whose profile has a new active device must 409 "
+        f"(gruvax-gqe), got {reinstate_res.status_code}: {reinstate_res.text}"
+    )
+    assert reinstate_res.json().get("detail", {}).get("type") == "reinstate_conflict", (
+        f"Expected detail.type == 'reinstate_conflict', got: {reinstate_res.json()}"
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")
