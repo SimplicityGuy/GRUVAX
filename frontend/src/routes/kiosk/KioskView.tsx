@@ -552,6 +552,18 @@ export function KioskView() {
     // Apply will-change during animation window (Pi 5 compositor optimization)
     resolvedNodes.forEach((n) => n?.classList.add('is-animating'))
 
+    // gruvax-k0zj: bring the newly-lit cube into view. .shelf-area is
+    // min-height:100dvh and grows with the number of shelf units, so a
+    // search can light a cube several rows below the fold with nothing to
+    // scroll it there — the grid just grows and the visible viewport shows
+    // an unlit grid. Runs on every animationToken bump, i.e. both a fresh
+    // locate AND an SSE re-locate (relocateActiveSelection / boundary_changed
+    // both funnel through setLocateResult, which always bumps the token).
+    // Guarded: scrollIntoView is unimplemented in jsdom (test environment).
+    if (primaryCube && typeof primaryCube.scrollIntoView === 'function') {
+      primaryCube.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' })
+    }
+
     // Reset elements to start state before building new timeline
     bandNodes.forEach((band) => gsap.set(band, { opacity: 0 }))
 
