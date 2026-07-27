@@ -99,16 +99,32 @@ export function KioskView() {
   }, [animationToken])
 
   // Phase 8 / PRIV-04 / D-09: Reset handler — client-side only, zero API calls (L-05)
+  //
+  // gruvax-b76z: clearSearch() only touches Zustand store state (query) — it
+  // cannot reach debouncedQuery/dismissedQuery, which are component-local
+  // useState here. resultsOpen (below) is derived from those two, so without
+  // this the results dropdown stuck open over an emptied search box,
+  // showing the previous user's results indefinitely (PRIV-04 wipe
+  // incomplete). Reset both here so resultsOpen re-derives to false AND a
+  // retyped query (even one identical to the previously dismissed query)
+  // reopens the dropdown instead of comparing equal to a stale dismissal.
   const handleReset = () => {
     clearSearch()
+    setDebouncedQuery('')
+    setDismissedQuery(null)
     useRecentlyPulledStore.getState().clear()
     setShowResetConfirm(false)
   }
 
   // Phase 8 / D-14/D-15: 15-minute idle timeout — clears search + chips to resting screen.
   // Device stays paired; bound profile stays selected (client-side only).
+  // gruvax-b76z: same debouncedQuery/dismissedQuery reset as handleReset above —
+  // idle is the other privacy-wipe path (D-09) that must not leave the
+  // previous user's results dropdown on screen.
   useIdleTimer(15 * 60 * 1000, () => {
     clearSearch()
+    setDebouncedQuery('')
+    setDismissedQuery(null)
     useRecentlyPulledStore.getState().clear()
   })
 
