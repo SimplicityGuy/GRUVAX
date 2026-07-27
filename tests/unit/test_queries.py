@@ -207,6 +207,12 @@ def _make_fake_pool_fetchall(rows: list[tuple]) -> object:
     return FakePool()
 
 
+# gruvax-7ad: profile_id is a REQUIRED argument on both picker helpers (the
+# default-profile default is what leaked another profile's labels into the admin
+# picker). These unit tests only exercise ordering, so any valid UUID will do.
+_TEST_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+
+
 # ── gruvax-icc5: picker ordering is the pyuca authority, not SQL glibc ─────────
 
 
@@ -232,7 +238,10 @@ async def test_get_distinct_labels_sorted_by_pyuca_not_sql_order() -> None:
         ("ABC",),
     ]
     fake_pool = _make_fake_pool_fetchall(db_rows)
-    result = await get_distinct_labels(fake_pool)  # type: ignore[arg-type]
+    result = await get_distinct_labels(
+        fake_pool,  # type: ignore[arg-type]
+        profile_id=_TEST_PROFILE_UUID,
+    )
 
     expected = sorted((r[0] for r in db_rows), key=label_sort_key)
     assert result == expected
@@ -267,7 +276,11 @@ async def test_get_catalogs_for_label_sorted_by_parse_key_numeric_aware() -> Non
         (3, "BLP 9"),
     ]
     fake_pool = _make_fake_pool_fetchall(db_rows)
-    result = await get_catalogs_for_label(fake_pool, "Blue Note")  # type: ignore[arg-type]
+    result = await get_catalogs_for_label(
+        fake_pool,  # type: ignore[arg-type]
+        "Blue Note",
+        profile_id=_TEST_PROFILE_UUID,
+    )
 
     cats = [r["catalog_number"] for r in result]
     assert cats == ["BLP 9", "BLP 10", "BLP 100"]
