@@ -28,9 +28,12 @@ interface PinOverlayProps {
   /** When true, the overlay is shown even though there is an existing session
    *  (Lock button tapped — re-auth without ending the session). */
   isLocked?: boolean
+  /** Called on a successful PIN entry while `isLocked` is true, so the caller
+   *  can clear its lock state and dismiss the overlay (D-03c unlock path). */
+  onUnlock?: () => void
 }
 
-export function PinOverlay({ isLocked = false }: PinOverlayProps) {
+export function PinOverlay({ isLocked = false, onUnlock }: PinOverlayProps) {
   const headingId = useId()
   const { setAdminLoggedIn } = useAdminStore()
 
@@ -54,6 +57,10 @@ export function PinOverlay({ isLocked = false }: PinOverlayProps) {
       const expires = new Date(now.getTime() + 10 * 60 * 1000).toISOString()
       const hardCap = new Date(now.getTime() + 30 * 60 * 1000).toISOString()
       setAdminLoggedIn(expires, hardCap, csrfToken)
+      // Lock re-auth: the session was already active, so setAdminLoggedIn is a
+      // no-op for isLoggedIn — explicitly tell the caller to clear isLocked
+      // and dismiss the overlay (D-03c).
+      if (isLocked) onUnlock?.()
     } catch (err) {
       if (err instanceof RateLimitError) {
         setStatus('ratelimit')
@@ -79,7 +86,7 @@ export function PinOverlay({ isLocked = false }: PinOverlayProps) {
         }, 2000)
       }
     }
-  }, [setAdminLoggedIn])
+  }, [setAdminLoggedIn, isLocked, onUnlock])
 
   // Countdown for rate-limit retry
   useEffect(() => {

@@ -214,17 +214,32 @@
   text-transform: uppercase;
 }
 
+/*
+ * flex: 1 1 auto + min-width: 0 lets this item shrink below its nowrap
+ * min-content (the 8-tab row is ~600px+ unbroken) instead of forcing the
+ * whole topbar wider than the viewport. overflow-x: auto turns any
+ * remaining overflow into a horizontal scroll *within the nav strip only*,
+ * so the brand and actions (countdown/Lock/Logout) never get pushed off
+ * the visible bar at phone (360/390px) or kiosk (800px) widths
+ * (gruvax-nlyt).
+ */
 .admin-topbar-nav {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: 0;
   display: flex;
   gap: var(--gruvax-space-4);
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: thin;
 }
 
 .admin-nav-tab {
+  flex: 0 0 auto;
   font-family: var(--gruvax-font-ui);
   font-size: var(--gruvax-text-body-sm, 14px);
   color: var(--gruvax-white);
   text-decoration: none;
+  white-space: nowrap;
   padding: var(--gruvax-space-1) 0;
   border-bottom: 2px solid transparent;
   transition: border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
@@ -240,6 +255,8 @@
   display: flex;
   align-items: center;
   gap: var(--gruvax-space-3);
+  /* Always visible — the nav strip is the one that scrolls, never this group. */
+  margin-left: auto;
 }
 
 /* Session countdown pill */

@@ -270,3 +270,77 @@ describe('ProfileDrawer poll-until-terminal', () => {
     expect(vi.mocked(getAdminProfile).mock.calls.length).toBeGreaterThanOrEqual(3)
   })
 })
+
+// ── gruvax-4wc: stale cached poll data must not fire a false terminal ────────
+describe('ProfileDrawer retry after a failed sync (gruvax-4wc)', () => {
+  /**
+   * Regression: TanStack's `enabled: false` retains the poll query's cached
+   * data. Retrying SYNC NOW after a 'failed' terminal reset only the
+   * handledSyncStatusRef, not the cached query data — so re-enabling the
+   * poll on the SAME render synchronously re-evaluated the terminal-status
+   * effect against the PREVIOUS run's cached 'failed' status and instantly
+   * re-fired "Sync failed", before the new sync's first refetch resolved.
+   *
+   * This test drives: sync 1 fails → SYNC NOW again → sync 2 succeeds, and
+   * asserts no false-failed toast/error fires between the retry click and
+   * the new sync's own terminal tick.
+   */
+  it('retry after a failed sync does not instantly re-fire the failed error from stale cache', async () => {
+    vi.mocked(getAdminProfile)
+      // Sync 1: in_progress -> failed
+      .mockResolvedValueOnce(IN_PROGRESS_TICK)
+      .mockResolvedValueOnce(TERMINAL_FAILED_TICK)
+      // Sync 2 (retry): in_progress -> ok
+      .mockResolvedValueOnce(IN_PROGRESS_TICK)
+      .mockResolvedValueOnce(TERMINAL_OK_TICK)
+      .mockResolvedValue(TERMINAL_OK_TICK)
+
+    const onSyncComplete = vi.fn()
+    const queryClient = makeQueryClient()
+    await renderAndStartSync(queryClient, onSyncComplete)
+
+    // Sync 1: in_progress -> failed
+    await driveOneTick(500)
+    await driveOneTick(2100)
+
+    vi.useRealTimers()
+    await waitFor(() => {
+      expect(
+        screen.queryByText(/sync failed\. tap sync now to try again/i),
+      ).not.toBeNull()
+    }, { timeout: 3000 })
+    vi.useFakeTimers({ shouldAdvanceTime: false })
+
+    // Retry: tap SYNC NOW again — flush the syncAdminProfile promise only,
+    // WITHOUT advancing timers, so we observe the state immediately after
+    // the re-enable render (this is exactly where the bug fired synchronously).
+    const syncBtn = screen.getByRole('button', { name: /sync now/i })
+    await act(async () => {
+      syncBtn.click()
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    // The stale 'failed' error must NOT have reappeared yet — the new sync's
+    // own poll hasn't resolved. The drawer should be back in its syncing UI.
+    expect(
+      screen.queryByText(/sync failed\. tap sync now to try again/i),
+    ).toBeNull()
+    expect(screen.queryByText(/syncing…/i)).not.toBeNull()
+
+    // Drive the retry's own ticks through to its real terminal ('ok').
+    await driveOneTick(500)
+    await driveOneTick(2100)
+
+    vi.useRealTimers()
+    await waitFor(() => {
+      expect(screen.queryByText(/sync complete/i)).not.toBeNull()
+    }, { timeout: 3000 })
+
+    // Exactly one success callback, with the RETRY run's count (3,000) — not a
+    // leftover/duplicate call from the stale 'failed' cache.
+    expect(onSyncComplete).toHaveBeenCalledOnce()
+    expect(onSyncComplete).toHaveBeenCalledWith('Sync complete — 3,000 records')
+  })
+})
