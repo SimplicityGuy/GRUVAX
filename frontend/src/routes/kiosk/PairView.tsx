@@ -77,6 +77,21 @@ export function PairView() {
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Guard: track whether reroll has been triggered to avoid double-firing
   const rerollTriggeredRef = useRef(false)
+  // gruvax-7j5: true once a pairing code has ever been received successfully.
+  // Distinguishes "the initial mount fetch is retrying" (no countdown interval
+  // exists yet to drive a retry) from "a reroll fetch failed" (the countdown
+  // interval is still running and can drive the retry on its next 1s tick).
+  const hasEverSucceededRef = useRef(false)
+  // gruvax-7j5: surfaces a retry affordance + drives the initial-mount backoff
+  // retry loop. Cleared on the next successful fetch.
+  const [fetchFailed, setFetchFailed] = useState(false)
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryAttemptRef = useRef(0)
+  // gruvax-7j5: fetchNewCode's own catch schedules a retry BY CALLING
+  // fetchNewCode again — a ref mirror (assigned right after the useCallback
+  // below) lets that self-reference happen without referencing the `const`
+  // before its declaration completes.
+  const fetchNewCodeRef = useRef<() => Promise<void>>(async () => {})
 
   // Milestone announcer ref (a11y — aria-live="assertive" hidden node)
   const announcerRef = useRef<HTMLSpanElement>(null)
@@ -114,14 +129,51 @@ export function PairView() {
       })
       if (!res.ok) throw new Error(`Failed: ${res.status}`)
       const data = await res.json() as PairingCodeData
+      hasEverSucceededRef.current = true
+      retryAttemptRef.current = 0
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
+      }
+      setFetchFailed(false)
       setPairingCode(data)
-    } catch {
-      // Fetch failed or aborted — degrade gracefully (keep old code displayed)
+    } catch (err) {
+      // gruvax-7j5: a swallowed 500/network blip on the auto-reroll used to
+      // strand the kiosk on "Generating new code…" forever — the countdown
+      // effect's rerollTriggeredRef only resets when a NEW pairingCode
+      // arrives, and a failed fetch never produces one. Surface the failure
+      // (never silent) and recover instead of stranding:
+      if (controller.signal.aborted) {
+        // Superseded by a newer fetch (unmount or manual retry) — not a
+        // real failure, nothing to recover from.
+        return
+      }
+      console.error('PairView: pairing-code fetch failed', err)
+      setFetchFailed(true)
+      if (hasEverSucceededRef.current) {
+        // A reroll (not the initial mount fetch) failed. The countdown
+        // interval (see below) is still running and its next 1s tick will
+        // retry automatically once this guard is clear again.
+        rerollTriggeredRef.current = false
+      } else {
+        // The very first fetch failed — no countdown interval exists yet to
+        // drive a retry, so schedule one with capped exponential backoff
+        // (2s, 4s, 8s, 16s, capped at 30s) until it succeeds.
+        const attempt = retryAttemptRef.current + 1
+        retryAttemptRef.current = attempt
+        const delayMs = Math.min(30_000, 2 ** attempt * 1000)
+        retryTimeoutRef.current = setTimeout(() => {
+          void fetchNewCodeRef.current()
+        }, delayMs)
+      }
     } finally {
       isFetchingRef.current = false
       setIsCodeFetching(false)
     }
   }, [])
+  useEffect(() => {
+    fetchNewCodeRef.current = fetchNewCode
+  }, [fetchNewCode])
 
   // Initial fetch on mount — side effect only (fetch + setState in callback)
   useEffect(() => {
@@ -129,6 +181,9 @@ export function PairView() {
     void fetchNewCode()
     return () => {
       fetchAbortRef.current?.abort()
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -308,7 +363,22 @@ export function PairView() {
             <span className="pair-code-success-text">PAIRED — navigating…</span>
           </div>
         ) : isExpired ? (
-          <span className="pair-code-expired-text">Generating new code…</span>
+          <div className="pair-code-expired">
+            <span className="pair-code-expired-text">Generating new code…</span>
+            {/* gruvax-7j5: a failed reroll auto-retries (see fetchNewCode),
+                but also surface a manual tap so the device never depends
+                solely on a background timer to recover. */}
+            {fetchFailed && (
+              <button
+                type="button"
+                className="pair-code-retry-btn"
+                onClick={() => { void fetchNewCode() }}
+                disabled={isCodeFetching}
+              >
+                Tap to retry
+              </button>
+            )}
+          </div>
         ) : (
           <div className="pair-code-digits">
             {digits.map((d, i) => (

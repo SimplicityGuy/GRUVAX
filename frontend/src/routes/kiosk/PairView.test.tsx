@@ -327,4 +327,76 @@ describe('PairView', () => {
     const qrContainer = container.querySelector('.pair-qr-container')
     expect(qrContainer).toBeNull()
   })
+
+  /**
+   * Test 7 (gruvax-7j5): a failed auto-reroll must NOT permanently strand the
+   * kiosk on "Generating new code…". Before the fix, fetchNewCode's catch
+   * silently swallowed the error and never reset rerollTriggeredRef, and the
+   * countdown effect's deps ([pairingCode?.expires_at, ...]) never changed
+   * because a failed fetch never produces a new pairingCode — so the guard
+   * stayed permanently true and no future tick could retry.
+   *
+   * Strategy: code #1 expires quickly; the reroll (call #2) returns a 500
+   * (the genuine trigger documented in the bead — devices.py code_generation_
+   * failed, or any transient DB/network blip); a subsequent tick must retry
+   * automatically (call #3) and recover to a fresh, non-expired code.
+   */
+  it('recovers automatically after a failed auto-reroll instead of stranding (gruvax-7j5)', async () => {
+    vi.spyOn(console, 'error').mockImplementation(() => {})
+    const soonExpiredAt = new Date(FAKE_NOW_MS + 1100).toISOString()
+    const recoveredExpiresAt = new Date(FAKE_NOW_MS + 1100 + 5 * 60 * 1000).toISOString()
+    let callIndex = 0
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method?.toUpperCase() ?? 'GET'
+      if (typeof url === 'string' && url.includes('/api/devices/pairing-codes') && method === 'POST') {
+        callIndex += 1
+        if (callIndex === 1) {
+          return { ok: true, json: async () => ({ code: '5678', expires_at: soonExpiredAt }) } as Response
+        }
+        if (callIndex === 2) {
+          // The reroll attempt fails (mirrors devices.py's code_generation_failed 500).
+          return { ok: false, status: 500, json: async () => ({}) } as Response
+        }
+        // The auto-retry succeeds with a fresh code.
+        return { ok: true, json: async () => ({ code: '4321', expires_at: recoveredExpiresAt }) } as Response
+      }
+      if (typeof url === 'string' && url.includes('/api/devices/me')) {
+        return { ok: true, json: async () => ({ state: 'unpaired', profile_id: null }) } as Response
+      }
+      return { ok: false, json: async () => ({}) } as Response
+    }))
+
+    const qc = makeQueryClient()
+    await act(async () => {
+      render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter>
+            <PairView />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    // Advance past the 1100ms expiry — triggers the failing reroll (call #2).
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(2000)
+    })
+    expect(callIndex).toBeGreaterThanOrEqual(2)
+
+    // The still-running countdown interval's NEXT 1s tick must retry
+    // automatically (call #3) now that the failure reset the guard — this is
+    // exactly the tick that never fired before the fix.
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+
+    expect(callIndex).toBeGreaterThanOrEqual(3)
+
+    // Recovered: no longer stuck on the "Generating new code…" placeholder.
+    const container = document.body
+    expect(container.textContent).not.toContain('Generating new code')
+  })
 })

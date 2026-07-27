@@ -157,11 +157,39 @@
 
 /* ── Expired state text ──────────────────────────────────────────────────── */
 
+.pair-code-expired {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+}
+
 .pair-code-expired-text {
   font-family: var(--gruvax-font-ui);
   font-size: var(--gruvax-text-body-lg);
   color: var(--gruvax-text-muted);
   font-weight: 400;
+}
+
+/* gruvax-7j5: manual recovery affordance for a failed auto-reroll — never
+   solely depend on the background retry timer. min-height 44px meets the
+   WCAG 2.5.5 (AA) target-size minimum. */
+.pair-code-retry-btn {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  font-weight: 600;
+  color: var(--gruvax-blue);
+  background: var(--gruvax-blue-faint);
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.pair-code-retry-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* ── Status row (waiting pill + countdown) ───────────────────────────────── */
