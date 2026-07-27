@@ -622,23 +622,30 @@ def boundary_cache_for_profile(request: Request, profile_id: str) -> BoundaryCac
 
 
 def settings_cache_for_profile(request: Request, profile_id: str) -> dict[str, Any]:
-    """Return the settings map for ``profile_id``, falling back to the flat cache.
+    """Return the effective settings map for ``profile_id`` (global + profile overrides).
 
-    Unlike the caches above this is deliberately NON-fatal: settings are optional
-    per profile and a missing entry means "no per-profile overrides", not a bad
-    request. The fallback is the startup-seeded flat ``app.state.settings_cache``
-    (also what a pre-registry P1 deployment has), so a profile with no settings
-    rows still gets sane defaults instead of a 404.
+    Unlike the caches above this is deliberately NON-fatal and deliberately a
+    MERGE, not a lookup:
+
+    - Non-fatal, because settings are optional per profile — a profile with no
+      rows is a normal state, not a bad request, so it must not 404.
+    - A merge, because settings are global by design today (admin settings and the
+      PIN are written under the default profile — see api/admin/settings.py) while
+      the composite PK ``(profile_id, key)`` allows per-profile rows. Returning
+      only the per-profile map would make a non-default profile silently lose an
+      admin-configured global like ``cube.nominal_capacity`` and fall back to the
+      hardcoded default. Profile-specific entries win over global ones.
     """
+    flat: dict[str, Any] = getattr(request.app.state, "settings_cache", {})
     registry: dict[str, dict[str, Any]] | None = getattr(
         request.app.state, "settings_cache_registry", None
     )
-    if registry is not None:
-        entry = registry.get(canonical_profile_id(profile_id))
-        if entry is not None:
-            return entry
-    flat: dict[str, Any] = getattr(request.app.state, "settings_cache", {})
-    return flat
+    if registry is None:
+        return flat
+    per_profile = registry.get(canonical_profile_id(profile_id))
+    if not per_profile:
+        return flat
+    return {**flat, **per_profile}
 
 
 async def require_admin(
