@@ -8,7 +8,7 @@ from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 import secrets
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
 from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, Response, status
@@ -536,6 +536,109 @@ async def get_write_target(
             detail={"type": "profile_not_found"},
         )
     return profile_id, bus
+
+
+# ── Per-profile READ scoping (gruvax-5dm) ────────────────────────────────────
+#
+# get_write_target is the write-side equivalent of this pair: it resolves the
+# caller's profile AND hands back the bus to publish on. Public READ routes need
+# only the profile_id plus whichever per-profile cache they read, and they must
+# NOT reach for the app.state default singletons (boundary_cache / segment_cache /
+# collection_snapshot / settings_cache) — those are the default profile's objects
+# regardless of who is asking, which is exactly how the unscoped-read bug family
+# (gruvax-5dm / -0ge / -7ad / -xkc) shipped.
+
+
+async def get_read_profile_id(
+    request: Request,
+    pool: Any = Depends(get_pool),
+) -> str:
+    """FastAPI dependency: the caller's authoritative profile_id for a scoped READ route.
+
+    Resolution is identical to ``get_write_target`` (device binding wins over the
+    browse cookie — D3-05) and propagates the same errors verbatim (D-02 — never a
+    default-profile fallback):
+      HTTP 400 session_unbound — no fingerprint cookie AND no browse-binding cookie.
+      HTTP 403 device_revoked  — fingerprint maps to a revoked device.
+
+    Returns the id in canonical form so it is directly usable as a registry key.
+    """
+    profile_id, _ = await resolve_profile_from_request(request, pool)
+    return canonical_profile_id(profile_id)
+
+
+def _registry_entry(
+    request: Request,
+    attr: str,
+    profile_id: str,
+    not_ready_detail: str,
+) -> Any:
+    """Return ``app.state.<attr>[profile_id]`` with the shared 503/404 taxonomy.
+
+    Raises:
+        HTTP 503 — the registry attribute is missing from app.state (request raced
+                   lifespan startup or arrived during shutdown).
+        HTTP 404 profile_not_found — no entry for this profile (deleted / unknown).
+    """
+    registry: dict[str, Any] | None = getattr(request.app.state, attr, None)
+    if registry is None:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=not_ready_detail,
+        )
+    entry = registry.get(canonical_profile_id(profile_id))
+    if entry is None:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail={"type": "profile_not_found"},
+        )
+    return entry
+
+
+def segment_cache_for_profile(request: Request, profile_id: str) -> SegmentCache:
+    """Return the SegmentCache for ``profile_id`` (never the default singleton)."""
+    return cast(
+        "SegmentCache",
+        _registry_entry(
+            request, "segment_cache_registry", profile_id, "Segment cache registry not ready"
+        ),
+    )
+
+
+def snapshot_for_profile(request: Request, profile_id: str) -> CollectionSnapshot:
+    """Return the CollectionSnapshot for ``profile_id`` (never the default singleton)."""
+    return cast(
+        "CollectionSnapshot",
+        _registry_entry(request, "snapshot_registry", profile_id, "Snapshot registry not ready"),
+    )
+
+
+def boundary_cache_for_profile(request: Request, profile_id: str) -> BoundaryCache:
+    """Return the BoundaryCache for ``profile_id`` (never the default singleton)."""
+    return cast(
+        "BoundaryCache",
+        _registry_entry(request, "boundary_cache_registry", profile_id, "Cache registry not ready"),
+    )
+
+
+def settings_cache_for_profile(request: Request, profile_id: str) -> dict[str, Any]:
+    """Return the settings map for ``profile_id``, falling back to the flat cache.
+
+    Unlike the caches above this is deliberately NON-fatal: settings are optional
+    per profile and a missing entry means "no per-profile overrides", not a bad
+    request. The fallback is the startup-seeded flat ``app.state.settings_cache``
+    (also what a pre-registry P1 deployment has), so a profile with no settings
+    rows still gets sane defaults instead of a 404.
+    """
+    registry: dict[str, dict[str, Any]] | None = getattr(
+        request.app.state, "settings_cache_registry", None
+    )
+    if registry is not None:
+        entry = registry.get(canonical_profile_id(profile_id))
+        if entry is not None:
+            return entry
+    flat: dict[str, Any] = getattr(request.app.state, "settings_cache", {})
+    return flat
 
 
 async def require_admin(
