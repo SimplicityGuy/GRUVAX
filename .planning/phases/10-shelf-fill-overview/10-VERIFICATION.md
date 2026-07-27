@@ -102,7 +102,7 @@ Scanned `LocatorHeader.tsx`, `ShelfBinList.tsx`, `admin.css` (Phase 10 block) fo
 
 #### 1. Empty vs Full Cube Visual Distinctness at Kiosk Scale (UX-01 SC3)
 
-**Test:** Open the admin route on the 7" kiosk display (or a Chromium window at 1024x600, the Pi's resolution). Navigate to any shelf's bin editor (ShelfBinList). Observe the mini-Kallax in the LocatorHeader with a mix of empty and non-empty cubes.
+**Test:** Open the admin route on the 7" kiosk display (or a Chromium window at 800x480, the pinned Pi resolution — see CLAUDE.md § Recommended Stack — Raspberry Pi Kiosk). Navigate to any shelf's bin editor (ShelfBinList). Observe the mini-Kallax in the LocatorHeader with a mix of empty and non-empty cubes.
 
 **Expected:**
 - Empty cubes appear in a clearly desaturated gray with a dashed border — visually distinct from any filled cube.

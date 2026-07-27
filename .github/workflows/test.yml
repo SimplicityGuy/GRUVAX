@@ -82,6 +82,11 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up Node
+        uses: actions/setup-node@48b55a011bda9f5d6aeb4c2d9c7362e8dae4041e  # v6.4.0
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+
       - name: Set up Just
         uses: extractions/setup-just@53165ef7e734c5c07cb06b3c8e7b647c5aa16db3  # v4
         with:
@@ -89,6 +94,14 @@ jobs:
 
       - name: Install dependencies
         run: uv sync --frozen
+
+      # tests/browser/test_kiosk_viewport.py (gruvax-ull6) renders the real SPA
+      # at the pinned 800x480 kiosk viewport via FastAPI's StaticFiles mount,
+      # which only activates when static/ exists (see src/gruvax/app.py).
+      - name: Build frontend SPA
+        run: |
+          npm --prefix frontend ci
+          just build-spa
 
       # Plan 03-05: tests/browser/test_reboot_persistence.py drives a real
       # Chromium via Playwright. `uv sync` installs the playwright package but
