@@ -635,6 +635,28 @@ export async function downloadSettingsYaml(): Promise<void> {
 }
 
 /**
+ * Normalize an admin API error body to a FLAT shape, regardless of which
+ * backend convention produced it.
+ *
+ * Bare FastAPI has no repo-wide exception handler, so the two conventions in
+ * use both reach the client as valid JSON but with different top-level shapes:
+ *   - ``JSONResponse(content={...})`` (cubes.py's 400s) — already flat.
+ *   - ``HTTPException(detail={...})`` (the import endpoints' parse/format/size
+ *     errors) — FastAPI wraps it as ``{"detail": {...}}``.
+ * Reading ``.type`` / ``.message`` top-level silently misses the nested case
+ * (gruvax-imeq) — hoist a nested ``detail`` object's keys to the top level so
+ * every caller of this body (``BulkSaveError.body``, ``parseServerErrors`` in
+ * Import.tsx, …) can rely on ONE flat shape without re-checking both.
+ */
+function flattenErrorBody(body: Record<string, unknown>): Record<string, unknown> {
+  const { detail } = body
+  if (detail && typeof detail === 'object' && !Array.isArray(detail)) {
+    return { ...body, ...(detail as Record<string, unknown>) }
+  }
+  return body
+}
+
+/**
  * Dry-run preview response from POST /api/admin/import/boundaries?dry_run=true.
  *
  * The backend returns this shape on a successful (zero-error) dry_run — no DB
@@ -707,7 +729,8 @@ export async function uploadImportBoundaries(
     let errorType: string | undefined
     let errorMessage: string | undefined
     try {
-      parsedBody = await res.json() as Record<string, unknown>
+      const rawBody = await res.json() as Record<string, unknown>
+      parsedBody = flattenErrorBody(rawBody)
       if (typeof parsedBody.type === 'string') errorType = parsedBody.type
       if (typeof parsedBody.message === 'string') errorMessage = parsedBody.message
     } catch { /* ignore */ }
@@ -742,7 +765,8 @@ export async function uploadImportSettings(file: File): Promise<{ updated: strin
     let errorType: string | undefined
     let errorMessage: string | undefined
     try {
-      parsedBody = await res.json() as Record<string, unknown>
+      const rawBody = await res.json() as Record<string, unknown>
+      parsedBody = flattenErrorBody(rawBody)
       if (typeof parsedBody.type === 'string') errorType = parsedBody.type
       if (typeof parsedBody.message === 'string') errorMessage = parsedBody.message
     } catch { /* ignore */ }
