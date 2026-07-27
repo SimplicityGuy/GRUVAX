@@ -49,11 +49,52 @@ def _find_free_port() -> int:
         return s.getsockname()[1]
 
 
+# ── letter-bearing profile fixture (gruvax-kol) ──────────────────────────────
+#
+# The default profile UUID (00000000-…-0001) has NO hex letters, so
+# ``uuid.upper()`` is a no-op on it — a "sends the UUID uppercase" test written
+# against the default profile is VACUOUS (it passes against the unfixed raw string
+# compare). This fixture inserts a profile whose UUID does contain hex letters so
+# the two spellings are genuinely different strings that denote the same UUID.
+#
+# It is a dependency of live_server so the profile exists BEFORE create_app()
+# builds event_bus_registry (same ordering constraint as
+# test_two_profile_isolation.py's profile_b / WARNING-2).
+
+CASE_PROFILE_UUID = "0000000f-0000-0000-0000-0000000000ab"
+
+
 @pytest.fixture(scope="module")
-def live_server(db_pool):  # type: ignore[no-untyped-def]
+def case_profile(db_pool):  # type: ignore[no-untyped-def]
+    """Insert a profile with a letter-bearing UUID; yield the canonical lowercase string."""
+    import psycopg
+
+    from gruvax.settings import settings
+
+    dsn = settings.DATABASE_URL.replace("postgresql+psycopg://", "postgresql://", 1)
+    with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO gruvax.profiles (id, display_name, app_token_encrypted, "
+            "app_token_revoked) VALUES (%s::uuid, 'SSECaseTest', %s::bytea, TRUE) "
+            "ON CONFLICT (id) DO UPDATE SET deleted_at = NULL",
+            (CASE_PROFILE_UUID, b""),
+        )
+        conn.commit()
+
+    yield CASE_PROFILE_UUID
+
+    with psycopg.connect(dsn) as conn, conn.cursor() as cur:
+        cur.execute("DELETE FROM gruvax.profiles WHERE id = %s::uuid", (CASE_PROFILE_UUID,))
+        conn.commit()
+
+
+@pytest.fixture(scope="module")
+def live_server(db_pool, case_profile):  # type: ignore[no-untyped-def]
     """Real uvicorn server in a background thread for SSE testing.
 
-    Mirrors the fixture from test_sse.py exactly.
+    Mirrors the fixture from test_sse.py exactly, plus the ``case_profile``
+    dependency so a letter-bearing profile UUID is in the registry at startup
+    (gruvax-kol).
     """
     port = _find_free_port()
     app = create_app()
@@ -162,6 +203,92 @@ async def test_sse_connects_when_bound(live_server) -> None:  # type: ignore[no-
                 got_comment = True
                 break
         assert got_comment, "SSE stream must start with a ': connected' comment line"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sse_connects_when_path_uuid_is_uppercase(live_server, case_profile) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-kol: an UPPERCASE path UUID for the bound profile must connect, not 403/404.
+
+    The bug: ``get_bus_for_profile`` compared the resolved profile (canonical
+    lowercase — ``str()`` of a DB UUID) against the raw path string, and looked the
+    bus up under that raw string. A kiosk that spelled its own profile UUID in
+    uppercase got 403 profile_mismatch on SSE while GET /api/search with the SAME
+    uppercase UUID returned 200 — SSE dead, search alive, same client, no error the
+    user could act on.
+
+    This is a BEHAVIOURAL assertion: it drives the real endpoint over a real socket
+    with an uppercase spelling of a letter-bearing profile UUID and requires
+    200 + the ': connected' comment. It fails against the pre-fix raw string compare
+    (403) and against a compare-only fix that leaves the registry lookup
+    un-normalized (404 profile_not_found).
+    """
+    upper = case_profile.upper()
+    assert upper != case_profile, (
+        "fixture regression: CASE_PROFILE_UUID must contain hex letters, otherwise "
+        "upper() is a no-op and this test cannot detect a raw string compare"
+    )
+    cookies = {BROWSE_BINDING_COOKIE: case_profile}
+
+    async with (
+        httpx.AsyncClient(base_url=live_server) as ac,
+        ac.stream("GET", f"/api/events/{upper}", headers=cookie_header(cookies)) as resp,
+    ):
+        assert resp.status_code == 200, (
+            f"gruvax-kol: GET /api/events/{upper} with the browse cookie bound to "
+            f"{case_profile} must return 200 — the two strings are the same UUID. "
+            f"Got {resp.status_code}: a 403 means the profile compare is a raw string "
+            f"compare (WR-02 unfixed); a 404 means the registry lookup key was not "
+            f"normalized to canonical form."
+        )
+        got_comment = False
+        async for line in resp.aiter_lines():
+            if line.startswith(":"):
+                got_comment = True
+                break
+        assert got_comment, "SSE stream must start with a ': connected' comment line"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sse_uppercase_cookie_binding_still_matches(live_server, case_profile) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-kol (inverse direction): an uppercase browse COOKIE must match a lowercase path.
+
+    The cookie is client-controlled too, so the normalization has to hold in both
+    directions — otherwise the same spurious 403 appears with the operands swapped.
+    """
+    cookies = {BROWSE_BINDING_COOKIE: case_profile.upper()}
+
+    async with (
+        httpx.AsyncClient(base_url=live_server) as ac,
+        ac.stream("GET", f"/api/events/{case_profile}", headers=cookie_header(cookies)) as resp,
+    ):
+        assert resp.status_code == 200, (
+            f"gruvax-kol: an UPPERCASE gruvax_browse_binding cookie must resolve to the "
+            f"same profile as the lowercase path UUID. Got {resp.status_code}."
+        )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sse_still_403s_a_genuinely_different_profile(live_server, case_profile) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-kol guard: the normalization must NOT weaken the spoofing check.
+
+    Companion to the uppercase tests: a DIFFERENT profile UUID (not a different
+    spelling of the same one) must still be rejected with 403 profile_mismatch.
+    Without this, "fix the false 403" could regress into "never 403" — the
+    uppercase tests alone are satisfied by deleting the check entirely.
+    """
+    default_profile = "00000000-0000-0000-0000-000000000001"
+
+    async with httpx.AsyncClient(base_url=live_server) as ac:
+        res = await ac.get(
+            # Uppercase spelling of a DIFFERENT profile — case-insensitively distinct.
+            f"/api/events/{case_profile.upper()}",
+            headers=cookie_header({BROWSE_BINDING_COOKIE: default_profile}),
+        )
+
+    assert res.status_code == 403, (
+        f"A genuinely different profile UUID must still be 403 profile_mismatch — "
+        f"UUID normalization must not turn the spoofing guard off. Got {res.status_code}."
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")

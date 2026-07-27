@@ -9,6 +9,7 @@ from __future__ import annotations
 from datetime import UTC, datetime, timedelta
 import secrets
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, Response, status
 
@@ -289,6 +290,70 @@ async def resolve_profile_from_request(
 #
 # NOTE (gruvax-7qgx): an unknown fingerprint (no device row) is no longer an
 # error — resolve_profile_from_request falls through to browse-binding for it.
+#
+# NOTE (gruvax-kol): every one of these deps compares the resolved profile
+# against the path/query value through ``require_profile_match`` — never a raw
+# string ``!=``. Three of the four deps below currently have no call sites
+# (search.py / locate.py deliberately inline the resolution to avoid a second DB
+# round-trip per WR-01); they are kept as the documented D2-04 dep family, and
+# routing the compare through one helper is what stops the WR-02 bug class from
+# reaching their first future caller.
+
+
+def canonical_profile_id(profile_id: str) -> str:
+    """Return ``profile_id`` in canonical lowercase-hyphenated UUID form (gruvax-kol).
+
+    Every ``app.state`` registry (boundary_cache_registry, snapshot_registry,
+    segment_cache_registry, event_bus_registry, settings_cache_registry) is keyed
+    by ``str(<DB UUID>)`` — canonical lowercase. A profile id that arrives off the
+    wire in any other valid UUID spelling (uppercase, unhyphenated, brace-wrapped)
+    therefore misses the registry and 404s ``profile_not_found`` even though the
+    profile exists. Normalizing the KEY is the other half of the WR-02 fix: the
+    compare in ``require_profile_match`` stops the spurious 403, this stops the
+    spurious 404 immediately behind it.
+
+    A value that is not a parseable UUID is returned unchanged (legacy
+    browse-binding cookie values must keep their existing behaviour, not raise).
+    """
+    try:
+        return str(UUID(profile_id))
+    except ValueError:
+        return profile_id
+
+
+def profile_ids_match(resolved_profile_id: str, supplied_profile_id: str) -> bool:
+    """Return True when both strings denote the same profile UUID (WR-02 / gruvax-kol).
+
+    A raw string ``==`` is the wrong comparison: ``resolved_profile_id`` is
+    canonical lowercase (``str()`` of a DB UUID — see ``resolve_profile_from_request``),
+    while the supplied value comes off the wire and may be uppercase, brace-wrapped,
+    or unhyphenated. Comparing the raw strings spuriously reports a mismatch (and
+    therefore a 403) for what is provably the same profile.
+
+    Both sides are normalized through ``UUID()`` before comparing. If EITHER side
+    is not a parseable UUID (e.g. a legacy browse-binding cookie value), the
+    original string compare is used as the fallback — never a 500.
+    """
+    try:
+        resolved = UUID(resolved_profile_id)
+        supplied = UUID(supplied_profile_id)
+    except ValueError:
+        return resolved_profile_id == supplied_profile_id
+    return resolved == supplied
+
+
+def require_profile_match(resolved_profile_id: str, supplied_profile_id: str) -> None:
+    """Raise 403 profile_mismatch unless both ids denote the same profile (WR-02).
+
+    The single shared guard used by every per-profile dep and by the inlined
+    resolution in ``search.py`` / ``locate.py``, so the UUID-normalizing compare
+    cannot drift back apart between the two (gruvax-kol).
+    """
+    if not profile_ids_match(resolved_profile_id, supplied_profile_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"type": "profile_mismatch"},
+        )
 
 
 async def get_boundary_cache_for_profile(
@@ -310,11 +375,7 @@ async def get_boundary_cache_for_profile(
         HTTP 404 (profile_not_found)  — profile_id key absent from registry.
     """
     resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    if resolved_profile_id != profile_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"type": "profile_mismatch"},
-        )
+    require_profile_match(resolved_profile_id, profile_id)
     registry: dict[str, BoundaryCache] | None = getattr(
         request.app.state, "boundary_cache_registry", None
     )
@@ -323,7 +384,7 @@ async def get_boundary_cache_for_profile(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Cache registry not ready",
         )
-    cache: BoundaryCache | None = registry.get(str(profile_id))
+    cache: BoundaryCache | None = registry.get(canonical_profile_id(profile_id))
     if cache is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -343,11 +404,7 @@ async def get_snapshot_for_profile(
     Device binding overrides browse cookie (D3-05).
     """
     resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    if resolved_profile_id != profile_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"type": "profile_mismatch"},
-        )
+    require_profile_match(resolved_profile_id, profile_id)
     registry: dict[str, CollectionSnapshot] | None = getattr(
         request.app.state, "snapshot_registry", None
     )
@@ -356,7 +413,7 @@ async def get_snapshot_for_profile(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Snapshot registry not ready",
         )
-    snapshot: CollectionSnapshot | None = registry.get(str(profile_id))
+    snapshot: CollectionSnapshot | None = registry.get(canonical_profile_id(profile_id))
     if snapshot is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -376,11 +433,7 @@ async def get_segment_cache_for_profile(
     Device binding overrides browse cookie (D3-05).
     """
     resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    if resolved_profile_id != profile_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"type": "profile_mismatch"},
-        )
+    require_profile_match(resolved_profile_id, profile_id)
     registry: dict[str, SegmentCache] | None = getattr(
         request.app.state, "segment_cache_registry", None
     )
@@ -389,7 +442,7 @@ async def get_segment_cache_for_profile(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Segment cache registry not ready",
         )
-    seg: SegmentCache | None = registry.get(str(profile_id))
+    seg: SegmentCache | None = registry.get(canonical_profile_id(profile_id))
     if seg is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -417,18 +470,14 @@ async def get_bus_for_profile(
     # Device/browse validation — pool acquired + released atomically here.
     # The generator body (events.py) must NOT call get_pool (Pitfall 10).
     resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    if resolved_profile_id != profile_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"type": "profile_mismatch"},
-        )
+    require_profile_match(resolved_profile_id, profile_id)
     registry: dict[str, EventBus] | None = getattr(request.app.state, "event_bus_registry", None)
     if registry is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Event bus registry not ready",
         )
-    bus: EventBus | None = registry.get(str(profile_id))
+    bus: EventBus | None = registry.get(canonical_profile_id(profile_id))
     if bus is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -480,7 +529,7 @@ async def get_write_target(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Event bus registry not ready",
         )
-    bus: Any = registry.get(str(profile_id))
+    bus: Any = registry.get(canonical_profile_id(profile_id))
     if bus is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,

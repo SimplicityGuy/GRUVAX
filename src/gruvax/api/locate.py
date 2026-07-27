@@ -35,7 +35,9 @@ from fastapi.responses import JSONResponse
 from starlette import status
 
 from gruvax.api.deps import (
+    canonical_profile_id,
     get_pool,
+    require_profile_match,
     resolve_profile_from_request,
 )
 from gruvax.db.queries import get_release_for_locate, increment_selection_count
@@ -117,33 +119,24 @@ async def locate_endpoint(
 
     if profile_id is None:
         # Omitted-param path (B-02): use the cookie-authoritative resolved profile.
-        effective_profile_id = resolved_profile_id
+        effective_profile_id = canonical_profile_id(resolved_profile_id)
     else:
-        # Supplied-param path: normalize both sides to canonical UUID form before
-        # comparing (WR-02 — raw string compare spuriously 403s when the client
-        # sends the same UUID in a different case/format).
+        # Supplied-param path: a non-UUID value is a client error, not a mismatch.
         try:
-            supplied_uuid = UUID(profile_id)
+            UUID(profile_id)
         except ValueError:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_ENTITY,
                 detail={"type": "invalid_profile_id"},
             ) from None
-        # resolved_profile_id comes from the DB (canonical lowercase) or from the
-        # browse-binding cookie (raw string that may not be a valid UUID — e.g. a
-        # legacy value).  Guard the parse so a non-UUID resolved value falls back to
-        # the original string compare rather than raising an uncaught 500.
-        try:
-            resolved_uuid = UUID(resolved_profile_id)
-            mismatch = resolved_uuid != supplied_uuid
-        except ValueError:
-            mismatch = resolved_profile_id != profile_id
-        if mismatch:
-            raise HTTPException(
-                status_code=status.HTTP_403_FORBIDDEN,
-                detail={"type": "profile_mismatch"},
-            )
-        effective_profile_id = profile_id
+        # WR-02 / gruvax-kol: compare through the shared UUID-normalizing guard —
+        # a raw string compare spuriously 403s when the client sends the same UUID
+        # in a different case/format. require_profile_match is the single copy of
+        # that compare, shared with every per-profile dep in deps.py.
+        require_profile_match(resolved_profile_id, profile_id)
+        # Canonicalize before use: the registries below are keyed by canonical
+        # lowercase UUID, so an uppercase-but-matching param must not 404.
+        effective_profile_id = canonical_profile_id(profile_id)
 
     # Resolve the per-profile segment_cache and snapshot for position estimation.
     # Registry-only lookups — resolve_profile_from_request already ran above; calling
