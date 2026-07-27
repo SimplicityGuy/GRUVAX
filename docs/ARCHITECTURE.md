@@ -528,7 +528,7 @@ than surfacing later at request time. Full list in `.env.example`.
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `DATABASE_URL` | yes | SQLAlchemy/psycopg async DSN, e.g. `postgresql+psycopg://user:pass@host/db` (compose interpolates this from `GRUVAX_DB_HOST`/`_USER`/`_PASSWORD`/`_NAME`/`_PORT`, which are compose-only, not read directly by the app) |
+| `DATABASE_URL` | yes | SQLAlchemy/psycopg async DSN, e.g. `postgresql+psycopg://user:pass@host/db`. Env-first in compose: a `DATABASE_URL` set in `.env` wins outright; only when it is absent does compose assemble one from `GRUVAX_DB_HOST`/`_USER`/`_PASSWORD`/`_NAME`/`_PORT` (compose-only pieces, not read directly by the app) (gruvax-95qp) |
 | `DISCOGSOGRAPHY_BASE_URL` | yes | Base URL of the discogsography HTTP API (prod: real service; dev: `fake-discogsography`) |
 | `GRUVAX_SECRET_KEY` | yes | 32-byte URL-safe base64 Fernet key for PAT-at-rest encryption; boot fails on a malformed key |
 | `SESSION_SECRET` | yes | Signing key for the admin session cookie |

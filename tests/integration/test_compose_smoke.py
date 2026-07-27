@@ -20,11 +20,17 @@ What's tested here:
     sync`).
   - api service depends_on adds fake-discogsography healthy.
   - justfile has the `compose-smoke` recipe.
+  - gruvax-95qp: `docker compose config` honors a scratch `.env`'s DATABASE_URL /
+    MQTT_HOST / MQTT_PORT instead of the previously-shadowing hardcoded/rebuilt
+    values (skipped if the `docker` CLI isn't available).
 """
 
 from __future__ import annotations
 
+import os
 from pathlib import Path
+import shutil
+import subprocess
 from typing import Any
 
 import pytest
@@ -263,3 +269,92 @@ def test_justfile_has_compose_smoke_recipe() -> None:
     assert "docker compose down" in content, (
         "compose-smoke recipe must tear down the stack at the end"
     )
+
+
+# ── gruvax-95qp: compose environment: no longer shadows .env overrides ──────
+
+
+def _resolve_compose_config(env_overrides: dict[str, str]) -> dict[str, Any]:
+    """Run `docker compose config` with a scratch env file and return the parsed result.
+
+    Mirrors what an operator's real `.env` would produce — this is the only way
+    to catch a compose `environment:` entry silently shadowing a documented
+    `.env` knob (gruvax-95qp): reading `compose.yaml` as YAML shows the
+    unresolved `${...}` template, not which value wins.
+    """
+    if shutil.which("docker") is None:
+        pytest.skip("docker CLI not available")
+    env_file = REPO_ROOT / ".gruvax95qp-scratch.env"
+    # Required `${VAR:?...}` guards elsewhere in compose.yaml need a value or
+    # `docker compose config` fails before we even get to assert on our vars.
+    base_required = {
+        "SESSION_SECRET": "test-session-secret",
+        "GRUVAX_SECRET_KEY": "test-fernet-key",
+        "GRUVAX_ADMIN_PIN": "1234",
+    }
+    env_file.write_text(
+        "\n".join(f"{k}={v}" for k, v in {**base_required, **env_overrides}.items()) + "\n"
+    )
+    # Shell/process environment vars take precedence over --env-file in
+    # Compose's interpolation order — and this test suite's own conftest.py
+    # exports DATABASE_URL (etc.) for pydantic-settings to boot. Strip those
+    # from the subprocess env so the scratch .env file is what's actually
+    # exercised, matching what a real operator's shell (without those already
+    # set) would produce.
+    subprocess_env = {
+        k: v for k, v in os.environ.items() if k not in {"DATABASE_URL", "MQTT_HOST", "MQTT_PORT"}
+    }
+    try:
+        result = subprocess.run(  # noqa: S603
+            ["docker", "compose", "--env-file", str(env_file), "config"],  # noqa: S607
+            cwd=REPO_ROOT,
+            capture_output=True,
+            text=True,
+            timeout=30,
+            env=subprocess_env,
+        )
+    finally:
+        env_file.unlink(missing_ok=True)
+    assert result.returncode == 0, f"docker compose config failed: {result.stderr}"
+    parsed: dict[str, Any] = yaml.safe_load(result.stdout)
+    return parsed
+
+
+def test_compose_config_honors_env_database_url() -> None:
+    """A scratch `.env` DATABASE_URL must win outright, not be shadowed by
+    the GRUVAX_DB_*-assembled default (gruvax-95qp)."""
+    override = "postgresql+psycopg://shareduser:sharedpw@shared-pg.lan:5432/gruvax"
+    config = _resolve_compose_config({"DATABASE_URL": override})
+    for svc in ("api", "init-sync"):
+        resolved = config["services"][svc]["environment"]["DATABASE_URL"]
+        assert resolved == override, (
+            f"{svc}.environment.DATABASE_URL must honor a .env override; "
+            f"got {resolved!r} instead of {override!r} (gruvax-95qp regression)"
+        )
+
+
+def test_compose_config_honors_env_mqtt_host_and_port() -> None:
+    """A scratch `.env` MQTT_HOST/MQTT_PORT must win outright, not be
+    shadowed by hardcoded literals (gruvax-95qp)."""
+    config = _resolve_compose_config({"MQTT_HOST": "remote-broker.lan", "MQTT_PORT": "8883"})
+    api_env = config["services"]["api"]["environment"]
+    assert api_env["MQTT_HOST"] == "remote-broker.lan", (
+        f"api.environment.MQTT_HOST must honor a .env override; "
+        f"got {api_env['MQTT_HOST']!r} (gruvax-95qp regression)"
+    )
+    assert str(api_env["MQTT_PORT"]) == "8883", (
+        f"api.environment.MQTT_PORT must honor a .env override; "
+        f"got {api_env['MQTT_PORT']!r} (gruvax-95qp regression)"
+    )
+
+
+def test_compose_config_falls_back_when_env_unset() -> None:
+    """Absent DATABASE_URL/MQTT_HOST/MQTT_PORT still resolve to the documented
+    bundled-service defaults (no regression in the unset case)."""
+    config = _resolve_compose_config({})
+    api_env = config["services"]["api"]["environment"]
+    assert api_env["DATABASE_URL"] == (
+        "postgresql+psycopg://gruvax:gruvax@gruvax-dev-pg:5432/gruvax"
+    )
+    assert api_env["MQTT_HOST"] == "mosquitto"
+    assert str(api_env["MQTT_PORT"]) == "1883"
