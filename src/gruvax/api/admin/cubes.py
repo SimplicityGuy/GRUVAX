@@ -48,12 +48,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
+from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
 from gruvax.api.admin.validation import validate_contiguity
 from gruvax.api.deps import (
-    get_boundary_cache,
-    get_collection_snapshot,
+    WriteContext,
     get_pool,
-    get_segment_cache,
+    get_write_context,
     get_write_target,
     require_admin,
 )
@@ -73,7 +73,6 @@ from gruvax.estimator.normalize import parse_key
 
 if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryCache
-    from gruvax.estimator.collection_snapshot import CollectionSnapshot
     from gruvax.estimator.segment_cache import SegmentCache
 
 
@@ -167,11 +166,8 @@ def _get_nominal_capacity(request: Request) -> int:
 async def get_admin_cubes(
     request: Request,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> dict[str, Any]:
     """Return all cubes with fill levels.
 
@@ -185,7 +181,7 @@ async def get_admin_cubes(
     Response: ``{cubes: [{unit_id, row, col, is_empty, fill_level,
                            first_label, first_catalog}, ...]}``
     """
-    profile_id, _ = _write_target
+    profile_id, segment_cache = ctx.profile_id, ctx.segment_cache
     nominal_capacity = _get_nominal_capacity(request)
 
     sql = """
@@ -269,11 +265,8 @@ async def put_cube_boundary(
     row: int = Path(ge=0),
     col: int = Path(ge=0),
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Validate and (when valid) update a cube boundary.
 
@@ -290,7 +283,7 @@ async def put_cube_boundary(
     so the frontend can distinguish phantom errors without unwrapping a nested
     ``detail`` object.
     """
-    profile_id, bus = _write_target
+    profile_id, bus = ctx.profile_id, ctx.bus
     first_label = body.first_label or ""
     first_catalog = body.first_catalog or ""
 
@@ -380,27 +373,10 @@ WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
 
     # Reload BoundaryCache AFTER transaction commit (Pitfall A), then re-derive
     # SegmentCache from it (Phase 5 / 05-04).
-    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
-    # and `derive()` publish their result only once it is fully built, so the
-    # last known-good cache keeps serving if either raises. The old
-    # invalidate-then-rebuild order meant any derive failure — e.g. an override
-    # set with no absorber — left the caches EMPTY and every locate in the app
-    # dead, turning a bad width value into a whole-product outage.
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        # Re-derive SegmentCache from the refreshed BoundaryCache (D-07 / SEG-08).
-        #
-        # gruvax-591: pass ``cache.overrides`` — the FULL override set the
-        # ``cache.load()`` on the previous line just read from
-        # ``gruvax.segment_overrides``.  The previous code hand-built a dict from
-        # only the EDITED bin's pre-invalidation segments, so ``derive()`` (which
-        # applies exactly the dict it is handed and sets ``is_override=False`` for
-        # every label absent from it) silently reverted every OTHER cube's admin
-        # width override in the live cache.  The DB rows survived, so a restart
-        # made them reappear — a phantom the owner could never reproduce.
-        # ``cache.overrides`` is the canonical argument (app.py:231,
-        # profile_sync.py, segment_cache docstring).
-        segment_cache.derive(cache, snapshot, cache.overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -421,11 +397,8 @@ async def validate_boundary(
     request: Request,
     body: ValidateRequest,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Dry-run boundary validation — NO DB write.
 
@@ -444,7 +417,7 @@ async def validate_boundary(
     checks and near-miss lookups are scoped to the same profile as the matching
     commit path — preview and commit now agree.
     """
-    profile_id, _ = _write_target
+    profile_id, segment_cache = ctx.profile_id, ctx.segment_cache
     nominal_capacity = _get_nominal_capacity(request)
 
     results: list[dict[str, Any]] = []
@@ -600,10 +573,8 @@ async def suggest_cube_midpoint(
     request: Request,
     body: SuggestRequest,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> dict[str, Any]:
     """Suggest an index-space midpoint between this cube and the next populated cube.
 
@@ -616,6 +587,11 @@ async def suggest_cube_midpoint(
     Response on success: ``{suggestion: {release_id, label, catalog_number}}``
     Response when no midpoint: ``{suggestion: null}``
     """
+    # gruvax-xkc: read the caches of the SAME profile the caller is bound to.
+    # A suggestion computed from the default profile's shelf would offer another
+    # profile's records as a cut point for this one.
+    cache, segment_cache, snapshot = ctx.boundary_cache, ctx.segment_cache, ctx.snapshot
+
     # Get the SegmentBin for the requested cube
     current_bin = segment_cache.get_bin(body.unit_id, body.row, body.col)
     if current_bin is None or not current_bin.segments:
@@ -728,11 +704,8 @@ async def bulk_write_cubes(
     request: Request,
     body: BulkWriteRequest,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Atomic bulk commit of all pending cube boundary edits (D-10, ADMN-09).
 
@@ -760,7 +733,7 @@ async def bulk_write_cubes(
     Returns:
       ``{change_set_id: str, applied: int}``
     """
-    profile_id, bus = _write_target
+    profile_id, bus = ctx.profile_id, ctx.bus
 
     # ── Idempotency short-circuit (Pitfall 7) ────────────────────────────────
     idempotency_key = request.headers.get("Idempotency-Key")
@@ -866,19 +839,10 @@ async def bulk_write_cubes(
     # ── Invalidate + reload BoundaryCache AFTER transaction commit (Pitfall A) ─
     # CR review CR-01: publish in `finally` so a transient cache.load() failure
     # never strands SSE subscribers on stale data (the bulk write already committed).
-    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
-    # and `derive()` publish their result only once it is fully built, so the
-    # last known-good cache keeps serving if either raises. The old
-    # invalidate-then-rebuild order meant any derive failure — e.g. an override
-    # set with no absorber — left the caches EMPTY and every locate in the app
-    # dead, turning a bad width value into a whole-product outage.
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        # Re-derive SegmentCache from the refreshed BoundaryCache (Phase 5 / 05-04).
-        # gruvax-591: use the full DB-truth override set from ``cache.load()``
-        # instead of a dict hand-built from only the edited bins — see the same
-        # comment on put_cube_boundary above.
-        segment_cache.derive(cache, snapshot, cache.overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",

@@ -38,6 +38,34 @@ async def load_boundaries_fresh() -> None:
     await load_boundaries(_BOUNDARIES_YAML)
 
 
+_DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+
+
+def _spy_write_context(app, spy):  # type: ignore[no-untyped-def]
+    """Build a ``get_write_context`` override that swaps in a SpyEventBus.
+
+    gruvax-xkc replaced ``get_write_target`` on the admin write routes with
+    ``get_write_context``, which returns the resolved profile_id + bus PLUS that
+    profile's BoundaryCache / SegmentCache / CollectionSnapshot.  The override
+    therefore has to hand back real caches, not just a bus — it reads them from
+    the app's registries when the dependency runs (they only exist once lifespan
+    has run, which is after ``dependency_overrides`` is installed).
+    """
+    from gruvax.api.deps import WriteContext
+
+    def _override() -> WriteContext:
+        state = app.state
+        return WriteContext(
+            profile_id=_DEFAULT_PROFILE_UUID,
+            bus=spy,
+            boundary_cache=state.boundary_cache_registry[_DEFAULT_PROFILE_UUID],
+            segment_cache=state.segment_cache_registry[_DEFAULT_PROFILE_UUID],
+            snapshot=state.snapshot_registry[_DEFAULT_PROFILE_UUID],
+        )
+
+    return _override
+
+
 @pytest.fixture(autouse=True)
 def reset_login_rate_limit() -> None:  # type: ignore[return]
     """Reset the login rate-limit counter before each test.
@@ -1040,9 +1068,7 @@ async def test_cut_publishes_correct_payload(db_pool) -> None:  # type: ignore[n
     Plan 06-01 (D-04): admin write routes now use get_write_target (not get_event_bus)
     to resolve the per-profile bus. Override get_write_target to inject the SpyEventBus.
     """
-    from gruvax.api.deps import get_write_target
-
-    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+    from gruvax.api.deps import get_write_context
 
     await _seed_test_pin(db_pool)
     await load_boundaries_fresh()
@@ -1051,7 +1077,7 @@ async def test_cut_publishes_correct_payload(db_pool) -> None:  # type: ignore[n
     app = create_app()
     # Override get_write_target (not get_event_bus) — routes resolve per-profile bus
     # from event_bus_registry, not from app.state.event_bus (Plan 06-01 / D-04).
-    app.dependency_overrides[get_write_target] = lambda: (_DEFAULT_PROFILE_UUID, spy)
+    app.dependency_overrides[get_write_context] = _spy_write_context(app, spy)
     try:
         async with (
             LifespanManager(app) as manager,
@@ -1071,7 +1097,7 @@ async def test_cut_publishes_correct_payload(db_pool) -> None:  # type: ignore[n
                 f"Expected 200 from PUT cut, got {response.status_code}: {response.text}"
             )
     finally:
-        app.dependency_overrides.pop(get_write_target, None)
+        app.dependency_overrides.pop(get_write_context, None)
 
     # Assert the event was published
     assert len(spy.published) >= 1, "Expected at least one boundary_changed publish"
@@ -1109,9 +1135,7 @@ async def test_overrides_publishes_correct_payload(db_pool) -> None:  # type: ig
     Uses a fresh ASGI client with SpyEventBus installed before lifespan starts.
     Plan 06-01 (D-04): override get_write_target (not get_event_bus) to inject spy.
     """
-    from gruvax.api.deps import get_write_target
-
-    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+    from gruvax.api.deps import get_write_context
 
     await _seed_test_pin(db_pool)
     await load_boundaries_fresh()
@@ -1120,7 +1144,7 @@ async def test_overrides_publishes_correct_payload(db_pool) -> None:  # type: ig
     app = create_app()
     # Override get_write_target (not get_event_bus) — routes resolve per-profile bus
     # from event_bus_registry, not from app.state.event_bus (Plan 06-01 / D-04).
-    app.dependency_overrides[get_write_target] = lambda: (_DEFAULT_PROFILE_UUID, spy)
+    app.dependency_overrides[get_write_context] = _spy_write_context(app, spy)
     try:
         async with (
             LifespanManager(app) as manager,
@@ -1153,7 +1177,7 @@ async def test_overrides_publishes_correct_payload(db_pool) -> None:  # type: ig
                 f"Expected 200 from POST overrides, got {response.status_code}: {response.text}"
             )
     finally:
-        app.dependency_overrides.pop(get_write_target, None)
+        app.dependency_overrides.pop(get_write_context, None)
 
     # Assert the event was published
     assert len(spy.published) >= 1, "Expected at least one boundary_changed publish"
@@ -1196,9 +1220,7 @@ async def test_insert_cut_publishes_correct_payload(db_pool) -> None:  # type: i
     suite remains order-independent on the shared dev DB.
     Plan 06-01 (D-04): override get_write_target (not get_event_bus) to inject spy.
     """
-    from gruvax.api.deps import get_write_target
-
-    _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+    from gruvax.api.deps import get_write_context
 
     await _seed_test_pin(db_pool)
     await load_boundaries_fresh()
@@ -1207,7 +1229,7 @@ async def test_insert_cut_publishes_correct_payload(db_pool) -> None:  # type: i
     app = create_app()
     # Override get_write_target (not get_event_bus) — routes resolve per-profile bus
     # from event_bus_registry, not from app.state.event_bus (Plan 06-01 / D-04).
-    app.dependency_overrides[get_write_target] = lambda: (_DEFAULT_PROFILE_UUID, spy)
+    app.dependency_overrides[get_write_context] = _spy_write_context(app, spy)
     change_set_id: str | None = None
     try:
         async with (
@@ -1236,7 +1258,7 @@ async def test_insert_cut_publishes_correct_payload(db_pool) -> None:  # type: i
             )
             change_set_id = response.json().get("change_set_id")
     finally:
-        app.dependency_overrides.pop(get_write_target, None)
+        app.dependency_overrides.pop(get_write_context, None)
 
     # Assert the event was published
     assert len(spy.published) >= 1, "Expected at least one boundary_changed publish"

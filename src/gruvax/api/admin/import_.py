@@ -53,13 +53,14 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 import yaml
 
+from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
 from gruvax.api.admin.cubes import (
     BoundaryEdit,
     _compute_movement_counts,
@@ -75,11 +76,9 @@ from gruvax.api.admin.settings import (
 )
 from gruvax.api.admin.validation import validate_contiguity
 from gruvax.api.deps import (
-    get_boundary_cache,
-    get_collection_snapshot,
+    WriteContext,
     get_pool,
-    get_segment_cache,
-    get_write_target,
+    get_write_context,
     require_admin,
 )
 from gruvax.db.queries import (
@@ -95,12 +94,6 @@ from gruvax.db.queries import (
 )
 from gruvax.io.boundary_csv import parse_csv_boundaries
 from gruvax.io.boundary_yaml import parse_yaml_boundaries
-
-
-if TYPE_CHECKING:
-    from gruvax.estimator.boundary_cache import BoundaryCache
-    from gruvax.estimator.collection_snapshot import CollectionSnapshot
-    from gruvax.estimator.segment_cache import SegmentCache
 
 
 logger = logging.getLogger(__name__)
@@ -151,11 +144,8 @@ async def import_boundaries(
     request: Request,
     dry_run: bool = Query(default=False, description="Preview import without writing to DB"),
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, str] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Atomic CSV/YAML boundary import with optional dry_run preview (ADMN-05, D-09, D-11, BAK-01).
 
@@ -196,7 +186,7 @@ async def import_boundaries(
 
     Idempotency-Key header (commit path only): same semantics as cubes/bulk.
     """
-    profile_id, bus = _write_target
+    profile_id, bus, segment_cache = ctx.profile_id, ctx.bus, ctx.segment_cache
 
     # ── 1. Read + size cap (runs before dry_run branching — both paths capped) ─
     content = await request.body()
@@ -588,22 +578,10 @@ async def import_boundaries(
         await cleanup_idempotency(conn)
 
     # ── 8. Cache reload AFTER transaction commit (Pitfall A) ─────────────────
-    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
-    # and `derive()` publish their result only once it is fully built, so the
-    # last known-good cache keeps serving if either raises. The old
-    # invalidate-then-rebuild order meant any derive failure — e.g. an override
-    # set with no absorber — left the caches EMPTY and every locate in the app
-    # dead, turning a bad width value into a whole-product outage.
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        # gruvax-591: ``cache.overrides`` is the complete post-import override set.
-        # The file's own overrides were upserted into gruvax.segment_overrides
-        # INSIDE the committed transaction above, so the ``cache.load()`` on the
-        # previous line already reads them back — no separate merge needed, and
-        # the merge that used to live here was additive only: cubes ABSENT from
-        # the imported file still lost their override in the live cache because
-        # the hand-built dict only covered the edited bins.
-        segment_cache.derive(cache, snapshot, cache.overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",

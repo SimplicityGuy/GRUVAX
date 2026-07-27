@@ -57,6 +57,7 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
 from gruvax.api.admin.validation import (
     build_proposed_cuts,
     validate_contiguity,
@@ -64,11 +65,10 @@ from gruvax.api.admin.validation import (
     validate_shelf_overflow,
 )
 from gruvax.api.deps import (
-    get_boundary_cache,
-    get_collection_snapshot,
+    WriteContext,
     get_pool,
     get_segment_cache,
-    get_write_target,
+    get_write_context,
     require_admin,
 )
 from gruvax.db.queries import (
@@ -84,8 +84,6 @@ from gruvax.db.queries import (
 
 
 if TYPE_CHECKING:
-    from gruvax.estimator.boundary_cache import BoundaryCache
-    from gruvax.estimator.collection_snapshot import CollectionSnapshot
     from gruvax.estimator.segment_cache import SegmentCache
 
 
@@ -291,11 +289,8 @@ async def put_bin_cut(
     row: int = Path(ge=0),
     col: int = Path(ge=0),
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Update the cut point for a bin.
 
@@ -306,7 +301,12 @@ async def put_bin_cut(
 
     Returns 400 with phantom/near_misses on phantom rejection, 200 on success.
     """
-    profile_id, bus = _write_target
+    profile_id, bus, cache, segment_cache = (
+        ctx.profile_id,
+        ctx.bus,
+        ctx.boundary_cache,
+        ctx.segment_cache,
+    )
     first_label = body.first_label.strip()
     first_catalog = body.first_catalog.strip()
 
@@ -408,19 +408,10 @@ async def put_bin_cut(
         )
 
     # ── Reload + re-derive SegmentCache AFTER commit (Pitfall A) ────────────
-    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
-    # and `derive()` publish their result only once it is fully built, so the
-    # last known-good cache keeps serving if either raises. The old
-    # invalidate-then-rebuild order meant any derive failure — e.g. an override
-    # set with no absorber — left the caches EMPTY and every locate in the app
-    # dead, turning a bad width value into a whole-product outage.
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        # gruvax-591: re-derive against ``cache.overrides`` — the full override set
-        # the ``cache.load()`` above just read from gruvax.segment_overrides.  The
-        # old hand-built dict carried ONLY this bin's pre-invalidation segments, so
-        # derive() cleared is_override on every other cube in the shelf.
-        segment_cache.derive(cache, snapshot, cache.overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -451,11 +442,8 @@ async def set_bin_overrides(
     row: int = Path(ge=0),
     col: int = Path(ge=0),
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Set per-label physical-width overrides for a bin.
 
@@ -471,7 +459,12 @@ async def set_bin_overrides(
 
     Response: ``{applied: int, cleared: int}`` (counts of upserted / deleted rows).
     """
-    profile_id, bus = _write_target
+    profile_id, bus, cache, segment_cache = (
+        ctx.profile_id,
+        ctx.bus,
+        ctx.boundary_cache,
+        ctx.segment_cache,
+    )
     idempotency_key: str | None = request.headers.get("Idempotency-Key")
 
     # ── Idempotency replay check ──────────────────────────────────────────────
@@ -585,21 +578,11 @@ DO UPDATE SET fraction = EXCLUDED.fraction,
             await store_idempotency(conn, idempotency_key, response_body)
         await cleanup_idempotency(conn)
 
-    # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
-    # gruvax-591: ``cache.load()`` already re-reads gruvax.segment_overrides into
-    # ``cache.overrides``; the extra hand-rolled SELECT that used to live here was
-    # a second, divergent read of the same table.  One source (the cache) keeps
-    # the boundary rows and the override rows loaded under a single scope, so they
-    # can never disagree about which profile they came from.
-    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
-    # and `derive()` publish their result only once it is fully built, so the
-    # last known-good cache keeps serving if either raises. The old
-    # invalidate-then-rebuild order meant any derive failure — e.g. an override
-    # set with no absorber — left the caches EMPTY and every locate in the app
-    # dead, turning a bad width value into a whole-product outage.
+    # ── Reload + re-derive SegmentCache AFTER commit (Pitfall A) ────────────
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        segment_cache.derive(cache, snapshot, cache.overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -617,11 +600,8 @@ async def insert_cut(
     request: Request,
     body: InsertCutBody,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Insert a new cut point after (after_unit_id, after_row, after_col).
 
@@ -639,7 +619,12 @@ async def insert_cut(
     Returns 400 with specific error types on each failure condition.
     HTTP 404 if (after_unit_id, after_row, after_col) is not a known cube.
     """
-    profile_id, bus = _write_target
+    profile_id, bus, cache, segment_cache = (
+        ctx.profile_id,
+        ctx.bus,
+        ctx.boundary_cache,
+        ctx.segment_cache,
+    )
     new_first_label = body.new_first_label.strip()
     new_first_catalog = body.new_first_catalog.strip()
     after_uid = body.after_unit_id
@@ -826,19 +811,11 @@ async def insert_cut(
             )
             affected_cubes.append({"unit": uid, "row": r, "col": c})
 
-    # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
-    # gruvax-591: re-derive against ``cache.overrides`` (populated by the
-    # ``cache.load()`` below) rather than a second hand-rolled SELECT — see the
-    # same note on set_bin_overrides above.
-    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
-    # and `derive()` publish their result only once it is fully built, so the
-    # last known-good cache keeps serving if either raises. The old
-    # invalidate-then-rebuild order meant any derive failure — e.g. an override
-    # set with no absorber — left the caches EMPTY and every locate in the app
-    # dead, turning a bad width value into a whole-product outage.
+    # ── Reload + re-derive SegmentCache AFTER commit (Pitfall A) ────────────
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        segment_cache.derive(cache, snapshot, cache.overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",

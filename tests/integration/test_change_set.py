@@ -560,7 +560,7 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
 
     This test is RED before the INT-B fix in history.py (revert never publishes).
     """
-    from gruvax.api.deps import get_write_target
+    from gruvax.api.deps import WriteContext, get_write_context
 
     class SpyEventBus:
         """Records all bus.publish() calls for assertion."""
@@ -575,10 +575,20 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
 
     _DEFAULT_PROFILE_UUID_CHANGESET = "00000000-0000-0000-0000-000000000001"
 
-    def _spy_get_write_target() -> tuple[str, SpyEventBus]:
-        # Returns (profile_id, spy_bus) — matches the get_write_target return type.
-        # Plan 06-01 (D-04): admin write routes use get_write_target, not get_event_bus.
-        return _DEFAULT_PROFILE_UUID_CHANGESET, spy
+    def _spy_write_context() -> WriteContext:
+        # gruvax-xkc: admin write routes resolve get_write_context, which carries
+        # the profile's caches alongside its bus, so the override has to hand back
+        # real caches too. They are read from the registries at request time —
+        # lifespan has run by then, whereas dependency_overrides is installed
+        # before it.
+        state = app.state
+        return WriteContext(
+            profile_id=_DEFAULT_PROFILE_UUID_CHANGESET,
+            bus=spy,
+            boundary_cache=state.boundary_cache_registry[_DEFAULT_PROFILE_UUID_CHANGESET],
+            segment_cache=state.segment_cache_registry[_DEFAULT_PROFILE_UUID_CHANGESET],
+            snapshot=state.snapshot_registry[_DEFAULT_PROFILE_UUID_CHANGESET],
+        )
 
     # Seed the test PIN so login works in the fresh app instance.
     from gruvax.auth.pin import hash_pin
@@ -597,9 +607,9 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
     from gruvax.app import create_app
 
     app = create_app()
-    # Override get_write_target (not get_event_bus) — routes resolve per-profile bus
-    # from event_bus_registry, not from app.state.event_bus (Plan 06-01 / D-04).
-    app.dependency_overrides[get_write_target] = _spy_get_write_target
+    # Override the write context — routes resolve their per-profile bus and caches
+    # through it (Plan 06-01 / D-04, gruvax-xkc).
+    app.dependency_overrides[get_write_context] = _spy_write_context
 
     try:
         async with (
@@ -665,7 +675,7 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
             new_change_set_id = revert_body.get("change_set_id")
             assert new_change_set_id, "Revert must return its own change_set_id"
     finally:
-        app.dependency_overrides.pop(get_write_target, None)
+        app.dependency_overrides.pop(get_write_context, None)
 
     # Assert the SpyEventBus captured a boundary_changed event from the revert.
     # Without the INT-B fix, revert never calls bus.publish(), so spy.published is empty.

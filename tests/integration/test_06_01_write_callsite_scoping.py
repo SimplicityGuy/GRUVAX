@@ -19,6 +19,20 @@ def _read_src(path: str) -> str:
     return Path(path).read_text()
 
 
+def _write_target_deps(src: str) -> int:
+    """Count the dependencies that resolve a write target for a route.
+
+    gruvax-xkc split this into two spellings. ``get_write_target`` returns
+    ``(profile_id, bus)``; ``get_write_context`` returns the SAME resolved
+    profile plus that profile's BoundaryCache / SegmentCache / CollectionSnapshot,
+    and is what every route that touches a cache now uses — a route cannot hold a
+    profile_id from one profile and a cache from another. Both satisfy the
+    06-01 requirement this module guards: the route resolves its write target
+    instead of falling back to the default-profile event bus.
+    """
+    return src.count("Depends(get_write_target)") + src.count("Depends(get_write_context)")
+
+
 ADMIN_FILES = {
     "cubes": "src/gruvax/api/admin/cubes.py",
     "segments": "src/gruvax/api/admin/segments.py",
@@ -63,49 +77,43 @@ class TestNoGetEventBusInWriteRoutes:
 
 
 class TestGetWriteTargetCount:
-    """Each admin write/editing file must use Depends(get_write_target)."""
+    """Each admin write/editing file must resolve a write target for its routes."""
 
     def test_cubes_uses_get_write_target(self) -> None:
         src = _read_src(ADMIN_FILES["cubes"])
-        count = src.count("Depends(get_write_target)")
+        count = _write_target_deps(src)
         assert count >= 2, (
-            f"cubes.py must have at least 2 Depends(get_write_target) calls "
+            f"cubes.py must have at least 2 write-target dependencies "
             f"(put_cube_boundary + bulk_write_cubes), got {count}"
         )
 
     def test_segments_uses_get_write_target(self) -> None:
         src = _read_src(ADMIN_FILES["segments"])
-        count = src.count("Depends(get_write_target)")
+        count = _write_target_deps(src)
         assert count >= 2, (
-            f"segments.py must have at least 2 Depends(get_write_target) calls "
+            f"segments.py must have at least 2 write-target dependencies "
             f"(put_bin_cut + insert_cut), got {count}"
         )
 
     def test_import_uses_get_write_target(self) -> None:
         src = _read_src(ADMIN_FILES["import_"])
-        count = src.count("Depends(get_write_target)")
-        assert count >= 1, (
-            f"import_.py must have at least 1 Depends(get_write_target) call, got {count}"
-        )
+        count = _write_target_deps(src)
+        assert count >= 1, f"import_.py must have at least 1 write-target dependency, got {count}"
 
     def test_history_uses_get_write_target(self) -> None:
         src = _read_src(ADMIN_FILES["history"])
-        count = src.count("Depends(get_write_target)")
-        assert count >= 1, (
-            f"history.py must have at least 1 Depends(get_write_target) call, got {count}"
-        )
+        count = _write_target_deps(src)
+        assert count >= 1, f"history.py must have at least 1 write-target dependency, got {count}"
 
     def test_editing_uses_get_write_target(self) -> None:
         src = _read_src(ADMIN_FILES["editing"])
-        count = src.count("Depends(get_write_target)")
-        assert count >= 1, (
-            f"editing.py must have at least 1 Depends(get_write_target) call, got {count}"
-        )
+        count = _write_target_deps(src)
+        assert count >= 1, f"editing.py must have at least 1 write-target dependency, got {count}"
 
     def test_total_get_write_target_count_at_least_7(self) -> None:
-        total = sum(_read_src(p).count("Depends(get_write_target)") for p in ADMIN_FILES.values())
+        total = sum(_write_target_deps(_read_src(p)) for p in ADMIN_FILES.values())
         assert total >= 7, (
-            f"Total Depends(get_write_target) calls across admin files must be >= 7, got {total}"
+            f"Total write-target dependencies across admin files must be >= 7, got {total}"
         )
 
 
