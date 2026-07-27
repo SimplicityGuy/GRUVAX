@@ -1227,3 +1227,89 @@ async def test_expired_code(client) -> None:  # type: ignore[no-untyped-def]
         f"404 response must include {{type: 'code_not_found'}} or {{type: 'code_expired'}}, "
         f"got: {detail}"
     )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_generate_sweeps_expired_codes_preventing_exhaustion(  # type: ignore[no-untyped-def]
+    client, db_pool
+) -> None:
+    """gruvax-8fp: generation sweeps expired/consumed rows, preventing permanent exhaustion.
+
+    Before the fix, ON CONFLICT (code) DO NOTHING never reclaimed an
+    expired-or-consumed row, so the CHAR(4) namespace (10,000 values) filled
+    permanently over time — an idle kiosk alone exhausted it within ~5 weeks
+    (288 rerolls/day), and P(500) approached certainty as the table filled.
+
+    Simulates a namespace most of the way full of EXPIRED rows (directly, via
+    db_pool — reproducing weeks of accumulated reroll history without waiting
+    weeks), then asserts a single generation call both succeeds AND sweeps
+    those rows away, so the live table never approaches the exhaustion regime
+    again.
+    """
+    # Use a dedicated fingerprint so this test's rows are unambiguously
+    # identifiable and don't collide with rows other tests in this module
+    # create for the shared module-scoped `client`/`db_pool`.
+    sentinel_fp = "gruvax-8fp-exhaustion-sweep-test-fingerprint"
+
+    # Seed 9,000 EXPIRED rows across the CHAR(4) namespace directly — this
+    # reproduces "weeks of accumulated reroll history with no cleanup"
+    # (the pre-fix steady state) without an actual multi-week test run.
+    # generate_series is Postgres-native and avoids 9,000 individual INSERTs.
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.pairing_codes (code, fingerprint, expires_at)"
+            " SELECT LPAD(n::text, 4, '0'), %s, NOW() - INTERVAL '1 hour'"
+            " FROM generate_series(0, 8999) AS n"
+            " ON CONFLICT (code) DO NOTHING",
+            (sentinel_fp,),
+        )
+        await conn.commit()
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT COUNT(*) FROM gruvax.pairing_codes WHERE fingerprint = %s", (sentinel_fp,)
+        )
+        (seeded_count,) = await cur.fetchone()
+    assert seeded_count > 0, "seed INSERT must have created at least some expired rows"
+
+    # A single generation call must still succeed (not 500 code_generation_failed) ...
+    gen_res = await client.post("/api/devices/pairing-codes", headers={"Cookie": ""})
+    assert gen_res.status_code == 200, (
+        f"POST /api/devices/pairing-codes expected 200 even with a near-full namespace "
+        f"of expired rows (gruvax-8fp sweep), got {gen_res.status_code}: {gen_res.text}"
+    )
+
+    # ... and the sweep triggered by that call must have reclaimed the expired
+    # seed rows — the namespace must NOT be left in the near-exhausted state.
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT COUNT(*) FROM gruvax.pairing_codes WHERE fingerprint = %s", (sentinel_fp,)
+        )
+        (remaining_count,) = await cur.fetchone()
+    assert remaining_count == 0, (
+        f"Expired seed rows must be swept by generation (gruvax-8fp), "
+        f"{remaining_count} of {seeded_count} still present"
+    )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_generate_rate_limited(client) -> None:  # type: ignore[no-untyped-def]
+    """31st pairing-code generation from one IP within 5 minutes → 429 (gruvax-8fp).
+
+    POST /api/devices/pairing-codes is intentionally unauthenticated (a kiosk
+    hasn't paired yet) — without a rate limit, any LAN client could loop this
+    endpoint and exhaust the 10,000-code namespace in seconds.
+    """
+    statuses = []
+    for _ in range(31):
+        res = await client.post("/api/devices/pairing-codes", headers={"Cookie": ""})
+        statuses.append(res.status_code)
+
+    assert 429 in statuses, (
+        f"Expected a 429 within 31 generation attempts in one 5-minute window "
+        f"(gruvax-8fp, limit 30/5min), got statuses: {statuses}"
+    )
+    rate_limited_res = statuses[-1]
+    assert rate_limited_res == 429, (
+        f"The 31st attempt specifically must be rate-limited, got statuses: {statuses}"
+    )
