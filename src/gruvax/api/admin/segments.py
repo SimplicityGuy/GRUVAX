@@ -9,7 +9,7 @@ Endpoints:
   - ``PUT /admin/cubes/{unit_id}/{row}/{col}/cut``:
       Update the cut point for a bin (first_label + first_catalog).
       Runs phantom check (unless force=True), writes via cube_boundaries,
-      then invalidates + re-derives SegmentCache, publishes boundary_changed.
+      then reloads BoundaryCache + re-derives SegmentCache, publishes boundary_changed.
       Requires admin session + CSRF.
 
   - ``POST /admin/cubes/{unit_id}/{row}/{col}/overrides``:
@@ -17,7 +17,9 @@ Endpoints:
       Null fraction clears the override.  Rejects labels absent from the bin's
       derived segments (phantom override injection guard — T-05-04-02).
       Upserts into gruvax.segment_overrides; honors Idempotency-Key.
-      Invalidates + re-derives SegmentCache, publishes boundary_changed.
+      Rejects an override set that would leave the bin with no absorber for the
+      remaining width (per-bin sum guard — gruvax-cxy).
+      Re-derives SegmentCache, publishes boundary_changed.
       Requires admin session + CSRF.
 
   - ``POST /admin/cubes/insert-cut``:
@@ -25,19 +27,22 @@ Endpoints:
       subsequent cut points by one position.  Runs phantom check + shelf overflow +
       empty-bin validation before writing.  Writes all affected cubes as ONE
       change-set (source='cut_insert') so the cut is undoable via /history revert.
-      Invalidates + re-derives SegmentCache, publishes boundary_changed.
+      Re-derives SegmentCache, publishes boundary_changed.
       Requires admin session + CSRF.
 
 Security:
   - Every handler depends on require_admin (T-05-04-01, ASVS V4 carry-forward).
-  - Fraction bounds validated by Pydantic (0 < fraction <= 1.0) + DB CHECK (T-05-04-03).
+  - Fraction bounds validated by Pydantic (0 < fraction <= 1.0) + DB CHECK (T-05-04-03),
+    and the per-BIN sum is validated before the write (gruvax-cxy) — neither
+    per-row gate can see whether a bin still has a label to absorb the remainder.
   - Phantom override injection rejected server-side (T-05-04-02).
   - Shelf overflow guarded by validate_shelf_overflow before insert (T-05-04-04).
   - Idempotency-Key dedup: check → execute → store in one transaction (T-05-04-05, Pitfall 7).
   - All SQL uses %s placeholders, zero f-string interpolation (T-05-04-06, T-03-24).
 
 Phase 5 (05-04 / SEG-08):
-  - SegmentCache invalidated + re-derived on every write (Pitfall A: AFTER commit).
+  - SegmentCache re-derived on every write (Pitfall A: AFTER commit; gruvax-cxy:
+    derive into place, never invalidate first, so a failure keeps the last good cache).
   - insert-cut uses source='cut_insert' (boundary_history CHECK extended in migration 0005).
   - Override writes use gruvax.segment_overrides (SEG-04 table from migration 0005).
 """
@@ -135,6 +140,93 @@ class InsertCutBody(BaseModel):
     new_first_label: str
     new_first_catalog: str
     force: bool = False  # True: skip phantom check
+
+
+# ── Validation helpers ────────────────────────────────────────────────────────
+
+
+def _validate_bin_override_sums(
+    current_overrides: dict[tuple[int, int, int, str], float],
+    body: OverridesBody,
+    unit_id: int,
+    row: int,
+    col: int,
+    bin_labels: set[str],
+) -> dict[str, Any] | None:
+    """Reject an override set that would leave a bin's widths unresolvable (gruvax-cxy).
+
+    ``SegmentCache.derive`` gives each overridden label its stated fraction and
+    splits whatever is left over the NON-overridden labels in proportion to their
+    record counts.  That only works while some label is left to absorb the
+    remainder.  Two shapes break it, and neither is caught by the per-row bounds
+    (Pydantic ``gt=0.0, le=1.0``) or the per-row DB CHECK — the only two gates
+    that exist today:
+
+      1. The overrides sum to more than 1.0 — the remainder is negative and the
+         non-overridden labels would be handed negative widths.
+      2. EVERY label in the bin is overridden and the fractions do not sum to
+         1.0 — there is no absorber at all.  This is the reported defect: a
+         single-label bin plus ``fraction=0.5`` is legal at every gate.
+
+    Args:
+        current_overrides: The live override map (``BoundaryCache.overrides``),
+            keyed ``(unit_id, row, col, casefolded_label) -> fraction``.
+        body:              The request's override edits (``fraction=None`` clears).
+        unit_id, row, col: The bin being edited.
+        bin_labels:        Casefolded labels actually present in the bin.
+
+    Returns:
+        A JSON error body when the resulting set is unresolvable; ``None`` when
+        it is fine.
+    """
+    # Effective post-request override map for THIS bin, restricted to labels the
+    # bin actually holds (a stale row for a label that has since moved out of the
+    # bin is ignored by derive, so it must be ignored here too).
+    effective: dict[str, float] = {
+        label: fraction
+        for (ov_unit, ov_row, ov_col, label), fraction in current_overrides.items()
+        if (ov_unit, ov_row, ov_col) == (unit_id, row, col) and label in bin_labels
+    }
+    for ov in body.overrides:
+        key = ov.label.strip().casefold()
+        if ov.fraction is None:
+            effective.pop(key, None)
+        else:
+            effective[key] = ov.fraction
+
+    if not effective:
+        return None
+
+    total = sum(effective.values())
+    if total > 1.0 + 1e-9:
+        return {
+            "type": "override_sum_invalid",
+            "message": (
+                "These widths add up to more than the whole cube "
+                f"({total:.0%}). Lower one of them so the total is at most 100%."
+            ),
+            "unit_id": unit_id,
+            "row": row,
+            "col": col,
+            "override_sum": total,
+        }
+
+    # No label left to take up the slack — the widths must then be exact.
+    if not (bin_labels - effective.keys()) and abs(total - 1.0) >= 1e-6:
+        return {
+            "type": "override_sum_invalid",
+            "message": (
+                "Every label in this cube has a set width, so they must add up to "
+                f"the whole cube. They currently add up to {total:.0%}. Adjust a "
+                "width, or clear one so it can take up the remainder."
+            ),
+            "unit_id": unit_id,
+            "row": row,
+            "col": col,
+            "override_sum": total,
+        }
+
+    return None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -315,15 +407,19 @@ async def put_bin_cut(
             profile_id=profile_id,
         )
 
-    # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
-    cache.invalidate()
+    # ── Reload + re-derive SegmentCache AFTER commit (Pitfall A) ────────────
+    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
+    # and `derive()` publish their result only once it is fully built, so the
+    # last known-good cache keeps serving if either raises. The old
+    # invalidate-then-rebuild order meant any derive failure — e.g. an override
+    # set with no absorber — left the caches EMPTY and every locate in the app
+    # dead, turning a bad width value into a whole-product outage.
     try:
         await cache.load(pool)
         # gruvax-591: re-derive against ``cache.overrides`` — the full override set
         # the ``cache.load()`` above just read from gruvax.segment_overrides.  The
         # old hand-built dict carried ONLY this bin's pre-invalidation segments, so
         # derive() cleared is_override on every other cube in the shelf.
-        segment_cache.invalidate()
         segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(
@@ -411,6 +507,23 @@ async def set_bin_overrides(
             },
         )
 
+    # ── Per-bin override sum guard (gruvax-cxy) ───────────────────────────────
+    # Every existing bound is per-ROW: Pydantic's `gt=0.0, le=1.0` on
+    # LabelOverride.fraction and migration 0005's CHECK. Neither can see the
+    # BIN. A single legal row — fraction=0.5 on a one-label bin — therefore
+    # leaves the bin with no absorber for the missing 0.5, and the derive that
+    # runs immediately after this endpoint commits used to raise, wiping the
+    # SegmentCache and killing every locate in the app until the row was deleted
+    # by hand.
+    #
+    # Validate the bin's RESULTING override set BEFORE the transaction so the
+    # bad state is never committed at all. The check runs against the effective
+    # post-request map: the bin's current overrides, with this request's clears
+    # removed and its sets applied.
+    sum_error = _validate_bin_override_sums(cache.overrides, body, unit_id, row, col, bin_labels)
+    if sum_error is not None:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=sum_error)
+
     # ── DB write (upsert/delete in one transaction) ───────────────────────────
     applied = 0
     cleared = 0
@@ -478,10 +591,14 @@ DO UPDATE SET fraction = EXCLUDED.fraction,
     # a second, divergent read of the same table.  One source (the cache) keeps
     # the boundary rows and the override rows loaded under a single scope, so they
     # can never disagree about which profile they came from.
-    cache.invalidate()
+    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
+    # and `derive()` publish their result only once it is fully built, so the
+    # last known-good cache keeps serving if either raises. The old
+    # invalidate-then-rebuild order meant any derive failure — e.g. an override
+    # set with no absorber — left the caches EMPTY and every locate in the app
+    # dead, turning a bad width value into a whole-product outage.
     try:
         await cache.load(pool)
-        segment_cache.invalidate()
         segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(
@@ -713,10 +830,14 @@ async def insert_cut(
     # gruvax-591: re-derive against ``cache.overrides`` (populated by the
     # ``cache.load()`` below) rather than a second hand-rolled SELECT — see the
     # same note on set_bin_overrides above.
-    cache.invalidate()
+    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
+    # and `derive()` publish their result only once it is fully built, so the
+    # last known-good cache keeps serving if either raises. The old
+    # invalidate-then-rebuild order meant any derive failure — e.g. an override
+    # set with no absorber — left the caches EMPTY and every locate in the app
+    # dead, turning a bad width value into a whole-product outage.
     try:
         await cache.load(pool)
-        segment_cache.invalidate()
         segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(

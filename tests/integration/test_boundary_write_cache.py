@@ -267,8 +267,90 @@ async def test_bulk_write_preserves_unrelated_overrides(client) -> None:  # type
         after = await _segments(client, auth, b_unit, b_row, b_col)
         still = next((s for s in after if str(s["label"]) == label), None)
         assert still is not None and still["is_override"] is True, (
-            "gruvax-591: bulk write reverted an unrelated cube's override "
-            f"(segments now: {after})"
+            f"gruvax-591: bulk write reverted an unrelated cube's override (segments now: {after})"
         )
     finally:
         await _clear_override(client, auth, b_unit, b_row, b_col, label)
+
+
+# ── gruvax-cxy ───────────────────────────────────────────────────────────────
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_override_with_no_absorber_is_rejected_and_locate_survives(client) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-cxy: a fully-overridden bin must be refused, not committed then fatal.
+
+    Pre-fix: ``fraction=0.5`` on a single-label bin passed both gates (Pydantic
+    per-row bounds, per-row DB CHECK — no per-bin sum constraint exists), the row
+    was COMMITTED, then ``segment_cache.invalidate()`` ran and ``derive()`` raised
+    on the sum!=1.0 invariant.  The endpoint returned 500 with the SegmentCache
+    left EMPTY: every locate in the app returned no cube, across restarts, until
+    the row was deleted by hand.
+
+    Post-fix the request is rejected BEFORE the write, and the cache is untouched.
+    """
+    auth = await _login(client)
+    if not auth:
+        pytest.skip("Login not implemented")
+
+    bins = await _find_bins(client, auth)
+    single = next((b for b in bins if len(b[3]) == 1), None)
+    if single is None:
+        pytest.skip("Fixture has no single-label bin")
+    unit, row, col, before = single
+    label = str(before[0]["label"])
+
+    res = await client.post(
+        f"/api/admin/cubes/{unit}/{row}/{col}/overrides",
+        json={"overrides": [{"label": label, "fraction": 0.5}]},
+        headers=_auth_headers(auth),
+    )
+    assert res.status_code == 400, (
+        "gruvax-cxy: a sole-label override of 0.5 leaves the bin with no absorber "
+        f"and must be rejected before the write; got {res.status_code}: {res.text}"
+    )
+    assert res.json().get("type") == "override_sum_invalid", res.text
+
+    # A rejected request must change NOTHING — the SegmentCache is untouched.
+    # (Asserted as before == after rather than against fixed values, so the test
+    # does not depend on whether a sibling module left an override on this bin.)
+    after = await _segments(client, auth, unit, row, col)
+    assert after, "the rejected override wiped the SegmentCache for this bin"
+    assert after == before, f"a rejected override still mutated the bin: {before} -> {after}"
+
+    # And an unrelated bin still derives too (i.e. the whole cache is alive).
+    other = next((b for b in bins if b[:3] != (unit, row, col)), None)
+    if other is not None:
+        assert await _segments(client, auth, other[0], other[1], other[2]), (
+            "gruvax-cxy: the SegmentCache was emptied app-wide by one bad override"
+        )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_full_override_set_that_tiles_the_cube_is_accepted(client) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-cxy: the guard rejects only unresolvable sets — a sole 1.0 is fine."""
+    auth = await _login(client)
+    if not auth:
+        pytest.skip("Login not implemented")
+
+    bins = await _find_bins(client, auth)
+    single = next((b for b in bins if len(b[3]) == 1), None)
+    if single is None:
+        pytest.skip("Fixture has no single-label bin")
+    unit, row, col, segments = single
+    label = str(segments[0]["label"])
+
+    try:
+        res = await client.post(
+            f"/api/admin/cubes/{unit}/{row}/{col}/overrides",
+            json={"overrides": [{"label": label, "fraction": 1.0}]},
+            headers=_auth_headers(auth),
+        )
+        assert res.status_code == 200, (
+            f"a sole-label override of 1.0 tiles the cube exactly: {res.text}"
+        )
+        after = await _segments(client, auth, unit, row, col)
+        assert after[0]["is_override"] is True
+        assert after[0]["fraction"] == pytest.approx(1.0)
+    finally:
+        await _clear_override(client, auth, unit, row, col, label)

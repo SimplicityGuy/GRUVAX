@@ -180,7 +180,7 @@ async def import_boundaries(
          - On contiguity violation: return 400 (ZERO writes).
       7. Commit atomically: one change_set_id, one DB transaction for all edits
          + segment_overrides upsert + idempotency store.
-      8. AFTER transaction commit: cache.invalidate(), cache.load(), segment_cache
+      8. AFTER transaction commit: cache.load(), segment_cache
          re-derive, bus.publish (Pitfall A — NEVER inside the transaction).
     Returns: JSON ``{change_set_id, applied, source}``
 
@@ -587,8 +587,13 @@ async def import_boundaries(
             await store_idempotency(conn, idempotency_key, response_body)
         await cleanup_idempotency(conn)
 
-    # ── 8. Cache invalidate AFTER transaction commit (Pitfall A) ─────────────
-    cache.invalidate()
+    # ── 8. Cache reload AFTER transaction commit (Pitfall A) ─────────────────
+    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
+    # and `derive()` publish their result only once it is fully built, so the
+    # last known-good cache keeps serving if either raises. The old
+    # invalidate-then-rebuild order meant any derive failure — e.g. an override
+    # set with no absorber — left the caches EMPTY and every locate in the app
+    # dead, turning a bad width value into a whole-product outage.
     try:
         await cache.load(pool)
         # gruvax-591: ``cache.overrides`` is the complete post-import override set.
@@ -598,7 +603,6 @@ async def import_boundaries(
         # the merge that used to live here was additive only: cubes ABSENT from
         # the imported file still lost their override in the live cache because
         # the hand-built dict only covered the edited bins.
-        segment_cache.invalidate()
         segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(

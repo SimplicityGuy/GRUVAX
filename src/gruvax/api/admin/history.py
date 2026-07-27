@@ -234,7 +234,12 @@ async def revert_change_set(
     # (Pitfall A: cache mutations must run AFTER the transaction block exits.)
     # Only execute if at least one cube was actually changed.
     if reverted:
-        cache.invalidate()
+        # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
+        # and `derive()` publish their result only once it is fully built, so the
+        # last known-good cache keeps serving if either raises. The old
+        # invalidate-then-rebuild order meant any derive failure — e.g. an override
+        # set with no absorber — left the caches EMPTY and every locate in the app
+        # dead, turning a bad width value into a whole-product outage.
         try:
             await cache.load(pool)
             # gruvax-591: ALL overrides must survive a revert — a revert may touch
@@ -243,7 +248,6 @@ async def revert_change_set(
             # gruvax.segment_overrides into ``cache.overrides``, so the second
             # hand-rolled SELECT that used to live here was a divergent read of the
             # same table under a possibly different scope.  One source only.
-            segment_cache.invalidate()
             segment_cache.derive(cache, snapshot, cache.overrides)
         finally:
             # Publish boundary_changed even if cache.load() raised — the kiosk must

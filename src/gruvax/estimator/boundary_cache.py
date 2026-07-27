@@ -83,6 +83,12 @@ class BoundaryCache:
         to fetch all boundary rows ordered by (unit_id, row, col), then loads
         all segment overrides into ``_overrides``.
 
+        gruvax-cxy: both SELECTs complete into LOCALS before either is published
+        to ``self``. A failure partway through therefore leaves the previous
+        (consistent) contents serving, instead of a cache holding the new
+        boundary rows next to the old override map — or, when the caller had
+        already called ``invalidate()``, nothing at all.
+
         Args:
             pool: An open ``psycopg_pool.AsyncConnectionPool`` instance.
             profile_id: UUID string of the profile to scope the load to
@@ -98,7 +104,7 @@ class BoundaryCache:
                 (profile_id,),
             )
             rows_raw = await cur.fetchall()
-            self._rows = [BoundaryRow(*row) for row in rows_raw]  # type: ignore[misc]
+            new_rows = [BoundaryRow(*row) for row in rows_raw]  # type: ignore[misc]
 
         # Second SELECT: segment overrides (Phase 5 addition — SEG-04)
         # gruvax-rn7l.3: ORDER BY makes the row order deterministic. The PK
@@ -124,7 +130,11 @@ class BoundaryCache:
                 "list[tuple[int, int, int, str, float]]",
                 overrides_raw,
             )
-            self._overrides = {(r[0], r[1], r[2], r[3]): r[4] for r in typed_rows}
+            new_overrides = {(r[0], r[1], r[2], r[3]): r[4] for r in typed_rows}
+
+        # Publish both together — see the atomicity note in the docstring.
+        self._rows = new_rows
+        self._overrides = new_overrides
 
     def _load_rows(self, rows: list[BoundaryRow]) -> None:
         """Internal seam for testing: bypass DB and load rows directly.

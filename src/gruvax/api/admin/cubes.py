@@ -33,8 +33,8 @@ Phase 5 changes (05-04):
   - BoundaryEdit drops last_label / last_catalog (SEG-01 / migration 0005).
   - _compute_movement_counts uses SegmentCache + count_records_in_bin.
   - suggest_cube_midpoint derives the last-record anchor from SegmentCache rank info.
-  - Both write paths (put_cube_boundary + bulk_write_cubes) invalidate + re-derive
-    SegmentCache after BoundaryCache reload (Pitfall A: AFTER transaction commit).
+  - Both write paths (put_cube_boundary + bulk_write_cubes) re-derive SegmentCache
+    after BoundaryCache reload (Pitfall A: AFTER transaction commit).
   - validate endpoint adds validate_contiguity check after phantom check.
 """
 
@@ -281,7 +281,7 @@ async def put_cube_boundary(
       1. Phantom check (unless force=True): rejects values absent from v_collection;
          returns near_misses for tappable suggestions.
       2. On success: writes to cube_boundaries (cut-point only), logs to boundary_history,
-         invalidates + reloads BoundaryCache, then re-derives SegmentCache (Pitfall A).
+         reloads BoundaryCache, then re-derives SegmentCache (Pitfall A).
 
     NOTE: last_label / last_catalog removed from BoundaryEdit in Phase 5 (SEG-01).
     The cut-point model stores only first_label / first_catalog.
@@ -378,9 +378,14 @@ WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
         )
     # transaction commits atomically on exiting the conn.transaction() context.
 
-    # Invalidate + reload BoundaryCache AFTER transaction commit (Pitfall A).
-    # Then re-derive SegmentCache from the updated BoundaryCache (Phase 5 / 05-04).
-    cache.invalidate()
+    # Reload BoundaryCache AFTER transaction commit (Pitfall A), then re-derive
+    # SegmentCache from it (Phase 5 / 05-04).
+    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
+    # and `derive()` publish their result only once it is fully built, so the
+    # last known-good cache keeps serving if either raises. The old
+    # invalidate-then-rebuild order meant any derive failure — e.g. an override
+    # set with no absorber — left the caches EMPTY and every locate in the app
+    # dead, turning a bad width value into a whole-product outage.
     try:
         await cache.load(pool)
         # Re-derive SegmentCache from the refreshed BoundaryCache (D-07 / SEG-08).
@@ -395,7 +400,6 @@ WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
         # made them reappear — a phantom the owner could never reproduce.
         # ``cache.overrides`` is the canonical argument (app.py:231,
         # profile_sync.py, segment_cache docstring).
-        segment_cache.invalidate()
         segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(
@@ -733,14 +737,15 @@ async def bulk_write_cubes(
     """Atomic bulk commit of all pending cube boundary edits (D-10, ADMN-09).
 
     Phase 5 (05-04): BoundaryEdit no longer carries last_label / last_catalog.
-    After the transaction commits, invalidates BoundaryCache + reloads, then
-    re-derives SegmentCache (Pitfall A — NEVER inside the transaction).
+    After the transaction commits, reloads BoundaryCache and re-derives
+    SegmentCache (Pitfall A — NEVER inside the transaction).
 
     All updates are validated (phantom check) before ANY write.
     Writes all cubes in a single DB transaction sharing one change_set_id.
-    AFTER the transaction commits, invalidates + reloads the boundary cache
-    and re-derives SegmentCache (Pitfall A — cache.invalidate() is NEVER
-    called inside the transaction).
+    AFTER the transaction commits, reloads the boundary cache and re-derives
+    SegmentCache (Pitfall A — cache mutation is NEVER done inside the
+    transaction; gruvax-cxy — and never invalidated ahead of a successful
+    rebuild, so a failed derive cannot empty the live cache).
 
     Idempotency-Key header (D-10, Pitfall 7):
       - If the key was seen before, returns the cached response immediately.
@@ -861,14 +866,18 @@ async def bulk_write_cubes(
     # ── Invalidate + reload BoundaryCache AFTER transaction commit (Pitfall A) ─
     # CR review CR-01: publish in `finally` so a transient cache.load() failure
     # never strands SSE subscribers on stale data (the bulk write already committed).
-    cache.invalidate()
+    # gruvax-cxy: reload + re-derive WITHOUT invalidating first. Both `load()`
+    # and `derive()` publish their result only once it is fully built, so the
+    # last known-good cache keeps serving if either raises. The old
+    # invalidate-then-rebuild order meant any derive failure — e.g. an override
+    # set with no absorber — left the caches EMPTY and every locate in the app
+    # dead, turning a bad width value into a whole-product outage.
     try:
         await cache.load(pool)
         # Re-derive SegmentCache from the refreshed BoundaryCache (Phase 5 / 05-04).
         # gruvax-591: use the full DB-truth override set from ``cache.load()``
         # instead of a dict hand-built from only the edited bins — see the same
         # comment on put_cube_boundary above.
-        segment_cache.invalidate()
         segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(
