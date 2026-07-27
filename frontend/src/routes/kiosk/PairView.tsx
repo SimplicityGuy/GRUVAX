@@ -254,11 +254,13 @@ export function PairView() {
         className="pair-milestone-announcer"
       />
 
-      {/* GRUVAX icon mark */}
+      {/* GRUVAX icon mark — gruvax-qou1: shrunk from 48px so the QR +
+          countdown below clear the 480px kiosk-boot fold; viewBox unchanged
+          (same mark, smaller render). */}
       <div className="pair-icon-mark" aria-hidden="true">
         <svg
-          width="48"
-          height="48"
+          width="24"
+          height="24"
           viewBox="0 0 48 48"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
@@ -326,7 +328,11 @@ export function PairView() {
         >
           <QRCode
             value={`${window.location.origin}/admin/devices?code=${pairingCode.code}`}
-            size={160}
+            // gruvax-qou1: 160px measured @800×480 rendered TRUNCATED below
+            // the fold (.pair-qr-container top 487px on an 855.6px-tall
+            // page). 128px keeps the whole surface above the 480px fold at
+            // both candidate kiosk viewports while staying scannable.
+            size={128}
             level="M"
             bgColor="var(--gruvax-white)"
             fgColor="var(--gruvax-blue)"
