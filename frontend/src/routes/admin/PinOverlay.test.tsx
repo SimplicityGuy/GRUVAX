@@ -26,7 +26,6 @@ afterEach(() => {
 async function tapDigits(digits: string[]) {
   for (const d of digits) {
     const btn = screen.getByRole('button', { name: d })
-    // eslint-disable-next-line no-await-in-loop
     await act(async () => {
       btn.click()
       await Promise.resolve()
