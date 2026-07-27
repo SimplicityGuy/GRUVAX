@@ -117,6 +117,14 @@ export interface LoginResponse {
 export interface AdminSession {
   expires_at: string   // ISO-8601 UTC
   hard_cap_at: string  // ISO-8601 UTC
+  /**
+   * gruvax-6ip0: server-computed DURATION (seconds remaining), not a
+   * timestamp — AdminShell derives its idle-expiry countdown from this
+   * instead of diffing expires_at against the browser's Date.now(), so a
+   * skewed client clock can't desync the countdown from the server's
+   * actual sliding-window session state.
+   */
+  expires_in_seconds: number
 }
 
 /** Response from GET /api/admin/settings — nominal capacity, idle TTL, and LED knobs.

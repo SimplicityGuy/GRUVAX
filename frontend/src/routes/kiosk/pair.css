@@ -5,6 +5,14 @@
  * from gruvax-design-tokens.css. No hardcoded hex anywhere.
  *
  * Design contract: 03-UI-SPEC.md Surface 1 — Kiosk /pair route (wall-mounted).
+ *
+ * gruvax-qou1: this whole surface is sized to fit ABOVE the fold (no scroll
+ * needed) at both candidate kiosk viewports — 800×480 and 1024×600 — because
+ * this is the boot screen for an unpaired device and start-kiosk.sh launches
+ * Chromium with no --window-size (native fullscreen), so the QR + countdown
+ * must be visible without an undiscoverable swipe. Every space/font token
+ * below was chosen to keep the summed layout height under ~440px, leaving
+ * headroom under the 480px-tall viewport.
  */
 
 /* ── Page layout ─────────────────────────────────────────────────────────── */
@@ -16,8 +24,8 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  padding: var(--gruvax-space-7) var(--gruvax-space-6);
-  gap: var(--gruvax-space-4);
+  padding: var(--gruvax-space-3) var(--gruvax-space-6);
+  gap: var(--gruvax-space-1);
   font-family: var(--gruvax-font-ui);
   position: relative;
 }
@@ -37,14 +45,17 @@
 /* ── Icon mark ───────────────────────────────────────────────────────────── */
 
 .pair-icon-mark {
-  margin-bottom: var(--gruvax-space-3);
+  margin-bottom: var(--gruvax-space-1);
 }
 
 /* ── Screen heading ──────────────────────────────────────────────────────── */
 
 .pair-heading {
   font-family: var(--gruvax-font-display);
-  font-size: var(--gruvax-text-display-xl);  /* 48px */
+  /* gruvax-qou1: display-xl (48px) overflowed the 480px-tall boot viewport
+     when summed with the rest of the surface — display-md is still a clear
+     hero label at kiosk viewing distance within the fold budget. */
+  font-size: var(--gruvax-text-display-md);  /* 24px */
   font-weight: 900;
   color: var(--gruvax-text-primary);
   line-height: var(--gruvax-leading-tight);
@@ -58,7 +69,7 @@
 
 .pair-instruction {
   font-family: var(--gruvax-font-ui);
-  font-size: var(--gruvax-text-body-lg);  /* 18px */
+  font-size: var(--gruvax-text-body-sm);  /* 14px — gruvax-qou1 fold budget */
   font-weight: 400;
   color: var(--gruvax-text-secondary);
   line-height: var(--gruvax-leading-normal);
@@ -72,9 +83,11 @@
   background: var(--gruvax-off-white);
   border: 1.5px solid var(--gruvax-border-light);
   border-radius: var(--gruvax-radius-xl);
-  padding: var(--gruvax-space-5) var(--gruvax-space-7);  /* 24px 48px */
-  margin-top: var(--gruvax-space-7);   /* 48px gap above */
-  margin-bottom: var(--gruvax-space-5);  /* 24px gap below */
+  /* gruvax-qou1: fold budget — tighter padding/margins than the original
+     space-7 rhythm so the QR + countdown below clear the 480px viewport. */
+  padding: var(--gruvax-space-2) var(--gruvax-space-5);  /* 8px 24px */
+  margin-top: var(--gruvax-space-2);   /* 8px gap above */
+  margin-bottom: var(--gruvax-space-1);  /* 4px gap below */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -108,7 +121,11 @@
 
 .pair-code-digit {
   font-family: var(--gruvax-font-mono);
-  font-size: clamp(64px, 12vw, 96px);  /* 96px on >=768px, clamp below */
+  /* gruvax-qou1: clamp max lowered from 96px so the digit block + QR +
+     countdown all fit above the 480px fold at both 800×480 and 1024×600
+     (see the removed >=768px override below, which is no longer needed
+     — and was previously inert at both target viewports anyway). */
+  font-size: clamp(40px, 7vw, 56px);
   font-weight: 500;
   color: var(--gruvax-text-primary);
   line-height: 1.0;
@@ -140,11 +157,39 @@
 
 /* ── Expired state text ──────────────────────────────────────────────────── */
 
+.pair-code-expired {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--gruvax-space-2);
+}
+
 .pair-code-expired-text {
   font-family: var(--gruvax-font-ui);
   font-size: var(--gruvax-text-body-lg);
   color: var(--gruvax-text-muted);
   font-weight: 400;
+}
+
+/* gruvax-7j5: manual recovery affordance for a failed auto-reroll — never
+   solely depend on the background retry timer. min-height 44px meets the
+   WCAG 2.5.5 (AA) target-size minimum. */
+.pair-code-retry-btn {
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body);
+  font-weight: 600;
+  color: var(--gruvax-blue);
+  background: var(--gruvax-blue-faint);
+  border: none;
+  border-radius: var(--gruvax-radius-md);
+  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.pair-code-retry-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 /* ── Status row (waiting pill + countdown) ───────────────────────────────── */
@@ -153,7 +198,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--gruvax-space-3);  /* 12px */
+  gap: var(--gruvax-space-1);  /* 4px — gruvax-qou1 fold budget */
 }
 
 /* ── Waiting pill ────────────────────────────────────────────────────────── */
@@ -164,7 +209,7 @@
   gap: var(--gruvax-space-2);  /* 8px */
   background: var(--gruvax-blue-faint);
   color: var(--gruvax-text-primary);
-  padding: var(--gruvax-space-2) var(--gruvax-space-4);
+  padding: var(--gruvax-space-1) var(--gruvax-space-3);  /* gruvax-qou1 fold budget */
   border-radius: var(--gruvax-radius-pill);
 }
 
@@ -213,12 +258,15 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--gruvax-space-3);       /* 12px quiet-zone extension */
+  /* gruvax-qou1: quiet-zone padding kept at space-2 (not shrunk to space-1)
+     — the QR itself shrank to 128px, so a tighter quiet zone would risk
+     scan reliability; padding is the more valuable pixel to spend here. */
+  padding: var(--gruvax-space-2);       /* 8px quiet-zone extension */
   background: var(--gruvax-white);
   border: 1.5px solid var(--gruvax-border-light);
   border-radius: var(--gruvax-radius-md);
-  margin-top: var(--gruvax-space-3);    /* 12px from .pair-code-card */
-  margin-bottom: var(--gruvax-space-5); /* 24px before .pair-status-row */
+  margin-top: var(--gruvax-space-1);    /* 4px from .pair-code-card */
+  margin-bottom: var(--gruvax-space-1); /* 4px before .pair-status-row */
 }
 
 .pair-qr-caption {
@@ -239,10 +287,9 @@
   outline-offset: 2px;
 }
 
-/* ── Touch targets — minimum 64×64px on wall-mounted display ────────────── */
-
-@media (min-width: 768px) {
-  .pair-code-digit {
-    font-size: 96px;
-  }
-}
+/* gruvax-qou1: the >=768px override that previously bumped .pair-code-digit
+   to a flat 96px was removed — it was already inert at both candidate kiosk
+   viewports (the clamp() above already capped at 96px there), and at the
+   new lower clamp max it would have silently defeated the fold fix at
+   1024×600 (>=768px). The clamp() alone now governs digit size at every
+   kiosk viewport. */

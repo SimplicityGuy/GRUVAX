@@ -49,3 +49,13 @@ _BIND_RATE = parse_limit("10/5minutes")
 # to slow brute-force code enumeration (T-07-05). Namespace key "invite_redeem"
 # keeps it isolated from the login and device_bind counters.
 _REDEEM_RATE = parse_limit("5/10minutes")
+
+# Pairing-code GENERATION rate limit — 30 attempts per 5-minute window per IP
+# (gruvax-8fp). POST /api/devices/pairing-codes is intentionally unauthenticated
+# (a kiosk hasn't paired yet), so without this, any LAN client could loop the
+# endpoint and exhaust the 10,000-code CHAR(4) namespace in seconds. 30/5min
+# comfortably covers a legitimate kiosk's steady-state 1-per-5-min auto-reroll
+# plus the occasional gruvax-7j5 failure-retry burst, while still bounding
+# worst-case abuse. Namespace key "pairing_generate" keeps it isolated from the
+# other counters above.
+_PAIRING_GENERATE_RATE = parse_limit("30/5minutes")

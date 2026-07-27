@@ -50,6 +50,12 @@ function formatCountdown(ms: number): string {
 interface PairingCodeData {
   code: string
   expires_at: string
+  /**
+   * gruvax-6ip0: server-computed DURATION (seconds remaining at generation
+   * time), not a timestamp. Optional so a server/mock that hasn't been
+   * upgraded still falls back to the (skew-prone) expires_at diff below.
+   */
+  remaining_seconds?: number
 }
 
 type PairStatus = 'loading' | 'active' | 'expiring' | 'expired' | 'paired'
@@ -77,6 +83,21 @@ export function PairView() {
   const countdownIntervalRef = useRef<ReturnType<typeof setInterval> | null>(null)
   // Guard: track whether reroll has been triggered to avoid double-firing
   const rerollTriggeredRef = useRef(false)
+  // gruvax-7j5: true once a pairing code has ever been received successfully.
+  // Distinguishes "the initial mount fetch is retrying" (no countdown interval
+  // exists yet to drive a retry) from "a reroll fetch failed" (the countdown
+  // interval is still running and can drive the retry on its next 1s tick).
+  const hasEverSucceededRef = useRef(false)
+  // gruvax-7j5: surfaces a retry affordance + drives the initial-mount backoff
+  // retry loop. Cleared on the next successful fetch.
+  const [fetchFailed, setFetchFailed] = useState(false)
+  const retryTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const retryAttemptRef = useRef(0)
+  // gruvax-7j5: fetchNewCode's own catch schedules a retry BY CALLING
+  // fetchNewCode again — a ref mirror (assigned right after the useCallback
+  // below) lets that self-reference happen without referencing the `const`
+  // before its declaration completes.
+  const fetchNewCodeRef = useRef<() => Promise<void>>(async () => {})
 
   // Milestone announcer ref (a11y — aria-live="assertive" hidden node)
   const announcerRef = useRef<HTMLSpanElement>(null)
@@ -114,14 +135,51 @@ export function PairView() {
       })
       if (!res.ok) throw new Error(`Failed: ${res.status}`)
       const data = await res.json() as PairingCodeData
+      hasEverSucceededRef.current = true
+      retryAttemptRef.current = 0
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+        retryTimeoutRef.current = null
+      }
+      setFetchFailed(false)
       setPairingCode(data)
-    } catch {
-      // Fetch failed or aborted — degrade gracefully (keep old code displayed)
+    } catch (err) {
+      // gruvax-7j5: a swallowed 500/network blip on the auto-reroll used to
+      // strand the kiosk on "Generating new code…" forever — the countdown
+      // effect's rerollTriggeredRef only resets when a NEW pairingCode
+      // arrives, and a failed fetch never produces one. Surface the failure
+      // (never silent) and recover instead of stranding:
+      if (controller.signal.aborted) {
+        // Superseded by a newer fetch (unmount or manual retry) — not a
+        // real failure, nothing to recover from.
+        return
+      }
+      console.error('PairView: pairing-code fetch failed', err)
+      setFetchFailed(true)
+      if (hasEverSucceededRef.current) {
+        // A reroll (not the initial mount fetch) failed. The countdown
+        // interval (see below) is still running and its next 1s tick will
+        // retry automatically once this guard is clear again.
+        rerollTriggeredRef.current = false
+      } else {
+        // The very first fetch failed — no countdown interval exists yet to
+        // drive a retry, so schedule one with capped exponential backoff
+        // (2s, 4s, 8s, 16s, capped at 30s) until it succeeds.
+        const attempt = retryAttemptRef.current + 1
+        retryAttemptRef.current = attempt
+        const delayMs = Math.min(30_000, 2 ** attempt * 1000)
+        retryTimeoutRef.current = setTimeout(() => {
+          void fetchNewCodeRef.current()
+        }, delayMs)
+      }
     } finally {
       isFetchingRef.current = false
       setIsCodeFetching(false)
     }
   }, [])
+  useEffect(() => {
+    fetchNewCodeRef.current = fetchNewCode
+  }, [fetchNewCode])
 
   // Initial fetch on mount — side effect only (fetch + setState in callback)
   useEffect(() => {
@@ -129,11 +187,30 @@ export function PairView() {
     void fetchNewCode()
     return () => {
       fetchAbortRef.current?.abort()
+      if (retryTimeoutRef.current) {
+        clearTimeout(retryTimeoutRef.current)
+      }
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Countdown effect — fires when a new pairingCode is received ──────────
+  //
+  // gruvax-6ip0: the countdown used to re-diff the client's Date.now() against
+  // the server-ABSOLUTE expires_at on every 1s tick. That mixes two clock
+  // domains: a Pi that cold-boots without a battery-backed RTC restores its
+  // clock from fake-hwclock (last-saved time, so it starts BEHIND by however
+  // long it was powered off) until systemd-timesyncd catches up — landing on
+  // /pair mid-boot-race renders a wildly inflated countdown that never
+  // reaches 0 (dead code, no reroll, pairing impossible until NTP corrects).
+  //
+  // Fix: seed the countdown from the server-computed DURATION
+  // (remaining_seconds — immune to client clock skew entirely) and tick it
+  // down using the monotonic performance.now() clock rather than Date.now(),
+  // so neither an initial skew nor a mid-countdown wall-clock correction
+  // (e.g. NTP sync landing) can perturb it. Falls back to the expires_at
+  // diff (single read, at effect-start only — not on every tick) only if
+  // remaining_seconds is absent.
   useEffect(() => {
     if (!pairingCode?.expires_at) return
 
@@ -144,14 +221,16 @@ export function PairView() {
     rerollTriggeredRef.current = false
     lastMilestoneRef.current = null
 
-    const computeRemaining = () => {
-      const expiresMs = new Date(pairingCode.expires_at).getTime()
-      return expiresMs - Date.now()
-    }
+    const initialMs =
+      typeof pairingCode.remaining_seconds === 'number'
+        ? pairingCode.remaining_seconds * 1000
+        : new Date(pairingCode.expires_at).getTime() - Date.now()
+    const clampedInitial = Math.max(0, initialMs)
 
-    const initial = computeRemaining()
-    const clampedInitial = Math.max(0, initial)
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- countdown initial value derived from server-authoritative expires_at; no other place to set this than the effect that starts the interval
+    const startedAtPerf = performance.now()
+    const computeRemaining = () => clampedInitial - (performance.now() - startedAtPerf)
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- countdown initial value derived from server-authoritative duration; no other place to set this than the effect that starts the interval
     setRemainingMs(clampedInitial)
 
     updatePairStatus(clampedInitial <= 60_000 ? 'expiring' : 'active')
@@ -191,7 +270,7 @@ export function PairView() {
         clearInterval(countdownIntervalRef.current)
       }
     }
-  }, [pairingCode?.expires_at, fetchNewCode, updatePairStatus])
+  }, [pairingCode?.expires_at, pairingCode?.remaining_seconds, fetchNewCode, updatePairStatus])
 
   // ── Device-state poll ────────────────────────────────────────────────────
   const { data: deviceState } = useQuery({
@@ -254,11 +333,13 @@ export function PairView() {
         className="pair-milestone-announcer"
       />
 
-      {/* GRUVAX icon mark */}
+      {/* GRUVAX icon mark — gruvax-qou1: shrunk from 48px so the QR +
+          countdown below clear the 480px kiosk-boot fold; viewBox unchanged
+          (same mark, smaller render). */}
       <div className="pair-icon-mark" aria-hidden="true">
         <svg
-          width="48"
-          height="48"
+          width="24"
+          height="24"
           viewBox="0 0 48 48"
           fill="none"
           xmlns="http://www.w3.org/2000/svg"
@@ -306,7 +387,22 @@ export function PairView() {
             <span className="pair-code-success-text">PAIRED — navigating…</span>
           </div>
         ) : isExpired ? (
-          <span className="pair-code-expired-text">Generating new code…</span>
+          <div className="pair-code-expired">
+            <span className="pair-code-expired-text">Generating new code…</span>
+            {/* gruvax-7j5: a failed reroll auto-retries (see fetchNewCode),
+                but also surface a manual tap so the device never depends
+                solely on a background timer to recover. */}
+            {fetchFailed && (
+              <button
+                type="button"
+                className="pair-code-retry-btn"
+                onClick={() => { void fetchNewCode() }}
+                disabled={isCodeFetching}
+              >
+                Tap to retry
+              </button>
+            )}
+          </div>
         ) : (
           <div className="pair-code-digits">
             {digits.map((d, i) => (
@@ -326,7 +422,11 @@ export function PairView() {
         >
           <QRCode
             value={`${window.location.origin}/admin/devices?code=${pairingCode.code}`}
-            size={160}
+            // gruvax-qou1: 160px measured @800×480 rendered TRUNCATED below
+            // the fold (.pair-qr-container top 487px on an 855.6px-tall
+            // page). 128px keeps the whole surface above the 480px fold at
+            // both candidate kiosk viewports while staying scannable.
+            size={128}
             level="M"
             bgColor="var(--gruvax-white)"
             fgColor="var(--gruvax-blue)"

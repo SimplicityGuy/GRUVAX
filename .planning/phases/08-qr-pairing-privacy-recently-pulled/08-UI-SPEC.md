@@ -131,11 +131,11 @@ This section is the primary deliverable for the executor. Each surface maps to a
 
 **QR dimensions and ECC:**
 
-- Size: `160px` × `160px`. At the pinned 7-inch display (800×480 — see CLAUDE.md § Recommended Stack — Raspberry Pi Kiosk) viewed from 50–80 cm, 160px renders modules at approximately 1.4–2.2 mm each, sufficient for reliable scan with a phone camera. Larger would push PairView content off-screen.
-- Error Correction Level: `"M"` (15% data restoration). Level Q (25%) would increase the QR version and reduce module size at 160px; M is the correct tradeoff at this scanning distance and screen size.
+- Size: `128px` × `128px` (gruvax-qou1 correction — the original `160px` spec below was falsified by Playwright measurement: at 800×480 the full PairView surface rendered 855.6px tall, pushing `.pair-qr-container` to top:487px, *below* the 480px fold, truncating ~38% of the QR rather than avoiding overflow. `128px`, combined with tighter spacing/type-scale tokens across the rest of the surface, keeps the whole surface above the fold — see `pair.css`). At the pinned 7-inch display (800×480 — see CLAUDE.md § Recommended Stack — Raspberry Pi Kiosk) viewed from 50–80 cm, 128px still renders modules large enough for a reliable phone-camera scan at this distance.
+- Error Correction Level: `"M"` (15% data restoration). Level Q (25%) would increase the QR version and reduce module size further; M is the correct tradeoff at this scanning distance and screen size.
 - `bgColor`: `var(--gruvax-white)` — white is the quiet zone background.
 - `fgColor`: `var(--gruvax-blue)` — #0051A2, 7.2:1 contrast against white, exceeds scanner requirements.
-- Quiet zone: the `react-qr-code` SVG renders a built-in quiet zone. The `.pair-qr-container` adds `padding: var(--gruvax-space-3)` (12px) on all sides to extend the quiet zone against any surrounding background.
+- Quiet zone: the `react-qr-code` SVG renders a built-in quiet zone. The `.pair-qr-container` adds `padding: var(--gruvax-space-2)` (8px, gruvax-qou1 — was `space-3`/12px) on all sides to extend the quiet zone against any surrounding background.
 
 **Caption:** `p.pair-qr-caption` rendered below the SVG, inside `.pair-qr-container`.
 
