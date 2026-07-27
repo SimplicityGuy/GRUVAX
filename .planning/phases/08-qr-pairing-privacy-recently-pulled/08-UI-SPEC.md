@@ -131,7 +131,7 @@ This section is the primary deliverable for the executor. Each surface maps to a
 
 **QR dimensions and ECC:**
 
-- Size: `160px` × `160px`. At a 7-inch display (1024×600 or 800×480) viewed from 50–80 cm, 160px renders modules at approximately 1.4–2.2 mm each, sufficient for reliable scan with a phone camera. Larger would push PairView content off-screen on 800×480.
+- Size: `160px` × `160px`. At the pinned 7-inch display (800×480 — see CLAUDE.md § Recommended Stack — Raspberry Pi Kiosk) viewed from 50–80 cm, 160px renders modules at approximately 1.4–2.2 mm each, sufficient for reliable scan with a phone camera. Larger would push PairView content off-screen.
 - Error Correction Level: `"M"` (15% data restoration). Level Q (25%) would increase the QR version and reduce module size at 160px; M is the correct tradeoff at this scanning distance and screen size.
 - `bgColor`: `var(--gruvax-white)` — white is the quiet zone background.
 - `fgColor`: `var(--gruvax-blue)` — #0051A2, 7.2:1 contrast against white, exceeds scanner requirements.
