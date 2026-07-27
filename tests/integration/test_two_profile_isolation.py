@@ -16,6 +16,20 @@ Tests:
       POST /api/admin/editing bound to profile A delivers admin_editing only on A's SSE channel;
       profile B's channel receives nothing.
 
+SCOPE LIMIT — read this before trusting a green run here (gruvax-seh):
+  Every write test in this module binds profile A = DEFAULT_PROFILE_UUID (see
+  ``_login``, which sets gruvax_browse_binding to DEFAULT_PROFILE_UUID). A write
+  path that IGNORES the binding and hardcodes the default profile is therefore
+  indistinguishable from a correctly-scoped one here — A *is* the default, so
+  "profile B unchanged" holds either way. These tests cannot detect the
+  hardcoded-default write class (gruvax-xkc / -5dm / -0ge / -7ad), and a green run
+  of this module is not evidence against it.
+
+  The inverse direction — binding to a NON-default profile and asserting that the
+  write landed there AND the default profile was untouched — lives in
+  ``test_nondefault_profile_scoping.py``. Add new write-scoping coverage there, not
+  here, unless the case genuinely needs A to be the default.
+
 Design note — WARNING-2 registry constraint:
   Profile B must be inserted into gruvax.profiles BEFORE live_server calls create_app(),
   so create_app()'s startup loop builds B's EventBus. We achieve this by making the
