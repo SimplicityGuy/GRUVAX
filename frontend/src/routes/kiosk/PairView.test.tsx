@@ -399,4 +399,68 @@ describe('PairView', () => {
     const container = document.body
     expect(container.textContent).not.toContain('Generating new code')
   })
+
+  /**
+   * Test 8 (gruvax-6ip0): the countdown must be immune to client clock skew.
+   *
+   * Reproduces the boot-race scenario: a Pi without a battery-backed RTC
+   * restores its clock from fake-hwclock on cold boot (starts BEHIND real
+   * time by however long it was powered off) until systemd-timesyncd
+   * catches up. If the countdown were still computed by diffing the
+   * client's (skewed) Date.now() against the server's ABSOLUTE expires_at,
+   * a client clock hours behind would render a countdown of several HOURS
+   * instead of the true ~5 minutes.
+   *
+   * The fixture sets expires_at to a server-absolute timestamp hours ahead
+   * of the frozen client clock (simulating exactly that skew) while
+   * remaining_seconds correctly reports the true ~300s duration. Only the
+   * duration-based fix renders a sane M:SS value.
+   */
+  it('renders a correct countdown from remaining_seconds even when the client clock is skewed behind the server (gruvax-6ip0)', async () => {
+    const callCount = { value: 0 }
+    // expires_at is HOURS ahead of FAKE_NOW_MS — as it would appear to a Pi
+    // whose clock is still hours behind real (server) time post-cold-boot.
+    // A naive `new Date(expires_at).getTime() - Date.now()` diff would render
+    // an hours-long countdown here instead of the true ~5 minutes.
+    const skewedExpiresAtIso = new Date(FAKE_NOW_MS + 3 * 60 * 60 * 1000).toISOString()
+    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
+      const method = init?.method?.toUpperCase() ?? 'GET'
+      if (typeof url === 'string' && url.includes('/api/devices/pairing-codes') && method === 'POST') {
+        callCount.value += 1
+        return {
+          ok: true,
+          json: async () => ({
+            code: '1234',
+            expires_at: skewedExpiresAtIso,
+            remaining_seconds: 299,
+          }),
+        } as Response
+      }
+      if (typeof url === 'string' && url.includes('/api/devices/me')) {
+        return { ok: true, json: async () => ({ state: 'unpaired', profile_id: null }) } as Response
+      }
+      return { ok: false, json: async () => ({}) } as Response
+    }))
+
+    const qc = makeQueryClient()
+    await act(async () => {
+      render(
+        <QueryClientProvider client={qc}>
+          <MemoryRouter>
+            <PairView />
+          </MemoryRouter>
+        </QueryClientProvider>,
+      )
+      await Promise.resolve()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    const text = document.body.textContent ?? ''
+    // Must read as the true ~5 minute duration (4:57-4:59, depending on
+    // exact tick timing), never an hours-long value derived from the skewed
+    // expires_at diff (180:00 for the 3-hour skew injected above).
+    expect(/4:5[7-9]/.test(text)).toBe(true)
+    expect(text).not.toMatch(/\d{3,}:\d\d/) // no 3+ digit minute count (e.g. "180:00")
+  })
 })

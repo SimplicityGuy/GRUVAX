@@ -214,6 +214,19 @@ async def test_generate_code(client) -> None:  # type: ignore[no-untyped-def]
     assert code.isdigit(), f"code must be all digits ('0000'..'9999'), got {code!r}"
     assert data.get("expires_at") is not None, "expires_at must be non-null (5-min TTL from now)"
 
+    # gruvax-6ip0: remaining_seconds is a server-computed DURATION (not a
+    # timestamp) so the kiosk countdown never has to diff its own (possibly
+    # skewed, e.g. pre-NTP-sync on a cold Pi boot) wall clock against this
+    # response's server-absolute expires_at.
+    remaining_seconds = data.get("remaining_seconds")
+    assert isinstance(remaining_seconds, int), (
+        f"remaining_seconds must be an int (gruvax-6ip0), got {type(remaining_seconds)!r}: "
+        f"{remaining_seconds!r}"
+    )
+    assert 290 <= remaining_seconds <= 300, (
+        f"remaining_seconds must be ~300 (5-min TTL just issued), got {remaining_seconds}"
+    )
+
     # Fingerprint cookie must be set
     assert FINGERPRINT_COOKIE in response.cookies, (
         f"Response must set {FINGERPRINT_COOKIE!r} cookie. "

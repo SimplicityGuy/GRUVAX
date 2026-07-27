@@ -50,6 +50,12 @@ function formatCountdown(ms: number): string {
 interface PairingCodeData {
   code: string
   expires_at: string
+  /**
+   * gruvax-6ip0: server-computed DURATION (seconds remaining at generation
+   * time), not a timestamp. Optional so a server/mock that hasn't been
+   * upgraded still falls back to the (skew-prone) expires_at diff below.
+   */
+  remaining_seconds?: number
 }
 
 type PairStatus = 'loading' | 'active' | 'expiring' | 'expired' | 'paired'
@@ -189,6 +195,22 @@ export function PairView() {
   }, [])
 
   // ── Countdown effect — fires when a new pairingCode is received ──────────
+  //
+  // gruvax-6ip0: the countdown used to re-diff the client's Date.now() against
+  // the server-ABSOLUTE expires_at on every 1s tick. That mixes two clock
+  // domains: a Pi that cold-boots without a battery-backed RTC restores its
+  // clock from fake-hwclock (last-saved time, so it starts BEHIND by however
+  // long it was powered off) until systemd-timesyncd catches up — landing on
+  // /pair mid-boot-race renders a wildly inflated countdown that never
+  // reaches 0 (dead code, no reroll, pairing impossible until NTP corrects).
+  //
+  // Fix: seed the countdown from the server-computed DURATION
+  // (remaining_seconds — immune to client clock skew entirely) and tick it
+  // down using the monotonic performance.now() clock rather than Date.now(),
+  // so neither an initial skew nor a mid-countdown wall-clock correction
+  // (e.g. NTP sync landing) can perturb it. Falls back to the expires_at
+  // diff (single read, at effect-start only — not on every tick) only if
+  // remaining_seconds is absent.
   useEffect(() => {
     if (!pairingCode?.expires_at) return
 
@@ -199,14 +221,16 @@ export function PairView() {
     rerollTriggeredRef.current = false
     lastMilestoneRef.current = null
 
-    const computeRemaining = () => {
-      const expiresMs = new Date(pairingCode.expires_at).getTime()
-      return expiresMs - Date.now()
-    }
+    const initialMs =
+      typeof pairingCode.remaining_seconds === 'number'
+        ? pairingCode.remaining_seconds * 1000
+        : new Date(pairingCode.expires_at).getTime() - Date.now()
+    const clampedInitial = Math.max(0, initialMs)
 
-    const initial = computeRemaining()
-    const clampedInitial = Math.max(0, initial)
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- countdown initial value derived from server-authoritative expires_at; no other place to set this than the effect that starts the interval
+    const startedAtPerf = performance.now()
+    const computeRemaining = () => clampedInitial - (performance.now() - startedAtPerf)
+
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- countdown initial value derived from server-authoritative duration; no other place to set this than the effect that starts the interval
     setRemainingMs(clampedInitial)
 
     updatePairStatus(clampedInitial <= 60_000 ? 'expiring' : 'active')
@@ -246,7 +270,7 @@ export function PairView() {
         clearInterval(countdownIntervalRef.current)
       }
     }
-  }, [pairingCode?.expires_at, fetchNewCode, updatePairStatus])
+  }, [pairingCode?.expires_at, pairingCode?.remaining_seconds, fetchNewCode, updatePairStatus])
 
   // ── Device-state poll ────────────────────────────────────────────────────
   const { data: deviceState } = useQuery({

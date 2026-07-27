@@ -6,6 +6,15 @@ Endpoints (no PIN required — kiosk-facing):
   GET  /api/devices/me            — return device state for the current fingerprint cookie:
                                     {state: 'unpaired'|'pending'|'paired'|'revoked', profile_id?}
 
+gruvax-6ip0 (clock skew): the pairing-codes response carries ``remaining_seconds``,
+a server-computed DURATION (``EXTRACT(EPOCH FROM (expires_at - NOW()))``), alongside
+``expires_at``. The kiosk countdown (PairView.tsx) counts down from that duration
+using its own monotonic clock rather than repeatedly diffing the client's wall clock
+against the server's absolute ``expires_at`` — so a Pi that cold-boots with its clock
+still behind (no RTC battery fitted, fake-hwclock restores time from last shutdown
+until systemd-timesyncd catches up) still gets a correct 5:00 countdown instead of a
+bogus one, or worse, a code that renders already-expired.
+
 Security:
   - Fingerprint value is NEVER logged (RESEARCH.md Pitfall 7)
   - All SQL uses parameterized %s — no f-strings in query text (bandit B608)
@@ -36,7 +45,8 @@ _INSERT_PAIRING_CODE = (
     "INSERT INTO gruvax.pairing_codes (code, fingerprint, expires_at)"
     " VALUES (%s, %s, NOW() + INTERVAL '5 minutes')"
     " ON CONFLICT (code) DO NOTHING"
-    " RETURNING code, expires_at"
+    " RETURNING code, expires_at,"
+    " EXTRACT(EPOCH FROM (expires_at - NOW()))::int AS remaining_seconds"
 )
 
 # SELECT device row by fingerprint — intentionally selects the raw fingerprint
@@ -66,7 +76,12 @@ async def generate_pairing_code(
     and attached to the response.
 
     Returns:
-        ``{code: "XXXX", expires_at: ISO-8601}``
+        ``{code: "XXXX", expires_at: ISO-8601, remaining_seconds: int}``
+
+    ``remaining_seconds`` (gruvax-6ip0) is a server-computed DURATION, not a
+    timestamp — the kiosk counts down from it locally instead of repeatedly
+    diffing its own (possibly skewed, e.g. pre-NTP-sync on a cold Pi boot)
+    wall clock against the server-absolute ``expires_at``.
 
     Security: fingerprint value is never logged (RESEARCH.md Pitfall 7).
     Code collisions are handled with up to 3 retries (RESEARCH.md Pattern 2 + Pitfall 6).
@@ -89,6 +104,7 @@ async def generate_pairing_code(
     # probability of 3 consecutive PK collisions is negligible (~(N/10000)^3).
     code: str | None = None
     expires_at_iso: str | None = None
+    remaining_seconds: int = 0
 
     for _ in range(3):
         candidate = f"{secrets.randbelow(10000):04d}"  # '0000'..'9999' via OS CSPRNG
@@ -102,6 +118,8 @@ async def generate_pairing_code(
             expires_at_iso = (
                 expires_at.isoformat() if hasattr(expires_at, "isoformat") else str(expires_at)
             )
+            # gruvax-6ip0: server-computed duration, immune to client clock skew.
+            remaining_seconds = int(row[2]) if row[2] is not None else 0
             break
 
     if code is None:
@@ -116,7 +134,13 @@ async def generate_pairing_code(
 
     # Build the JSON response and attach the fingerprint cookie (with the SAME
     # token that was just stored in pairing_codes) only if it was freshly issued.
-    json_response = JSONResponse(content={"code": code, "expires_at": expires_at_iso})
+    json_response = JSONResponse(
+        content={
+            "code": code,
+            "expires_at": expires_at_iso,
+            "remaining_seconds": remaining_seconds,
+        }
+    )
     if new_fp_issued:
         set_fingerprint_cookie(json_response, fp)
     return json_response
