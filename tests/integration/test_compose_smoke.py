@@ -23,6 +23,8 @@ What's tested here:
   - gruvax-95qp: `docker compose config` honors a scratch `.env`'s DATABASE_URL /
     MQTT_HOST / MQTT_PORT instead of the previously-shadowing hardcoded/rebuilt
     values (skipped if the `docker` CLI isn't available).
+  - gruvax-b51h: `.env.example` does not ship an active (uncommented)
+    `GRUVAX_ENV=development`, and the runbook documents the pre-flight check.
 """
 
 from __future__ import annotations
@@ -358,3 +360,42 @@ def test_compose_config_falls_back_when_env_unset() -> None:
     )
     assert api_env["MQTT_HOST"] == "mosquitto"
     assert str(api_env["MQTT_PORT"]) == "1883"
+
+
+# ── gruvax-b51h: GRUVAX_ENV=development must not ship active in .env.example ─
+
+
+def test_env_example_does_not_ship_active_gruvax_env_development() -> None:
+    """`.env.example` must NOT set an active (uncommented) GRUVAX_ENV.
+
+    `cp .env.example .env` is the documented first step of both the README
+    quickstart and docs/runbook-fresh-host.md's production Bring-Up Sequence.
+    Shipping GRUVAX_ENV=development active there previously meant that exact
+    copy silently enabled synthetic seeding (and permanently skipped the real
+    Discogs sync) on a production host (gruvax-b51h).
+    """
+    env_example = REPO_ROOT / ".env.example"
+    assert env_example.exists()
+    for line in env_example.read_text().splitlines():
+        stripped = line.strip()
+        assert not stripped.startswith("GRUVAX_ENV="), (
+            f".env.example must not ship an active GRUVAX_ENV line: {line!r} "
+            "(gruvax-b51h regression — it must be commented out)"
+        )
+
+
+def test_runbook_documents_gruvax_env_preflight_check() -> None:
+    """docs/runbook-fresh-host.md must call out GRUVAX_ENV explicitly (gruvax-b51h).
+
+    Previously GRUVAX_ENV appeared zero times in the runbook even though its
+    prerequisites list told operators to `cp .env.example .env` verbatim.
+    """
+    runbook = REPO_ROOT / "docs" / "runbook-fresh-host.md"
+    assert runbook.exists()
+    content = runbook.read_text()
+    assert "GRUVAX_ENV" in content, (
+        "docs/runbook-fresh-host.md must mention GRUVAX_ENV (gruvax-b51h regression)"
+    )
+    assert "pre-flight" in content.lower(), (
+        "docs/runbook-fresh-host.md must document a GRUVAX_ENV pre-flight check (gruvax-b51h)"
+    )
