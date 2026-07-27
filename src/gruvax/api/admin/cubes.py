@@ -384,15 +384,19 @@ WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
     try:
         await cache.load(pool)
         # Re-derive SegmentCache from the refreshed BoundaryCache (D-07 / SEG-08).
-        # Must use the same overrides that were in effect before invalidation.
-        overrides: dict[tuple[int, int, int, str], float] = {}
-        seg_bin_old = segment_cache.get_bin(unit_id, row, col)
-        if seg_bin_old is not None:
-            for seg in seg_bin_old.segments:
-                if seg.is_override:
-                    overrides[(unit_id, row, col, seg.label)] = seg.applied_fraction
+        #
+        # gruvax-591: pass ``cache.overrides`` — the FULL override set the
+        # ``cache.load()`` on the previous line just read from
+        # ``gruvax.segment_overrides``.  The previous code hand-built a dict from
+        # only the EDITED bin's pre-invalidation segments, so ``derive()`` (which
+        # applies exactly the dict it is handed and sets ``is_override=False`` for
+        # every label absent from it) silently reverted every OTHER cube's admin
+        # width override in the live cache.  The DB rows survived, so a restart
+        # made them reappear — a phantom the owner could never reproduce.
+        # ``cache.overrides`` is the canonical argument (app.py:231,
+        # profile_sync.py, segment_cache docstring).
         segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, overrides)
+        segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -861,17 +865,11 @@ async def bulk_write_cubes(
     try:
         await cache.load(pool)
         # Re-derive SegmentCache from the refreshed BoundaryCache (Phase 5 / 05-04).
-        # Collect overrides from the current (pre-invalidation) SegmentCache state.
-        overrides: dict[tuple[int, int, int, str], float] = {}
-        for edit in body.updates:
-            seg_bin = segment_cache.get_bin(edit.unit_id, edit.row, edit.col)
-            if seg_bin is not None:
-                for seg in seg_bin.segments:
-                    if seg.is_override:
-                        key = (edit.unit_id, edit.row, edit.col, seg.label)
-                        overrides[key] = seg.applied_fraction
+        # gruvax-591: use the full DB-truth override set from ``cache.load()``
+        # instead of a dict hand-built from only the edited bins — see the same
+        # comment on put_cube_boundary above.
         segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, overrides)
+        segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(
             "boundary_changed",

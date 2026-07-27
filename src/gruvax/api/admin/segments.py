@@ -319,15 +319,12 @@ async def put_bin_cut(
     cache.invalidate()
     try:
         await cache.load(pool)
-        # Collect overrides from pre-invalidation state to preserve admin fractions
-        overrides: dict[tuple[int, int, int, str], float] = {}
-        seg_bin_old = segment_cache.get_bin(unit_id, row, col)
-        if seg_bin_old is not None:
-            for seg in seg_bin_old.segments:
-                if seg.is_override:
-                    overrides[(unit_id, row, col, seg.label)] = seg.applied_fraction
+        # gruvax-591: re-derive against ``cache.overrides`` — the full override set
+        # the ``cache.load()`` above just read from gruvax.segment_overrides.  The
+        # old hand-built dict carried ONLY this bin's pre-invalidation segments, so
+        # derive() cleared is_override on every other cube in the shelf.
         segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, overrides)
+        segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -476,28 +473,16 @@ DO UPDATE SET fraction = EXCLUDED.fraction,
         await cleanup_idempotency(conn)
 
     # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
-    # CR-02: re-read is scoped to the resolved profile_id so overrides from other
-    # profiles are not folded into this profile's SegmentCache.
+    # gruvax-591: ``cache.load()`` already re-reads gruvax.segment_overrides into
+    # ``cache.overrides``; the extra hand-rolled SELECT that used to live here was
+    # a second, divergent read of the same table.  One source (the cache) keeps
+    # the boundary rows and the override rows loaded under a single scope, so they
+    # can never disagree about which profile they came from.
     cache.invalidate()
     try:
         await cache.load(pool)
-        # Build overrides dict from the segment_overrides table for this re-derive
-        # (the table is the authoritative source; we re-read for correctness)
-        new_overrides: dict[tuple[int, int, int, str], float] = {}
-        async with pool.connection() as conn2:
-            sql_overrides = """
-SELECT unit_id, row, col, label, fraction
-FROM gruvax.segment_overrides
-WHERE profile_id = %s::uuid
-ORDER BY unit_id, row, col, label
-"""
-            async with conn2.cursor() as cur:
-                await cur.execute(sql_overrides, (profile_id,))
-                override_rows = await cur.fetchall()
-        for uid, r, c, lbl, frac in override_rows:
-            new_overrides[(int(uid), int(r), int(c), str(lbl))] = float(frac)
         segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, new_overrides)
+        segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -725,27 +710,14 @@ async def insert_cut(
             affected_cubes.append({"unit": uid, "row": r, "col": c})
 
     # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
-    # CR-02: re-read is scoped to the resolved profile_id so overrides from other
-    # profiles are not folded into this profile's SegmentCache.
+    # gruvax-591: re-derive against ``cache.overrides`` (populated by the
+    # ``cache.load()`` below) rather than a second hand-rolled SELECT — see the
+    # same note on set_bin_overrides above.
     cache.invalidate()
     try:
         await cache.load(pool)
-        # Reload overrides from segment_overrides for accurate re-derive
-        new_overrides: dict[tuple[int, int, int, str], float] = {}
-        async with pool.connection() as conn2:
-            sql_overrides = """
-SELECT unit_id, row, col, label, fraction
-FROM gruvax.segment_overrides
-WHERE profile_id = %s::uuid
-ORDER BY unit_id, row, col, label
-"""
-            async with conn2.cursor() as cur:
-                await cur.execute(sql_overrides, (profile_id,))
-                override_rows = await cur.fetchall()
-        for uid_o, r_o, c_o, lbl_o, frac_o in override_rows:
-            new_overrides[(int(uid_o), int(r_o), int(c_o), str(lbl_o))] = float(frac_o)
         segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, new_overrides)
+        segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(
             "boundary_changed",

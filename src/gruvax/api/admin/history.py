@@ -237,26 +237,14 @@ async def revert_change_set(
         cache.invalidate()
         try:
             await cache.load(pool)
-            # Re-read ALL overrides from the DB before re-deriving SegmentCache.
-            # A revert may touch multiple bins, and admin-set width overrides must
-            # be preserved.  Re-reading from gruvax.segment_overrides is the same
-            # approach used by segments.py::set_bin_overrides and insert_cut.
-            # CR-02: scoped to the resolved profile_id to prevent cross-profile
-            # override contamination.
-            overrides: dict[tuple[int, int, int, str], float] = {}
-            async with pool.connection() as conn2, conn2.cursor() as cur2:
-                await cur2.execute(
-                    "SELECT unit_id, row, col, label, fraction"
-                    " FROM gruvax.segment_overrides"
-                    " WHERE profile_id = %s::uuid"
-                    " ORDER BY unit_id, row, col, label",
-                    (profile_id,),
-                )
-                override_rows = await cur2.fetchall()
-            for uid_o, r_o, c_o, lbl_o, frac_o in override_rows:
-                overrides[(int(uid_o), int(r_o), int(c_o), str(lbl_o))] = float(frac_o)
+            # gruvax-591: ALL overrides must survive a revert — a revert may touch
+            # many bins, and admin-set width overrides are not part of the reverted
+            # change-set.  ``cache.load()`` above already re-read
+            # gruvax.segment_overrides into ``cache.overrides``, so the second
+            # hand-rolled SELECT that used to live here was a divergent read of the
+            # same table under a possibly different scope.  One source only.
             segment_cache.invalidate()
-            segment_cache.derive(cache, snapshot, overrides)
+            segment_cache.derive(cache, snapshot, cache.overrides)
         finally:
             # Publish boundary_changed even if cache.load() raised — the kiosk must
             # be notified that a revert occurred.  cube_ids uses key "unit" (not

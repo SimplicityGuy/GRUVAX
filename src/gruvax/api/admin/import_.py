@@ -591,27 +591,15 @@ async def import_boundaries(
     cache.invalidate()
     try:
         await cache.load(pool)
-        # Collect overrides for segment_cache re-derive
-        overrides: dict[tuple[int, int, int, str], float] = {}
-        for edit in all_edits:
-            seg_bin = segment_cache.get_bin(edit.unit_id, edit.row, edit.col)
-            if seg_bin is not None:
-                for seg in seg_bin.segments:
-                    if seg.is_override:
-                        override_key: tuple[int, int, int, str] = (
-                            edit.unit_id,
-                            edit.row,
-                            edit.col,
-                            str(seg.label),
-                        )
-                        overrides[override_key] = seg.applied_fraction
-        # Also include any overrides from the imported file entries
-        for entry in entries:
-            if entry.overrides and not entry.is_empty:
-                for label, fraction in entry.overrides.items():
-                    overrides[(entry.unit_id, entry.row, entry.col, str(label))] = fraction
+        # gruvax-591: ``cache.overrides`` is the complete post-import override set.
+        # The file's own overrides were upserted into gruvax.segment_overrides
+        # INSIDE the committed transaction above, so the ``cache.load()`` on the
+        # previous line already reads them back — no separate merge needed, and
+        # the merge that used to live here was additive only: cubes ABSENT from
+        # the imported file still lost their override in the live cache because
+        # the hand-built dict only covered the edited bins.
         segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, overrides)
+        segment_cache.derive(cache, snapshot, cache.overrides)
     finally:
         await bus.publish(
             "boundary_changed",
