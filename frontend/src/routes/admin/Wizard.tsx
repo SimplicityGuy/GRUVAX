@@ -194,6 +194,18 @@ function WizardWalk() {
   const isLastStep = currentStepIndex === totalSteps - 1
   const isReviewPhase = phase === 'review'
 
+  // Clamp currentStepIndex once the real step count is known. A reshuffle draft's
+  // completedSteps can be persisted at (or past) totalSteps by a skip/commit on the
+  // last step (see handleSkip / handleCommit) — without this clamp, re-entry reads
+  // steps[currentStepIndex] as undefined and the render below throws, unmounting
+  // the whole React root (no error boundary exists) — gruvax-cw8.
+  useEffect(() => {
+    if (totalSteps > 0 && currentStepIndex > totalSteps - 1) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setCurrentStepIndex(totalSteps - 1)
+    }
+  }, [totalSteps, currentStepIndex])
+
   // ── Pre-load existing cut points in reshuffle mode ────────────────────────
   useEffect(() => {
     if (mode === 'reshuffle' && cubesData && Object.keys(cuts).length === 0 && !reshuffleDraft) {
@@ -253,7 +265,13 @@ function WizardWalk() {
     const key = stepKey(currentStep)
     const newCuts = { ...cuts, [key]: { first_label: null, first_catalog: null, is_empty: true } }
     setCuts(newCuts)
-    if (mode === 'reshuffle') persistDraft(newCuts, currentStepIndex + 1)
+    if (mode === 'reshuffle') {
+      // Persist the updated cuts, but never persist a completedSteps that would
+      // point PAST the last real step (steps[totalSteps] is undefined). On the
+      // last step the walk is done — clamp to the last valid index so a reload
+      // safely re-renders it instead of white-screening (gruvax-cw8).
+      persistDraft(newCuts, isLastStep ? currentStepIndex : currentStepIndex + 1)
+    }
     if (isLastStep) {
       setPhase('review')
     } else {
@@ -333,11 +351,15 @@ function WizardWalk() {
     setIsCommitting(true)
     setCommitError('')
 
-    // Persist idempotency key into draft immediately before network call (Pattern 4)
+    // Persist idempotency key into draft immediately before network call (Pattern 4).
+    // completedSteps stays clamped to the last valid step index here — it must only
+    // become "fully done" (totalSteps) once the commit actually succeeds below;
+    // persisting totalSteps pre-emptively left a poisoned draft (out-of-range
+    // currentStepIndex on re-entry) whenever the network call failed (gruvax-cw8).
     if (mode === 'reshuffle') {
       setReshuffleDraft({
         mode: 'reshuffle',
-        completedSteps: totalSteps,
+        completedSteps: Math.min(currentStepIndex, totalSteps - 1),
         cuts,
         idempotencyKey: idempotencyKey.current,
         startedAt: draftStartedAt.current,
@@ -376,7 +398,19 @@ function WizardWalk() {
     )
   }
 
-  const step = currentStep!
+  if (!currentStep) {
+    // Defense in depth alongside the clamp effect above: the clamp runs in an
+    // effect (after render), so the render that follows a poisoned/out-of-range
+    // currentStepIndex can still momentarily see currentStep === null. Render a
+    // safe loading state instead of throwing on `step.unit_id` (gruvax-cw8).
+    return (
+      <div className="wizard-route">
+        <p className="wizard-loading" aria-live="polite">Loading cubes…</p>
+      </div>
+    )
+  }
+
+  const step = currentStep
   const shelfLetter = String.fromCharCode(64 + (step?.unit_id ?? 1))
   const shelfName = `SHELF ${shelfLetter}`
   const binNumber = currentStepIndex + 1

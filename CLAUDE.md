@@ -138,6 +138,7 @@ GRUVAX is a touchscreen kiosk plus REST API that helps the owner (and visiting f
 | Concern | Choice | Rationale |
 |---------|--------|-----------|
 | OS | Raspberry Pi OS Trixie (Debian 13), 64-bit | Official supported release since Oct 2025. Includes the labwc compositor by default for Wayland sessions on Pi 5. |
+| Display panel | **Official Raspberry Pi Touch Display (7"), 800×480 — PINNED** | The single supported render target. All kiosk CSS, layout, and the Playwright viewport render check (`tests/browser/test_kiosk_viewport.py`) are authored and verified against this exact resolution; `deploy/kiosk/start-kiosk.sh` passes `--window-size=800,480 --force-device-scale-factor=1`. See `deploy/kiosk/README.md` § Target Viewport before considering a different panel. |
 | Display server | **Wayland with `labwc`** | Default for Pi 5 in Trixie. Hardware video acceleration through KMS works correctly. X11 still works but is the legacy path; the active development is Wayland. |
 | Browser | Chromium (from Raspberry Pi OS repo, not snap/flatpak) | The packaged Chromium has the proprietary V4L2/MMAL bits configured. Same browser the Pi Foundation tests against. |
 | Launcher | `~/.config/labwc/autostart` invoking a `start-kiosk.sh` script | `start-kiosk.sh` runs the browser with the right flags (`--kiosk`, `--noerrdialogs`, `--disable-infobars`, `--no-first-run`, `--password-store=basic`, `--ozone-platform=wayland`, `--app=http://your-server.local:PORT/`). `--password-store=basic` avoids the keyring unlock dialog on boot. |

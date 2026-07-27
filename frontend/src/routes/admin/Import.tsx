@@ -283,6 +283,15 @@ function ErrorCard({ error, index, onApplySuggestion }: ErrorCardProps) {
         </p>
       )}
 
+      {/* Non-phantom, non-contiguity errors (e.g. parse_error / unsupported_format) have
+          no first_label to key off — render the backend's exact message instead of
+          rendering nothing (gruvax-imeq). */}
+      {!isContiguity && !error.first_label && (
+        <p className="import-error-body">
+          {error.message || 'Validation error.'}
+        </p>
+      )}
+
       {!error.fixed && !isContiguity && error.near_misses.length > 0 && (
         <div className="import-suggestion-row">
           <span className="import-suggestion-label">Did you mean?</span>

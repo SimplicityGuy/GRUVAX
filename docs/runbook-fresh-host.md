@@ -27,6 +27,12 @@ healthcheck verification, and the expected bring-up sequence.
     bundled `fake-discogsography` sibling service, `http://fake-discogsography:8004`).
     **Override to the real discogsography service in production** — see the
     `fake-discogsography` pitfall under Bring-Up Sequence below.
+  - `GRUVAX_ENV` — **must be absent/unset on a production host.** `.env.example` ships it
+    commented out (gruvax-b51h); if `.env` was ever created from an older copy, or a stray
+    `export GRUVAX_ENV=development` is in the deploy shell's environment, **remove it**
+    before continuing. Setting it seeds ~3,000 synthetic records into the real
+    `gruvax.profile_collection` on first boot and then permanently skips the real Discogs
+    sync — see the "GRUVAX_ENV" pre-flight check and pitfall below.
 
 ## Volume Permissions
 
@@ -60,6 +66,15 @@ cd GRUVAX
 cp .env.example .env   # or create from scratch (see Prerequisites above)
 $EDITOR .env
 
+# 2a. PRE-FLIGHT CHECK (production only) — confirm GRUVAX_ENV is NOT set.
+#     .env.example ships it commented out, but verify before every prod
+#     bring-up (gruvax-b51h): an active GRUVAX_ENV=development seeds
+#     synthetic data into the real collection and permanently skips the
+#     initial Discogs sync (see the pitfall below). Expected output: no match.
+grep -E '^\s*GRUVAX_ENV\s*=' .env && echo "REFUSE TO DEPLOY: unset GRUVAX_ENV in .env first" && exit 1
+docker compose config | grep -q 'GRUVAX_ENV: development' && echo "REFUSE TO DEPLOY: GRUVAX_ENV=development is active in the resolved config" && exit 1
+echo "GRUVAX_ENV pre-flight check passed (unset -> production default)"
+
 # 3a. Production host (pull-based deploy — do NOT have compose.override.yaml present):
 docker compose pull
 docker compose up -d
@@ -92,8 +107,24 @@ in production.
 > a fresh production host, expect to see `gruvax-fake-discogsography` running (harmlessly)
 > alongside the real stack until a profile gate lands for it.
 
+> **Pitfall — `GRUVAX_ENV=development` makes `init-sync`'s "skip" output indistinguishable
+> from success (gruvax-b51h).** If `GRUVAX_ENV=development` is active (see the pre-flight
+> check above), the `api` container seeds ~3,000 SYNTHETIC records into
+> `gruvax.profile_collection` for the default profile as part of its entrypoint, **before**
+> `init-sync` ever runs. `init-sync`'s D-16 idempotency precheck then sees a non-empty
+> collection and logs "profile_collection already populated for default profile; skipping
+> initial sync" — **exactly the same log line and `Exited (0)` status a healthy, already-synced
+> production deployment produces.** `docker compose ps -a` and `init-sync`'s own exit code
+> cannot tell these two cases apart; check `docker compose logs api` for
+> `"Seeding synthetic profile_collection"` (only present when `GRUVAX_ENV=development` fired)
+> to confirm which one happened. The fix is prevention (the pre-flight check above), not
+> after-the-fact detection — once synthetic rows exist for the default profile, `init-sync`
+> will keep skipping the real sync on every future boot regardless of `GRUVAX_ENV`.
+
 Expected output of `docker compose ps -a` when healthy (production host — the
-`init-sync` `Exited (0)` row is only visible with `-a`):
+`init-sync` `Exited (0)` row is only visible with `-a`; this shape is IDENTICAL whether
+`init-sync` ran the real sync or skipped it, so it does NOT by itself confirm `GRUVAX_ENV`
+was unset — see the pitfall above):
 
 ```
 NAME                         IMAGE                                   STATUS                    PORTS
@@ -232,3 +263,19 @@ If Alembic fails with `role "gruvax" does not exist` / `permission denied for sc
 shared Postgres hasn't been provisioned for GRUVAX yet — `just provision-db` prints the
 grant SQL to run as a superuser on the shared instance; create the `gruvax` role/database
 first, run those grants, then re-run `docker compose up -d`.
+
+### Real Discogs sync never happens / kiosk only ever shows the same ~3,000 synthetic records
+
+Almost always `GRUVAX_ENV=development` was active on first boot (see the pre-flight check
+and pitfall above). Confirm:
+
+```bash
+docker compose logs api | grep -i "Seeding synthetic profile_collection"
+```
+
+A match means the entrypoint seeded synthetic data instead of leaving `profile_collection`
+empty for `init-sync`'s real sync to populate. Recovery: unset `GRUVAX_ENV`, then either
+`docker compose down -v` (wipes ALL data, including the dev-pg volume — only safe for a
+fresh install) or manually `DELETE FROM gruvax.profile_collection WHERE profile_id =
+'00000000-0000-0000-0000-000000000001'` on the shared Postgres so `init-sync`'s idempotency
+precheck sees an empty collection on the next `docker compose up -d` and runs the real sync.

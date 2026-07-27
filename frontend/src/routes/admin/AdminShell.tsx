@@ -143,6 +143,10 @@ export function AdminShell() {
     setIsLocked(true)
   }, [])
 
+  const handleUnlock = useCallback(() => {
+    setIsLocked(false)
+  }, [])
+
   const idleRemainingMs = sessionExpiresAt > 0 ? sessionExpiresAt - nowMs : 0
   const isExpiringSoon = idleRemainingMs > 0 && idleRemainingMs < WARNING_THRESHOLD_MS
 
@@ -316,7 +320,7 @@ export function AdminShell() {
 
       {/* PIN overlay — shown when not logged in OR when screen is locked */}
       {showOverlay && (
-        <PinOverlay isLocked={isLocked} />
+        <PinOverlay isLocked={isLocked} onUnlock={handleUnlock} />
       )}
     </div>
   )

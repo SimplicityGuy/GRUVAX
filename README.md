@@ -122,14 +122,17 @@ The atomic unit of the UI is the Kallax cube: a 4×4 grid where each cell is a r
 ### Quickstart
 
 ```bash
-# 1. Copy the environment template and fill in the required secrets (see below)
+# 1. Copy the environment template, fill in the required secrets (see below),
+#    and uncomment `GRUVAX_ENV=development` for the local demo seed (it ships
+#    commented out by default — gruvax-b51h — so a stray copy to a production
+#    host can't silently enable it).
 cp .env.example .env
+$EDITOR .env   # uncomment GRUVAX_ENV=development
 
 # 2. Build and start the full stack: api, gruvax-dev-pg, mosquitto, and the
 #    fake-discogsography sibling used for local dev. The api container waits
-#    for Postgres, runs Alembic migrations, and seeds the synthetic collection
-#    + cube boundaries on first boot (GRUVAX_ENV=development, set by default
-#    in .env.example).
+#    for Postgres, runs Alembic migrations, and (because GRUVAX_ENV=development
+#    is now set) seeds the synthetic collection + cube boundaries on first boot.
 just up
 
 # 3. Open the kiosk
@@ -183,16 +186,20 @@ built-in fake dataset, so **always set it explicitly in production**:
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | `postgresql+psycopg://gruvax:gruvax@gruvax-dev-pg:5432/gruvax` | SQLAlchemy/psycopg connection string (compose supplies the `gruvax-dev-pg` default when unset) |
+| `DATABASE_URL` | `postgresql+psycopg://gruvax:gruvax@gruvax-dev-pg:5432/gruvax` | SQLAlchemy/psycopg connection string — **env-first**: a `DATABASE_URL` set in `.env` is used verbatim; compose only assembles the `gruvax-dev-pg` default from `GRUVAX_DB_*` when `DATABASE_URL` itself is unset (gruvax-95qp) |
 | `SESSION_SECRET` | _(required, no default)_ | Signs the admin session cookie — boot-fail-if-missing |
 | `GRUVAX_SECRET_KEY` | _(required, no default)_ | Fernet key for PAT-at-rest encryption — boot-fail-if-missing or malformed |
 | `GRUVAX_ADMIN_PIN` | _(required by the `init-sync` container, no default)_ | Piped into `gruvax-sync` on first boot; **not** in `.env.example` — add it yourself (e.g. `1234` for local dev) |
 | `DISCOGSOGRAPHY_BASE_URL` | `http://fake-discogsography:8004` | HTTP base URL of the discogsography API — compose defaults to the **fake** service when unset; set explicitly in production |
-| `GRUVAX_ENV` | `development` (in `.env.example`) | `development` enables dev-only migration stubs + synthetic seeding; leave unset (`production`) for a real deployment |
+| `GRUVAX_ENV` | unset → `production` (ships **commented out** in `.env.example`, gruvax-b51h) | `development` enables dev-only migration stubs + synthetic seeding — uncomment for local dev only; **never set on a production host** (permanently short-circuits the real Discogs sync, see `docs/runbook-fresh-host.md`) |
 
-The `api` service also derives `DATABASE_URL` from `GRUVAX_DB_USER` / `GRUVAX_DB_PASSWORD` /
-`GRUVAX_DB_HOST` / `GRUVAX_DB_PORT` / `GRUVAX_DB_NAME` (see `compose.yaml`) if you'd rather
-override the pieces than the full connection string.
+If you'd rather override the pieces than the full connection string, leave `DATABASE_URL`
+unset in `.env` and set `GRUVAX_DB_USER` / `GRUVAX_DB_PASSWORD` / `GRUVAX_DB_HOST` /
+`GRUVAX_DB_PORT` / `GRUVAX_DB_NAME` instead — the `api` and `init-sync` services assemble
+`DATABASE_URL` from those pieces (see `compose.yaml`) **only when `DATABASE_URL` itself is
+absent**. Setting both is not an error, but `DATABASE_URL` always wins outright — the
+`GRUVAX_DB_*` pieces are then ignored, so don't expect them to patch a `DATABASE_URL` you've
+also set.
 
 **DB connectivity from inside Docker (Linux):** The `api` service container reaches the
 bundled `gruvax-dev-pg` service by container name on the Compose network by default. If you

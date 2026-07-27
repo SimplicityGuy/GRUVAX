@@ -429,16 +429,23 @@
     box-shadow var(--gruvax-led-off-duration) var(--gruvax-led-off-ease);
 }
 
-/* Hover state */
-.cube[data-state="hover"],
-.cube:hover {
-  background: var(--gruvax-cell-hover);
-  border-color: var(--gruvax-border);
-  border-style: solid;
-  box-shadow: none;
-  transition:
-    background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
-    border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+/* Hover state — scoped to non-lit cubes only (gruvax-652): a lit cube must
+   never be recolored by hover per design/gruvax-design-language.md:80
+   ("never recolor a lit cell"). Equal specificity with .cube[data-state="lit"]
+   previously let this rule win on tap (Chromium's sticky touch :hover lands
+   on the tapped cube), permanently graying out the cube the search just lit.
+   Also guarded behind (hover: hover) since this is a touch kiosk — there is
+   no pointer that can "hover" without also having just tapped. */
+@media (hover: hover) {
+  .cube:not([data-state="lit"]):hover {
+    background: var(--gruvax-cell-hover);
+    border-color: var(--gruvax-border);
+    border-style: solid;
+    box-shadow: none;
+    transition:
+      background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+      border-color var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  }
 }
 
 /* Address overlay — always visible */

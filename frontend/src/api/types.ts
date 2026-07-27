@@ -100,8 +100,10 @@ export interface CubesResponse {
   cubes: CubeBoundary[]
 }
 
-/** Cube state driven by UI logic — fed into data-state attribute on each Cube cell. */
-export type CubeState = 'dim' | 'lit' | 'empty' | 'hover'
+/** Cube state driven by UI logic — fed into data-state attribute on each Cube cell.
+ * Hover is not a member: it is real-pointer CSS-only state (kiosk.css `:hover`),
+ * never assigned by application logic (gruvax-652). */
+export type CubeState = 'dim' | 'lit' | 'empty'
 
 // ── Admin API types ────────────────────────────────────────────────────────
 
