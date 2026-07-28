@@ -49,7 +49,7 @@ from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
 from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
-from gruvax.api.admin.validation import validate_contiguity
+from gruvax.api.admin.validation import build_proposed_cuts, validate_contiguity
 from gruvax.api.deps import (
     WriteContext,
     get_pool,
@@ -157,6 +157,56 @@ def _get_nominal_capacity(request: Request) -> int:
             raw,
         )
         return 95
+
+
+def _check_contiguity_for_writes(
+    edits: list[BoundaryEdit],
+    cache: BoundaryCache,
+    segment_cache: SegmentCache,
+) -> str | None:
+    """Return a contiguity error for a set of proposed cube writes, or None (gruvax-216).
+
+    ``validate_contiguity`` was wired into every OTHER write path — import_,
+    ``PUT /cut``, ``POST /insert-cut`` — and into the advisory ``POST
+    /cubes/validate``, but NOT into ``POST /cubes/bulk`` or ``PUT
+    /{u}/{r}/{c}/boundary``. Since bulk is the wizard's commit path, and the
+    wizard's VALIDATE button is optional (``validateErrors`` starts empty and
+    only the button fills it), an owner who skipped VALIDATE — or who validated,
+    went back to edit, and committed against stale-empty errors — persisted a
+    scattered label with no contiguity enforcement anywhere. Posting the same
+    payload to ``/cubes/validate`` returned 400: preview rejected what commit
+    accepted.
+
+    Direction A, the same one segments.py documents: enforce on the live write
+    path rather than re-wiring the editor through a mandatory
+    validate→preview→commit flow. Client-side gating stays advisory.
+
+    Contiguity is a per-UNIT invariant (bins in different Kallax units are never
+    adjacent), and ``build_proposed_cuts`` scopes to a single unit, so a
+    multi-unit payload is checked one unit at a time.
+
+    Freshness contract (WR-03), inherited from build_proposed_cuts: the proposed
+    set is merged over the live in-app BoundaryCache, so this decision is only as
+    correct as that cache is current.
+    """
+    by_unit: dict[int, list[tuple[int, int, int, str | None, str | None, bool]]] = {}
+    for e in edits:
+        by_unit.setdefault(e.unit_id, []).append(
+            (
+                e.unit_id,
+                e.row,
+                e.col,
+                e.first_label if not e.is_empty else None,
+                e.first_catalog if not e.is_empty else None,
+                e.is_empty,
+            )
+        )
+
+    for cascade in by_unit.values():
+        error = validate_contiguity(build_proposed_cuts(cache, cascade=cascade), segment_cache)
+        if error is not None:
+            return error
+    return None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -270,10 +320,13 @@ async def put_cube_boundary(
 ) -> JSONResponse:
     """Validate and (when valid) update a cube boundary.
 
-    Phase 5 validation order (T-03-14, D-07):
+    Validation order (T-03-14, D-07):
       1. Phantom check (unless force=True): rejects values absent from v_collection;
          returns near_misses for tappable suggestions.
-      2. On success: writes to cube_boundaries (cut-point only), logs to boundary_history,
+      2. Contiguity check (gruvax-216): rejects a cut that would scatter a label
+         across non-adjacent bins. Enforced HERE, on the live write path, not
+         only in the advisory POST /cubes/validate.
+      3. On success: writes to cube_boundaries (cut-point only), logs to boundary_history,
          reloads BoundaryCache, then re-derives SegmentCache (Pitfall A).
 
     NOTE: last_label / last_catalog removed from BoundaryEdit in Phase 5 (SEG-01).
@@ -312,7 +365,34 @@ async def put_cube_boundary(
                 },
             )
 
-    # ── Step 2: DB write (boundary update + history log) ─────────────────────
+    # ── Step 2: Contiguity check on the LIVE write path (gruvax-216) ─────────
+    contiguity_error = _check_contiguity_for_writes(
+        [
+            BoundaryEdit(
+                unit_id=unit_id,
+                row=row,
+                col=col,
+                first_label=body.first_label,
+                first_catalog=body.first_catalog,
+                is_empty=body.is_empty,
+            )
+        ],
+        ctx.boundary_cache,
+        ctx.segment_cache,
+    )
+    if contiguity_error is not None:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "type": "contiguity_violation",
+                "message": contiguity_error,
+                "unit_id": unit_id,
+                "row": row,
+                "col": col,
+            },
+        )
+
+    # ── Step 3: DB write (boundary update + history log) ─────────────────────
     change_set_id = str(uuid.uuid4())
     new_first_label = first_label or None
     new_first_catalog = first_catalog or None
@@ -713,7 +793,7 @@ async def bulk_write_cubes(
     After the transaction commits, reloads BoundaryCache and re-derives
     SegmentCache (Pitfall A — NEVER inside the transaction).
 
-    All updates are validated (phantom check) before ANY write.
+    All updates are validated (phantom + contiguity) before ANY write.
     Writes all cubes in a single DB transaction sharing one change_set_id.
     AFTER the transaction commits, reloads the boundary cache and re-derives
     SegmentCache (Pitfall A — cache mutation is NEVER done inside the
@@ -773,6 +853,19 @@ async def bulk_write_cubes(
                         "col": edit.col,
                     },
                 )
+
+    # ── Contiguity check across ALL proposed updates (gruvax-216) ───────────
+    # Runs BEFORE the transaction so a scatter-inducing wizard commit is never
+    # written. Mirrors the check POST /cubes/validate already performs, so the
+    # preview and the commit finally agree.
+    contiguity_error = _check_contiguity_for_writes(
+        list(body.updates), ctx.boundary_cache, ctx.segment_cache
+    )
+    if contiguity_error is not None:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"type": "contiguity_violation", "message": contiguity_error},
+        )
 
     # ── Single atomic transaction: write boundary + history for all cubes ────
     change_set_id = str(uuid.uuid4())
