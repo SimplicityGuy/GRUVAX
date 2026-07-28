@@ -20,5 +20,15 @@ export default defineConfig({
     environment: 'jsdom',
     globals: true,
     setupFiles: ['./src/test-setup.ts'],
+    server: {
+      deps: {
+        // gruvax-db8m: react-qr-code's ESM entry imports
+        // 'qr.js/lib/ErrorCorrectLevel' extensionless, which Node's native
+        // ESM resolution rejects (PairView.test.tsx fails to load under
+        // vitest on Node >=22). Inlining hands the package to Vite's
+        // resolver, which tolerates the extensionless subpath.
+        inline: ['react-qr-code'],
+      },
+    },
   },
 })
