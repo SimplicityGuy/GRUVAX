@@ -46,8 +46,10 @@ router = APIRouter(tags=["admin-labels"])
 @router.get("/labels")
 async def list_labels(
     pool: Any = Depends(get_pool),
-    profile_id: str = Depends(get_read_profile_id),
+    # require_admin MUST resolve before get_read_profile_id: an unauthenticated
+    # caller gets 401, not the binding resolver's 400 session_unbound.
     _admin: dict[str, Any] = Depends(require_admin),
+    profile_id: str = Depends(get_read_profile_id),
 ) -> list[dict[str, str]]:
     """Return the bound profile's distinct labels for the label autocomplete.
 
@@ -64,8 +66,9 @@ async def list_labels(
 async def list_catalogs_for_label(
     label: str = Path(min_length=1),
     pool: Any = Depends(get_pool),
-    profile_id: str = Depends(get_read_profile_id),
+    # require_admin MUST resolve before get_read_profile_id (401 before 400).
     _admin: dict[str, Any] = Depends(require_admin),
+    profile_id: str = Depends(get_read_profile_id),
 ) -> list[dict[str, Any]]:
     """Return the bound profile's release_id + catalog_number for a label.
 
