@@ -90,6 +90,7 @@ from gruvax.db.queries import (
     find_boundary_near_misses,
     load_settings_cache,
     store_idempotency,
+    upsert_boundary,
     write_boundary,
     write_history_row,
 )
@@ -302,8 +303,16 @@ async def import_boundaries(
                 )
             )
 
+    # gruvax-cam: this profile's address space has zero cube_boundaries rows
+    # (the natural state for a freshly-created v2 profile — nothing has ever
+    # written cube_boundaries for it). The commit-path write loop below must
+    # INSERT these rows instead of the strict UPDATE-only write_boundary,
+    # which always affects 0 rows against an empty address space and would
+    # 404 on the very first cube.
+    is_bootstrap_import = not all_addresses_raw
+
     # If no DB addresses exist yet (empty setup), just use file entries directly
-    if not all_addresses_raw:
+    if is_bootstrap_import:
         all_edits = [
             BoundaryEdit(
                 unit_id=e.unit_id,
@@ -515,16 +524,32 @@ async def import_boundaries(
             new_first_label = edit.first_label if not edit.is_empty else None
             new_first_catalog = edit.first_catalog if not edit.is_empty else None
 
-            rows_affected = await write_boundary(
-                conn,
-                edit.unit_id,
-                edit.row,
-                edit.col,
-                new_first_label,
-                new_first_catalog,
-                edit.is_empty,
-                profile_id=profile_id,
-            )
+            # gruvax-cam: an empty address space has nothing to UPDATE — upsert
+            # instead so profile bootstrap-via-import can actually create rows.
+            # Every other (non-empty) address space keeps the strict
+            # write_boundary so an out-of-grid coordinate still 404s.
+            if is_bootstrap_import:
+                rows_affected = await upsert_boundary(
+                    conn,
+                    edit.unit_id,
+                    edit.row,
+                    edit.col,
+                    new_first_label,
+                    new_first_catalog,
+                    edit.is_empty,
+                    profile_id=profile_id,
+                )
+            else:
+                rows_affected = await write_boundary(
+                    conn,
+                    edit.unit_id,
+                    edit.row,
+                    edit.col,
+                    new_first_label,
+                    new_first_catalog,
+                    edit.is_empty,
+                    profile_id=profile_id,
+                )
             # D-11: 0-row write inside transaction aborts the whole change-set.
             if rows_affected == 0:
                 raise HTTPException(

@@ -824,6 +824,78 @@ WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
         return cur.rowcount if cur.rowcount is not None else 0
 
 
+async def upsert_boundary(
+    conn: Any,
+    unit_id: int,
+    row: int,
+    col: int,
+    first_label: str | None,
+    first_catalog: str | None,
+    is_empty: bool,
+    profile_id: str | None = None,
+) -> int:
+    """Insert-or-update a cube boundary row — bootstrap-only variant of ``write_boundary``.
+
+    gruvax-cam: a brand-new (v2 multi-profile) profile has ZERO pre-existing
+    ``cube_boundaries`` rows — the only ``INSERT INTO gruvax.cube_boundaries``
+    in the whole tree is the CLI seeder, which hardcodes the default profile.
+    ``write_boundary`` is UPDATE-only by design (its 0-rows-affected return is
+    the load-bearing 404 signal every OTHER admin write path uses to reject an
+    out-of-grid ``(unit_id, row, col)``), so calling it against an empty
+    address space always affects 0 rows and 404s on the very first cube —
+    permanently blocking import as a profile-bootstrap path even though the
+    dry_run preview (which never writes) reports success.
+
+    This function is deliberately NOT a drop-in replacement for
+    ``write_boundary``: it must be called ONLY from the one call site that
+    already detected "this profile's address space is empty"
+    (``import_.py``'s ``not all_addresses_raw`` branch). Every other write
+    path (cubes/segments/history editing) keeps using strict
+    ``write_boundary`` so an invalid coordinate still 404s instead of
+    silently creating a garbage row.
+
+    Always returns 1 (an INSERT or an UPDATE via ``ON CONFLICT`` always
+    affects exactly one row) — there is no "not found" case for a
+    legitimately-bootstrapping profile.
+
+    All SQL uses %s placeholders (T-03-24, zero f-string interpolation).
+
+    Args:
+        conn:          Open psycopg async connection (inside a transaction).
+        unit_id:       Cube unit ID (must reference an existing gruvax.units row —
+                       the FK constraint still rejects a bogus unit).
+        row:           Cube row index.
+        col:           Cube column index.
+        first_label:   New cut-point label (None only when is_empty=True).
+        first_catalog: New cut-point catalog number (None only when is_empty=True).
+        is_empty:      Whether the cube is empty.
+        profile_id:    UUID string of the profile to scope the write to (DATA-01).
+                       Raises ValueError when None to prevent unscoped writes.
+
+    Returns:
+        Number of rows affected (always 1).
+    """
+    if profile_id is None:
+        raise ValueError(
+            "upsert_boundary: profile_id is required (WR-03). "
+            "Pass the resolved profile_id from get_write_target."
+        )
+    sql = """
+INSERT INTO gruvax.cube_boundaries
+    (profile_id, unit_id, row, col, first_label, first_catalog, is_empty, updated_at)
+VALUES (%s::uuid, %s, %s, %s, %s, %s, %s, now())
+ON CONFLICT (profile_id, unit_id, row, col)
+DO UPDATE SET first_label   = EXCLUDED.first_label,
+              first_catalog = EXCLUDED.first_catalog,
+              is_empty      = EXCLUDED.is_empty,
+              updated_at    = now()
+"""
+    params: tuple[Any, ...] = (profile_id, unit_id, row, col, first_label, first_catalog, is_empty)
+    async with conn.cursor() as cur:
+        await cur.execute(sql, params)
+        return cur.rowcount if cur.rowcount is not None else 0
+
+
 async def write_history_row(
     conn: Any,
     change_set_id: str,
