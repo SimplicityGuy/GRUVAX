@@ -19,6 +19,12 @@ import pytest_asyncio
 from gruvax.app import create_app
 
 
+# gruvax-5dm: GET /api/cubes is profile-scoped, so it needs a browse-binding to
+# resolve (D-02 / B-02 — no default-profile fallback), like search / locate / SSE.
+BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
+DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+
+
 @pytest_asyncio.fixture(scope="module")
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan."""
@@ -28,9 +34,29 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
         AsyncClient(
             transport=ASGITransport(app=manager.app),
             base_url="http://test",
+            cookies={BROWSE_BINDING_COOKIE: DEFAULT_PROFILE_UUID},
         ) as ac,
     ):
         yield ac
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_cubes_bulk_unbound_returns_400(db_pool) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-5dm: no binding → 400 session_unbound, never the default profile's grid."""
+    app = create_app()
+    async with (
+        LifespanManager(app) as manager,
+        AsyncClient(
+            transport=ASGITransport(app=manager.app),
+            base_url="http://test",
+        ) as ac,
+    ):
+        response = await ac.get("/api/cubes")
+
+    assert response.status_code == 400, (
+        f"Expected 400 session_unbound for an unbound caller, got "
+        f"{response.status_code}: {response.text}"
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")

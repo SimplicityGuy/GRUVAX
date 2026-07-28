@@ -9,6 +9,7 @@
  * No PIN required (R7 — open profile picker on LAN).
  */
 
+import { useEffect } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { useNavigate } from 'react-router'
 import { OnboardingScreen } from './OnboardingScreen'
@@ -24,6 +25,18 @@ export function ProfilePicker() {
     queryFn: () => fetch('/api/session').then((r) => r.json() as Promise<SessionData>),
     staleTime: 0,   // always fresh on /select mount
   })
+
+  // gruvax-ocrn: /select cannot do anything for a PAIRED device. Picking a card
+  // there binds the browse cookie, but the device binding overrides it (D3-05), so
+  // the kiosk reverts to its paired profile with no error — a silent no-op the user
+  // can repeat forever. App.tsx already bounces paired devices off /select on
+  // reload; do the same for an in-session arrival (deep link, back button, or any
+  // future caller) so there is exactly one rule. Re-pointing a device stays an
+  // admin operation (DeviceDrawer reassign).
+  const pairedElsewhere = session?.is_device_paired === true && !!session.bound_profile_id
+  useEffect(() => {
+    if (pairedElsewhere) void navigate('/', { replace: true })
+  }, [pairedElsewhere, navigate])
 
   if (isLoading) {
     return (

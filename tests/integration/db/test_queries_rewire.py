@@ -113,7 +113,18 @@ def test_collection_snapshot_has_no_v_collection_query() -> None:
 
 # Anti-leakage functions (D2-03/D2-04): profile_id is REQUIRED (no default).
 # These must never leak to the default profile if the caller forgets to pass one.
-_ANTI_LEAKAGE_FUNCTIONS = {search_collection, did_you_mean_query, get_release_for_locate}
+#
+# gruvax-7ad added get_distinct_labels / get_catalogs_for_label: their callers (the
+# admin label + catalog autocomplete) DID forget, and the default silently served
+# the default profile's collection to every admin — cross-profile disclosure plus a
+# picker that offered exactly what the profile-scoped phantom check would reject.
+_ANTI_LEAKAGE_FUNCTIONS = {
+    search_collection,
+    did_you_mean_query,
+    get_release_for_locate,
+    get_distinct_labels,
+    get_catalogs_for_label,
+}
 
 
 @pytest.mark.parametrize(

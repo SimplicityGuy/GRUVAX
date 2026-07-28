@@ -20,19 +20,20 @@ All SQL uses ``%s`` placeholders — no f-string interpolation (T-07-SC).
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 import yaml
 
 from gruvax.api.admin.settings import _ALLOWED_SETTINGS_KEYS
-from gruvax.api.deps import get_boundary_cache, get_pool, require_admin
+from gruvax.api.deps import (
+    boundary_cache_for_profile,
+    get_pool,
+    get_read_profile_id,
+    require_admin,
+)
 from gruvax.io.boundary_yaml import CutPointEntry, serialize_boundaries_yaml
-
-
-if TYPE_CHECKING:
-    from gruvax.estimator.boundary_cache import BoundaryCache
 
 
 logger = logging.getLogger(__name__)
@@ -44,10 +45,10 @@ router = APIRouter(tags=["admin-export"])
 async def export_boundaries(
     request: Request,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
+    profile_id: str = Depends(get_read_profile_id),
     _admin: dict[str, str] = Depends(require_admin),
 ) -> Response:
-    """Export the full live boundary set (+ per-label overrides) as a YAML file (BAK-01).
+    """Export the bound profile's live boundary set (+ per-label overrides) as YAML (BAK-01).
 
     The YAML document conforms to the ``version: "1"`` boundary schema understood
     by ``parse_yaml_boundaries`` (SC4 round-trip identity). Each non-empty cube
@@ -55,10 +56,24 @@ async def export_boundaries(
 
     Empty cubes serialize as ``{is_empty: true}`` with no first_* fields.
 
+    gruvax-0ge — this export used to mix profiles two different ways:
+      - the segment_overrides SELECT had no WHERE profile_id (the last unscoped
+        segment_overrides query in the codebase) and overrides_index was keyed on
+        coordinates alone, so with two profiles overriding the same cube whichever
+        row Postgres returned LAST silently won;
+      - the cut points came from Depends(get_boundary_cache) = the DEFAULT
+        profile's cache, so an admin bound to B downloaded A's cut points.
+    Re-importing such a file (import IS correctly scoped) wrote a foreign
+    profile's boundaries into the importing profile, breaking BAK-01's
+    export -> re-import identity guarantee across profiles. The settings export one
+    function down always scoped explicitly; :63 was an oversight, not a design
+    choice.
+
     Returns:
         YAML file download with Content-Disposition attachment.
     """
-    # Load per-label segment overrides, keyed by (unit_id, row, col) → {label: fraction}.
+    # Load THIS profile's per-label segment overrides, keyed by
+    # (unit_id, row, col) → {label: fraction}.
     # gruvax-rn7l.3: export label_display (original case), NEVER the casefolded
     # `label` storage key — a round-tripped export/import must not silently
     # relabel every override to lowercase.
@@ -66,7 +81,9 @@ async def export_boundaries(
         await cur.execute(
             "SELECT unit_id, row, col, label_display, fraction"
             " FROM gruvax.segment_overrides"
-            " ORDER BY unit_id, row, col, label"
+            " WHERE profile_id = %s::uuid"
+            " ORDER BY unit_id, row, col, label",
+            (profile_id,),
         )
         override_rows = await cur.fetchall()
 
@@ -74,7 +91,8 @@ async def export_boundaries(
     for uid, r, c, lbl, frac in override_rows:
         overrides_index.setdefault((uid, r, c), {})[str(lbl)] = float(frac)
 
-    # Build CutPointEntry list from the live boundary cache
+    # Build CutPointEntry list from the CALLER's live boundary cache (gruvax-0ge)
+    cache = boundary_cache_for_profile(request, profile_id)
     entries: list[CutPointEntry] = []
     for b in sorted(cache.get_boundaries(), key=lambda b: (b.unit_id, b.row, b.col)):
         ovr = overrides_index.get((b.unit_id, b.row, b.col), {})
