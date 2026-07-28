@@ -781,6 +781,105 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
         await load_boundaries(_BOUNDARIES_YAML)
 
 
+@pytest.mark.asyncio(loop_scope="session")
+async def test_insert_cut_at_head_shifts_first_bin(db_pool) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-r1q: null after_* coords perform a real before-first insert.
+
+    The UI's "insert before first bin" divider used to post after_row=0,
+    after_col=0 (the ``?? 0`` fallback), which the server read as the real cube
+    at (0,0) — the cut landed AFTER bin 1 under an "AFTER BIN 0" title, and the
+    API had no head representation at all. Now all-null after_* means "insert at
+    the head": the new cut becomes bin 1's cut and every existing cut shifts one
+    position right.
+
+    Runs against its OWN app instance (not the module ``client``): the cascade
+    test above restores the DB via ``load_boundaries`` but cannot refresh the
+    module app's lifespan-loaded BoundaryCache, so this test reseeds and boots a
+    fresh app to see canonical state.
+    """
+    from gruvax.db.seed_boundaries import load_boundaries
+
+    await load_boundaries(_BOUNDARIES_YAML)
+    await _seed_test_pin(db_pool)
+
+    app = create_app()
+    async with (
+        LifespanManager(app) as manager,
+        AsyncClient(transport=ASGITransport(app=manager.app), base_url="http://test") as client,
+    ):
+        await _run_head_insert_assertions(client, db_pool)
+
+
+async def _run_head_insert_assertions(client, db_pool) -> None:  # type: ignore[no-untyped-def]
+    auth = await _login(client)
+    assert auth, "login should succeed after seeding the test PIN"
+
+    def unit1_cuts(payload: dict) -> dict[tuple[int, int], str | None]:
+        return {
+            (c["row"], c["col"]): c.get("first_catalog")
+            for c in payload["cubes"]
+            if c["unit_id"] == 1 and not c["is_empty"]
+        }
+
+    before_res = await client.get("/api/admin/cubes", headers=cookie_header(auth["cookies"]))
+    if before_res.status_code in (404, 405):
+        pytest.skip("Admin cubes endpoint not yet implemented")
+    before = unit1_cuts(before_res.json())
+    first_catalog_before = before.get((0, 0))
+    assert first_catalog_before is not None, "fixture must have a cut at (1,0,0)"
+
+    response = await client.post(
+        "/api/admin/cubes/insert-cut",
+        json={
+            "after_unit_id": None,
+            "after_row": None,
+            "after_col": None,
+            # Sorts before the fixture's first cut (Blue Note BLP 4001) so the
+            # post-shift arrangement stays contiguous.
+            "new_first_label": "Blue Note",
+            "new_first_catalog": "BLP 1005",
+            "force": True,
+        },
+        headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
+    )
+    assert response.status_code == 200, (
+        f"Expected 200 from a head insert, got {response.status_code}: {response.text}"
+    )
+    payload = response.json()
+    assert payload.get("at_head") is True
+    assert payload.get("inserted_after") is None
+    change_set_id = payload.get("change_set_id")
+
+    try:
+        after_res = await client.get("/api/admin/cubes", headers=cookie_header(auth["cookies"]))
+        after = unit1_cuts(after_res.json())
+
+        # The new cut is now the FIRST bin's cut...
+        assert after.get((0, 0)) == "BLP 1005", (
+            f"head insert must land at (1,0,0); found {after.get((0, 0))!r}"
+        )
+        # ...the old first cut shifted right by one...
+        assert after.get((0, 1)) == first_catalog_before, (
+            "the previous first cut must shift to (1,0,1)"
+        )
+        # ...and nothing was lost: one new occupied bin, multiset preserved.
+        assert len(after) == len(before) + 1
+        assert sorted(filter(None, after.values())) == sorted(
+            [*filter(None, before.values()), "BLP 1005"]
+        ), "head insert changed the cut-point set beyond adding the new one"
+    finally:
+        if change_set_id:
+            async with db_pool.connection() as conn:
+                await conn.execute(
+                    "DELETE FROM gruvax.boundary_history WHERE change_set_id = %s",
+                    (change_set_id,),
+                )
+                await conn.commit()
+        from gruvax.db.seed_boundaries import load_boundaries
+
+        await load_boundaries(_BOUNDARIES_YAML)
+
+
 # ── Admin label/catalog autocomplete endpoints ───────────────────────────────
 
 

@@ -453,9 +453,13 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
             "Fixture cube (1,0,1) should have non-empty segments (Blue Note has collection records)"
         )
 
-        # Step 2: Bulk write cube (1, 0, 1) — change cut-point to "Riverside" RLP 12-226.
-        # "Riverside" is in v_collection.  force=True bypasses phantom check.
-        # This changes which label starts at cube (1,0,1), altering the SegmentCache.
+        # Step 2: Bulk write cube (1, 0, 1) — change cut-point to "Columbia" CL 100.
+        # force=True bypasses the phantom check. This changes which label starts
+        # at cube (1,0,1), altering the SegmentCache. The payload must be
+        # contiguity-legal now that gruvax-216 enforces contiguity on the commit
+        # path: "Columbia" extends backward into the adjacent (1,0,2) Columbia
+        # cut, whereas the previous "Riverside" payload duplicated a label that
+        # lives at (1,2,2)/(1,3,0) — a genuine scatter, now correctly rejected.
         bulk_res = await ac.post(
             "/api/admin/cubes/bulk",
             json={
@@ -464,8 +468,8 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
                         "unit_id": 1,
                         "row": 0,
                         "col": 1,
-                        "first_label": "Riverside",
-                        "first_catalog": "RLP 12-226",
+                        "first_label": "Columbia",
+                        "first_catalog": "CL 100",
                         "is_empty": False,
                         "force": True,
                     }

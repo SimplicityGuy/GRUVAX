@@ -189,7 +189,7 @@ async def test_bulk_commit_rejects_scattered_labels(client) -> None:  # type: ig
     # Preview and commit now agree — that asymmetry was the reported symptom.
     preview = await client.post(
         "/api/admin/cubes/validate",
-        json={"updates": [{k: v for k, v in u.items()} for u in updates]},
+        json={"updates": [dict(u) for u in updates]},
         headers=_headers(auth),
     )
     assert preview.status_code == 400, (
