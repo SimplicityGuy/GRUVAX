@@ -573,6 +573,18 @@ async def find_boundary_near_misses(
     ``psycopg.errors.UndefinedFunction`` and returns [] so the caller still
     receives a valid response.
 
+    gruvax-jn3: ``label``/``catalog_number`` are nullable columns (sync writes
+    NULLs verbatim for Discogs releases lacking a catalog number). Every
+    sibling helper (``did_you_mean_query``, ``get_distinct_labels``) guards
+    with ``IS NOT NULL``; this one didn't, so a NULL-label/-catalog row made
+    the combined ``sim`` score NULL, and Postgres sorts NULL FIRST on
+    ``ORDER BY sim DESC`` — the phantom row landed at position 1 and
+    ``float(row[2])`` on ``None`` raised ``TypeError`` (a 500 from the
+    error-handling path itself). The ``IS NOT NULL`` guards below exclude
+    NULL rows from the candidate set entirely, so ``sim`` is never NULL for a
+    returned row. The Python-side ``if row[2] is None: continue`` is
+    defense-in-depth only (should be unreachable given the SQL guard).
+
     All user input goes through ``%s`` placeholders — never f-string
     interpolation (T-01-07, T-03-16, T-01-sqli-rewire).
 
@@ -593,6 +605,8 @@ SELECT label, catalog_number,
         + similarity(lower(catalog_number), lower(%s)) * 0.5) AS sim
 FROM gruvax.profile_collection
 WHERE profile_id = %s::uuid
+  AND label IS NOT NULL
+  AND catalog_number IS NOT NULL
   AND (
       similarity(lower(label), lower(%s)) > %s
    OR similarity(lower(catalog_number), lower(%s)) > %s
@@ -623,6 +637,7 @@ LIMIT %s
                 "similarity": float(row[2]),
             }
             for row in rows
+            if row[2] is not None  # defense-in-depth; SQL guard already excludes NULLs
         ]
     except psycopg.errors.UndefinedFunction:
         # pg_trgm not installed — degrade gracefully (Pitfall E)
@@ -686,6 +701,15 @@ async def get_catalogs_for_label(
     Source is exclusively profile_collection for the active profile (Pitfall 5).
     All SQL uses %s placeholders (T-03-16, T-01-sqli-rewire).
 
+    gruvax-jn3 (defect B): ``catalog_number`` is nullable (Discogs releases
+    routinely lack one); without an ``IS NOT NULL`` guard here, a NULL row
+    was rendered via ``str(row[1])`` as the literal string ``"None"`` and
+    offered to the admin as a real catalog option. Picking it round-trips
+    through ``cube_exact_match`` (``'None' = NULL`` never matches) into the
+    phantom path and then into ``find_boundary_near_misses`` — the delivery
+    vehicle for that helper's own NULL-sort defect (defect A). Excluding NULL
+    catalogs here removes the literal-"None" option at the source.
+
     Args:
         pool:       Open psycopg ``AsyncConnectionPool``.
         label:      Label to filter by (matched case-insensitively).
@@ -704,7 +728,7 @@ async def get_catalogs_for_label(
     sql = """
 SELECT release_id, catalog_number
 FROM gruvax.profile_collection
-WHERE profile_id = %s::uuid AND lower(label) = lower(%s)
+WHERE profile_id = %s::uuid AND lower(label) = lower(%s) AND catalog_number IS NOT NULL
 ORDER BY catalog_number
 """
     async with pool.connection() as conn, conn.cursor() as cur:
