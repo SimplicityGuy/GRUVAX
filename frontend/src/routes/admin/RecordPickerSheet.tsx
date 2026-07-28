@@ -39,6 +39,10 @@ export interface RecordPickerSheetProps {
   col: number
   /** For insert mode: display number of bin after which cut is inserted. */
   afterBinDisplay?: number
+  /** gruvax-r1q: insert BEFORE the first bin — posts null after_* coords so the
+   *  server performs a real head insert (previously null degraded to (0,0),
+   *  i.e. "after bin 1", under an "AFTER BIN 0" title). */
+  insertAtHead?: boolean
   /** Called with updated segment list on successful commit. */
   onCommit: (updatedSegments?: unknown) => void
   /** Called when sheet is dismissed without commit. */
@@ -148,6 +152,7 @@ export function RecordPickerSheet({
   row,
   col,
   afterBinDisplay,
+  insertAtHead = false,
   onCommit,
   onCancel,
 }: RecordPickerSheetProps) {
@@ -206,7 +211,9 @@ export function RecordPickerSheet({
   const heading =
     mode === 'edit'
       ? 'EDIT CUT POINT'
-      : `INSERT CUT AFTER BIN ${afterBinDisplay ?? ''}`
+      : insertAtHead
+        ? 'INSERT CUT BEFORE BIN 1'
+        : `INSERT CUT AFTER BIN ${afterBinDisplay ?? ''}`
 
   const commitLabel = mode === 'edit' ? 'SET CUT POINT' : 'INSERT CUT'
 
@@ -233,9 +240,11 @@ export function RecordPickerSheet({
         onCommit()
       } else {
         const body: InsertCutBody = {
-          after_unit_id: unitId,
-          after_row: row,
-          after_col: col,
+          // gruvax-r1q: a head insert sends null coords — never (0,0), which
+          // the server reads as the real cube at row 0, col 0.
+          after_unit_id: insertAtHead ? null : unitId,
+          after_row: insertAtHead ? null : row,
+          after_col: insertAtHead ? null : col,
           new_first_label: labelValue.trim(),
           new_first_catalog: catalogValue.trim(),
           force: forcePhantom || undefined,

@@ -197,14 +197,21 @@ describe('DeviceDrawer', () => {
    *
    * Uses real timers so TanStack Query resolves the profile fetch.
    */
-  it('PENDING drawer: renders BIND TO PROFILE; no pending code falls back to code entry', async () => {
+  it('PENDING drawer: renders BIND TO PROFILE; no pending code falls back to code entry, and the picked profile survives to the bind POST', async () => {
     // This test needs real timers so TanStack Query settles the profile fetch.
     vi.useRealTimers()
+
+    const bindCalls: Array<{ code: string; profile_id?: string }> = []
 
     vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
       const method = (init?.method ?? 'GET').toUpperCase()
       if (typeof url === 'string' && url.includes('/api/admin/profiles') && method === 'GET') {
         return { ok: true, json: async () => PROFILES_RESPONSE } as Response
+      }
+      if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
+        const body = init?.body ? JSON.parse(init.body as string) : {}
+        bindCalls.push(body)
+        return { ok: true, json: async () => ({ device_id: PENDING_DEVICE.id, display_name: PENDING_DEVICE.display_name }) } as Response
       }
       return { ok: true, json: async () => ({}) } as Response
     }))
@@ -231,13 +238,14 @@ describe('DeviceDrawer', () => {
 
     // Profile picker renders profiles fetched from API
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /default/i })).toBeTruthy()
+      expect(screen.getByRole('button', { name: /robert/i })).toBeTruthy()
     }, { timeout: 3000 })
 
-    // Pick "Default" profile — since device has no last_pairing_code, falls back to bind-code
-    const defaultBtn = screen.getByRole('button', { name: /default/i })
+    // Pick "Robert" (non-default) profile — since device has no last_pairing_code,
+    // falls back to bind-code, but the pick must NOT be discarded (gruvax-99s).
+    const robertBtn = screen.getByRole('button', { name: /robert/i })
     await act(async () => {
-      defaultBtn.click()
+      robertBtn.click()
       await Promise.resolve()
       await Promise.resolve()
     })
@@ -246,6 +254,20 @@ describe('DeviceDrawer', () => {
     await waitFor(() => {
       expect(screen.queryByRole('button', { name: '1' })).toBeTruthy()
     }, { timeout: 3000 })
+
+    // Complete the code entry — the bind POST must carry the picked profile_id,
+    // not silently omit it (which the backend defaults to the Default profile).
+    await act(async () => { screen.getByRole('button', { name: '1' }).click(); await Promise.resolve() })
+    await act(async () => { screen.getByRole('button', { name: '2' }).click(); await Promise.resolve() })
+    await act(async () => { screen.getByRole('button', { name: '3' }).click(); await Promise.resolve() })
+    await act(async () => {
+      screen.getByRole('button', { name: '4' }).click()
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+
+    expect(bindCalls).toHaveLength(1)
+    expect(bindCalls[0]).toMatchObject({ code: '1234', profile_id: 'profile-uuid-2' })
   })
 
   // ── DEV-04: Prefill-confirm tests ─────────────────────────────────────────

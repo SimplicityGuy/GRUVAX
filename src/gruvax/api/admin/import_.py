@@ -53,13 +53,14 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Query, Request, status
 from fastapi.responses import JSONResponse
 import yaml
 
+from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
 from gruvax.api.admin.cubes import (
     BoundaryEdit,
     _compute_movement_counts,
@@ -75,11 +76,9 @@ from gruvax.api.admin.settings import (
 )
 from gruvax.api.admin.validation import validate_contiguity
 from gruvax.api.deps import (
-    get_boundary_cache,
-    get_collection_snapshot,
+    WriteContext,
     get_pool,
-    get_segment_cache,
-    get_write_target,
+    get_write_context,
     require_admin,
 )
 from gruvax.db.queries import (
@@ -96,12 +95,6 @@ from gruvax.db.queries import (
 )
 from gruvax.io.boundary_csv import parse_csv_boundaries
 from gruvax.io.boundary_yaml import parse_yaml_boundaries
-
-
-if TYPE_CHECKING:
-    from gruvax.estimator.boundary_cache import BoundaryCache
-    from gruvax.estimator.collection_snapshot import CollectionSnapshot
-    from gruvax.estimator.segment_cache import SegmentCache
 
 
 logger = logging.getLogger(__name__)
@@ -152,11 +145,8 @@ async def import_boundaries(
     request: Request,
     dry_run: bool = Query(default=False, description="Preview import without writing to DB"),
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, str] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Atomic CSV/YAML boundary import with optional dry_run preview (ADMN-05, D-09, D-11, BAK-01).
 
@@ -181,7 +171,7 @@ async def import_boundaries(
          - On contiguity violation: return 400 (ZERO writes).
       7. Commit atomically: one change_set_id, one DB transaction for all edits
          + segment_overrides upsert + idempotency store.
-      8. AFTER transaction commit: cache.invalidate(), cache.load(), segment_cache
+      8. AFTER transaction commit: cache.load(), segment_cache
          re-derive, bus.publish (Pitfall A — NEVER inside the transaction).
     Returns: JSON ``{change_set_id, applied, source}``
 
@@ -197,7 +187,7 @@ async def import_boundaries(
 
     Idempotency-Key header (commit path only): same semantics as cubes/bulk.
     """
-    profile_id, bus = _write_target
+    profile_id, bus, segment_cache = ctx.profile_id, ctx.bus, ctx.segment_cache
 
     # ── 1. Read + size cap (runs before dry_run branching — both paths capped) ─
     content = await request.body()
@@ -612,31 +602,11 @@ async def import_boundaries(
             await store_idempotency(conn, idempotency_key, response_body)
         await cleanup_idempotency(conn)
 
-    # ── 8. Cache invalidate AFTER transaction commit (Pitfall A) ─────────────
-    cache.invalidate()
+    # ── 8. Cache reload AFTER transaction commit (Pitfall A) ─────────────────
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        # Collect overrides for segment_cache re-derive
-        overrides: dict[tuple[int, int, int, str], float] = {}
-        for edit in all_edits:
-            seg_bin = segment_cache.get_bin(edit.unit_id, edit.row, edit.col)
-            if seg_bin is not None:
-                for seg in seg_bin.segments:
-                    if seg.is_override:
-                        override_key: tuple[int, int, int, str] = (
-                            edit.unit_id,
-                            edit.row,
-                            edit.col,
-                            str(seg.label),
-                        )
-                        overrides[override_key] = seg.applied_fraction
-        # Also include any overrides from the imported file entries
-        for entry in entries:
-            if entry.overrides and not entry.is_empty:
-                for label, fraction in entry.overrides.items():
-                    overrides[(entry.unit_id, entry.row, entry.col, str(label))] = fraction
-        segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",

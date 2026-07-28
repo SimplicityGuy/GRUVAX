@@ -17,6 +17,17 @@ Security:
   - Both handlers depend on require_admin (session cookie, ASVS V4 — T-03-13).
   - Read-only (GET): no CSRF, no INSERT/UPDATE/DELETE.
   - All SQL lives in db.queries and uses %s placeholders (T-03-16).
+  - Both handlers are scoped to the caller's resolved profile (gruvax-7ad) — see
+    below.
+
+Profile scoping (gruvax-7ad):
+  Both queries used to run with the ``profile_id`` default, i.e. the DEFAULT
+  profile, regardless of which profile the admin was bound to. That is a
+  cross-profile collection disclosure (an admin bound to B was shown A's label
+  list) AND it put the picker at odds with the validator: the write-side phantom
+  check IS profile-scoped (cubes.py -> cube_exact_match(..., profile_id)), so
+  selecting one of A's labels while bound to B produced 400 phantom_boundary. The
+  picker offered exactly what the validator rejected, by construction.
 """
 
 from __future__ import annotations
@@ -25,7 +36,7 @@ from typing import Any
 
 from fastapi import APIRouter, Depends, Path
 
-from gruvax.api.deps import get_pool, require_admin
+from gruvax.api.deps import get_pool, get_read_profile_id, require_admin
 from gruvax.db.queries import get_catalogs_for_label, get_distinct_labels
 
 
@@ -35,13 +46,19 @@ router = APIRouter(tags=["admin-labels"])
 @router.get("/labels")
 async def list_labels(
     pool: Any = Depends(get_pool),
+    # require_admin MUST resolve before get_read_profile_id: an unauthenticated
+    # caller gets 401, not the binding resolver's 400 session_unbound.
     _admin: dict[str, Any] = Depends(require_admin),
+    profile_id: str = Depends(get_read_profile_id),
 ) -> list[dict[str, str]]:
-    """Return all distinct labels for the label autocomplete.
+    """Return the bound profile's distinct labels for the label autocomplete.
 
     Response shape matches the frontend ``LabelOption[]``: ``[{"label": str}]``.
+
+    gruvax-7ad: scoped to the resolved profile — the same resolution the write
+    path uses, so the picker can only offer values the phantom check will accept.
     """
-    labels = await get_distinct_labels(pool)
+    labels = await get_distinct_labels(pool, profile_id=profile_id)
     return [{"label": label} for label in labels]
 
 
@@ -49,11 +66,15 @@ async def list_labels(
 async def list_catalogs_for_label(
     label: str = Path(min_length=1),
     pool: Any = Depends(get_pool),
+    # require_admin MUST resolve before get_read_profile_id (401 before 400).
     _admin: dict[str, Any] = Depends(require_admin),
+    profile_id: str = Depends(get_read_profile_id),
 ) -> list[dict[str, Any]]:
-    """Return release_id + catalog_number for a label (catalog autocomplete).
+    """Return the bound profile's release_id + catalog_number for a label.
 
     The label path segment is URL-decoded by Starlette. Response shape matches
     the frontend ``CatalogOption[]``: ``[{"release_id": int, "catalog_number": str}]``.
+
+    gruvax-7ad: scoped to the resolved profile (see module docstring).
     """
-    return await get_catalogs_for_label(pool, label)
+    return await get_catalogs_for_label(pool, label, profile_id=profile_id)

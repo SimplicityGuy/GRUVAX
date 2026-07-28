@@ -717,3 +717,117 @@ def test_glibc_ordered_layout_pyuca_disagrees_emits_warning(caplog) -> None:  # 
         assert len(sc.get_bins_for_label(label)) == 1, f"{label!r} must still light one cube"
     total = sum(seg.segment_count for b in sc._bins for seg in b.segments)
     assert total == len(glibc_physical_order)
+
+
+# ── gruvax-cxy: a bin with no absorber must degrade, never wipe the cache ─────
+
+
+def _derive_with_overrides(rows, records, overrides):  # type: ignore[no-untyped-def]
+    """Like ``_derive`` but with an explicit width-override map."""
+    from gruvax.estimator.boundary_cache import BoundaryCache
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot
+    from gruvax.estimator.segment_cache import SegmentCache
+
+    cache = BoundaryCache()
+    cache._load_rows(rows)
+    cache._load_overrides(overrides)
+    snapshot = CollectionSnapshot()
+    snapshot._load_snapshot(records)
+    sc = SegmentCache()
+    sc.derive(cache, snapshot, cache.overrides)
+    return sc
+
+
+def _two_bin_shelf():  # type: ignore[no-untyped-def]
+    """A shelf whose first cube holds ONE label and whose second holds another."""
+    from gruvax.estimator.boundary_cache import BoundaryRow
+
+    rows = [
+        BoundaryRow(
+            unit_id=1, row=0, col=0, first_label="Alpha", first_catalog="A 001", is_empty=False
+        ),
+        BoundaryRow(
+            unit_id=1, row=0, col=1, first_label="Beta", first_catalog="B 001", is_empty=False
+        ),
+    ]
+    records = {
+        "alpha": [
+            RecordRow(release_id=i, label="Alpha", catalog_number=f"A {i:03d}") for i in range(1, 5)
+        ],
+        "beta": [
+            RecordRow(release_id=10 + i, label="Beta", catalog_number=f"B {i:03d}")
+            for i in range(1, 4)
+        ],
+    }
+    return rows, records
+
+
+def test_fully_overridden_bin_does_not_raise(caplog) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-cxy: a single-label bin with fraction=0.5 must not blow up derive().
+
+    The reported outage: fraction=0.5 on a one-label bin is legal at BOTH gates
+    (Pydantic ``gt=0.0, le=1.0`` and migration 0005's per-row CHECK) because no
+    per-bin sum constraint exists.  ``derive()`` then found ``non_overridden_total
+    == 0``, nothing absorbed the missing 0.5, and the sum==1.0 invariant raised —
+    after the caller had already invalidated the cache.  Result: an EMPTY
+    SegmentCache and no working locate anywhere in the app, persisting across
+    restarts, recoverable only by deleting the row by hand.
+    """
+    import logging
+
+    rows, records = _two_bin_shelf()
+
+    with caplog.at_level(logging.WARNING, logger="gruvax.estimator.segment_cache"):
+        sc = _derive_with_overrides(rows, records, {(1, 0, 0, "alpha"): 0.5})
+
+    # 1. The derive completed — the whole shelf is still there.
+    assert len(sc._bins) == 2, "a bad override on one bin must not empty the cache"
+    assert sc.get_bin(1, 0, 1) is not None, "the UNRELATED bin must survive"
+
+    # 2. The affected bin degrades to the rescaled override (relative widths kept).
+    alpha_bin = sc.get_bin(1, 0, 0)
+    assert alpha_bin is not None
+    assert len(alpha_bin.segments) == 1
+    assert alpha_bin.segments[0].applied_fraction == pytest.approx(1.0), (
+        "the sole label of a fully-overridden bin must be rescaled to the full cube"
+    )
+
+    # 3. The bad data is discoverable rather than silent.
+    assert any("no absorber" in r.message for r in caplog.records), (
+        "a rescaled, no-absorber bin must be logged loudly"
+    )
+
+
+def test_overrides_summing_past_one_do_not_produce_negative_widths(caplog) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-cxy: overrides summing > 1.0 must not hand other labels negative widths."""
+    import logging
+
+    from gruvax.estimator.boundary_cache import BoundaryRow
+
+    rows = [
+        BoundaryRow(
+            unit_id=1, row=0, col=0, first_label="Alpha", first_catalog="A 001", is_empty=False
+        ),
+    ]
+    records = {
+        "alpha": [
+            RecordRow(release_id=i, label="Alpha", catalog_number=f"A {i:03d}") for i in range(1, 4)
+        ],
+        "beta": [
+            RecordRow(release_id=10 + i, label="Beta", catalog_number=f"B {i:03d}")
+            for i in range(1, 3)
+        ],
+    }
+    # Both labels land in the single bin; the two overrides sum to 1.4.
+    overrides = {(1, 0, 0, "alpha"): 0.9, (1, 0, 0, "beta"): 0.5}
+
+    with caplog.at_level(logging.WARNING, logger="gruvax.estimator.segment_cache"):
+        sc = _derive_with_overrides(rows, records, overrides)
+
+    bin_ = sc.get_bin(1, 0, 0)
+    assert bin_ is not None
+    assert all(seg.applied_fraction >= 0.0 for seg in bin_.segments), (
+        f"negative segment width produced: {[s.applied_fraction for s in bin_.segments]}"
+    )
+    total = sum(seg.applied_fraction for seg in bin_.segments)
+    assert total == pytest.approx(1.0), f"widths must still tile the cube, got {total}"

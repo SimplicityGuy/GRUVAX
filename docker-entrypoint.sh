@@ -6,6 +6,39 @@ set -e
 
 PYTHON="/app/.venv/bin/python"
 
+# gruvax-95qp: log the *effective* database target (host + db name only,
+# never credentials) at every boot. compose.yaml's DATABASE_URL is env-first
+# with a GRUVAX_DB_*-assembled fallback — this line is the loud, unmissable
+# signal of which one actually won, so a mis-layered `.env` (or an operator
+# expecting the shared discogsography Postgres and silently getting the
+# throwaway gruvax-dev-pg default) shows up in `docker compose logs api`
+# instead of only being discoverable via `docker compose config`.
+echo "Effective DATABASE_URL target: $("$PYTHON" -c '
+import os
+from urllib.parse import urlsplit
+u = urlsplit(os.environ["DATABASE_URL"])
+print(f"{u.hostname}:{u.port or 5432}{u.path}")
+')"
+
+# gruvax-b51h: make GRUVAX_ENV=development LOUD at every boot, not just
+# discoverable via docs. This is the single switch that gates the dev-only
+# migration-0002 stub bootstrap AND the synthetic profile_collection /
+# cube-boundary seeding below — leaving it set on a real deployment
+# permanently short-circuits the real Discogs sync (see
+# docs/runbook-fresh-host.md). A stray `GRUVAX_ENV=development` in a
+# production `.env` or shell environment should be unmissable in
+# `docker compose logs api`, not just a silent behavior change.
+if [ "${GRUVAX_ENV:-production}" = "development" ]; then
+    echo "############################################################"
+    echo "# WARNING: GRUVAX_ENV=development — dev-only bootstrap ACTIVE."
+    echo "# This seeds ~3,000 SYNTHETIC records into profile_collection"
+    echo "# and permanently skips the real Discogs sync (init-sync's"
+    echo "# idempotency precheck will see it as already populated)."
+    echo "# If this is a production host, STOP and unset GRUVAX_ENV now"
+    echo "# -- see docs/runbook-fresh-host.md (GRUVAX_ENV pre-flight check)."
+    echo "############################################################"
+fi
+
 # Wait for Postgres to accept connections before migrating — a cold
 # `docker compose up` starts the DB and the API concurrently, so without this
 # `alembic upgrade head` would fail and crash-loop the container (WR-04).

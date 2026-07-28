@@ -9,7 +9,7 @@ Endpoints:
   - ``PUT /admin/cubes/{unit_id}/{row}/{col}/cut``:
       Update the cut point for a bin (first_label + first_catalog).
       Runs phantom check (unless force=True), writes via cube_boundaries,
-      then invalidates + re-derives SegmentCache, publishes boundary_changed.
+      then reloads BoundaryCache + re-derives SegmentCache, publishes boundary_changed.
       Requires admin session + CSRF.
 
   - ``POST /admin/cubes/{unit_id}/{row}/{col}/overrides``:
@@ -17,7 +17,9 @@ Endpoints:
       Null fraction clears the override.  Rejects labels absent from the bin's
       derived segments (phantom override injection guard — T-05-04-02).
       Upserts into gruvax.segment_overrides; honors Idempotency-Key.
-      Invalidates + re-derives SegmentCache, publishes boundary_changed.
+      Rejects an override set that would leave the bin with no absorber for the
+      remaining width (per-bin sum guard — gruvax-cxy).
+      Re-derives SegmentCache, publishes boundary_changed.
       Requires admin session + CSRF.
 
   - ``POST /admin/cubes/insert-cut``:
@@ -25,19 +27,22 @@ Endpoints:
       subsequent cut points by one position.  Runs phantom check + shelf overflow +
       empty-bin validation before writing.  Writes all affected cubes as ONE
       change-set (source='cut_insert') so the cut is undoable via /history revert.
-      Invalidates + re-derives SegmentCache, publishes boundary_changed.
+      Re-derives SegmentCache, publishes boundary_changed.
       Requires admin session + CSRF.
 
 Security:
   - Every handler depends on require_admin (T-05-04-01, ASVS V4 carry-forward).
-  - Fraction bounds validated by Pydantic (0 < fraction <= 1.0) + DB CHECK (T-05-04-03).
+  - Fraction bounds validated by Pydantic (0 < fraction <= 1.0) + DB CHECK (T-05-04-03),
+    and the per-BIN sum is validated before the write (gruvax-cxy) — neither
+    per-row gate can see whether a bin still has a label to absorb the remainder.
   - Phantom override injection rejected server-side (T-05-04-02).
   - Shelf overflow guarded by validate_shelf_overflow before insert (T-05-04-04).
   - Idempotency-Key dedup: check → execute → store in one transaction (T-05-04-05, Pitfall 7).
   - All SQL uses %s placeholders, zero f-string interpolation (T-05-04-06, T-03-24).
 
 Phase 5 (05-04 / SEG-08):
-  - SegmentCache invalidated + re-derived on every write (Pitfall A: AFTER commit).
+  - SegmentCache re-derived on every write (Pitfall A: AFTER commit; gruvax-cxy:
+    derive into place, never invalidate first, so a failure keeps the last good cache).
   - insert-cut uses source='cut_insert' (boundary_history CHECK extended in migration 0005).
   - Override writes use gruvax.segment_overrides (SEG-04 table from migration 0005).
 """
@@ -50,8 +55,9 @@ import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
+from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
 from gruvax.api.admin.validation import (
     build_proposed_cuts,
     validate_contiguity,
@@ -59,11 +65,10 @@ from gruvax.api.admin.validation import (
     validate_shelf_overflow,
 )
 from gruvax.api.deps import (
-    get_boundary_cache,
-    get_collection_snapshot,
+    WriteContext,
     get_pool,
     get_segment_cache,
-    get_write_target,
+    get_write_context,
     require_admin,
 )
 from gruvax.db.queries import (
@@ -79,8 +84,6 @@ from gruvax.db.queries import (
 
 
 if TYPE_CHECKING:
-    from gruvax.estimator.boundary_cache import BoundaryCache
-    from gruvax.estimator.collection_snapshot import CollectionSnapshot
     from gruvax.estimator.segment_cache import SegmentCache
 
 
@@ -127,14 +130,122 @@ class InsertCutBody(BaseModel):
 
     Inserts a new cut point immediately AFTER (after_unit_id, after_row, after_col),
     cascading all subsequent cubes by one position.
+
+    gruvax-r1q: all three ``after_*`` fields may be null TOGETHER, meaning
+    "insert at the head of the shelf" — the new cut becomes the first bin's cut
+    and every existing cut shifts one position right. Before this, the API had
+    no before-first representation at all, so the UI's "insert before first
+    bin" divider silently degraded into "after bin 1" (null → (0,0) conflation).
     """
 
-    after_unit_id: int
-    after_row: int
-    after_col: int
+    after_unit_id: int | None = None
+    after_row: int | None = None
+    after_col: int | None = None
     new_first_label: str
     new_first_catalog: str
     force: bool = False  # True: skip phantom check
+
+    @model_validator(mode="after")
+    def _after_coords_all_or_none(self) -> InsertCutBody:
+        coords = (self.after_unit_id, self.after_row, self.after_col)
+        if any(c is None for c in coords) and not all(c is None for c in coords):
+            raise ValueError(
+                "after_unit_id/after_row/after_col must be provided together, "
+                "or all omitted for an insert at the head of the shelf"
+            )
+        return self
+
+    @property
+    def at_head(self) -> bool:
+        """True when this is a before-first (head) insert."""
+        return self.after_unit_id is None
+
+
+# ── Validation helpers ────────────────────────────────────────────────────────
+
+
+def _validate_bin_override_sums(
+    current_overrides: dict[tuple[int, int, int, str], float],
+    body: OverridesBody,
+    unit_id: int,
+    row: int,
+    col: int,
+    bin_labels: set[str],
+) -> dict[str, Any] | None:
+    """Reject an override set that would leave a bin's widths unresolvable (gruvax-cxy).
+
+    ``SegmentCache.derive`` gives each overridden label its stated fraction and
+    splits whatever is left over the NON-overridden labels in proportion to their
+    record counts.  That only works while some label is left to absorb the
+    remainder.  Two shapes break it, and neither is caught by the per-row bounds
+    (Pydantic ``gt=0.0, le=1.0``) or the per-row DB CHECK — the only two gates
+    that exist today:
+
+      1. The overrides sum to more than 1.0 — the remainder is negative and the
+         non-overridden labels would be handed negative widths.
+      2. EVERY label in the bin is overridden and the fractions do not sum to
+         1.0 — there is no absorber at all.  This is the reported defect: a
+         single-label bin plus ``fraction=0.5`` is legal at every gate.
+
+    Args:
+        current_overrides: The live override map (``BoundaryCache.overrides``),
+            keyed ``(unit_id, row, col, casefolded_label) -> fraction``.
+        body:              The request's override edits (``fraction=None`` clears).
+        unit_id, row, col: The bin being edited.
+        bin_labels:        Casefolded labels actually present in the bin.
+
+    Returns:
+        A JSON error body when the resulting set is unresolvable; ``None`` when
+        it is fine.
+    """
+    # Effective post-request override map for THIS bin, restricted to labels the
+    # bin actually holds (a stale row for a label that has since moved out of the
+    # bin is ignored by derive, so it must be ignored here too).
+    effective: dict[str, float] = {
+        label: fraction
+        for (ov_unit, ov_row, ov_col, label), fraction in current_overrides.items()
+        if (ov_unit, ov_row, ov_col) == (unit_id, row, col) and label in bin_labels
+    }
+    for ov in body.overrides:
+        key = ov.label.strip().casefold()
+        if ov.fraction is None:
+            effective.pop(key, None)
+        else:
+            effective[key] = ov.fraction
+
+    if not effective:
+        return None
+
+    total = sum(effective.values())
+    if total > 1.0 + 1e-9:
+        return {
+            "type": "override_sum_invalid",
+            "message": (
+                "These widths add up to more than the whole cube "
+                f"({total:.0%}). Lower one of them so the total is at most 100%."
+            ),
+            "unit_id": unit_id,
+            "row": row,
+            "col": col,
+            "override_sum": total,
+        }
+
+    # No label left to take up the slack — the widths must then be exact.
+    if not (bin_labels - effective.keys()) and abs(total - 1.0) >= 1e-6:
+        return {
+            "type": "override_sum_invalid",
+            "message": (
+                "Every label in this cube has a set width, so they must add up to "
+                f"the whole cube. They currently add up to {total:.0%}. Adjust a "
+                "width, or clear one so it can take up the remainder."
+            ),
+            "unit_id": unit_id,
+            "row": row,
+            "col": col,
+            "override_sum": total,
+        }
+
+    return None
 
 
 # ── Endpoints ─────────────────────────────────────────────────────────────────
@@ -199,11 +310,8 @@ async def put_bin_cut(
     row: int = Path(ge=0),
     col: int = Path(ge=0),
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Update the cut point for a bin.
 
@@ -214,7 +322,12 @@ async def put_bin_cut(
 
     Returns 400 with phantom/near_misses on phantom rejection, 200 on success.
     """
-    profile_id, bus = _write_target
+    profile_id, bus, cache, segment_cache = (
+        ctx.profile_id,
+        ctx.bus,
+        ctx.boundary_cache,
+        ctx.segment_cache,
+    )
     first_label = body.first_label.strip()
     first_catalog = body.first_catalog.strip()
 
@@ -315,19 +428,11 @@ async def put_bin_cut(
             profile_id=profile_id,
         )
 
-    # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
-    cache.invalidate()
+    # ── Reload + re-derive SegmentCache AFTER commit (Pitfall A) ────────────
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        # Collect overrides from pre-invalidation state to preserve admin fractions
-        overrides: dict[tuple[int, int, int, str], float] = {}
-        seg_bin_old = segment_cache.get_bin(unit_id, row, col)
-        if seg_bin_old is not None:
-            for seg in seg_bin_old.segments:
-                if seg.is_override:
-                    overrides[(unit_id, row, col, seg.label)] = seg.applied_fraction
-        segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -358,11 +463,8 @@ async def set_bin_overrides(
     row: int = Path(ge=0),
     col: int = Path(ge=0),
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Set per-label physical-width overrides for a bin.
 
@@ -378,7 +480,12 @@ async def set_bin_overrides(
 
     Response: ``{applied: int, cleared: int}`` (counts of upserted / deleted rows).
     """
-    profile_id, bus = _write_target
+    profile_id, bus, cache, segment_cache = (
+        ctx.profile_id,
+        ctx.bus,
+        ctx.boundary_cache,
+        ctx.segment_cache,
+    )
     idempotency_key: str | None = request.headers.get("Idempotency-Key")
 
     # ── Idempotency replay check ──────────────────────────────────────────────
@@ -413,6 +520,23 @@ async def set_bin_overrides(
                 "phantom_labels": phantom_labels,
             },
         )
+
+    # ── Per-bin override sum guard (gruvax-cxy) ───────────────────────────────
+    # Every existing bound is per-ROW: Pydantic's `gt=0.0, le=1.0` on
+    # LabelOverride.fraction and migration 0005's CHECK. Neither can see the
+    # BIN. A single legal row — fraction=0.5 on a one-label bin — therefore
+    # leaves the bin with no absorber for the missing 0.5, and the derive that
+    # runs immediately after this endpoint commits used to raise, wiping the
+    # SegmentCache and killing every locate in the app until the row was deleted
+    # by hand.
+    #
+    # Validate the bin's RESULTING override set BEFORE the transaction so the
+    # bad state is never committed at all. The check runs against the effective
+    # post-request map: the bin's current overrides, with this request's clears
+    # removed and its sets applied.
+    sum_error = _validate_bin_override_sums(cache.overrides, body, unit_id, row, col, bin_labels)
+    if sum_error is not None:
+        return JSONResponse(status_code=status.HTTP_400_BAD_REQUEST, content=sum_error)
 
     # ── DB write (upsert/delete in one transaction) ───────────────────────────
     applied = 0
@@ -475,29 +599,11 @@ DO UPDATE SET fraction = EXCLUDED.fraction,
             await store_idempotency(conn, idempotency_key, response_body)
         await cleanup_idempotency(conn)
 
-    # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
-    # CR-02: re-read is scoped to the resolved profile_id so overrides from other
-    # profiles are not folded into this profile's SegmentCache.
-    cache.invalidate()
+    # ── Reload + re-derive SegmentCache AFTER commit (Pitfall A) ────────────
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        # Build overrides dict from the segment_overrides table for this re-derive
-        # (the table is the authoritative source; we re-read for correctness)
-        new_overrides: dict[tuple[int, int, int, str], float] = {}
-        async with pool.connection() as conn2:
-            sql_overrides = """
-SELECT unit_id, row, col, label, fraction
-FROM gruvax.segment_overrides
-WHERE profile_id = %s::uuid
-ORDER BY unit_id, row, col, label
-"""
-            async with conn2.cursor() as cur:
-                await cur.execute(sql_overrides, (profile_id,))
-                override_rows = await cur.fetchall()
-        for uid, r, c, lbl, frac in override_rows:
-            new_overrides[(int(uid), int(r), int(c), str(lbl))] = float(frac)
-        segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, new_overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -515,11 +621,8 @@ async def insert_cut(
     request: Request,
     body: InsertCutBody,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Insert a new cut point after (after_unit_id, after_row, after_col).
 
@@ -537,7 +640,12 @@ async def insert_cut(
     Returns 400 with specific error types on each failure condition.
     HTTP 404 if (after_unit_id, after_row, after_col) is not a known cube.
     """
-    profile_id, bus = _write_target
+    profile_id, bus, cache, segment_cache = (
+        ctx.profile_id,
+        ctx.bus,
+        ctx.boundary_cache,
+        ctx.segment_cache,
+    )
     new_first_label = body.new_first_label.strip()
     new_first_catalog = body.new_first_catalog.strip()
     after_uid = body.after_unit_id
@@ -565,7 +673,55 @@ async def insert_cut(
                 },
             )
 
+    # ── Load all boundaries sorted (also anchors the head-insert path) ────────
+    boundaries = sorted(
+        cache.get_boundaries(),
+        key=lambda b: (b.unit_id, b.row, b.col),
+    )
+
+    # gruvax-r1q: resolve the insertion index up front. A head insert targets
+    # index -1 ("before the physically-first bin"): the new cut becomes the
+    # first bin's cut and the whole cascade below shifts every existing cut one
+    # position right — the same generalized cascade, no special case.
+    insert_after_idx: int
+    if body.at_head:
+        if not boundaries:
+            return JSONResponse(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                content={
+                    "type": "no_cubes",
+                    "message": "No cubes exist yet — configure a shelf before inserting cuts.",
+                },
+            )
+        insert_after_idx = -1
+        # The empty-bin comparison target for a head insert is the current
+        # first bin: a new head cut equal to its cut would leave it recordless.
+        empty_check_uid = boundaries[0].unit_id
+        empty_check_row = boundaries[0].row
+        empty_check_col = boundaries[0].col
+    else:
+        # The model validator guarantees all three coords are present here.
+        assert after_uid is not None and after_row is not None and after_col is not None
+        found_idx: int | None = None
+        for i, b in enumerate(boundaries):
+            if b.unit_id == after_uid and b.row == after_row and b.col == after_col:
+                found_idx = i
+                break
+        if found_idx is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={
+                    "type": "cube_not_found",
+                    "unit_id": after_uid,
+                    "row": after_row,
+                    "col": after_col,
+                },
+            )
+        insert_after_idx = found_idx
+        empty_check_uid, empty_check_row, empty_check_col = after_uid, after_row, after_col
+
     # ── Shelf overflow check (T-05-04-04) ─────────────────────────────────────
+    # after_* of None (head insert) checks the entire shelf for an absorber.
     overflow_error = validate_shelf_overflow(
         boundary_cache=cache,
         after_unit_id=after_uid,
@@ -583,39 +739,14 @@ async def insert_cut(
         proposed_first_label=new_first_label,
         proposed_first_catalog=new_first_catalog,
         segment_cache=segment_cache,
-        unit_id=after_uid,
-        row=after_row,
-        col=after_col,
+        unit_id=empty_check_uid,
+        row=empty_check_row,
+        col=empty_check_col,
     )
     if no_empty_error is not None:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,
             content={"type": "empty_bin", "message": no_empty_error},
-        )
-
-    # ── Load all boundaries sorted to find the cascade target ─────────────────
-    # Get the sorted boundary list from the cache
-    boundaries = sorted(
-        cache.get_boundaries(),
-        key=lambda b: (b.unit_id, b.row, b.col),
-    )
-
-    # Find the insertion index (the cube AFTER which we insert)
-    insert_after_idx: int | None = None
-    for i, b in enumerate(boundaries):
-        if b.unit_id == after_uid and b.row == after_row and b.col == after_col:
-            insert_after_idx = i
-            break
-
-    if insert_after_idx is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={
-                "type": "cube_not_found",
-                "unit_id": after_uid,
-                "row": after_row,
-                "col": after_col,
-            },
         )
 
     # ── Build cascade plan ────────────────────────────────────────────────────
@@ -724,28 +855,11 @@ async def insert_cut(
             )
             affected_cubes.append({"unit": uid, "row": r, "col": c})
 
-    # ── Invalidate + re-derive SegmentCache AFTER commit (Pitfall A) ─────────
-    # CR-02: re-read is scoped to the resolved profile_id so overrides from other
-    # profiles are not folded into this profile's SegmentCache.
-    cache.invalidate()
+    # ── Reload + re-derive SegmentCache AFTER commit (Pitfall A) ────────────
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        # Reload overrides from segment_overrides for accurate re-derive
-        new_overrides: dict[tuple[int, int, int, str], float] = {}
-        async with pool.connection() as conn2:
-            sql_overrides = """
-SELECT unit_id, row, col, label, fraction
-FROM gruvax.segment_overrides
-WHERE profile_id = %s::uuid
-ORDER BY unit_id, row, col, label
-"""
-            async with conn2.cursor() as cur:
-                await cur.execute(sql_overrides, (profile_id,))
-                override_rows = await cur.fetchall()
-        for uid_o, r_o, c_o, lbl_o, frac_o in override_rows:
-            new_overrides[(int(uid_o), int(r_o), int(c_o), str(lbl_o))] = float(frac_o)
-        segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, new_overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -759,7 +873,10 @@ ORDER BY unit_id, row, col, label
         status_code=200,
         content={
             "change_set_id": change_set_id,
-            "inserted_after": {"unit_id": after_uid, "row": after_row, "col": after_col},
+            "inserted_after": (
+                None if body.at_head else {"unit_id": after_uid, "row": after_row, "col": after_col}
+            ),
+            "at_head": body.at_head,
             "new_cut": {"first_label": new_first_label, "first_catalog": new_first_catalog},
             "affected": len(affected_cubes),
         },

@@ -9,18 +9,27 @@
  *   - Line 2: catalog_number in DM Mono
  *   - aria-label: "{primary_artist} – {title}, catalog number {catalog_number}"
  *
- * Tapping a chip calls setSelectedReleaseId(release_id) — the existing locate flow
- * resolves the cube highlight without navigation (D-06).
+ * Tapping a chip sets selectedReleaseId AND fires the same locate-and-illuminate
+ * sequence ResultsList runs on a row tap (via the shared locateAndIlluminate
+ * helper) — resolving the cube highlight without navigation (D-06). Setting
+ * selectedReleaseId alone is not enough: nothing else in the app treats that
+ * store write as a trigger (gruvax-5zu).
  *
  * Design tokens only — no hardcoded hex (CLAUDE.md constraint).
  */
 
 import { useRecentlyPulledStore } from '../../state/recentlyPulledStore'
 import { useGruvaxStore } from '../../state/store'
+import { locateAndIlluminate } from './locateAndIlluminate'
 
 export function RecentlyPulledStrip() {
   const items = useRecentlyPulledStore((s) => s.items)
   const setSelectedReleaseId = useGruvaxStore((s) => s.setSelectedReleaseId)
+
+  const handleChipTap = (releaseId: number) => {
+    setSelectedReleaseId(releaseId)
+    locateAndIlluminate(releaseId)
+  }
 
   // Returns null when list is empty — no reserved space in layout (D-08)
   if (items.length === 0) return null
@@ -44,7 +53,7 @@ export function RecentlyPulledStrip() {
                 type="button"
                 className="recently-pulled-chip"
                 aria-label={chipLabel}
-                onClick={() => setSelectedReleaseId(item.release_id)}
+                onClick={() => handleChipTap(item.release_id)}
               >
                 <span className="recently-pulled-chip__primary">
                   {item.primary_artist ? `${item.primary_artist} – ${item.title}` : item.title}

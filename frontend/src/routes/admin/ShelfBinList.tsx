@@ -310,9 +310,13 @@ export function ShelfBinList() {
         <RecordPickerSheet
           mode="insert"
           unitId={unitId}
+          // gruvax-r1q: with insertAtHead the sheet posts null after_* coords;
+          // the row/col below are ignored in that case (the old `?? 0` fallback
+          // silently turned "before first bin" into "after the cube at (0,0)").
           row={insertState.afterCube?.row ?? 0}
           col={insertState.afterCube?.col ?? 0}
           afterBinDisplay={insertState.afterDisplay}
+          insertAtHead={insertState.afterCube === null}
           onCommit={() => void handleInsertCommit()}
           onCancel={() => setInsertState(null)}
         />

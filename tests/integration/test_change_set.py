@@ -453,9 +453,13 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
             "Fixture cube (1,0,1) should have non-empty segments (Blue Note has collection records)"
         )
 
-        # Step 2: Bulk write cube (1, 0, 1) — change cut-point to "Riverside" RLP 12-226.
-        # "Riverside" is in v_collection.  force=True bypasses phantom check.
-        # This changes which label starts at cube (1,0,1), altering the SegmentCache.
+        # Step 2: Bulk write cube (1, 0, 1) — change cut-point to "Columbia" CL 100.
+        # force=True bypasses the phantom check. This changes which label starts
+        # at cube (1,0,1), altering the SegmentCache. The payload must be
+        # contiguity-legal now that gruvax-216 enforces contiguity on the commit
+        # path: "Columbia" extends backward into the adjacent (1,0,2) Columbia
+        # cut, whereas the previous "Riverside" payload duplicated a label that
+        # lives at (1,2,2)/(1,3,0) — a genuine scatter, now correctly rejected.
         bulk_res = await ac.post(
             "/api/admin/cubes/bulk",
             json={
@@ -464,8 +468,8 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
                         "unit_id": 1,
                         "row": 0,
                         "col": 1,
-                        "first_label": "Riverside",
-                        "first_catalog": "RLP 12-226",
+                        "first_label": "Columbia",
+                        "first_catalog": "CL 100",
                         "is_empty": False,
                         "force": True,
                     }
@@ -560,7 +564,7 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
 
     This test is RED before the INT-B fix in history.py (revert never publishes).
     """
-    from gruvax.api.deps import get_write_target
+    from gruvax.api.deps import WriteContext, get_write_context
 
     class SpyEventBus:
         """Records all bus.publish() calls for assertion."""
@@ -575,10 +579,20 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
 
     _DEFAULT_PROFILE_UUID_CHANGESET = "00000000-0000-0000-0000-000000000001"
 
-    def _spy_get_write_target() -> tuple[str, SpyEventBus]:
-        # Returns (profile_id, spy_bus) — matches the get_write_target return type.
-        # Plan 06-01 (D-04): admin write routes use get_write_target, not get_event_bus.
-        return _DEFAULT_PROFILE_UUID_CHANGESET, spy
+    def _spy_write_context() -> WriteContext:
+        # gruvax-xkc: admin write routes resolve get_write_context, which carries
+        # the profile's caches alongside its bus, so the override has to hand back
+        # real caches too. They are read from the registries at request time —
+        # lifespan has run by then, whereas dependency_overrides is installed
+        # before it.
+        state = app.state
+        return WriteContext(
+            profile_id=_DEFAULT_PROFILE_UUID_CHANGESET,
+            bus=spy,
+            boundary_cache=state.boundary_cache_registry[_DEFAULT_PROFILE_UUID_CHANGESET],
+            segment_cache=state.segment_cache_registry[_DEFAULT_PROFILE_UUID_CHANGESET],
+            snapshot=state.snapshot_registry[_DEFAULT_PROFILE_UUID_CHANGESET],
+        )
 
     # Seed the test PIN so login works in the fresh app instance.
     from gruvax.auth.pin import hash_pin
@@ -597,9 +611,9 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
     from gruvax.app import create_app
 
     app = create_app()
-    # Override get_write_target (not get_event_bus) — routes resolve per-profile bus
-    # from event_bus_registry, not from app.state.event_bus (Plan 06-01 / D-04).
-    app.dependency_overrides[get_write_target] = _spy_get_write_target
+    # Override the write context — routes resolve their per-profile bus and caches
+    # through it (Plan 06-01 / D-04, gruvax-xkc).
+    app.dependency_overrides[get_write_context] = _spy_write_context
 
     try:
         async with (
@@ -665,7 +679,7 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
             new_change_set_id = revert_body.get("change_set_id")
             assert new_change_set_id, "Revert must return its own change_set_id"
     finally:
-        app.dependency_overrides.pop(get_write_target, None)
+        app.dependency_overrides.pop(get_write_context, None)
 
     # Assert the SpyEventBus captured a boundary_changed event from the revert.
     # Without the INT-B fix, revert never calls bus.publish(), so spy.published is empty.

@@ -30,7 +30,21 @@ from tests.cookies import cookie_header
 
 @pytest_asyncio.fixture(scope="module")
 async def client(db_pool):  # type: ignore[no-untyped-def]
-    """Module-scoped async test client with full ASGI lifespan."""
+    """Module-scoped async test client with full ASGI lifespan.
+
+    Re-seeds boundaries to the canonical fixture BEFORE the app starts (the
+    test_segment_api pattern): the suite shares the dev DB, and gruvax-216's
+    contiguity enforcement on /cubes/bulk means this module's seeding writes
+    are validated against the app's lifespan-loaded BoundaryCache — booting on
+    another module's leftover boundary state made those seeds spuriously
+    scatter (e.g. a stray Blue Note bin elsewhere on the shelf).
+    """
+    from pathlib import Path
+
+    from gruvax.db.seed_boundaries import load_boundaries
+
+    await load_boundaries(Path(__file__).parents[2] / "fixtures" / "boundaries.yaml")
+
     app = create_app()
     async with (
         LifespanManager(app) as manager,
@@ -347,11 +361,17 @@ async def test_contiguity_violation(client) -> None:  # type: ignore[no-untyped-
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_unchanged_unmatchable_row_skips_phantom(client, four_cube_boundaries) -> None:  # type: ignore[no-untyped-def]
+async def test_unchanged_unmatchable_row_skips_phantom(four_cube_boundaries) -> None:  # type: ignore[no-untyped-def]
     """G3 identity-skip: a committed row whose (label, catalog) is absent from v_collection
     is SKIPPED from phantom re-validation on re-import (BAK-01, SC4, Pitfall 22).
 
     Without the G3 skip this test would return 400 phantom_boundary — proving the skip fires.
+
+    Runs against its OWN reseeded app (not the module ``client``): earlier tests
+    in this module commit imports that reshape the shelf, and gruvax-216's
+    contiguity enforcement on /cubes/bulk validates this test's four-cube seed
+    against the app's live BoundaryCache — on the reshaped shelf the seed
+    spuriously scatters Blue Note.
 
     Steps:
       1. Seed the four_cube_boundaries state via POST /api/admin/cubes/bulk with force=True on
@@ -362,6 +382,21 @@ async def test_unchanged_unmatchable_row_skips_phantom(client, four_cube_boundar
 
     Synthetic data only (four_cube_boundaries uses made-up labels not in dev v_collection).
     """
+    from pathlib import Path
+
+    from gruvax.db.seed_boundaries import load_boundaries
+
+    await load_boundaries(Path(__file__).parents[2] / "fixtures" / "boundaries.yaml")
+
+    app = create_app()
+    async with (
+        LifespanManager(app) as manager,
+        AsyncClient(transport=ASGITransport(app=manager.app), base_url="http://test") as client,
+    ):
+        await _run_unmatchable_row_assertions(client, four_cube_boundaries)
+
+
+async def _run_unmatchable_row_assertions(client, four_cube_boundaries) -> None:  # type: ignore[no-untyped-def]
     auth = await _login(client)
     assert auth, "Login must be available for identity-skip test"
 

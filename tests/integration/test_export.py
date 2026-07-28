@@ -22,6 +22,13 @@ from gruvax.app import create_app
 from tests.cookies import cookie_header
 
 
+# gruvax-0ge: the boundaries export is scoped to the caller's profile, so it needs
+# a browse-binding to resolve — the same requirement every other admin route that
+# touches boundary data already has (D-02, no default-profile fallback).
+BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
+DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+
+
 @pytest_asyncio.fixture(scope="module")
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan."""
@@ -37,14 +44,38 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
 
 
 async def _login(client) -> dict:  # type: ignore[no-untyped-def]
-    """Helper: log in and return cookies + csrf token dict."""
+    """Helper: log in and return cookies (incl. browse-binding) + csrf token dict."""
     res = await client.post("/api/admin/login", json={"pin": "0000"})
     if res.status_code != 200:
         return {}
+    cookies = dict(res.cookies)
+    cookies[BROWSE_BINDING_COOKIE] = DEFAULT_PROFILE_UUID
     return {
-        "cookies": res.cookies,
+        "cookies": cookies,
         "csrf_token": res.cookies.get("gruvax_csrf") or "",
     }
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_export_unbound_returns_400(client) -> None:  # type: ignore[no-untyped-def]
+    """gruvax-0ge: an admin with no browse-binding gets 400, not the default profile's cuts.
+
+    The pre-fix handler answered every caller with the DEFAULT profile's boundary
+    cache, so this request used to succeed and hand back the wrong profile's cut
+    points. Refusing to guess is the fix.
+    """
+    res = await client.post("/api/admin/login", json={"pin": "0000"})
+    assert res.status_code == 200, "Login must be available for the unbound export test"
+    session_only = {k: v for k, v in dict(res.cookies).items() if k != BROWSE_BINDING_COOKIE}
+
+    response = await client.get(
+        "/api/admin/export/boundaries.yaml",
+        headers=cookie_header(session_only),
+    )
+    assert response.status_code == 400, (
+        f"Expected 400 session_unbound for an unbound admin export, got "
+        f"{response.status_code}: {response.text}"
+    )
 
 
 @pytest.mark.asyncio(loop_scope="session")

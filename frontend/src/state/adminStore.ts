@@ -56,8 +56,15 @@ interface AdminStore {
   /**
    * Update the sliding expiry time (called by AdminShell on /session poll).
    * Only updates expiresAt — hard cap is immutable for the session lifetime.
+   *
+   * gruvax-6ip0: takes a server-computed DURATION (seconds remaining), not
+   * a timestamp — sessionExpiresAt is derived as `Date.now() + seconds*1000`
+   * entirely on the browser's own clock, so a skewed client clock never gets
+   * mixed with the server's absolute expires_at (which is what previously
+   * made a skewed client either see an inflated countdown, or session-out
+   * while the server-side session was still valid).
    */
-  refreshExpiry: (expiresAt: string) => void
+  refreshExpiry: (expiresInSeconds: number) => void
 
   /** Replace the entire pending change-set (or clear it with null). */
   setPendingChangeSet: (cs: ChangeSet | null) => void
@@ -99,8 +106,8 @@ export const useAdminStore = create<AdminStore>()(
           // pendingChangeSet intentionally NOT cleared — preserved across re-auth
         }),
 
-      refreshExpiry: (expiresAt) =>
-        set({ sessionExpiresAt: new Date(expiresAt).getTime() }),
+      refreshExpiry: (expiresInSeconds) =>
+        set({ sessionExpiresAt: Date.now() + expiresInSeconds * 1000 }),
 
       setPendingChangeSet: (cs) => set({ pendingChangeSet: cs }),
 

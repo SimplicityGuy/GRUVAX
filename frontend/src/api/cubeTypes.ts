@@ -84,11 +84,15 @@ export interface OverridesBody {
   overrides: OverrideEntry[]
 }
 
-/** Body for POST /api/admin/cubes/insert-cut */
+/** Body for POST /api/admin/cubes/insert-cut.
+ *
+ * gruvax-r1q: all three `after_*` null together = insert at the head of the
+ * shelf (before the first bin); the server shifts every existing cut right.
+ */
 export interface InsertCutBody {
-  after_unit_id: number
-  after_row: number
-  after_col: number
+  after_unit_id: number | null
+  after_row: number | null
+  after_col: number | null
   new_first_label: string
   new_first_catalog: string
   force?: boolean

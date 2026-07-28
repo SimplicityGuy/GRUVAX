@@ -46,12 +46,13 @@ restarts automatically if Chromium crashes (`Restart=always`, `RestartSec=3`).
 
 ## Configuration
 
-The launcher reads two environment variables (both optional):
+The launcher reads three environment variables (all optional):
 
 | Variable | Default | Purpose |
 |----------|---------|---------|
 | `GRUVAX_URL` | `http://gruvax.lan/pair` | URL Chromium opens at launch |
 | `USER_DATA_DIR` | `~/.local/share/gruvax-kiosk` | Chromium profile directory |
+| `KIOSK_WINDOW_SIZE` | `800,480` | Chromium `--window-size` — see "Target Viewport" below. Only override this for bench/dev testing on a different panel; production units use the default. |
 
 Override them in the systemd unit or in the shell environment if needed:
 
@@ -60,6 +61,30 @@ Override them in the systemd unit or in the shell environment if needed:
 Environment=GRUVAX_URL=http://192.168.1.100:8000/pair
 Environment=USER_DATA_DIR=/home/pi/.local/share/gruvax-kiosk
 ```
+
+---
+
+## Target Viewport
+
+> **Pinned: 800×480 — the official Raspberry Pi Touch Display (7").**
+
+This is the single supported render target. The kiosk CSS grid, the
+`RecentlyPulledStrip`, and the Playwright viewport render check
+(`tests/browser/test_kiosk_viewport.py`) are all authored and verified against
+this exact resolution. `start-kiosk.sh` passes `--window-size=800,480
+--force-device-scale-factor=1` to Chromium so a windowed dev/test launch (or a
+panel that isn't already forcing the fullscreen native resolution) still
+renders at the pinned size; `--kiosk --app` on the real Pi hardware renders
+fullscreen at the panel's native resolution, which for the official 7" panel
+*is* 800×480, so the two agree.
+
+Do not repurpose this deployment for a 1024×600 panel without first
+reconciling the CSS breakpoints, the design docs that reference a viewport
+(`.planning/phases/08-qr-pairing-privacy-recently-pulled/08-UI-SPEC.md`,
+`.planning/phases/07-member-self-connect-collection-diff/07-UI-SPEC.md`,
+`.planning/research/PITFALLS.md`,
+`.planning/phases/10-shelf-fill-overview/10-VERIFICATION.md`), and the
+Playwright check's viewport constant.
 
 ---
 
@@ -169,5 +194,7 @@ Run it after initial provisioning and after any OS update.
 | `--no-first-run` | Skip first-run wizard |
 | `--password-store=basic` | Avoids keyring unlock dialog on boot under labwc |
 | `--ozone-platform=wayland` | Force Wayland rendering (default on Pi 5 Trixie) |
+| `--window-size=800,480` | Pins the render viewport to the official 7" panel resolution — see "Target Viewport" above |
+| `--force-device-scale-factor=1` | Disables Chromium's automatic DPI scaling so CSS pixels map 1:1 to the pinned viewport |
 | `--user-data-dir=...` | Persistent profile dir — cookie storage |
 | `--app=...` | Open as a frameless app window at the given URL |

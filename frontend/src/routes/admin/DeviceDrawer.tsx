@@ -102,6 +102,12 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
   // Profile-picker: track which context triggered the pick ('bind-to-profile' | 'change-profile')
   const [profilePickContext, setProfilePickContext] = useState<'bind-to-profile' | 'change-profile'>('change-profile')
 
+  // The profile picked via BIND TO PROFILE when the PENDING fast-path (WR-04) is
+  // unavailable and we fall through to manual code entry. Carried across the mode
+  // switch so the eventual bindDevice() call still binds to the picked profile
+  // instead of silently defaulting to the Default profile (gruvax-99s).
+  const [pendingBindProfileId, setPendingBindProfileId] = useState<string | null>(null)
+
   // Profiles query — fetched lazily when profile-picker is opened (staleTime: 30s)
   const { data: profiles, isLoading: profilesLoading } = useQuery({
     queryKey: ['admin', 'profiles'],
@@ -125,7 +131,10 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
     setSaveError(null)
     setIsSaving(true)
     try {
-      const bound = await bindDevice({ code })
+      const bound = await bindDevice(
+        pendingBindProfileId ? { code, profile_id: pendingBindProfileId } : { code },
+      )
+      setPendingBindProfileId(null)
       void queryClient.invalidateQueries({ queryKey: ['admin', 'devices'] })
       onActionComplete?.(`Device "${bound.display_name}" paired successfully.`)
       onClose()
@@ -136,7 +145,7 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
     } finally {
       setIsSaving(false)
     }
-  }, [queryClient, onActionComplete, onClose])
+  }, [queryClient, onActionComplete, onClose, pendingBindProfileId])
 
   // ── Pick profile ───────────────────────────────────────────────────────────
   const handlePickProfile = useCallback(async (profileId: string) => {
@@ -163,7 +172,10 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
           onActionComplete?.(`Device "${bound.display_name}" paired successfully.`)
           onClose()
         } else {
-          // No pending code available — fall back to manual code entry
+          // No pending code available — fall back to manual code entry, carrying
+          // the picked profile forward so the eventual handleBind() call still
+          // binds to it instead of defaulting to the Default profile (gruvax-99s).
+          setPendingBindProfileId(profileId)
           setDrawerMode('bind-code')
           setSaveError(null)
         }

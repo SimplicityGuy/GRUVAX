@@ -646,7 +646,7 @@ LIMIT %s
 
 async def get_distinct_labels(
     pool: AsyncConnectionPool,
-    profile_id: str = DEFAULT_PROFILE_UUID,
+    profile_id: str,
 ) -> list[str]:
     """Return all distinct labels present in gruvax.profile_collection, sorted.
 
@@ -667,7 +667,11 @@ async def get_distinct_labels(
 
     Args:
         pool:       Open psycopg ``AsyncConnectionPool``.
-        profile_id: UUID of the profile to scope the query to (P1: default).
+        profile_id: UUID of the profile to scope the query to. REQUIRED
+                    (gruvax-7ad): this used to default to DEFAULT_PROFILE_UUID,
+                    and the one caller — the admin label autocomplete — never
+                    passed it, so every admin saw the default profile's labels.
+                    No default means a future caller cannot repeat that.
 
     Returns:
         Sorted list of distinct label strings.
@@ -690,7 +694,7 @@ ORDER BY label
 async def get_catalogs_for_label(
     pool: AsyncConnectionPool,
     label: str,
-    profile_id: str = DEFAULT_PROFILE_UUID,
+    profile_id: str,
 ) -> list[dict[str, Any]]:
     """Return all release_id + catalog_number for records with the given label.
 
@@ -713,7 +717,9 @@ async def get_catalogs_for_label(
     Args:
         pool:       Open psycopg ``AsyncConnectionPool``.
         label:      Label to filter by (matched case-insensitively).
-        profile_id: UUID of the profile to scope the query to (P1: default).
+        profile_id: UUID of the profile to scope the query to. REQUIRED
+                    (gruvax-7ad) — see ``get_distinct_labels`` for why the
+                    default was removed.
 
     Returns:
         List of dicts with keys ``release_id`` (int) and ``catalog_number`` (str),

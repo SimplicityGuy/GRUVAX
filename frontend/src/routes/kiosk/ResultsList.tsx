@@ -1,10 +1,9 @@
 import { useEffect } from 'react'
 import { AnimatePresence, motion } from 'motion/react'
-import { illuminateRecord, locateRelease } from '../../api/client'
 import type { SearchResult } from '../../api/types'
 import { useGruvaxStore } from '../../state/store'
-import { useSessionStore } from '../../state/sessionStore'
 import { DidYouMean } from './DidYouMean'
+import { locateAndIlluminate } from './locateAndIlluminate'
 import { NoResultsRow } from './NoResultsRow'
 import { ResultRow } from './ResultRow'
 
@@ -53,8 +52,7 @@ export function ResultsList({
   onResultSelect,
   onDidYouMean,
 }: ResultsListProps) {
-  const { selectedResult, setSelectedResult, setSelectedReleaseId, setHighlightCube, setLocateResult } =
-    useGruvaxStore()
+  const { selectedResult, setSelectedResult, setSelectedReleaseId } = useGruvaxStore()
 
   const isVisible = open && (items.length > 0 || showNoResults)
 
@@ -69,21 +67,7 @@ export function ResultsList({
     setSelectedResult(top)
     setSelectedReleaseId(top.release_id)
     // Fire locate for top result — feed full result into store (CUBE-04/Phase 2).
-    // D2-04: locate's profile_id query param is REQUIRED (locate.py), so pass the
-    // bound profile or every call 422s and is swallowed (no cube, no affordance).
-    // Read at call-time via getState() to stay stale-closure-safe (matches KioskView).
-    const topPid = useSessionStore.getState().boundProfileId
-    void locateRelease(top.release_id, topPid ?? undefined)
-      .then((result) => {
-        setLocateResult(result)
-        // Phase 6: fire-and-forget illuminate — never block locate path (D-01)
-        void illuminateRecord(result).catch(() => {
-          // Swallow — broker may be in degraded mode
-        })
-      })
-      .catch(() => {
-        setHighlightCube(null)
-      })
+    locateAndIlluminate(top.release_id)
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topReleaseId])
 
@@ -93,19 +77,7 @@ export function ResultsList({
     onResultSelect?.()
     setSelectedResult(result)
     setSelectedReleaseId(result.release_id)
-    // D2-04: pass the bound profile_id (required query param) — see auto-locate note above.
-    const pid = useSessionStore.getState().boundProfileId
-    void locateRelease(result.release_id, pid ?? undefined)
-      .then((located) => {
-        setLocateResult(located)
-        // Phase 6: fire-and-forget illuminate after explicit select (D-01)
-        void illuminateRecord(located).catch(() => {
-          // Swallow — broker may be in degraded mode
-        })
-      })
-      .catch(() => {
-        setHighlightCube(null)
-      })
+    locateAndIlluminate(result.release_id)
   }
 
   // D-10: onTap sets the search query — user sees the corrected term in the

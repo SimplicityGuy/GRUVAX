@@ -195,13 +195,19 @@ async def get_session(
     already refreshes ``expires_at`` on each call.
 
     Returns:
-        ``{expires_at: ISO-8601 string, hard_cap_at: ISO-8601 string}``
+        ``{expires_at, hard_cap_at, expires_in_seconds}`` — ``expires_at`` /
+        ``hard_cap_at`` are ISO-8601 strings (kept for display / debugging);
+        ``expires_in_seconds`` (gruvax-6ip0) is a server-computed DURATION,
+        used by AdminShell's countdown so it never mixes the server's clock
+        (via a foreign absolute timestamp) with the browser's Date.now().
     """
     session_id = admin["session_id"]
 
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
-            "SELECT expires_at, hard_expires_at FROM gruvax.admin_sessions WHERE id = %s",
+            "SELECT expires_at, hard_expires_at,"
+            " EXTRACT(EPOCH FROM (expires_at - NOW()))::int AS expires_in_seconds"
+            " FROM gruvax.admin_sessions WHERE id = %s",
             (session_id,),
         )
         row = await cur.fetchone()
@@ -212,7 +218,7 @@ async def get_session(
             detail="Session not found",
         )
 
-    expires_at, hard_expires_at = row
+    expires_at, hard_expires_at, expires_in_seconds = row
     return {
         "expires_at": expires_at.isoformat()
         if hasattr(expires_at, "isoformat")
@@ -220,4 +226,7 @@ async def get_session(
         "hard_cap_at": hard_expires_at.isoformat()
         if hasattr(hard_expires_at, "isoformat")
         else str(hard_expires_at),
+        "expires_in_seconds": max(0, int(expires_in_seconds))
+        if expires_in_seconds is not None
+        else 0,
     }

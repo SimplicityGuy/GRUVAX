@@ -107,7 +107,7 @@ async def test_get_catalogs_for_label_excludes_null_catalog(  # type: ignore[no-
     """Defect B: a NULL catalog_number must never surface as the literal
     string ``"None"`` in the catalog picker's option list.
     """
-    results = await get_catalogs_for_label(db_pool, "Jn3 Test Label")
+    results = await get_catalogs_for_label(db_pool, "Jn3 Test Label", DEFAULT_PROFILE_UUID)
     catalogs = [r["catalog_number"] for r in results]
     assert "None" not in catalogs, (
         f"NULL catalog_number leaked as the literal string 'None': {catalogs!r}"
