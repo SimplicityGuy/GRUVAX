@@ -200,6 +200,12 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
       await fn(profileId, { pat: patValue.trim() })
       // On success: transition to SYNCING (connect endpoint already kicked full sync)
       handledSyncStatusRef.current = null // reset so next terminal state is handled
+      // Drop the cached poll result for THIS profile before re-enabling the poll
+      // query. `enabled: false` does not clear TanStack's cached data, so without
+      // this the terminal-status effect below would fire on the re-enable render
+      // against the PREVIOUS sync's terminal value, before the new sync's first
+      // refetch has resolved (gruvax-4wc — deterministic stale-poll false terminal).
+      void queryClient.removeQueries({ queryKey: ['admin', 'profiles', profileId], exact: true })
       setConnectState('syncing')
       setSyncStartedAt(Date.now()) // D4-17: record sync start for elapsed counter
       setPatValue('')
@@ -270,6 +276,10 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
 
     try {
       await syncAdminProfile(profileId)
+      // See handleConnect — drop the stale cached poll result before re-enabling
+      // the poll query so the terminal-status effect can't fire against the
+      // previous run's cached status (gruvax-4wc).
+      void queryClient.removeQueries({ queryKey: ['admin', 'profiles', profileId], exact: true })
       setConnectState('syncing')
       setSyncStartedAt(Date.now()) // D4-17: record sync start for elapsed counter
     } catch {

@@ -528,7 +528,7 @@ than surfacing later at request time. Full list in `.env.example`.
 
 | Variable | Required | Purpose |
 |----------|----------|---------|
-| `DATABASE_URL` | yes | SQLAlchemy/psycopg async DSN, e.g. `postgresql+psycopg://user:pass@host/db` (compose interpolates this from `GRUVAX_DB_HOST`/`_USER`/`_PASSWORD`/`_NAME`/`_PORT`, which are compose-only, not read directly by the app) |
+| `DATABASE_URL` | yes | SQLAlchemy/psycopg async DSN, e.g. `postgresql+psycopg://user:pass@host/db`. Env-first in compose: a `DATABASE_URL` set in `.env` wins outright; only when it is absent does compose assemble one from `GRUVAX_DB_HOST`/`_USER`/`_PASSWORD`/`_NAME`/`_PORT` (compose-only pieces, not read directly by the app) (gruvax-95qp) |
 | `DISCOGSOGRAPHY_BASE_URL` | yes | Base URL of the discogsography HTTP API (prod: real service; dev: `fake-discogsography`) |
 | `GRUVAX_SECRET_KEY` | yes | 32-byte URL-safe base64 Fernet key for PAT-at-rest encryption; boot fails on a malformed key |
 | `SESSION_SECRET` | yes | Signing key for the admin session cookie |
@@ -542,7 +542,16 @@ than surfacing later at request time. Full list in `.env.example`.
 Compose-only variables (not read by `Settings`, only used to build the vars above or to
 bootstrap containers): `GRUVAX_DB_HOST`/`_PORT`/`_USER`/`_PASSWORD`/`_NAME` (build
 `DATABASE_URL`), `GRUVAX_ADMIN_PIN` (required by the `init-sync` one-shot job only),
-`GIT_SHA`/`BUILD_TIMESTAMP`/`GRUVAX_ENV` (Docker build args baked into `_version.py`).
+`GIT_SHA`/`BUILD_TIMESTAMP` (Docker build args baked into `_version.py`).
+
+`GRUVAX_ENV` is **not** build-arg-only (gruvax-b51h corrects the previous misfiling here) —
+it is baked into `_version.py` at build time (`compose.yaml`'s `build.args`) **and** read at
+container-runtime by `docker-entrypoint.sh`, which gates dev-only bootstrap behind
+`GRUVAX_ENV=development`: creating the `gruvax_dev` migration-0002 stub schema, seeding
+`gruvax.profile_collection` with the ~3,000-row synthetic dataset, and seeding synthetic cube
+boundaries. `.env.example` ships this UNSET by default; setting it to `development` against
+a real deployment permanently short-circuits the initial Discogs sync (see
+`docs/runbook-fresh-host.md`).
 
 The v1.0 `ADMIN_PIN_HASH` env var and `OBSERVED_DISCOGSOGRAPHY_SCHEMA` env var described
 in earlier drafts of this document no longer exist — the PIN hash lives in

@@ -27,23 +27,19 @@ Phase 5 changes:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request
 
 from gruvax.api.deps import (
-    get_boundary_cache,
-    get_collection_snapshot,
     get_pool,
-    get_segment_cache,
+    get_read_profile_id,
+    segment_cache_for_profile,
+    settings_cache_for_profile,
+    snapshot_for_profile,
 )
-from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
+from gruvax.estimator.boundary_cache import BoundaryRow
 from gruvax.estimator.boundary_math import count_records_in_bin, get_records_in_bin, sample_records
-
-
-if TYPE_CHECKING:
-    from gruvax.estimator.collection_snapshot import CollectionSnapshot
-    from gruvax.estimator.segment_cache import SegmentCache
 
 
 logger = logging.getLogger(__name__)
@@ -81,9 +77,7 @@ ORDER BY ordering
 async def get_cubes_bulk(
     request: Request,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
+    profile_id: str = Depends(get_read_profile_id),
 ) -> dict[str, Any]:
     """Return all cube boundary rows with their empty-state flag and fill level.
 
@@ -97,20 +91,32 @@ async def get_cubes_bulk(
 
     ``fill_level`` is computed from the in-memory SegmentCache (no extra DB calls
     during compute, D-13 / T-03-12). Phase 5: uses count_records_in_bin(SegmentBin).
+
+    gruvax-5dm: scoped to the caller's resolved profile — the SELECT had no
+    ``WHERE profile_id``, so with two profiles holding boundary rows the kiosk got
+    2x32 rows with duplicate (unit_id, row, col) and conflicting is_empty flags.
+    Same resolution the admin twin (GET /admin/cubes) already used, and the
+    segment cache is taken from the registry rather than the default singleton so
+    fill bars describe the collection actually on screen. Public but binding-gated
+    (D-02 / B-02, as search / locate / SSE already are): 400 session_unbound when
+    the browser has no browse-binding cookie and no device fingerprint.
     """
     # Phase 5: fetch only cut-point columns (last_* dropped in SEG-01 migration 0005)
     sql = """
 SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
+WHERE profile_id = %s::uuid
 ORDER BY unit_id, row, col
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql)
+        await cur.execute(sql, (profile_id,))
         rows_raw = await cur.fetchall()
         cols_meta = [desc[0] for desc in (cur.description or [])]
 
+    segment_cache = segment_cache_for_profile(request, profile_id)
+
     nominal_capacity: int = int(
-        getattr(request.app.state, "settings_cache", {}).get("cube.nominal_capacity", 95)
+        settings_cache_for_profile(request, profile_id).get("cube.nominal_capacity", 95)
     )
 
     cubes = []
@@ -145,14 +151,22 @@ async def get_cube(
     row: int = Path(ge=0),
     col: int = Path(ge=0),
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
+    profile_id: str = Depends(get_read_profile_id),
 ) -> dict[str, Any]:
     """Return one cube's boundary metadata plus fill level, count, and sample records.
 
     Public endpoint — no admin auth required (D-15). Visiting friends can browse
-    cube contents on the kiosk without logging in.
+    cube contents on the kiosk without logging in. It IS profile-bound though
+    (D-02 / B-02): 400 session_unbound with no browse-binding cookie and no device
+    fingerprint, exactly as search / locate / SSE behave.
+
+    gruvax-5dm: scoped to the caller's resolved profile. The SELECT filtered only
+    on (unit_id, row, col) and then ``fetchone()`` with no ORDER BY, so with two
+    profiles holding a row at the same physical coordinate the kiosk showed
+    whichever row Postgres's heap scan yielded first — an arbitrary profile's cube
+    metadata, non-deterministically. total_count / fill_level / sample_records now
+    come from the caller's own SegmentCache and snapshot instead of the default
+    profile's singletons.
 
     Args:
         unit_id: Unit ID (integer ≥ 1). FastAPI returns 422 on non-int.
@@ -177,10 +191,10 @@ async def get_cube(
     sql = """
 SELECT unit_id, row, col, first_label, first_catalog, is_empty
 FROM gruvax.cube_boundaries
-WHERE unit_id = %s AND row = %s AND col = %s
+WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql, (unit_id, row, col))
+        await cur.execute(sql, (profile_id, unit_id, row, col))
         row_raw = await cur.fetchone()
         cols_meta = [desc[0] for desc in (cur.description or [])]
 
@@ -203,14 +217,18 @@ WHERE unit_id = %s AND row = %s AND col = %s
         is_empty=result["is_empty"],
     )
 
-    # Nominal capacity from settings cache (admin-configurable, D-13).
+    # Nominal capacity from the CALLER's settings cache (admin-configurable, D-13).
     # Default 95 records per Kallax cube (typical LP density).
     nominal_capacity: int = int(
-        getattr(request.app.state, "settings_cache", {}).get("cube.nominal_capacity", 95)
+        settings_cache_for_profile(request, profile_id).get("cube.nominal_capacity", 95)
     )
 
     # Phase 5: Compute fill level and sample from SegmentCache + snapshot (no DB during compute,
     # O(records-per-label) — negligible at ~50 worst case, T-03-12 / RESEARCH.md A5).
+    # gruvax-5dm: both come from the per-profile registry, not app.state's default
+    # singletons — otherwise the row is the caller's but the counts are someone else's.
+    segment_cache = segment_cache_for_profile(request, profile_id)
+    snapshot = snapshot_for_profile(request, profile_id)
     seg_bin = segment_cache.get_bin(boundary.unit_id, boundary.row, boundary.col)
     if seg_bin is not None:
         total_count = count_records_in_bin(seg_bin)

@@ -326,7 +326,7 @@ The kiosk `KioskView.tsx` currently ignores `collection_changed`. This phase wir
 - Admin diagnostics card: new row follows established `.diag-status-row` responsive flex pattern
 
 **Kiosk indicator (Surface 3):**
-- Full-width below search box on the 7" kiosk display (800×480 or similar)
+- Full-width below search box on the pinned 7" kiosk display (800×480 — see CLAUDE.md § Recommended Stack — Raspberry Pi Kiosk)
 - Auto-dismisses from layout when `newRecordCount === 0` (no reserved space)
 
 ---

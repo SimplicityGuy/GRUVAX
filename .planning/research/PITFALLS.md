@@ -481,7 +481,7 @@ PRIV-03 phase. The documentation of scope is the mitigation — no code change n
 ### Pitfall 43: QR code rendering is blurry or too small on the 7" kiosk screen to be scanned
 
 **What goes wrong:**
-The QR code is rendered as a 200×200 CSS pixel element. On the Pi's 7" display (typically 800×480 at 60dpi effective), the QR code is physically 3.3 inches — small but scannable with most phones from normal distance. If the QR is further reduced by padding, margins, or a surrounding "pair your device" dialog, it may drop below the comfortable scan distance for the admin's phone camera.
+The QR code is rendered as a 200×200 CSS pixel element. On the Pi's pinned 7" display (800×480 at 60dpi effective — see CLAUDE.md § Recommended Stack — Raspberry Pi Kiosk), the QR code is physically 3.3 inches — small but scannable with most phones from normal distance. If the QR is further reduced by padding, margins, or a surrounding "pair your device" dialog, it may drop below the comfortable scan distance for the admin's phone camera.
 
 **Why it happens:**
 QR code scannable size depends on physical size and error correction level. A 37-char URL encoded at QR error-correction level M requires at minimum a 25×25 module grid. At 200 CSS pixels, each module is 8 pixels — fine. But if the display is DPI-scaled differently, the physical size drops.

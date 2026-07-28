@@ -9,7 +9,8 @@ from __future__ import annotations
 from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import secrets
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, cast
+from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, Response, status
 
@@ -290,6 +291,70 @@ async def resolve_profile_from_request(
 #
 # NOTE (gruvax-7qgx): an unknown fingerprint (no device row) is no longer an
 # error — resolve_profile_from_request falls through to browse-binding for it.
+#
+# NOTE (gruvax-kol): every one of these deps compares the resolved profile
+# against the path/query value through ``require_profile_match`` — never a raw
+# string ``!=``. Three of the four deps below currently have no call sites
+# (search.py / locate.py deliberately inline the resolution to avoid a second DB
+# round-trip per WR-01); they are kept as the documented D2-04 dep family, and
+# routing the compare through one helper is what stops the WR-02 bug class from
+# reaching their first future caller.
+
+
+def canonical_profile_id(profile_id: str) -> str:
+    """Return ``profile_id`` in canonical lowercase-hyphenated UUID form (gruvax-kol).
+
+    Every ``app.state`` registry (boundary_cache_registry, snapshot_registry,
+    segment_cache_registry, event_bus_registry, settings_cache_registry) is keyed
+    by ``str(<DB UUID>)`` — canonical lowercase. A profile id that arrives off the
+    wire in any other valid UUID spelling (uppercase, unhyphenated, brace-wrapped)
+    therefore misses the registry and 404s ``profile_not_found`` even though the
+    profile exists. Normalizing the KEY is the other half of the WR-02 fix: the
+    compare in ``require_profile_match`` stops the spurious 403, this stops the
+    spurious 404 immediately behind it.
+
+    A value that is not a parseable UUID is returned unchanged (legacy
+    browse-binding cookie values must keep their existing behaviour, not raise).
+    """
+    try:
+        return str(UUID(profile_id))
+    except ValueError:
+        return profile_id
+
+
+def profile_ids_match(resolved_profile_id: str, supplied_profile_id: str) -> bool:
+    """Return True when both strings denote the same profile UUID (WR-02 / gruvax-kol).
+
+    A raw string ``==`` is the wrong comparison: ``resolved_profile_id`` is
+    canonical lowercase (``str()`` of a DB UUID — see ``resolve_profile_from_request``),
+    while the supplied value comes off the wire and may be uppercase, brace-wrapped,
+    or unhyphenated. Comparing the raw strings spuriously reports a mismatch (and
+    therefore a 403) for what is provably the same profile.
+
+    Both sides are normalized through ``UUID()`` before comparing. If EITHER side
+    is not a parseable UUID (e.g. a legacy browse-binding cookie value), the
+    original string compare is used as the fallback — never a 500.
+    """
+    try:
+        resolved = UUID(resolved_profile_id)
+        supplied = UUID(supplied_profile_id)
+    except ValueError:
+        return resolved_profile_id == supplied_profile_id
+    return resolved == supplied
+
+
+def require_profile_match(resolved_profile_id: str, supplied_profile_id: str) -> None:
+    """Raise 403 profile_mismatch unless both ids denote the same profile (WR-02).
+
+    The single shared guard used by every per-profile dep and by the inlined
+    resolution in ``search.py`` / ``locate.py``, so the UUID-normalizing compare
+    cannot drift back apart between the two (gruvax-kol).
+    """
+    if not profile_ids_match(resolved_profile_id, supplied_profile_id):
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail={"type": "profile_mismatch"},
+        )
 
 
 async def get_boundary_cache_for_profile(
@@ -311,11 +376,7 @@ async def get_boundary_cache_for_profile(
         HTTP 404 (profile_not_found)  — profile_id key absent from registry.
     """
     resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    if resolved_profile_id != profile_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"type": "profile_mismatch"},
-        )
+    require_profile_match(resolved_profile_id, profile_id)
     registry: dict[str, BoundaryCache] | None = getattr(
         request.app.state, "boundary_cache_registry", None
     )
@@ -324,7 +385,7 @@ async def get_boundary_cache_for_profile(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Cache registry not ready",
         )
-    cache: BoundaryCache | None = registry.get(str(profile_id))
+    cache: BoundaryCache | None = registry.get(canonical_profile_id(profile_id))
     if cache is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -344,11 +405,7 @@ async def get_snapshot_for_profile(
     Device binding overrides browse cookie (D3-05).
     """
     resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    if resolved_profile_id != profile_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"type": "profile_mismatch"},
-        )
+    require_profile_match(resolved_profile_id, profile_id)
     registry: dict[str, CollectionSnapshot] | None = getattr(
         request.app.state, "snapshot_registry", None
     )
@@ -357,7 +414,7 @@ async def get_snapshot_for_profile(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Snapshot registry not ready",
         )
-    snapshot: CollectionSnapshot | None = registry.get(str(profile_id))
+    snapshot: CollectionSnapshot | None = registry.get(canonical_profile_id(profile_id))
     if snapshot is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -377,11 +434,7 @@ async def get_segment_cache_for_profile(
     Device binding overrides browse cookie (D3-05).
     """
     resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    if resolved_profile_id != profile_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"type": "profile_mismatch"},
-        )
+    require_profile_match(resolved_profile_id, profile_id)
     registry: dict[str, SegmentCache] | None = getattr(
         request.app.state, "segment_cache_registry", None
     )
@@ -390,7 +443,7 @@ async def get_segment_cache_for_profile(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Segment cache registry not ready",
         )
-    seg: SegmentCache | None = registry.get(str(profile_id))
+    seg: SegmentCache | None = registry.get(canonical_profile_id(profile_id))
     if seg is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -418,18 +471,14 @@ async def get_bus_for_profile(
     # Device/browse validation — pool acquired + released atomically here.
     # The generator body (events.py) must NOT call get_pool (Pitfall 10).
     resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    if resolved_profile_id != profile_id:
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail={"type": "profile_mismatch"},
-        )
+    require_profile_match(resolved_profile_id, profile_id)
     registry: dict[str, EventBus] | None = getattr(request.app.state, "event_bus_registry", None)
     if registry is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Event bus registry not ready",
         )
-    bus: EventBus | None = registry.get(str(profile_id))
+    bus: EventBus | None = registry.get(canonical_profile_id(profile_id))
     if bus is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -481,7 +530,7 @@ async def get_write_target(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
             detail="Event bus registry not ready",
         )
-    bus: Any = registry.get(str(profile_id))
+    bus: Any = registry.get(canonical_profile_id(profile_id))
     if bus is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -521,21 +570,114 @@ class WriteContext:
     snapshot: CollectionSnapshot
 
 
-def _registry_entry(request: Request, attr: str, profile_id: str, not_ready: str) -> Any:
-    """Look up one per-profile registry entry, or raise the standard 503/404."""
+# ── Per-profile READ scoping (gruvax-5dm) ────────────────────────────────────
+#
+# get_write_target is the write-side equivalent of this pair: it resolves the
+# caller's profile AND hands back the bus to publish on. Public READ routes need
+# only the profile_id plus whichever per-profile cache they read, and they must
+# NOT reach for the app.state default singletons (boundary_cache / segment_cache /
+# collection_snapshot / settings_cache) — those are the default profile's objects
+# regardless of who is asking, which is exactly how the unscoped-read bug family
+# (gruvax-5dm / -0ge / -7ad / -xkc) shipped.
+
+
+async def get_read_profile_id(
+    request: Request,
+    pool: Any = Depends(get_pool),
+) -> str:
+    """FastAPI dependency: the caller's authoritative profile_id for a scoped READ route.
+
+    Resolution is identical to ``get_write_target`` (device binding wins over the
+    browse cookie — D3-05) and propagates the same errors verbatim (D-02 — never a
+    default-profile fallback):
+      HTTP 400 session_unbound — no fingerprint cookie AND no browse-binding cookie.
+      HTTP 403 device_revoked  — fingerprint maps to a revoked device.
+
+    Returns the id in canonical form so it is directly usable as a registry key.
+    """
+    profile_id, _ = await resolve_profile_from_request(request, pool)
+    return canonical_profile_id(profile_id)
+
+
+def _registry_entry(
+    request: Request,
+    attr: str,
+    profile_id: str,
+    not_ready_detail: str,
+) -> Any:
+    """Return ``app.state.<attr>[profile_id]`` with the shared 503/404 taxonomy.
+
+    Raises:
+        HTTP 503 — the registry attribute is missing from app.state (request raced
+                   lifespan startup or arrived during shutdown).
+        HTTP 404 profile_not_found — no entry for this profile (deleted / unknown).
+    """
     registry: dict[str, Any] | None = getattr(request.app.state, attr, None)
     if registry is None:
         raise HTTPException(
             status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail=not_ready,
+            detail=not_ready_detail,
         )
-    entry = registry.get(str(profile_id))
+    entry = registry.get(canonical_profile_id(profile_id))
     if entry is None:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail={"type": "profile_not_found"},
         )
     return entry
+
+
+def segment_cache_for_profile(request: Request, profile_id: str) -> SegmentCache:
+    """Return the SegmentCache for ``profile_id`` (never the default singleton)."""
+    return cast(
+        "SegmentCache",
+        _registry_entry(
+            request, "segment_cache_registry", profile_id, "Segment cache registry not ready"
+        ),
+    )
+
+
+def snapshot_for_profile(request: Request, profile_id: str) -> CollectionSnapshot:
+    """Return the CollectionSnapshot for ``profile_id`` (never the default singleton)."""
+    return cast(
+        "CollectionSnapshot",
+        _registry_entry(request, "snapshot_registry", profile_id, "Snapshot registry not ready"),
+    )
+
+
+def boundary_cache_for_profile(request: Request, profile_id: str) -> BoundaryCache:
+    """Return the BoundaryCache for ``profile_id`` (never the default singleton)."""
+    return cast(
+        "BoundaryCache",
+        _registry_entry(request, "boundary_cache_registry", profile_id, "Cache registry not ready"),
+    )
+
+
+def settings_cache_for_profile(request: Request, profile_id: str) -> dict[str, Any]:
+    """Return the effective settings map for ``profile_id`` (global + profile overrides).
+
+    Unlike the caches above this is deliberately NON-fatal and deliberately a
+    MERGE, not a lookup:
+
+    - Non-fatal, because settings are optional per profile — a profile with no
+      rows is a normal state, not a bad request, so it must not 404.
+    - A merge, because settings are global by design today (admin settings and the
+      PIN are written under the default profile — see api/admin/settings.py) while
+      the composite PK ``(profile_id, key)`` allows per-profile rows. Returning
+      only the per-profile map would make a non-default profile silently lose an
+      admin-configured global like ``cube.nominal_capacity`` and fall back to the
+      hardcoded default. Profile-specific entries win over global ones.
+    """
+    flat: dict[str, Any] = getattr(request.app.state, "settings_cache", {})
+    registry: dict[str, dict[str, Any]] | None = getattr(
+        request.app.state, "settings_cache_registry", None
+    )
+    if registry is None:
+        return flat
+    per_profile = registry.get(canonical_profile_id(profile_id))
+    if not per_profile:
+        return flat
+    return {**flat, **per_profile}
 
 
 async def get_write_context(
@@ -577,6 +719,7 @@ async def get_write_context(
             cache, segment_cache = ctx.boundary_cache, ctx.segment_cache
     """
     profile_id, _ = await resolve_profile_from_request(request, pool)
+    profile_id = canonical_profile_id(profile_id)
     return WriteContext(
         profile_id=profile_id,
         bus=_registry_entry(

@@ -29,6 +29,21 @@ interface SessionStore {
    */
   boundProfileId: string | null
 
+  /**
+   * True when this browser's device fingerprint is bound to a profile in
+   * gruvax.devices, i.e. the screen is PAIRED (D3-03/D3-05).
+   *
+   * gruvax-ocrn: setSession used to discard is_device_paired, which made it
+   * impossible for any component to tell a paired kiosk from a browse-bound one.
+   * SwitchProfileButton needs exactly that: on a paired device the switch flow
+   * cannot work (DELETE /api/session/bind clears only the BROWSE cookie, while
+   * the device binding overrides it — D3-05), so the button must not be offered.
+   */
+  isDevicePaired: boolean
+
+  /** Device ID for the current fingerprint cookie, or null when not a device. */
+  deviceId: string | null
+
   /** Full profile list from GET /api/session. */
   profiles: ProfileSummary[]
 
@@ -91,6 +106,8 @@ interface SessionStore {
 export const useSessionStore = create<SessionStore>()((set, get) => ({
   profileCount: 0,
   boundProfileId: null,
+  isDevicePaired: false,
+  deviceId: null,
   profiles: [],
   revokePending: false,
   reassignBanner: null,
@@ -99,6 +116,11 @@ export const useSessionStore = create<SessionStore>()((set, get) => ({
     set({
       profileCount: data.profile_count,
       boundProfileId: data.bound_profile_id,
+      // gruvax-ocrn: retain the device-pairing facts instead of dropping them.
+      // Both fields are optional in SessionData (older/partial responses), so
+      // coerce rather than assume.
+      isDevicePaired: data.is_device_paired === true,
+      deviceId: data.device_id ?? null,
       profiles: data.profiles,
     }),
 

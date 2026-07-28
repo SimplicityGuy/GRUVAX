@@ -249,3 +249,41 @@ async def test_change_pin_revokes_sessions(client) -> None:  # type: ignore[no-u
     assert verify_res.status_code in (200, 401), (
         f"After PIN change, session check must return 200 or 401, got {verify_res.status_code}"
     )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_get_session_returns_expires_in_seconds(client) -> None:  # type: ignore[no-untyped-def]
+    """GET /api/admin/session includes expires_in_seconds — a DURATION (gruvax-6ip0).
+
+    AdminShell's idle-expiry countdown used to derive sessionExpiresAt by
+    diffing the browser's Date.now() against this endpoint's ABSOLUTE
+    expires_at — mixing the server's clock with the client's. A skewed
+    client clock either inflated the countdown or logged the admin out while
+    the server-side session was still valid. The fix has AdminShell re-anchor
+    off a server-computed DURATION instead, entirely on the browser's own
+    clock. This test guards the response contract that fix depends on.
+    """
+    login_res = await client.post("/api/admin/login", json={"pin": _TEST_PIN})
+    if login_res.status_code != 200:
+        pytest.skip("Login not yet implemented — skipping session-duration test")
+
+    session_res = await client.get("/api/admin/session", headers=cookie_header(login_res.cookies))
+    assert session_res.status_code == 200, (
+        f"GET /api/admin/session expected 200, got {session_res.status_code}: {session_res.text}"
+    )
+
+    body = session_res.json()
+    assert "expires_in_seconds" in body, (
+        f"GET /api/admin/session response must include expires_in_seconds "
+        f"(gruvax-6ip0 — a DURATION, not a timestamp), got: {body}"
+    )
+    expires_in_seconds = body["expires_in_seconds"]
+    assert isinstance(expires_in_seconds, int), (
+        f"expires_in_seconds must be an int, got {type(expires_in_seconds)!r}: {expires_in_seconds!r}"
+    )
+    # A freshly-logged-in session's idle window has not yet ticked down —
+    # must be positive and within a sane bound (the idle TTL is minutes, not
+    # hours), i.e. NOT computed by diffing against a skewed absolute clock.
+    assert 0 < expires_in_seconds <= 24 * 60 * 60, (
+        f"expires_in_seconds must be a small positive duration, got {expires_in_seconds}"
+    )

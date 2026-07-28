@@ -62,10 +62,16 @@ services:
       - path: .env
         required: false
     environment:
-      # Default: the bundled gruvax-dev-pg service (same compose network).
-      # Override GRUVAX_DB_HOST (e.g. to the shared discogsography Postgres on the deployment host)
-      # to point elsewhere without editing this file.
-      DATABASE_URL: "postgresql+psycopg://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-gruvax-dev-pg}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}"
+      # gruvax-95qp: DATABASE_URL is env-first — a `DATABASE_URL` set in `.env`
+      # (or the shell) wins outright and is used verbatim; only when it is
+      # ABSENT does compose assemble the fallback from the GRUVAX_DB_* pieces
+      # (default: the bundled gruvax-dev-pg service on the compose network).
+      # Previously this entry ignored `${DATABASE_URL}` entirely and always
+      # rebuilt the URL from GRUVAX_DB_* — the documented `.env` DATABASE_URL
+      # override was a silent no-op. Override GRUVAX_DB_HOST (e.g. to the
+      # shared discogsography Postgres on the deployment host) to point
+      # elsewhere without editing this file, or set DATABASE_URL directly.
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-gruvax-dev-pg}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}}"
       # Plan 01-01 / D-12 retired the legacy observed-discogsography-schema
       # env entry (removed 2026-05-27); the runtime pool's search_path is now
       # a single literal `gruvax, public` and no application code branches on
@@ -86,8 +92,12 @@ services:
       # Locally inherited from .env via env_file above; CI sets via workflow env.
       # The :? guard rejects compose-up if neither path supplies it.
       SESSION_SECRET: "${SESSION_SECRET:?SESSION_SECRET must be set in .env}"
-      MQTT_HOST: "mosquitto"
-      MQTT_PORT: "1883"
+      # gruvax-95qp: these were previously hardcoded literals ("mosquitto" /
+      # "1883") that always won over `.env`'s MQTT_HOST/MQTT_PORT — the
+      # documented override knobs were silent no-ops. Now env-first, falling
+      # back to the bundled mosquitto service on the compose network.
+      MQTT_HOST: "${MQTT_HOST:-mosquitto}"
+      MQTT_PORT: "${MQTT_PORT:-1883}"
       MQTT_USERNAME: "${MQTT_USERNAME:-gruvax-api}"
       MQTT_PASSWORD: "${MQTT_PASSWORD:-}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
@@ -303,8 +313,11 @@ services:
     environment:
       GRUVAX_BASE_URL: "http://api:8000"
       # SQLAlchemy form, used by the in-venv psycopg precheck above AND by any
-      # in-process app code path the init image imports.
-      DATABASE_URL: "postgresql+psycopg://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-gruvax-dev-pg}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}"
+      # in-process app code path the init image imports. gruvax-95qp: mirror
+      # the api service's env-first DATABASE_URL (see above) so init-sync
+      # targets the same database the api actually connects to instead of
+      # silently re-deriving a possibly-different one from GRUVAX_DB_*.
+      DATABASE_URL: "${DATABASE_URL:-postgresql+psycopg://${GRUVAX_DB_USER:-gruvax}:${GRUVAX_DB_PASSWORD:-gruvax}@${GRUVAX_DB_HOST:-gruvax-dev-pg}:${GRUVAX_DB_PORT:-5432}/${GRUVAX_DB_NAME:-gruvax}}"
       DISCOGSOGRAPHY_BASE_URL: "${DISCOGSOGRAPHY_BASE_URL:-http://fake-discogsography:8004}"
       GRUVAX_SECRET_KEY: "${GRUVAX_SECRET_KEY:?GRUVAX_SECRET_KEY must be set in .env}"
       SESSION_SECRET: "${SESSION_SECRET:?SESSION_SECRET must be set in .env}"
