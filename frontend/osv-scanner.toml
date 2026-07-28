@@ -1,0 +1,16 @@
+# osv-scanner configuration for frontend/package-lock.json.
+# Applies to lockfiles in this directory; read by the run-security /
+# "Python Security" job's osv-scanner --recursive step.
+
+[[IgnoredVulns]]
+id = "GHSA-qwww-vcr4-c8h2"
+# No expiry: gated on adopting React Router 8, not on a date (gruvax-037w).
+reason = """
+CSRF bypass in React Router's UNSTABLE RSC (React Server Components) code
+paths; the advisory states it only affects applications using the unstable
+RSC APIs. GRUVAX is a client-side Vite SPA: no SSR, no RSC, no server
+actions (the stack decision in CLAUDE.md explicitly rejects SSR
+frameworks), so the vulnerable code paths are unreachable. The only patched
+version is the 8.3.0 major; remove this entry when the app migrates to
+React Router 8 (gruvax-037w).
+"""
