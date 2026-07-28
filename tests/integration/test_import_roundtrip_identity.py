@@ -35,7 +35,21 @@ from tests.cookies import cookie_header
 
 @pytest_asyncio.fixture(scope="module")
 async def client(db_pool):  # type: ignore[no-untyped-def]
-    """Module-scoped async test client with full ASGI lifespan."""
+    """Module-scoped async test client with full ASGI lifespan.
+
+    Re-seeds boundaries to the canonical fixture BEFORE the app starts (the
+    test_segment_api pattern): the suite shares the dev DB, and gruvax-216's
+    contiguity enforcement on /cubes/bulk means this module's seeding writes
+    are validated against the app's lifespan-loaded BoundaryCache — booting on
+    another module's leftover boundary state made those seeds spuriously
+    scatter (e.g. a stray Blue Note bin elsewhere on the shelf).
+    """
+    from pathlib import Path
+
+    from gruvax.db.seed_boundaries import load_boundaries
+
+    await load_boundaries(Path(__file__).parents[2] / "fixtures" / "boundaries.yaml")
+
     app = create_app()
     async with (
         LifespanManager(app) as manager,

@@ -33,8 +33,8 @@ Phase 5 changes (05-04):
   - BoundaryEdit drops last_label / last_catalog (SEG-01 / migration 0005).
   - _compute_movement_counts uses SegmentCache + count_records_in_bin.
   - suggest_cube_midpoint derives the last-record anchor from SegmentCache rank info.
-  - Both write paths (put_cube_boundary + bulk_write_cubes) invalidate + re-derive
-    SegmentCache after BoundaryCache reload (Pitfall A: AFTER transaction commit).
+  - Both write paths (put_cube_boundary + bulk_write_cubes) re-derive SegmentCache
+    after BoundaryCache reload (Pitfall A: AFTER transaction commit).
   - validate endpoint adds validate_contiguity check after phantom check.
 """
 
@@ -48,12 +48,12 @@ from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 
-from gruvax.api.admin.validation import validate_contiguity
+from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
+from gruvax.api.admin.validation import build_proposed_cuts, validate_contiguity
 from gruvax.api.deps import (
-    get_boundary_cache,
-    get_collection_snapshot,
+    WriteContext,
     get_pool,
-    get_segment_cache,
+    get_write_context,
     get_write_target,
     require_admin,
 )
@@ -73,7 +73,6 @@ from gruvax.estimator.normalize import parse_key
 
 if TYPE_CHECKING:
     from gruvax.estimator.boundary_cache import BoundaryCache
-    from gruvax.estimator.collection_snapshot import CollectionSnapshot
     from gruvax.estimator.segment_cache import SegmentCache
 
 
@@ -160,6 +159,56 @@ def _get_nominal_capacity(request: Request) -> int:
         return 95
 
 
+def _check_contiguity_for_writes(
+    edits: list[BoundaryEdit],
+    cache: BoundaryCache,
+    segment_cache: SegmentCache,
+) -> str | None:
+    """Return a contiguity error for a set of proposed cube writes, or None (gruvax-216).
+
+    ``validate_contiguity`` was wired into every OTHER write path — import_,
+    ``PUT /cut``, ``POST /insert-cut`` — and into the advisory ``POST
+    /cubes/validate``, but NOT into ``POST /cubes/bulk`` or ``PUT
+    /{u}/{r}/{c}/boundary``. Since bulk is the wizard's commit path, and the
+    wizard's VALIDATE button is optional (``validateErrors`` starts empty and
+    only the button fills it), an owner who skipped VALIDATE — or who validated,
+    went back to edit, and committed against stale-empty errors — persisted a
+    scattered label with no contiguity enforcement anywhere. Posting the same
+    payload to ``/cubes/validate`` returned 400: preview rejected what commit
+    accepted.
+
+    Direction A, the same one segments.py documents: enforce on the live write
+    path rather than re-wiring the editor through a mandatory
+    validate→preview→commit flow. Client-side gating stays advisory.
+
+    Contiguity is a per-UNIT invariant (bins in different Kallax units are never
+    adjacent), and ``build_proposed_cuts`` scopes to a single unit, so a
+    multi-unit payload is checked one unit at a time.
+
+    Freshness contract (WR-03), inherited from build_proposed_cuts: the proposed
+    set is merged over the live in-app BoundaryCache, so this decision is only as
+    correct as that cache is current.
+    """
+    by_unit: dict[int, list[tuple[int, int, int, str | None, str | None, bool]]] = {}
+    for e in edits:
+        by_unit.setdefault(e.unit_id, []).append(
+            (
+                e.unit_id,
+                e.row,
+                e.col,
+                e.first_label if not e.is_empty else None,
+                e.first_catalog if not e.is_empty else None,
+                e.is_empty,
+            )
+        )
+
+    for cascade in by_unit.values():
+        error = validate_contiguity(build_proposed_cuts(cache, cascade=cascade), segment_cache)
+        if error is not None:
+            return error
+    return None
+
+
 # ── Endpoints ─────────────────────────────────────────────────────────────────
 
 
@@ -167,11 +216,8 @@ def _get_nominal_capacity(request: Request) -> int:
 async def get_admin_cubes(
     request: Request,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> dict[str, Any]:
     """Return all cubes with fill levels.
 
@@ -185,7 +231,7 @@ async def get_admin_cubes(
     Response: ``{cubes: [{unit_id, row, col, is_empty, fill_level,
                            first_label, first_catalog}, ...]}``
     """
-    profile_id, _ = _write_target
+    profile_id, segment_cache = ctx.profile_id, ctx.segment_cache
     nominal_capacity = _get_nominal_capacity(request)
 
     sql = """
@@ -269,19 +315,19 @@ async def put_cube_boundary(
     row: int = Path(ge=0),
     col: int = Path(ge=0),
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Validate and (when valid) update a cube boundary.
 
-    Phase 5 validation order (T-03-14, D-07):
+    Validation order (T-03-14, D-07):
       1. Phantom check (unless force=True): rejects values absent from v_collection;
          returns near_misses for tappable suggestions.
-      2. On success: writes to cube_boundaries (cut-point only), logs to boundary_history,
-         invalidates + reloads BoundaryCache, then re-derives SegmentCache (Pitfall A).
+      2. Contiguity check (gruvax-216): rejects a cut that would scatter a label
+         across non-adjacent bins. Enforced HERE, on the live write path, not
+         only in the advisory POST /cubes/validate.
+      3. On success: writes to cube_boundaries (cut-point only), logs to boundary_history,
+         reloads BoundaryCache, then re-derives SegmentCache (Pitfall A).
 
     NOTE: last_label / last_catalog removed from BoundaryEdit in Phase 5 (SEG-01).
     The cut-point model stores only first_label / first_catalog.
@@ -290,7 +336,7 @@ async def put_cube_boundary(
     so the frontend can distinguish phantom errors without unwrapping a nested
     ``detail`` object.
     """
-    profile_id, bus = _write_target
+    profile_id, bus = ctx.profile_id, ctx.bus
     first_label = body.first_label or ""
     first_catalog = body.first_catalog or ""
 
@@ -319,10 +365,44 @@ async def put_cube_boundary(
                 },
             )
 
-    # ── Step 2: DB write (boundary update + history log) ─────────────────────
+    # ── Step 2: Contiguity check on the LIVE write path (gruvax-216) ─────────
+    contiguity_error = _check_contiguity_for_writes(
+        [
+            BoundaryEdit(
+                unit_id=unit_id,
+                row=row,
+                col=col,
+                first_label=body.first_label,
+                first_catalog=body.first_catalog,
+                is_empty=body.is_empty,
+            )
+        ],
+        ctx.boundary_cache,
+        ctx.segment_cache,
+    )
+    if contiguity_error is not None:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={
+                "type": "contiguity_violation",
+                "message": contiguity_error,
+                "unit_id": unit_id,
+                "row": row,
+                "col": col,
+            },
+        )
+
+    # ── Step 3: DB write (boundary update + history log) ─────────────────────
     change_set_id = str(uuid.uuid4())
-    new_first_label = first_label or None
-    new_first_catalog = first_catalog or None
+    # gruvax-a2x: an empty cube stores NO cut point — is_empty=true with
+    # populated first_* wrote both verbatim (the phantom check is skipped for
+    # empty cubes, and migration 0005's cut_point_complete CHECK passes the
+    # combination), leaving a row that violates the documented "first_* is None
+    # only when is_empty" convention. The bulk path already normalizes this;
+    # mirror it here rather than 400-ing, since the caller's intent ("this cube
+    # is empty") is unambiguous.
+    new_first_label = (first_label or None) if not body.is_empty else None
+    new_first_catalog = (first_catalog or None) if not body.is_empty else None
 
     async with pool.connection() as conn, conn.transaction():
         # Capture prev_* before overwriting (history audit) — scoped to resolved profile.
@@ -378,21 +458,12 @@ WHERE profile_id = %s::uuid AND unit_id = %s AND row = %s AND col = %s
         )
     # transaction commits atomically on exiting the conn.transaction() context.
 
-    # Invalidate + reload BoundaryCache AFTER transaction commit (Pitfall A).
-    # Then re-derive SegmentCache from the updated BoundaryCache (Phase 5 / 05-04).
-    cache.invalidate()
+    # Reload BoundaryCache AFTER transaction commit (Pitfall A), then re-derive
+    # SegmentCache from it (Phase 5 / 05-04).
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        # Re-derive SegmentCache from the refreshed BoundaryCache (D-07 / SEG-08).
-        # Must use the same overrides that were in effect before invalidation.
-        overrides: dict[tuple[int, int, int, str], float] = {}
-        seg_bin_old = segment_cache.get_bin(unit_id, row, col)
-        if seg_bin_old is not None:
-            for seg in seg_bin_old.segments:
-                if seg.is_override:
-                    overrides[(unit_id, row, col, seg.label)] = seg.applied_fraction
-        segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",
@@ -413,11 +484,8 @@ async def validate_boundary(
     request: Request,
     body: ValidateRequest,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Dry-run boundary validation — NO DB write.
 
@@ -436,7 +504,7 @@ async def validate_boundary(
     checks and near-miss lookups are scoped to the same profile as the matching
     commit path — preview and commit now agree.
     """
-    profile_id, _ = _write_target
+    profile_id, segment_cache = ctx.profile_id, ctx.segment_cache
     nominal_capacity = _get_nominal_capacity(request)
 
     results: list[dict[str, Any]] = []
@@ -592,10 +660,8 @@ async def suggest_cube_midpoint(
     request: Request,
     body: SuggestRequest,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> dict[str, Any]:
     """Suggest an index-space midpoint between this cube and the next populated cube.
 
@@ -608,6 +674,11 @@ async def suggest_cube_midpoint(
     Response on success: ``{suggestion: {release_id, label, catalog_number}}``
     Response when no midpoint: ``{suggestion: null}``
     """
+    # gruvax-xkc: read the caches of the SAME profile the caller is bound to.
+    # A suggestion computed from the default profile's shelf would offer another
+    # profile's records as a cut point for this one.
+    cache, segment_cache, snapshot = ctx.boundary_cache, ctx.segment_cache, ctx.snapshot
+
     # Get the SegmentBin for the requested cube
     current_bin = segment_cache.get_bin(body.unit_id, body.row, body.col)
     if current_bin is None or not current_bin.segments:
@@ -720,23 +791,21 @@ async def bulk_write_cubes(
     request: Request,
     body: BulkWriteRequest,
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Atomic bulk commit of all pending cube boundary edits (D-10, ADMN-09).
 
     Phase 5 (05-04): BoundaryEdit no longer carries last_label / last_catalog.
-    After the transaction commits, invalidates BoundaryCache + reloads, then
-    re-derives SegmentCache (Pitfall A — NEVER inside the transaction).
+    After the transaction commits, reloads BoundaryCache and re-derives
+    SegmentCache (Pitfall A — NEVER inside the transaction).
 
-    All updates are validated (phantom check) before ANY write.
+    All updates are validated (phantom + contiguity) before ANY write.
     Writes all cubes in a single DB transaction sharing one change_set_id.
-    AFTER the transaction commits, invalidates + reloads the boundary cache
-    and re-derives SegmentCache (Pitfall A — cache.invalidate() is NEVER
-    called inside the transaction).
+    AFTER the transaction commits, reloads the boundary cache and re-derives
+    SegmentCache (Pitfall A — cache mutation is NEVER done inside the
+    transaction; gruvax-cxy — and never invalidated ahead of a successful
+    rebuild, so a failed derive cannot empty the live cache).
 
     Idempotency-Key header (D-10, Pitfall 7):
       - If the key was seen before, returns the cached response immediately.
@@ -751,7 +820,7 @@ async def bulk_write_cubes(
     Returns:
       ``{change_set_id: str, applied: int}``
     """
-    profile_id, bus = _write_target
+    profile_id, bus = ctx.profile_id, ctx.bus
 
     # ── Idempotency short-circuit (Pitfall 7) ────────────────────────────────
     idempotency_key = request.headers.get("Idempotency-Key")
@@ -791,6 +860,19 @@ async def bulk_write_cubes(
                         "col": edit.col,
                     },
                 )
+
+    # ── Contiguity check across ALL proposed updates (gruvax-216) ───────────
+    # Runs BEFORE the transaction so a scatter-inducing wizard commit is never
+    # written. Mirrors the check POST /cubes/validate already performs, so the
+    # preview and the commit finally agree.
+    contiguity_error = _check_contiguity_for_writes(
+        list(body.updates), ctx.boundary_cache, ctx.segment_cache
+    )
+    if contiguity_error is not None:
+        return JSONResponse(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            content={"type": "contiguity_violation", "message": contiguity_error},
+        )
 
     # ── Single atomic transaction: write boundary + history for all cubes ────
     change_set_id = str(uuid.uuid4())
@@ -857,21 +939,10 @@ async def bulk_write_cubes(
     # ── Invalidate + reload BoundaryCache AFTER transaction commit (Pitfall A) ─
     # CR review CR-01: publish in `finally` so a transient cache.load() failure
     # never strands SSE subscribers on stale data (the bulk write already committed).
-    cache.invalidate()
+    # Scope, override source, and failure semantics are all owned by
+    # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
     try:
-        await cache.load(pool)
-        # Re-derive SegmentCache from the refreshed BoundaryCache (Phase 5 / 05-04).
-        # Collect overrides from the current (pre-invalidation) SegmentCache state.
-        overrides: dict[tuple[int, int, int, str], float] = {}
-        for edit in body.updates:
-            seg_bin = segment_cache.get_bin(edit.unit_id, edit.row, edit.col)
-            if seg_bin is not None:
-                for seg in seg_bin.segments:
-                    if seg.is_override:
-                        key = (edit.unit_id, edit.row, edit.col, seg.label)
-                        overrides[key] = seg.applied_fraction
-        segment_cache.invalidate()
-        segment_cache.derive(cache, snapshot, overrides)
+        await rebuild_derived_caches(pool, ctx)
     finally:
         await bus.publish(
             "boundary_changed",

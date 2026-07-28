@@ -31,17 +31,17 @@ Security:
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING, Any
+from typing import Any
 import uuid as _uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Path, Request, status
 from fastapi.responses import JSONResponse
 
+from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
 from gruvax.api.deps import (
-    get_boundary_cache,
-    get_collection_snapshot,
+    WriteContext,
     get_pool,
-    get_segment_cache,
+    get_write_context,
     get_write_target,
     require_admin,
 )
@@ -52,12 +52,6 @@ from gruvax.db.queries import (
     write_boundary,
     write_history_row,
 )
-
-
-if TYPE_CHECKING:
-    from gruvax.estimator.boundary_cache import BoundaryCache
-    from gruvax.estimator.collection_snapshot import CollectionSnapshot
-    from gruvax.estimator.segment_cache import SegmentCache
 
 
 logger = logging.getLogger(__name__)
@@ -92,11 +86,8 @@ async def revert_change_set(
     request: Request,
     change_set_id: str = Path(description="UUID of the change-set to revert"),
     pool: Any = Depends(get_pool),
-    cache: BoundaryCache = Depends(get_boundary_cache),
-    segment_cache: SegmentCache = Depends(get_segment_cache),
-    snapshot: CollectionSnapshot = Depends(get_collection_snapshot),
     _admin: dict[str, Any] = Depends(require_admin),
-    _write_target: tuple[str, Any] = Depends(get_write_target),
+    ctx: WriteContext = Depends(get_write_context),
 ) -> JSONResponse:
     """Conflict-aware revert of a change-set (D-11, D-12, ADMN-09).
 
@@ -121,7 +112,7 @@ async def revert_change_set(
 
     HTTP 404 if the change_set_id is not found in boundary_history.
     """
-    profile_id, bus = _write_target
+    profile_id, bus = ctx.profile_id, ctx.bus
 
     # Fetch all history rows for this change-set — scoped to resolved profile (WR-02).
     rows = await fetch_change_set_rows(pool, change_set_id, profile_id=profile_id)
@@ -234,29 +225,10 @@ async def revert_change_set(
     # (Pitfall A: cache mutations must run AFTER the transaction block exits.)
     # Only execute if at least one cube was actually changed.
     if reverted:
-        cache.invalidate()
+        # Scope, override source, and failure semantics are all owned by
+        # api/admin/cache_rebuild.rebuild_derived_caches (gruvax-591 / cxy / xkc).
         try:
-            await cache.load(pool)
-            # Re-read ALL overrides from the DB before re-deriving SegmentCache.
-            # A revert may touch multiple bins, and admin-set width overrides must
-            # be preserved.  Re-reading from gruvax.segment_overrides is the same
-            # approach used by segments.py::set_bin_overrides and insert_cut.
-            # CR-02: scoped to the resolved profile_id to prevent cross-profile
-            # override contamination.
-            overrides: dict[tuple[int, int, int, str], float] = {}
-            async with pool.connection() as conn2, conn2.cursor() as cur2:
-                await cur2.execute(
-                    "SELECT unit_id, row, col, label, fraction"
-                    " FROM gruvax.segment_overrides"
-                    " WHERE profile_id = %s::uuid"
-                    " ORDER BY unit_id, row, col, label",
-                    (profile_id,),
-                )
-                override_rows = await cur2.fetchall()
-            for uid_o, r_o, c_o, lbl_o, frac_o in override_rows:
-                overrides[(int(uid_o), int(r_o), int(c_o), str(lbl_o))] = float(frac_o)
-            segment_cache.invalidate()
-            segment_cache.derive(cache, snapshot, overrides)
+            await rebuild_derived_caches(pool, ctx)
         finally:
             # Publish boundary_changed even if cache.load() raised — the kiosk must
             # be notified that a revert occurred.  cube_ids uses key "unit" (not

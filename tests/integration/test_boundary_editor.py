@@ -255,8 +255,13 @@ async def test_single_cube_put_writes_history(client, db_pool) -> None:  # type:
     response = await client.put(
         "/api/admin/cubes/1/3/3/boundary",
         json={
-            "first_label": "Blue Note",
-            "first_catalog": "BLP 4001",
+            # gruvax-216 made the commit path enforce contiguity, so this write
+            # must be contiguity-legal: (1,3,3) follows the Verve cuts at (3,1)
+            # and (3,2), so a later Verve catalog extends the run contiguously.
+            # (The previous "Blue Note"/"BLP 4001" payload duplicated bin
+            # (0,0)'s cut — a genuine scatter, now correctly rejected 400.)
+            "first_label": "Verve",
+            "first_catalog": "V6 1198",
             "is_empty": False,
             "force": True,  # bypass phantom check; cut-point model has no last_* comparator
         },
@@ -287,3 +292,58 @@ async def test_single_cube_put_writes_history(client, db_pool) -> None:  # type:
             " WHERE unit_id = 1 AND row = 3 AND col = 3",
         )
         await conn.commit()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_single_cube_put_is_empty_normalizes_cut_point(client, db_pool) -> None:  # type: ignore[no-untyped-def]
+    """is_empty=true stores NO cut point, even when first_* arrive populated (gruvax-a2x).
+
+    The phantom check is skipped for empty cubes and migration 0005's
+    cut_point_complete CHECK accepts is_empty=TRUE with populated first_*, so
+    this combination used to be written verbatim — a row violating the
+    documented "first_* is None only when is_empty" convention, whose cut then
+    had to be defensively ignored at every consumer. The write path now
+    normalizes: an empty cube's first_label/first_catalog are stored NULL.
+    """
+    login_res = await client.post("/api/admin/login", json={"pin": "0000"})
+    if login_res.status_code != 200:
+        pytest.skip("Login not implemented — skipping is_empty normalization test")
+    csrf_token = login_res.cookies.get("gruvax_csrf") or ""
+
+    response = await client.put(
+        "/api/admin/cubes/1/3/3/boundary",
+        json={
+            # A cut that exists in the fixture collection — the bug is precisely
+            # that these values used to be persisted alongside is_empty=true.
+            "first_label": "Blue Note",
+            "first_catalog": "BLP 4001",
+            "is_empty": True,
+            "force": True,
+        },
+        headers={
+            "X-CSRF-Token": csrf_token,
+            **cookie_header(_with_browse_binding(login_res.cookies)),
+        },
+    )
+    if response.status_code == 404:
+        pytest.skip("Single-cube boundary endpoint not implemented")
+    assert response.status_code == 200, (
+        f"Expected 200 from is_empty PUT, got {response.status_code}: {response.text}"
+    )
+
+    async with db_pool.connection() as conn:
+        cur = await conn.execute(
+            "SELECT first_label, first_catalog, is_empty FROM gruvax.cube_boundaries"
+            " WHERE unit_id = 1 AND row = 3 AND col = 3",
+        )
+        fetched = await cur.fetchone()
+    assert fetched is not None
+    first_label, first_catalog, is_empty = fetched
+    assert is_empty is True
+    assert first_label is None and first_catalog is None, (
+        "gruvax-a2x: an is_empty cube must store NULL first_label/first_catalog — "
+        f"got ({first_label!r}, {first_catalog!r})"
+    )
+
+    # (1,3,3) is fixture-empty with NULL cut, which is exactly the state this
+    # test leaves behind — no restore needed.

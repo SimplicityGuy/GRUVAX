@@ -28,6 +28,7 @@ import {
   adminBulkSave,
   adminGetCubeBoundary,
   adminGetCubes,
+  BulkSaveError,
   validateBoundary,
 } from '../../api/adminClient'
 import type { CubeBoundaryEdit } from '../../api/types'
@@ -373,9 +374,17 @@ function WizardWalk() {
       setReshuffleDraft(null)  // clear localStorage draft on success (D-07)
       // Navigate to confirmation with result encoded in query params
       void navigate(`/admin/wizard/done?change_set_id=${encodeURIComponent(result.change_set_id)}&applied=${result.applied}&source=${source}`)
-    } catch {
+    } catch (err) {
+      // gruvax-216: the server now enforces contiguity on the commit path itself,
+      // so a rejected commit carries a real, plain-language reason ("This cut
+      // would split Blue Note across non-adjacent bins…"). Swallowing it behind
+      // the generic connection message left the owner with no way to know what
+      // to change — VALIDATE is optional, so this may be the first time they see
+      // the problem at all.
       setCommitError(
-        'Something went wrong checking your changes. Check your connection and try again.',
+        err instanceof BulkSaveError && err.serverMessage
+          ? err.serverMessage
+          : 'Something went wrong checking your changes. Check your connection and try again.',
       )
       setIsCommitting(false)
     }

@@ -6,6 +6,7 @@ app factory and the routers that depend on app.state.
 
 from __future__ import annotations
 
+from dataclasses import dataclass
 from datetime import UTC, datetime, timedelta
 import secrets
 from typing import TYPE_CHECKING, Any, cast
@@ -538,6 +539,37 @@ async def get_write_target(
     return profile_id, bus
 
 
+@dataclass(frozen=True)
+class WriteContext:
+    """Everything an admin boundary-write route needs, all scoped to ONE profile.
+
+    gruvax-xkc: before this existed, a write route resolved its profile_id via
+    ``get_write_target`` (correct) but took its caches from
+    ``Depends(get_boundary_cache)`` / ``get_segment_cache`` /
+    ``get_collection_snapshot``, which read ``app.state.boundary_cache`` &c —
+    aliases bound ONCE at startup to the DEFAULT profile's registry entries and
+    never re-pointed. So the route wrote profile B's rows and then validated
+    against, and rebuilt, profile A's caches.
+
+    Bundling the five values into one dependency makes the mismatch
+    unrepresentable: there is no way to hold a profile_id from one profile and a
+    cache from another.
+
+    Attributes:
+        profile_id:      The resolved (device- or browse-bound) profile UUID string.
+        bus:             That profile's EventBus, for boundary_changed fan-out.
+        boundary_cache:  That profile's BoundaryCache.
+        segment_cache:   That profile's SegmentCache.
+        snapshot:        That profile's CollectionSnapshot.
+    """
+
+    profile_id: str
+    bus: Any
+    boundary_cache: BoundaryCache
+    segment_cache: SegmentCache
+    snapshot: CollectionSnapshot
+
+
 # ── Per-profile READ scoping (gruvax-5dm) ────────────────────────────────────
 #
 # get_write_target is the write-side equivalent of this pair: it resolves the
@@ -646,6 +678,63 @@ def settings_cache_for_profile(request: Request, profile_id: str) -> dict[str, A
     if not per_profile:
         return flat
     return {**flat, **per_profile}
+
+
+async def get_write_context(
+    request: Request,
+    pool: Any = Depends(get_pool),
+) -> WriteContext:
+    """FastAPI dependency: resolve the full per-profile write context (gruvax-xkc).
+
+    Supersedes ``get_write_target`` on every admin route that also touches a
+    cache.  Resolves the profile exactly as ``get_write_target`` does — one
+    ``resolve_profile_from_request`` call, same error taxonomy, no
+    default-profile fallback (D-02) — then pulls all four per-profile objects
+    out of the registries under that single profile_id.
+
+    Why this and not "pass profile_id to cache.load()": the singular
+    ``app.state.boundary_cache`` / ``segment_cache`` / ``collection_snapshot``
+    attributes are bound by reference to the DEFAULT profile's registry entries
+    at startup (app.py) and are never re-pointed.  Calling
+    ``load(pool, profile_id=B)`` on the injected object would therefore
+    OVERWRITE the default profile's live cache — the one the kiosk serves — with
+    profile B's rows.  The registry lookup must land with (or before) any
+    profile-scoped load; that is why they are one dependency.
+
+    Raises (verbatim from ``resolve_profile_from_request``, then per registry):
+        HTTP 400 session_unbound    — no fingerprint and no browse-binding cookie.
+        HTTP 403 device_revoked     — fingerprint maps to a revoked device.
+        HTTP 503 registry not ready — a registry attr is missing from app.state.
+        HTTP 404 profile_not_found  — profile_id absent from a registry.
+
+    Usage::
+
+        @router.put("/cubes/{unit_id}/{row}/{col}/boundary")
+        async def put_cube_boundary(
+            ...
+            _admin: dict[str, Any] = Depends(require_admin),
+            ctx: WriteContext = Depends(get_write_context),
+        ) -> JSONResponse:
+            profile_id, bus = ctx.profile_id, ctx.bus
+            cache, segment_cache = ctx.boundary_cache, ctx.segment_cache
+    """
+    profile_id, _ = await resolve_profile_from_request(request, pool)
+    profile_id = canonical_profile_id(profile_id)
+    return WriteContext(
+        profile_id=profile_id,
+        bus=_registry_entry(
+            request, "event_bus_registry", profile_id, "Event bus registry not ready"
+        ),
+        boundary_cache=_registry_entry(
+            request, "boundary_cache_registry", profile_id, "Cache registry not ready"
+        ),
+        segment_cache=_registry_entry(
+            request, "segment_cache_registry", profile_id, "Segment cache registry not ready"
+        ),
+        snapshot=_registry_entry(
+            request, "snapshot_registry", profile_id, "Snapshot registry not ready"
+        ),
+    )
 
 
 async def require_admin(

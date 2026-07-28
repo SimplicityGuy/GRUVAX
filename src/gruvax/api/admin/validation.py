@@ -326,9 +326,9 @@ def validate_no_empty_bin(
 
 def validate_shelf_overflow(
     boundary_cache: BoundaryCache,
-    after_unit_id: int,
-    after_row: int,
-    after_col: int,
+    after_unit_id: int | None,
+    after_row: int | None,
+    after_col: int | None,
 ) -> str | None:
     """Return an error string if inserting a cut would overflow the shelf.
 
@@ -338,7 +338,10 @@ def validate_shelf_overflow(
 
     Args:
         boundary_cache: Current BoundaryCache with all cube boundaries.
-        after_unit_id:  Unit ID of the cube after which the cut is inserted.
+        after_unit_id:  Unit ID of the cube after which the cut is inserted,
+                        or None (with the other coords) for a head insert
+                        (gruvax-r1q) — the cascade then shifts EVERY cut, so
+                        the absorber may be anywhere on the shelf.
         after_row:      Row of the cube after which the cut is inserted.
         after_col:      Col of the cube after which the cut is inserted.
 
@@ -351,15 +354,20 @@ def validate_shelf_overflow(
         key=lambda b: (b.unit_id, b.row, b.col),
     )
 
-    # Find the insertion point
-    insert_idx: int | None = None
-    for i, b in enumerate(boundaries):
-        if b.unit_id == after_unit_id and b.row == after_row and b.col == after_col:
-            insert_idx = i
-            break
+    # Find the insertion point. A head insert (all after_* None) targets
+    # index -1: every bin is "after the insertion point".
+    insert_idx: int | None
+    if after_unit_id is None:
+        insert_idx = -1
+    else:
+        insert_idx = None
+        for i, b in enumerate(boundaries):
+            if b.unit_id == after_unit_id and b.row == after_row and b.col == after_col:
+                insert_idx = i
+                break
 
-    if insert_idx is None:
-        return None  # Target cube not found — cannot validate overflow
+        if insert_idx is None:
+            return None  # Target cube not found — cannot validate overflow
 
     # Check if there is at least one empty cube AFTER the insertion point
     for b in boundaries[insert_idx + 1 :]:

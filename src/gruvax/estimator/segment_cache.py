@@ -261,6 +261,27 @@ class SegmentCache:
                 return None
             return (_label_key(row.first_label), parse_key(row.first_catalog))
 
+        # gruvax-a2x: an is_empty row carrying a populated cut violates the
+        # "first_* is None only when is_empty" convention (the write paths now
+        # normalize it, but pre-existing rows may predate that). The cut is
+        # ignored either way (_cut_key returns None and the records fall to the
+        # preceding cut-bearing bin) — but say so loudly instead of silently,
+        # so stale rows get cleaned up rather than quietly re-shaping locates.
+        for row in boundary_rows:
+            if row.is_empty and (row.first_label is not None or row.first_catalog is not None):
+                logger.warning(
+                    "SegmentCache.derive: bin (%d,%d,%d) is marked is_empty but "
+                    "still carries cut point (%r, %r) — the cut is ignored and its "
+                    "records assigned to the preceding cut-bearing bin. This row "
+                    "violates the is_empty/first_* convention (gruvax-a2x); "
+                    "re-save the cube to normalize it.",
+                    row.unit_id,
+                    row.row,
+                    row.col,
+                    row.first_label,
+                    row.first_catalog,
+                )
+
         cut_keys = [_cut_key(row) for row in boundary_rows]
 
         # Only cut-bearing bins receive records, paired with their physical index.
@@ -458,20 +479,74 @@ class SegmentCache:
                 non_overridden_labels = [lk for lk in ordered_labels if lk not in active_overrides]
                 non_overridden_total = sum(label_counts[lk] for lk in non_overridden_labels)
 
-                for lk in ordered_labels:
-                    if lk in active_overrides:
-                        applied_fractions[lk] = active_overrides[lk]
-                        is_override_flags[lk] = True
-                    else:
-                        if non_overridden_total > 0:
-                            applied_fractions[lk] = remaining * (
-                                label_counts[lk] / non_overridden_total
-                            )
+                # gruvax-cxy: a bin with NO ABSORBER cannot be renormalized by
+                # spreading `remaining` — there is nothing to spread it over.
+                # That is the case when every label in the bin carries an override
+                # (non_overridden_total == 0), or when the overrides already sum
+                # past 1.0 so `remaining` is negative and the split would hand the
+                # non-overridden labels NEGATIVE widths.
+                #
+                # Both are reachable from a single LEGAL admin action: the only
+                # bounds anywhere are per-ROW (Pydantic `gt=0.0, le=1.0` and the
+                # migration-0005 CHECK) — no per-BIN sum constraint exists. A
+                # one-label bin plus fraction=0.5 passes every gate, and the old
+                # code then produced applied fractions summing to 0.5 and raised
+                # the invariant error below. Because callers invalidate BEFORE
+                # deriving, that raise left the SegmentCache EMPTY and killed
+                # every locate app-wide until the row was deleted by hand — the
+                # blast radius of a width tweak was the whole product.
+                #
+                # Degrade instead of exploding: rescale the overrides to sum 1.0,
+                # preserving their RELATIVE widths (for a bin the admin fully
+                # specified, the relative split IS the intent), and log loudly so
+                # the bad row is discoverable. The endpoint-side guard in
+                # api/admin/segments.py rejects this input before it is ever
+                # committed; this leg is the second line of defence for rows that
+                # predate the guard or arrive by import.
+                no_absorber = non_overridden_total == 0 or remaining < 0.0
+                if no_absorber and overridden_sum > 0:
+                    logger.warning(
+                        "SegmentCache.derive: bin (%d,%d,%d) has no absorber for "
+                        "its width overrides (%d of %d labels overridden, summing "
+                        "to %.6f); rescaling them to sum 1.0 so the derive still "
+                        "completes. The applied widths are NOT the values that "
+                        "were set — review the overrides for this bin. "
+                        "Overrides: %s",
+                        brow.unit_id,
+                        brow.row,
+                        brow.col,
+                        len(active_overrides),
+                        len(ordered_labels),
+                        overridden_sum,
+                        active_overrides,
+                    )
+                    scale = 1.0 / overridden_sum
+                    for lk in ordered_labels:
+                        # Non-overridden labels (reachable only on the
+                        # `remaining < 0` leg) are squeezed to zero width rather
+                        # than given a negative one.
+                        applied_fractions[lk] = active_overrides.get(lk, 0.0) * scale
+                        is_override_flags[lk] = lk in active_overrides
+                else:
+                    for lk in ordered_labels:
+                        if lk in active_overrides:
+                            applied_fractions[lk] = active_overrides[lk]
+                            is_override_flags[lk] = True
                         else:
-                            applied_fractions[lk] = 0.0
-                        is_override_flags[lk] = False
+                            if non_overridden_total > 0:
+                                applied_fractions[lk] = remaining * (
+                                    label_counts[lk] / non_overridden_total
+                                )
+                            else:
+                                applied_fractions[lk] = 0.0
+                            is_override_flags[lk] = False
 
-                # Step 5c: assert sum == 1.0 within 1e-6
+                # Step 5c: assert sum == 1.0 within 1e-6.
+                # gruvax-cxy: still an invariant — but now an UNREACHABLE one for
+                # the fully-overridden shape, which the branch above absorbs. A
+                # raise here means the derive found something genuinely unmodelled,
+                # and the caller's fresh-derive-then-swap keeps the last good cache
+                # serving while it is investigated.
                 total_applied = sum(applied_fractions[lk] for lk in ordered_labels)
                 if abs(total_applied - 1.0) >= 1e-6:
                     raise ValueError(
