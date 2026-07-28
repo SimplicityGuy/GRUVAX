@@ -1,12 +1,25 @@
-"""Tests for 06-01 Task 2: all six boundary-write call sites scoped to resolved profile_id.
+"""Tripwires for 06-01 Task 2: boundary-write call sites route through get_write_target.
 
-RED phase: these tests verify that:
-  1. No admin write/editing file injects Depends(get_event_bus).
-  2. Every write route uses Depends(get_write_target) instead.
-  3. boundary_not_found detail type is present in cubes/segments/import/history.
-  4. editing.py uses get_write_target instead of get_event_bus.
+TRIPWIRES ONLY — not the DATA-01 verification of record (gruvax-rh7)
+--------------------------------------------------------------------
+Every test in this module reads source text. Source containing (or lacking) the
+right characters is fully compatible with the bug class this suite once claimed
+to exclude: a route can inject ``Depends(get_write_target)`` and still pass
+``profile_id=DEFAULT_PROFILE_UUID`` to the query, or follow a correctly scoped
+write with a default-profile cache reload one line later. Both shipped green
+under these greps (the round-4 bug-hunt default-profile family).
 
-These are static source-inspection tests that FAIL before Task 2 and PASS after.
+They are kept because they are cheap and catch one honest regression shape —
+someone reintroducing a ``Depends(get_event_bus)`` injection wholesale — and for
+no other reason. The DATA-01 verification of record is behavioural:
+
+  - tests/integration/test_nondefault_profile_scoping.py — end-to-end writes
+    bound to profiles that are NOT the default (gruvax-seh).
+  - tests/integration/test_06_01_profile_scoped_writes.py — query-level
+    two-profile effect assertions (what moved, what didn't, rowcounts).
+
+Do not add new source-text assertions here; add behavioural coverage in the
+files above instead.
 """
 
 from __future__ import annotations
