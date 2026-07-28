@@ -63,7 +63,7 @@ if TYPE_CHECKING:
     from psycopg import AsyncConnection
 
 
-__all__ = ["sync_profile"]
+__all__ = ["ShrinkGuardTripped", "sync_profile"]
 
 logger = logging.getLogger(__name__)
 
@@ -295,13 +295,48 @@ async def _ingest_into_staging(
 
 # ── atomic swap (Pitfall 3 — single TX wrapping DELETE+INSERT+UPDATE) ────────
 
+# gruvax-envc: abort the swap (instead of silently committing a truncated
+# cache) when the incoming collection would shrink by more than this
+# fraction relative to what's already cached. 0.98 tolerates normal noise
+# (a handful of folder moves / re-tags) while catching the failure scenario
+# the bead documents: upstream returns a well-formed but dump-lagged
+# envelope missing the newest arrivals.
+_SHRINK_GUARD_RATIO = 0.98
+
+
+class ShrinkGuardTripped(Exception):
+    """Raised when a sync would shrink the cached collection beyond tolerance.
+
+    gruvax-envc: an upstream MATCH-not-MERGE drop (a release not yet in the
+    monthly discogsography dump never gets its :COLLECTED rel, so it's
+    silently absent from the payload) — or any other cause of upstream
+    truncation — used to swap in fewer rows than were already cached while
+    still reporting ``status='ok'`` and ``new_record_count=0`` (the
+    ``max(0, ...)`` arrival formula can't express "fewer", only "not more").
+    That is indistinguishable from "no new records" at every layer.
+
+    Raised from inside ``_swap_inside_tx``, itself inside the caller's
+    ``async with conn.transaction()`` block, so raising here rolls back the
+    DELETE + INSERT that already ran — the previous, larger cache stays
+    live and ``last_sync_status`` flips to ``'failed'`` /
+    ``last_sync_error='shrink_guard'`` via ``sync_profile``'s except chain.
+
+    ``allow_shrink=True`` (threaded through ``sync_profile`` /
+    ``_swap_inside_tx``) skips this check entirely — an explicit override for
+    a genuine large removal (e.g. the owner sold off part of the collection).
+    Not yet wired to a caller; the parameter exists so an admin surface can
+    opt in without further plumbing changes to this module.
+    """
+
 
 async def _swap_inside_tx(
     conn: AsyncConnection[Any],
     profile_id: str,
     row_count: int,
     user_id: str,
-) -> tuple[int, bool]:
+    *,
+    allow_shrink: bool = False,
+) -> tuple[int, bool, int]:
     """DELETE old rows, INSERT staging rows, UPDATE profiles — caller owns TX.
 
     Must be called from inside an ``async with conn.transaction()`` block.
@@ -309,10 +344,23 @@ async def _swap_inside_tx(
     (created earlier in the same TX) is still in scope when the SELECT FROM
     runs here.
 
+    Args:
+        allow_shrink: skip the shrink guard (gruvax-envc) — admin override
+            for a genuine large removal. Defaults to False everywhere.
+
     Returns:
-        (new_record_count, is_initial_import) computed atomically inside the TX.
+        (new_record_count, is_initial_import, stored_count) computed atomically
+        inside the TX.
         new_record_count: number of genuinely new releases this sync (>= 0, D-06).
         is_initial_import: True iff this is the first-ever sync (D-07).
+        stored_count: rows actually present in profile_collection after the
+            swap (gruvax-c34i: may be less than the raw ingest count when
+            duplicate-instance rows were collapsed).
+
+    Raises:
+        ShrinkGuardTripped: the incoming collection is smaller than the
+            cached one by more than the configured tolerance and
+            ``allow_shrink`` is False (gruvax-envc).
     """
     # Pitfall 4: capture is_initial_import BEFORE the UPDATE that sets last_sync_at.
     # READ last_sync_at IS NULL here — after the UPDATE it will always be non-NULL.
@@ -324,16 +372,32 @@ async def _swap_inside_tx(
         initial_row = await cur.fetchone()
     is_initial_import: bool = bool(initial_row[0]) if initial_row else True
 
+    # gruvax-envc: total rows currently cached for this profile, captured
+    # BEFORE the DELETE — the shrink-guard baseline.
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT COUNT(*) FROM gruvax.profile_collection WHERE profile_id = %s::uuid",
+            (profile_id,),
+        )
+        existing_total_row = await cur.fetchone()
+    existing_total: int = int(existing_total_row[0]) if existing_total_row else 0
+
     # Compute existing_count BEFORE the DELETE (Pitfall 9 — retry-safe scalar comparison).
-    # Counts profile_collection rows that match staging on (release_id, folder_id IS NOT DISTINCT).
+    # Counts DISTINCT profile_collection rows that match staging on
+    # (release_id, folder_id IS NOT DISTINCT). EXISTS (rather than a plain JOIN)
+    # so a duplicate staging row (gruvax-c34i — one Discogs release with two
+    # copies in the same folder maps to two identical staging rows pre-dedupe)
+    # can never double-count one already-cached release.
     # new_record_count = max(0, row_count - existing_count) — arrivals only, never negative (D-06).
     async with conn.cursor() as cur:
         await cur.execute(
             "SELECT COUNT(*) FROM gruvax.profile_collection pc"
-            " JOIN profile_collection_staging s"
-            "   ON pc.release_id = s.release_id"
-            "  AND pc.folder_id IS NOT DISTINCT FROM s.folder_id"
-            " WHERE pc.profile_id = %s::uuid",
+            " WHERE pc.profile_id = %s::uuid"
+            "   AND EXISTS ("
+            "       SELECT 1 FROM profile_collection_staging s"
+            "       WHERE pc.release_id = s.release_id"
+            "         AND pc.folder_id IS NOT DISTINCT FROM s.folder_id"
+            "   )",
             (profile_id,),
         )
         existing_row = await cur.fetchone()
@@ -346,15 +410,52 @@ async def _swap_inside_tx(
     )
     # Extended INSERT: sets first_seen_at = NOW() for all rows in this sync (API-04).
     # Nullable column — rows from before migration 0012 retain NULL (Pitfall 3 compliant).
-    await conn.execute(
-        "INSERT INTO gruvax.profile_collection "
-        "(profile_id, release_id, folder_id, artist, title, label, catalog_number, year,"
-        " first_seen_at) "
-        "SELECT %s::uuid, release_id, folder_id, artist, title, label, catalog_number, year,"
-        "       NOW() "
-        "FROM profile_collection_staging",
-        (profile_id,),
-    )
+    #
+    # gruvax-c34i: discogsography emits ONE ROW PER DISCOGS INSTANCE, not per
+    # release+folder — two copies of one pressing in the same folder arrive as
+    # two staging rows with an identical (release_id, folder_id) key (no
+    # instance_id on the wire to disambiguate them; see _release_to_tuple).
+    # profile_collection's PK is (profile_id, release_id, folder_id), so the
+    # raw INSERT...SELECT hit a UniqueViolation inside this transaction on
+    # every sync for a profile with any duplicate copy, permanently failing
+    # it with an untagged error. DISTINCT ON (release_id, folder_id) collapses
+    # duplicate copies to one row before the INSERT — the copies map to
+    # identical tuples anyway (no instance_id to distinguish them), so which
+    # physical copy "wins" is immaterial. ``ctid`` is a deterministic
+    # (if arbitrary) tiebreaker for DISTINCT ON's required ORDER BY.
+    async with conn.cursor() as insert_cur:
+        await insert_cur.execute(
+            "INSERT INTO gruvax.profile_collection "
+            "(profile_id, release_id, folder_id, artist, title, label, catalog_number, year,"
+            " first_seen_at) "
+            "SELECT %s::uuid, release_id, folder_id, artist, title, label, catalog_number, year,"
+            "       NOW() "
+            "FROM ("
+            "    SELECT DISTINCT ON (release_id, folder_id)"
+            "           release_id, folder_id, artist, title, label, catalog_number, year"
+            "    FROM profile_collection_staging"
+            "    ORDER BY release_id, folder_id, ctid"
+            ") deduped",
+            (profile_id,),
+        )
+        stored_count: int = insert_cur.rowcount if insert_cur.rowcount is not None else row_count
+
+    # gruvax-envc: abort the swap (rolling back the DELETE + INSERT above, via
+    # the caller's enclosing transaction) rather than committing a silently
+    # truncated cache. Skipped on the very first sync (existing_total == 0 —
+    # nothing to shrink from) and when explicitly overridden.
+    if (
+        not allow_shrink
+        and existing_total > 0
+        and stored_count < existing_total * _SHRINK_GUARD_RATIO
+    ):
+        raise ShrinkGuardTripped(
+            f"profile {profile_id}: sync would shrink the cached collection "
+            f"from {existing_total} to {stored_count} rows "
+            f"(more than {(1 - _SHRINK_GUARD_RATIO) * 100:.0f}% drop) — aborting swap; "
+            "the upstream response may be truncated"
+        )
+
     # Extended UPDATE: stores diff state atomically with the swap (D-08, T-07-02).
     await conn.execute(
         "UPDATE gruvax.profiles SET "
@@ -367,9 +468,9 @@ async def _swap_inside_tx(
         "    last_new_record_count = %s, "
         "    last_sync_is_initial = %s "
         "WHERE id = %s::uuid",
-        (row_count, user_id, new_record_count, is_initial_import, profile_id),
+        (stored_count, user_id, new_record_count, is_initial_import, profile_id),
     )
-    return new_record_count, is_initial_import
+    return new_record_count, is_initial_import, stored_count
 
 
 # ── cache refresh (D-14, Plan 02-02 — per-profile registry refresh) ──────────
@@ -478,7 +579,9 @@ async def _load_pat(profile_id: str) -> str:
 # ── public surface ───────────────────────────────────────────────────────────
 
 
-async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
+async def sync_profile(
+    profile_id: str, app_state: Any, *, allow_shrink: bool = False
+) -> dict[str, Any]:
     """Stream-fetch the profile's discogsography collection and atomically
     swap the local cache. Refresh in-process caches inline (D-14).
 
@@ -487,6 +590,10 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
       app_state: object with ``.db_pool``, ``.collection_snapshot``,
                  ``.boundary_cache``, ``.segment_cache`` attributes (typically
                  ``request.app.state``).
+      allow_shrink: bypass the shrink guard (gruvax-envc) for this sync —
+                 an explicit override for a genuine large removal. Defaults
+                 to False; every current caller (nightly, admin trigger)
+                 leaves it at the default.
 
     Returns:
       ``{"status": "ok", "item_count": int, "took_ms": float, "user_id": str}``
@@ -500,6 +607,9 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
       - RateLimitExhausted — sets last_sync_error='rate_limited'.
       - ServerError     — sets last_sync_error='server_error'.
       - NetworkError    — sets last_sync_error='network'.
+      - ShrinkGuardTripped — the incoming collection would shrink the cache
+                          by more than the tolerated fraction; sets
+                          last_sync_error='shrink_guard' (gruvax-envc).
       - Any other Exception — sets last_sync_status='failed' (no tag) and re-raises.
     """
     t0 = time.perf_counter()
@@ -576,8 +686,8 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
             async with conn.transaction():
                 await conn.execute(_STAGING_DDL)
                 user_id, row_count = await _ingest_into_staging(conn, client)
-                new_record_count, is_initial_import = await _swap_inside_tx(
-                    conn, profile_id, row_count, user_id
+                new_record_count, is_initial_import, stored_count = await _swap_inside_tx(
+                    conn, profile_id, row_count, user_id, allow_shrink=allow_shrink
                 )
 
             # Inline cache refresh (D-14). If this fails, the swap is still
@@ -606,7 +716,7 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
             took_ms = (time.perf_counter() - t0) * 1000.0
             return {
                 "status": "ok",
-                "item_count": row_count,
+                "item_count": stored_count,
                 "took_ms": took_ms,
                 "user_id": user_id,
             }
@@ -626,6 +736,13 @@ async def sync_profile(profile_id: str, app_state: Any) -> dict[str, Any]:
             raise
         except NetworkError:
             await _record_failure(profile_id, error_tag="network", flip_revoked=False)
+            raise
+        except ShrinkGuardTripped:
+            # gruvax-envc: the swap transaction already rolled back (raised
+            # from inside the ``async with conn.transaction()`` block above) —
+            # the previous, larger cache is untouched. Tag the failure so the
+            # admin diagnostics surface distinguishes it from a generic crash.
+            await _record_failure(profile_id, error_tag="shrink_guard", flip_revoked=False)
             raise
         except SyncInProgress:
             # Never set status='failed' on SyncInProgress — the OTHER sync owns
