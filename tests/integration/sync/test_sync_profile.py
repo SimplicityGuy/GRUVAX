@@ -647,3 +647,204 @@ async def test_sync_nfkc_normalizes_fullwidth_catalog_at_ingest(  # type: ignore
         assert release_id in found_ids, (
             f"search_collection({q!r}) did not return release_id={release_id}; got {found_ids!r}"
         )
+
+
+# ── gruvax-c34i: duplicate-instance dedup (same release, same folder) ────────
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sync_duplicate_folder_copies_deduped_not_failed(  # type: ignore[no-untyped-def]
+    db_pool, clean_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gruvax-c34i: two Discogs instances of one release in the same folder
+    must not permanently fail the sync.
+
+    discogsography emits ONE ROW PER DISCOGS INSTANCE, not per release+folder
+    (no instance_id on the wire — see _release_to_tuple's docstring), so two
+    physical copies of one pressing in the same folder arrive as two
+    contract-envelope items that map to an IDENTICAL staging tuple. Before the
+    fix, the raw INSERT...SELECT hit profile_collection's
+    (profile_id, release_id, folder_id) PK UniqueViolation inside the swap
+    transaction, caught by a bare ``except Exception`` and reported as a
+    'failed' sync with NO error tag — an untagged failure that would repeat
+    identically on every future sync for this profile.
+    """
+    seed = [
+        _make_release(11111, folder_id=1, label="Blue Note"),
+        _make_release(11111, folder_id=1, label="Blue Note"),  # 2nd copy, same folder
+        _make_release(22222, folder_id=1),
+    ]
+    app = create_fake_app(seed=seed)
+    monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app))
+
+    result = await sync_profile(DEFAULT_UUID, _make_app_state(db_pool))
+
+    assert result["status"] == "ok"
+    # item_count reflects the post-dedup row count actually stored, not the
+    # raw 3-item ingest count.
+    assert result["item_count"] == 2
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT COUNT(*) FROM gruvax.profile_collection "
+            "WHERE profile_id = %s::uuid AND release_id = 11111 AND folder_id = 1",
+            (DEFAULT_UUID,),
+        )
+        assert (await cur.fetchone())[0] == 1, "duplicate copies must collapse to one row"
+
+        await cur.execute(
+            "SELECT COUNT(*) FROM gruvax.profile_collection WHERE profile_id = %s::uuid",
+            (DEFAULT_UUID,),
+        )
+        assert (await cur.fetchone())[0] == 2
+
+        await cur.execute(
+            "SELECT last_sync_status, last_sync_error, last_sync_item_count "
+            "FROM gruvax.profiles WHERE id = %s::uuid",
+            (DEFAULT_UUID,),
+        )
+        row = await cur.fetchone()
+        assert row == ("ok", None, 2), f"expected a clean 'ok' sync with no error tag, got {row!r}"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sync_duplicate_copies_different_folders_not_deduped(  # type: ignore[no-untyped-def]
+    db_pool, clean_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The same release in TWO DIFFERENT folders is a legitimate D-03 case
+    (test_sync_folder_id_duplicates_allowed) and must NOT be collapsed by the
+    gruvax-c34i dedup — DISTINCT ON (release_id, folder_id) only merges rows
+    that share BOTH keys.
+    """
+    seed = [
+        _make_release(33333, folder_id=1, label="Blue Note"),
+        _make_release(33333, folder_id=2, label="Blue Note"),  # different folder — not a dupe
+    ]
+    app = create_fake_app(seed=seed)
+    monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app))
+
+    result = await sync_profile(DEFAULT_UUID, _make_app_state(db_pool))
+    assert result["status"] == "ok"
+    assert result["item_count"] == 2
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT folder_id FROM gruvax.profile_collection "
+            "WHERE profile_id = %s::uuid AND release_id = 33333 ORDER BY folder_id",
+            (DEFAULT_UUID,),
+        )
+        rows = await cur.fetchall()
+        assert [r[0] for r in rows] == [1, 2]
+
+
+# ── gruvax-envc: shrink guard on the atomic swap ──────────────────────────────
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sync_shrink_guard_aborts_and_preserves_previous_cache(  # type: ignore[no-untyped-def]
+    db_pool, clean_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """gruvax-envc: a sync that would shrink the cache by more than the
+    tolerated fraction aborts instead of silently committing the smaller set.
+
+    Without this guard, `new_record_count = max(0, row_count - existing_count)`
+    reports 0 for ANY shrink — indistinguishable from "no new records" at
+    every layer (status='ok', item_count silently drops). This reproduces the
+    bead's exact failure scenario: a well-formed upstream envelope that's
+    missing records the profile already had cached.
+    """
+    from gruvax.sync.profile_sync import ShrinkGuardTripped
+
+    seed_full = [_make_release(i) for i in range(1, 101)]
+    app_full = create_fake_app(seed=seed_full)
+    monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app_full))
+    result = await sync_profile(DEFAULT_UUID, _make_app_state(db_pool))
+    assert result["item_count"] == 100
+
+    # Simulate a truncated upstream dump: only half the records come back,
+    # well-formed and otherwise indistinguishable from a real 50-record purge.
+    seed_shrunk = [_make_release(i) for i in range(1, 51)]
+    app_shrunk = create_fake_app(seed=seed_shrunk)
+    monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app_shrunk))
+
+    with pytest.raises(ShrinkGuardTripped):
+        await sync_profile(DEFAULT_UUID, _make_app_state(db_pool))
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        # The PREVIOUS (larger) cache must still be live — the swap rolled back.
+        await cur.execute(
+            "SELECT COUNT(*) FROM gruvax.profile_collection WHERE profile_id = %s::uuid",
+            (DEFAULT_UUID,),
+        )
+        assert (await cur.fetchone())[0] == 100, (
+            "shrink guard must roll back the swap — the old cache must survive"
+        )
+
+        await cur.execute(
+            "SELECT last_sync_status, last_sync_error, last_sync_item_count "
+            "FROM gruvax.profiles WHERE id = %s::uuid",
+            (DEFAULT_UUID,),
+        )
+        row = await cur.fetchone()
+        assert row[0] == "failed"
+        assert row[1] == "shrink_guard"
+        assert row[2] == 100, "last_sync_item_count must not be overwritten by an aborted swap"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sync_small_shrink_within_tolerance_succeeds(  # type: ignore[no-untyped-def]
+    db_pool, clean_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A shrink within the tolerated fraction (a handful of removed folder
+    entries — normal collector behavior) must sync normally, not trip the
+    guard.
+    """
+    seed_full = [_make_release(i) for i in range(1, 101)]
+    app_full = create_fake_app(seed=seed_full)
+    monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app_full))
+    await sync_profile(DEFAULT_UUID, _make_app_state(db_pool))
+
+    # 100 -> 99 is a 1% drop, under the 2% tolerance.
+    seed_slightly_smaller = [_make_release(i) for i in range(1, 100)]
+    app_smaller = create_fake_app(seed=seed_slightly_smaller)
+    monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app_smaller))
+
+    result = await sync_profile(DEFAULT_UUID, _make_app_state(db_pool))
+    assert result["status"] == "ok"
+    assert result["item_count"] == 99
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT last_sync_status, last_sync_error FROM gruvax.profiles WHERE id = %s::uuid",
+            (DEFAULT_UUID,),
+        )
+        assert (await cur.fetchone()) == ("ok", None)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sync_allow_shrink_override_permits_large_removal(  # type: ignore[no-untyped-def]
+    db_pool, clean_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """allow_shrink=True is the explicit override path for a genuine large
+    removal (e.g. the owner sold off part of the collection) — it must skip
+    the guard entirely rather than being unreachable.
+    """
+    seed_full = [_make_release(i) for i in range(1, 101)]
+    app_full = create_fake_app(seed=seed_full)
+    monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app_full))
+    await sync_profile(DEFAULT_UUID, _make_app_state(db_pool))
+
+    seed_shrunk = [_make_release(i) for i in range(1, 11)]
+    app_shrunk = create_fake_app(seed=seed_shrunk)
+    monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app_shrunk))
+
+    result = await sync_profile(DEFAULT_UUID, _make_app_state(db_pool), allow_shrink=True)
+    assert result["status"] == "ok"
+    assert result["item_count"] == 10
+
+    async with db_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(
+            "SELECT COUNT(*) FROM gruvax.profile_collection WHERE profile_id = %s::uuid",
+            (DEFAULT_UUID,),
+        )
+        assert (await cur.fetchone())[0] == 10

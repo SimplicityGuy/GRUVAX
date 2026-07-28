@@ -248,7 +248,16 @@ async def test_0016_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no
     _run_alembic("downgrade", "0015")
     _run_alembic("upgrade", "head")
 
+    # Resolve the script head dynamically (gruvax-envc added 0017; hardcoding
+    # "0016" here made every later migration fail this unrelated round-trip).
+    from alembic.config import Config
+    from alembic.script import ScriptDirectory
+
+    script_head = ScriptDirectory.from_config(Config("alembic.ini")).get_current_head()
+
     async with migrate_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute("SELECT version_num FROM alembic_version")
         row = await cur.fetchone()
-    assert row is not None and row[0] == "0016", f"expected head revision 0016, got {row!r}"
+    assert row is not None and row[0] == script_head, (
+        f"expected head revision {script_head}, got {row!r}"
+    )
