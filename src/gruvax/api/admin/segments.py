@@ -700,8 +700,19 @@ async def insert_cut(
         empty_check_row = boundaries[0].row
         empty_check_col = boundaries[0].col
     else:
-        # The model validator guarantees all three coords are present here.
-        assert after_uid is not None and after_row is not None and after_col is not None
+        # Unreachable guard (gruvax-pts8): InsertCutBody's model validator
+        # enforces all-or-none on the after_* coords, so a partial-None here is
+        # impossible — but narrow explicitly rather than with `assert` (bandit
+        # B101: asserts vanish under -O).
+        if after_uid is None or after_row is None or after_col is None:
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={
+                    "type": "invalid_after_coords",
+                    "message": "after_unit_id/after_row/after_col must be provided "
+                    "together, or all omitted for a head insert.",
+                },
+            )
         found_idx: int | None = None
         for i, b in enumerate(boundaries):
             if b.unit_id == after_uid and b.row == after_row and b.col == after_col:
