@@ -394,8 +394,15 @@ async def put_cube_boundary(
 
     # ── Step 3: DB write (boundary update + history log) ─────────────────────
     change_set_id = str(uuid.uuid4())
-    new_first_label = first_label or None
-    new_first_catalog = first_catalog or None
+    # gruvax-a2x: an empty cube stores NO cut point — is_empty=true with
+    # populated first_* wrote both verbatim (the phantom check is skipped for
+    # empty cubes, and migration 0005's cut_point_complete CHECK passes the
+    # combination), leaving a row that violates the documented "first_* is None
+    # only when is_empty" convention. The bulk path already normalizes this;
+    # mirror it here rather than 400-ing, since the caller's intent ("this cube
+    # is empty") is unambiguous.
+    new_first_label = (first_label or None) if not body.is_empty else None
+    new_first_catalog = (first_catalog or None) if not body.is_empty else None
 
     async with pool.connection() as conn, conn.transaction():
         # Capture prev_* before overwriting (history audit) — scoped to resolved profile.

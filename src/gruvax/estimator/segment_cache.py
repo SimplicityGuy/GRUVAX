@@ -261,6 +261,27 @@ class SegmentCache:
                 return None
             return (_label_key(row.first_label), parse_key(row.first_catalog))
 
+        # gruvax-a2x: an is_empty row carrying a populated cut violates the
+        # "first_* is None only when is_empty" convention (the write paths now
+        # normalize it, but pre-existing rows may predate that). The cut is
+        # ignored either way (_cut_key returns None and the records fall to the
+        # preceding cut-bearing bin) — but say so loudly instead of silently,
+        # so stale rows get cleaned up rather than quietly re-shaping locates.
+        for row in boundary_rows:
+            if row.is_empty and (row.first_label is not None or row.first_catalog is not None):
+                logger.warning(
+                    "SegmentCache.derive: bin (%d,%d,%d) is marked is_empty but "
+                    "still carries cut point (%r, %r) — the cut is ignored and its "
+                    "records assigned to the preceding cut-bearing bin. This row "
+                    "violates the is_empty/first_* convention (gruvax-a2x); "
+                    "re-save the cube to normalize it.",
+                    row.unit_id,
+                    row.row,
+                    row.col,
+                    row.first_label,
+                    row.first_catalog,
+                )
+
         cut_keys = [_cut_key(row) for row in boundary_rows]
 
         # Only cut-bearing bins receive records, paired with their physical index.
