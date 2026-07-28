@@ -52,10 +52,16 @@ async def test_route_fits_pinned_viewport(live_server_url: str, route: str) -> N
         browser = await p.chromium.launch(headless=True, args=["--no-sandbox"])
         try:
             page = await browser.new_page(viewport=KIOSK_VIEWPORT)
-            await page.goto(f"{live_server_url}{route}", wait_until="networkidle")
+            # gruvax-dez0: NEVER wait_until="networkidle" here — the kiosk
+            # route ("/") holds a persistent SSE (EventSource) connection from
+            # mount, so the network never goes idle and goto times out after
+            # 30s on every run. "load" is sufficient: the assertion below only
+            # measures layout, and the explicit settle timeout covers the SSE
+            # bootstrap / initial data fetches.
+            await page.goto(f"{live_server_url}{route}", wait_until="load")
 
             # Let SSE bootstrap / initial data fetches settle before measuring.
-            await page.wait_for_timeout(250)
+            await page.wait_for_timeout(500)
 
             scroll_width = await page.evaluate("document.documentElement.scrollWidth")
             client_width = await page.evaluate("document.documentElement.clientWidth")
