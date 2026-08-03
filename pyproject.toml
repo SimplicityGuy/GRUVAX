@@ -12,7 +12,7 @@ dependencies = [
     "alembic>=1.18.4",
     "orjson>=3.11.9",
     "asgi-lifespan>=2.1.0",
-    "cryptography>=48.0.0",
+    "cryptography>=50.0.0",
     "fastapi>=0.136.3",
     # Runtime dep — used by gruvax.discogsography.client (Plan 01-02) and gruvax.cli.sync_cli (Plan 01-04).
     # Was historically only in [dependency-groups] dev which broke the api container's `uv sync --no-dev`.
