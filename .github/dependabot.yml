@@ -75,6 +75,27 @@ updates:
       - "javascript"
     assignees:
       - "SimplicityGuy"
+    ignore:
+      # TypeScript 7 is not adoptable yet, and Dependabot cannot know why, so it
+      # re-proposes it every week and every attempt fails CI the same way
+      # (#43 was filed within a minute of #39 merging).
+      #
+      # typescript-eslint does not merely declare a narrow peer range
+      # (">=4.8.4 <6.1.0") — it carries a hard runtime guard that throws
+      # "typescript-eslint does not support TS 7.0" at module load, so eslint
+      # dies even if the peer range is forced with npm overrides. The documented
+      # side-by-side arrangement (scoped overrides pinning the typescript-eslint
+      # stack to TS 6 while the root is TS 7) fails `npm install` with ERESOLVE.
+      # TypeScript 7 itself compiles this codebase clean — `tsc --noEmit` exits
+      # 0 — so the compiler is not the blocker; the linter is.
+      #
+      # Tracking: https://github.com/typescript-eslint/typescript-eslint/issues/10940
+      # REMOVE THIS ENTRY once typescript-eslint publishes a release whose peer
+      # range admits TypeScript >= 7, then take the major in the normal way.
+      #
+      # Scoped to major only: 6.x minor/patch updates still flow through.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
     groups:
       npm-dependencies:
         patterns:
