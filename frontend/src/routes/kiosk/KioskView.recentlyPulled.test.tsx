@@ -29,8 +29,7 @@ const mockAdminState = { isLoggedIn: false }
 
 vi.mock('../../state/adminStore', () => {
   return {
-    useAdminStore: (selector: (s: { isLoggedIn: boolean }) => unknown) =>
-      selector(mockAdminState),
+    useAdminStore: (selector: (s: { isLoggedIn: boolean }) => unknown) => selector(mockAdminState),
   }
 })
 
@@ -70,7 +69,10 @@ class MockEventSource {
   url: string
   onopen: (() => void) | null = null
   onerror: (() => void) | null = null
-  constructor(url: string) { this.url = url; MockEventSource.instances.push(this) }
+  constructor(url: string) {
+    this.url = url
+    MockEventSource.instances.push(this)
+  }
   addEventListener() {}
   close() {}
 }
@@ -81,10 +83,18 @@ function makeStorageMock() {
   const store: Record<string, string> = {}
   return {
     getItem: (k: string) => store[k] ?? null,
-    setItem: (k: string, v: string) => { store[k] = v },
-    removeItem: (k: string) => { delete store[k] },
-    clear: () => { for (const k in store) delete store[k] },
-    get length() { return Object.keys(store).length },
+    setItem: (k: string, v: string) => {
+      store[k] = v
+    },
+    removeItem: (k: string) => {
+      delete store[k]
+    },
+    clear: () => {
+      for (const k in store) delete store[k]
+    },
+    get length() {
+      return Object.keys(store).length
+    },
     key: (i: number) => Object.keys(store)[i] ?? null,
   }
 }
@@ -167,7 +177,12 @@ beforeEach(() => {
     selectedResult: null,
     query: '',
     highlight: { primaryCube: null },
-    connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
+    connectivity: {
+      sseConnected: false,
+      lastSeenAt: 0,
+      everConnected: false,
+      bannerVisible: false,
+    },
   })
 
   // Set admin state (not logged in by default)

@@ -29,10 +29,7 @@
 
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import {
-  uploadImportBoundaries,
-  BulkSaveError,
-} from '../../api/adminClient'
+import { uploadImportBoundaries, BulkSaveError } from '../../api/adminClient'
 import './admin.css'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -107,16 +104,18 @@ function parseServerErrors(body: Record<string, unknown>): ImportError[] {
         }
       }
     }
-    return [{
-      row: typeof body.row === 'number' ? body.row : 0,
-      type: body.type as string,
-      first_label: typeof body.first_label === 'string' ? body.first_label : '',
-      first_catalog: typeof body.first_catalog === 'string' ? body.first_catalog : '',
-      message: typeof body.message === 'string' ? body.message : 'Validation error.',
-      near_misses: nearMisses,
-      fixed: false,
-      appliedSuggestion: null,
-    }]
+    return [
+      {
+        row: typeof body.row === 'number' ? body.row : 0,
+        type: body.type as string,
+        first_label: typeof body.first_label === 'string' ? body.first_label : '',
+        first_catalog: typeof body.first_catalog === 'string' ? body.first_catalog : '',
+        message: typeof body.message === 'string' ? body.message : 'Validation error.',
+        near_misses: nearMisses,
+        fixed: false,
+        appliedSuggestion: null,
+      },
+    ]
   }
   // Bulk errors list
   if (Array.isArray(body.errors)) {
@@ -147,7 +146,11 @@ function parseServerErrors(body: Record<string, unknown>): ImportError[] {
 }
 
 /** Parse diff preview from a 200 dry_run response (diff_preview + counts). */
-function parseDiff(body: Record<string, unknown>): { diff: DiffCube[]; fileCubeCount: number; totalCubes: number } {
+function parseDiff(body: Record<string, unknown>): {
+  diff: DiffCube[]
+  fileCubeCount: number
+  totalCubes: number
+} {
   const diff: DiffCube[] = []
   let fileCubeCount = 0
   let totalCubes = 0
@@ -218,7 +221,8 @@ function DiffGrid({ diff, fileCubeCount, totalCubes }: DiffGridProps) {
                   <div key={`${r}-${c}`} className={cellClass}>
                     {cube && cube.delta !== 0 && !cube.willBeEmpty && (
                       <span className="import-diff-count">
-                        {cube.delta > 0 ? '+' : ''}{cube.delta} (approx.)
+                        {cube.delta > 0 ? '+' : ''}
+                        {cube.delta} (approx.)
                       </span>
                     )}
                   </div>
@@ -233,9 +237,18 @@ function DiffGrid({ diff, fileCubeCount, totalCubes }: DiffGridProps) {
         <div className="import-partial-warning" role="alert">
           <span className="import-partial-warning-icon" aria-hidden="true">
             {/* Lucide AlertTriangle */}
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" strokeWidth="2"
-                 strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
               <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
               <line x1="12" y1="9" x2="12" y2="13" />
               <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -263,9 +276,7 @@ function ErrorCard({ error, index, onApplySuggestion }: ErrorCardProps) {
   return (
     <div className={cardClass} data-error-type={error.type}>
       <div className="import-error-header">
-        <span className="import-error-row">
-          {error.row > 0 ? `ROW ${error.row}` : 'ROW —'}
-        </span>
+        <span className="import-error-row">{error.row > 0 ? `ROW ${error.row}` : 'ROW —'}</span>
         <span className={`import-error-badge${error.fixed ? ' import-error-badge--fixed' : ''}`}>
           {error.fixed ? 'FIXED' : isContiguity ? 'CONTIGUITY ERROR' : 'ERROR'}
         </span>
@@ -279,7 +290,8 @@ function ErrorCard({ error, index, onApplySuggestion }: ErrorCardProps) {
 
       {isContiguity && (
         <p className="import-error-body">
-          {error.message || `${error.first_label} would be split across non-adjacent bins. Adjust this cut point to keep ${error.first_label} in one run.`}
+          {error.message ||
+            `${error.first_label} would be split across non-adjacent bins. Adjust this cut point to keep ${error.first_label} in one run.`}
         </p>
       )}
 
@@ -287,9 +299,7 @@ function ErrorCard({ error, index, onApplySuggestion }: ErrorCardProps) {
           no first_label to key off — render the backend's exact message instead of
           rendering nothing (gruvax-imeq). */}
       {!isContiguity && !error.first_label && (
-        <p className="import-error-body">
-          {error.message || 'Validation error.'}
-        </p>
+        <p className="import-error-body">{error.message || 'Validation error.'}</p>
       )}
 
       {!error.fixed && !isContiguity && error.near_misses.length > 0 && (
@@ -438,16 +448,18 @@ export default function Import() {
             return
           }
           // Fallback: no structured errors parsed — show generic error from BulkSaveError fields
-          const fallbackErrors: ImportError[] = [{
-            row: 0,
-            type: err.errorType ?? 'unknown',
-            first_label: '',
-            first_catalog: '',
-            message: err.serverMessage ?? 'Validation error.',
-            near_misses: [],
-            fixed: false,
-            appliedSuggestion: null,
-          }]
+          const fallbackErrors: ImportError[] = [
+            {
+              row: 0,
+              type: err.errorType ?? 'unknown',
+              first_label: '',
+              first_catalog: '',
+              message: err.serverMessage ?? 'Validation error.',
+              near_misses: [],
+              fixed: false,
+              appliedSuggestion: null,
+            },
+          ]
           setState((prev) => ({
             ...prev,
             phase: 'validated',
@@ -459,14 +471,16 @@ export default function Import() {
           setState((prev) => ({
             ...prev,
             phase: 'error',
-            commitError: 'Import failed — check your connection and try again. Your collection has not changed.',
+            commitError:
+              'Import failed — check your connection and try again. Your collection has not changed.',
           }))
         }
       } else {
         setState((prev) => ({
           ...prev,
           phase: 'error',
-          commitError: 'Import failed — check your connection and try again. Your collection has not changed.',
+          commitError:
+            'Import failed — check your connection and try again. Your collection has not changed.',
         }))
       }
     }
@@ -512,9 +526,7 @@ export default function Import() {
     setState((prev) => ({
       ...prev,
       errors: prev.errors.map((err, i) =>
-        i === index
-          ? { ...err, fixed: true, appliedSuggestion: suggestion }
-          : err,
+        i === index ? { ...err, fixed: true, appliedSuggestion: suggestion } : err,
       ),
     }))
   }
@@ -569,7 +581,8 @@ export default function Import() {
       setState((prev) => ({
         ...prev,
         phase: 'error',
-        commitError: 'Import failed — check your connection and try again. Your collection has not changed.',
+        commitError:
+          'Import failed — check your connection and try again. Your collection has not changed.',
       }))
     }
   }
@@ -591,9 +604,18 @@ export default function Import() {
         <div className="import-file-chip">
           <span className="import-file-chip-icon" aria-hidden="true">
             {/* Lucide File */}
-            <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" strokeWidth="2"
-                 strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
               <path d="M13 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V9z" />
               <polyline points="13 2 13 9 20 9" />
             </svg>
@@ -607,9 +629,18 @@ export default function Import() {
             onClick={handleClearFile}
           >
             {/* Lucide X */}
-            <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24"
-                 fill="none" stroke="currentColor" strokeWidth="2"
-                 strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              width="14"
+              height="14"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              aria-hidden="true"
+            >
               <line x1="18" y1="6" x2="6" y2="18" />
               <line x1="6" y1="6" x2="18" y2="18" />
             </svg>
@@ -626,13 +657,16 @@ export default function Import() {
           role="button"
           tabIndex={0}
           aria-label="Drop a file or tap to upload"
-          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click() }}
+          onKeyDown={(e) => {
+            if (e.key === 'Enter' || e.key === ' ') fileInputRef.current?.click()
+          }}
         >
           {/* Lucide Upload icon */}
           <svg
             className="import-drop-zone-icon"
             xmlns="http://www.w3.org/2000/svg"
-            width="24" height="24"
+            width="24"
+            height="24"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -680,12 +714,7 @@ export default function Import() {
               : 'All errors resolved'}
           </h2>
           {state.errors.map((err, i) => (
-            <ErrorCard
-              key={i}
-              error={err}
-              index={i}
-              onApplySuggestion={applyMiss}
-            />
+            <ErrorCard key={i} error={err} index={i} onApplySuggestion={applyMiss} />
           ))}
         </div>
       )}
@@ -706,9 +735,18 @@ export default function Import() {
         state.fileCubeCount < state.totalCubes && (
           <div className="import-partial-warning" role="alert">
             <span className="import-partial-warning-icon" aria-hidden="true">
-              <svg xmlns="http://www.w3.org/2000/svg" width="16" height="16" viewBox="0 0 24 24"
-                   fill="none" stroke="currentColor" strokeWidth="2"
-                   strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
                 <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z" />
                 <line x1="12" y1="9" x2="12" y2="13" />
                 <line x1="12" y1="17" x2="12.01" y2="17" />
@@ -730,7 +768,9 @@ export default function Import() {
         <button
           type="button"
           className={`import-commit-btn${canCommit ? ' import-commit-btn--enabled' : ''}`}
-          onClick={() => { if (canCommit) void handleCommit() }}
+          onClick={() => {
+            if (canCommit) void handleCommit()
+          }}
           aria-disabled={!canCommit}
           disabled={!canCommit}
         >

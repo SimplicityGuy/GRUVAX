@@ -36,8 +36,26 @@ import type { AdminCubesResponse } from '../../api/types'
 
 const TWO_CUBES: AdminCubesResponse = {
   cubes: [
-    { unit_id: 1, row: 0, col: 0, first_label: 'AAA', first_catalog: '001', is_empty: false, fill_level: 0.5, record_count: 10 },
-    { unit_id: 1, row: 0, col: 1, first_label: 'BBB', first_catalog: '002', is_empty: false, fill_level: 0.5, record_count: 10 },
+    {
+      unit_id: 1,
+      row: 0,
+      col: 0,
+      first_label: 'AAA',
+      first_catalog: '001',
+      is_empty: false,
+      fill_level: 0.5,
+      record_count: 10,
+    },
+    {
+      unit_id: 1,
+      row: 0,
+      col: 1,
+      first_label: 'BBB',
+      first_catalog: '002',
+      is_empty: false,
+      fill_level: 0.5,
+      record_count: 10,
+    },
   ],
 }
 
@@ -86,11 +104,16 @@ describe('Wizard re-entry with a poisoned reshuffle draft (gruvax-cw8)', () => {
       },
     })
 
-    await act(async () => { await renderWizard() })
+    await act(async () => {
+      await renderWizard()
+    })
 
-    await waitFor(() => {
-      expect(screen.queryByText(/step/i)).not.toBeNull()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.queryByText(/step/i)).not.toBeNull()
+      },
+      { timeout: 3000 },
+    )
 
     // Clamped back onto the last real step (index 1 of 2) instead of crashing.
     expect(screen.getByText('2 / 2')).toBeTruthy()
@@ -107,11 +130,16 @@ describe('Wizard re-entry with a poisoned reshuffle draft (gruvax-cw8)', () => {
       },
     })
 
-    await act(async () => { await renderWizard() })
+    await act(async () => {
+      await renderWizard()
+    })
 
-    await waitFor(() => {
-      expect(screen.queryByText(/step/i)).not.toBeNull()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.queryByText(/step/i)).not.toBeNull()
+      },
+      { timeout: 3000 },
+    )
 
     expect(screen.getByText('2 / 2')).toBeTruthy()
   })

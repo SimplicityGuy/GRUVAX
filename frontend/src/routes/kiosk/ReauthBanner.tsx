@@ -26,7 +26,8 @@ export interface ReauthBannerProps {
 }
 
 // profileName accepted for future personalisation; static copy per T-04-03-01
-export function ReauthBanner(_props: ReauthBannerProps) { // eslint-disable-line @typescript-eslint/no-unused-vars
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export function ReauthBanner(_props: ReauthBannerProps) {
   return (
     <div className="reauth-banner" role="alert" aria-live="polite">
       {/* AlertCircle icon — Lucide-pattern inline SVG, 18×18, aria-hidden */}

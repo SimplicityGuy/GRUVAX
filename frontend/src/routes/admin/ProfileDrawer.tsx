@@ -175,14 +175,11 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
     }
   }, [polledProfile, connectState, handleSyncCompleteStable])
 
-  const currentProfile: AdminProfile | null =
-    polledProfile ?? initialProfile
+  const currentProfile: AdminProfile | null = polledProfile ?? initialProfile
 
   const isDefault = currentProfile?.id === DEFAULT_PROFILE_UUID
 
-  const heading = isNew
-    ? 'ADD PROFILE'
-    : (currentProfile?.display_name.toUpperCase() ?? '')
+  const heading = isNew ? 'ADD PROFILE' : (currentProfile?.display_name.toUpperCase() ?? '')
 
   // ── Connect PAT ────────────────────────────────────────────────────────────
   async function handleConnect(isRotate = false) {
@@ -304,9 +301,7 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
     }
 
     const tick = () => {
-      const remaining = Math.floor(
-        (new Date(inviteInfo.expires_at).getTime() - Date.now()) / 1000,
-      )
+      const remaining = Math.floor((new Date(inviteInfo.expires_at).getTime() - Date.now()) / 1000)
       if (remaining <= 0) {
         setTtlSeconds(0)
         setInviteInfo(null) // D-09: expire the invite in UI at TTL=0
@@ -406,11 +401,7 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
   return (
     <>
       {/* Scrim */}
-      <div
-        className="sheet-scrim"
-        aria-hidden="true"
-        onClick={isSyncing ? undefined : onClose}
-      />
+      <div className="sheet-scrim" aria-hidden="true" onClick={isSyncing ? undefined : onClose} />
 
       {/* Bottom sheet */}
       <div
@@ -431,10 +422,7 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
           {/* ── NEW PROFILE: name input ─────────────────────────────────────── */}
           {isNew && profileId === null && (
             <div className="profile-drawer-section">
-              <label
-                htmlFor="profile-name-input"
-                className="profile-field-label"
-              >
+              <label htmlFor="profile-name-input" className="profile-field-label">
                 PROFILE NAME
               </label>
               <input
@@ -466,44 +454,41 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
             (profileStatus === 'pending' || drawerMode === 'rotate') &&
             !isSyncing &&
             !syncSuccess && (
-            <div className="profile-drawer-section">
-              <label
-                htmlFor="profile-pat-input"
-                className="profile-field-label"
-              >
-                PERSONAL ACCESS TOKEN
-              </label>
-              <div className="profile-pat-input-row">
-                <input
-                  id="profile-pat-input"
-                  type={showPat ? 'text' : 'password'}
-                  className="profile-field-input profile-field-input--pat"
-                  value={patValue}
-                  onChange={(e) => setPatValue(e.target.value)}
-                  placeholder="Paste your discogsography PAT"
-                  disabled={isConnecting}
-                  autoComplete="off"
-                />
-                <button
-                  type="button"
-                  className="profile-pat-toggle"
-                  onClick={() => setShowPat((v) => !v)}
-                  aria-label={showPat ? 'Hide token' : 'Show token'}
-                >
-                  {showPat
-                    ? <EyeOff size={16} aria-hidden="true" />
-                    : <Eye size={16} aria-hidden="true" />
-                  }
-                </button>
+              <div className="profile-drawer-section">
+                <label htmlFor="profile-pat-input" className="profile-field-label">
+                  PERSONAL ACCESS TOKEN
+                </label>
+                <div className="profile-pat-input-row">
+                  <input
+                    id="profile-pat-input"
+                    type={showPat ? 'text' : 'password'}
+                    className="profile-field-input profile-field-input--pat"
+                    value={patValue}
+                    onChange={(e) => setPatValue(e.target.value)}
+                    placeholder="Paste your discogsography PAT"
+                    disabled={isConnecting}
+                    autoComplete="off"
+                  />
+                  <button
+                    type="button"
+                    className="profile-pat-toggle"
+                    onClick={() => setShowPat((v) => !v)}
+                    aria-label={showPat ? 'Hide token' : 'Show token'}
+                  >
+                    {showPat ? (
+                      <EyeOff size={16} aria-hidden="true" />
+                    ) : (
+                      <Eye size={16} aria-hidden="true" />
+                    )}
+                  </button>
+                </div>
+                <p className="profile-pat-instruction">
+                  {drawerMode === 'rotate'
+                    ? 'Paste your new token below. It must belong to the same account.'
+                    : 'Your token is encrypted and stored securely. It is never shown again after connecting.'}
+                </p>
               </div>
-              <p className="profile-pat-instruction">
-                {drawerMode === 'rotate'
-                  ? 'Paste your new token below. It must belong to the same account.'
-                  : 'Your token is encrypted and stored securely. It is never shown again after connecting.'
-                }
-              </p>
-            </div>
-          )}
+            )}
 
           {/* ── SYNCING progress ──────────────────────────────────────────── */}
           {isSyncing && (
@@ -516,17 +501,15 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
           {/* ── Sync success inline message ────────────────────────────────── */}
           {syncSuccess && !isSyncing && polledProfile && (
             <p className="profile-sync-success">
-              Sync complete — {(polledProfile.last_sync_item_count ?? 0).toLocaleString('en-US')} records
+              Sync complete — {(polledProfile.last_sync_item_count ?? 0).toLocaleString('en-US')}{' '}
+              records
             </p>
           )}
 
           {/* ── RENAME: name input ─────────────────────────────────────────── */}
           {drawerMode === 'rename' && (
             <div className="profile-drawer-section">
-              <label
-                htmlFor="profile-rename-input"
-                className="profile-field-label"
-              >
+              <label htmlFor="profile-rename-input" className="profile-field-label">
                 PROFILE NAME
               </label>
               <input
@@ -549,18 +532,15 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
               role="alertdialog"
               aria-labelledby="delete-confirm-heading"
             >
-              <h3
-                id="delete-confirm-heading"
-                className="profile-delete-confirm-heading"
-              >
+              <h3 id="delete-confirm-heading" className="profile-delete-confirm-heading">
                 Delete this profile?
               </h3>
               <p className="profile-delete-confirm-body">
                 This will permanently remove {currentProfile.display_name} and its{' '}
                 <span className="profile-delete-item-count">
                   {(currentProfile.last_sync_item_count ?? 0).toLocaleString('en-US')} records
-                </span>.{' '}
-                This cannot be undone.
+                </span>
+                . This cannot be undone.
               </p>
             </div>
           )}
@@ -606,15 +586,14 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
                   disabled={isGeneratingInvite}
                   aria-busy={isGeneratingInvite}
                 >
-                  {isGeneratingInvite
-                    ? (
-                      <>
-                        <Loader2 size={16} className="profile-btn-spinner" aria-hidden="true" />
-                        GENERATING…
-                      </>
-                    )
-                    : 'GENERATE INVITE LINK'
-                  }
+                  {isGeneratingInvite ? (
+                    <>
+                      <Loader2 size={16} className="profile-btn-spinner" aria-hidden="true" />
+                      GENERATING…
+                    </>
+                  ) : (
+                    'GENERATE INVITE LINK'
+                  )}
                 </button>
               )}
 
@@ -635,7 +614,6 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
 
           {/* ── Actions ───────────────────────────────────────────────────── */}
           <div className="sheet-actions">
-
             {/* NEW: create button (before profile exists) */}
             {isNew && profileId === null && (
               <button
@@ -655,43 +633,40 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
               drawerMode !== 'rotate' &&
               !isSyncing &&
               !syncSuccess && (
-              <button
-                type="button"
-                className="profile-btn-cta"
-                onClick={() => void handleConnect(false)}
-                disabled={isConnecting || !patValue.trim()}
-                aria-busy={isConnecting}
-              >
-                {isConnecting
-                  ? (
+                <button
+                  type="button"
+                  className="profile-btn-cta"
+                  onClick={() => void handleConnect(false)}
+                  disabled={isConnecting || !patValue.trim()}
+                  aria-busy={isConnecting}
+                >
+                  {isConnecting ? (
                     <>
                       <Loader2 size={16} className="profile-btn-spinner" aria-hidden="true" />
                       CONNECTING…
                     </>
-                  )
-                  : 'CONNECT PAT'
-                }
-              </button>
-            )}
+                  ) : (
+                    'CONNECT PAT'
+                  )}
+                </button>
+              )}
 
             {/* CONNECTED: SYNC NOW */}
             {profileStatus === 'connected' &&
               drawerMode === 'view' &&
               !isSyncing &&
               !syncSuccess && (
-              <button
-                type="button"
-                className="profile-btn-secondary"
-                onClick={() => void handleSyncNow()}
-              >
-                SYNC NOW
-              </button>
-            )}
+                <button
+                  type="button"
+                  className="profile-btn-secondary"
+                  onClick={() => void handleSyncNow()}
+                >
+                  SYNC NOW
+                </button>
+              )}
 
             {/* CONNECTED: ROTATE PAT */}
-            {profileStatus === 'connected' &&
-              drawerMode === 'view' &&
-              !isSyncing && (
+            {profileStatus === 'connected' && drawerMode === 'view' && !isSyncing && (
               <button
                 type="button"
                 className="profile-btn-secondary"
@@ -714,22 +689,19 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
                 disabled={isConnecting || !patValue.trim()}
                 aria-busy={isConnecting}
               >
-                {isConnecting
-                  ? (
-                    <>
-                      <Loader2 size={16} className="profile-btn-spinner" aria-hidden="true" />
-                      CONNECTING…
-                    </>
-                  )
-                  : 'ROTATE PAT'
-                }
+                {isConnecting ? (
+                  <>
+                    <Loader2 size={16} className="profile-btn-spinner" aria-hidden="true" />
+                    CONNECTING…
+                  </>
+                ) : (
+                  'ROTATE PAT'
+                )}
               </button>
             )}
 
             {/* RENAME: trigger */}
-            {profileId !== null &&
-              profileStatus !== 'pending' &&
-              drawerMode === 'view' && (
+            {profileId !== null && profileStatus !== 'pending' && drawerMode === 'view' && (
               <button
                 type="button"
                 className="profile-btn-tertiary"
@@ -757,10 +729,7 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
             )}
 
             {/* DELETE PROFILE: trigger */}
-            {profileId !== null &&
-              !isDefault &&
-              drawerMode === 'view' &&
-              !isSyncing && (
+            {profileId !== null && !isDefault && drawerMode === 'view' && !isSyncing && (
               <button
                 type="button"
                 className="profile-btn-destructive"
@@ -802,7 +771,10 @@ export function ProfileDrawer({ target, onClose, onSyncComplete }: ProfileDrawer
                 className="sheet-cancel-btn"
                 onClick={
                   drawerMode === 'rename' || drawerMode === 'rotate'
-                    ? () => { setDrawerMode('view'); setSaveError(null) }
+                    ? () => {
+                        setDrawerMode('view')
+                        setSaveError(null)
+                      }
                     : onClose
                 }
               >

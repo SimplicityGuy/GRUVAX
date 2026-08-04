@@ -29,10 +29,7 @@ function makeQueryClient() {
   })
 }
 
-function renderDialog(props: {
-  onConfirm: () => void
-  onCancel: () => void
-}) {
+function renderDialog(props: { onConfirm: () => void; onCancel: () => void }) {
   const qc = makeQueryClient()
   return render(
     <QueryClientProvider client={qc}>

@@ -54,10 +54,7 @@ function fillPct(fillLevel: number): number {
 }
 
 /** Popover content for a given cube. */
-function popoverContent(
-  cube: AdminCube | undefined,
-  id: string,
-): React.ReactNode {
+function popoverContent(cube: AdminCube | undefined, id: string): React.ReactNode {
   if (!cube || cube.is_empty) {
     return (
       <>
@@ -124,18 +121,14 @@ export function LocatorHeader({
   // Derive active cell details for popover rendering
   const activeRow = activeIdx !== null ? Math.floor(activeIdx / cols) : -1
   const activeCol = activeIdx !== null ? activeIdx % cols : -1
-  const activeCube =
-    activeIdx !== null ? cubeMap.get(`${activeRow}-${activeCol}`) : undefined
-  const activeBinId =
-    activeIdx !== null ? binId(unitId, activeRow, activeCol, cols) : ''
+  const activeCube = activeIdx !== null ? cubeMap.get(`${activeRow}-${activeCol}`) : undefined
+  const activeBinId = activeIdx !== null ? binId(unitId, activeRow, activeCol, cols) : ''
 
   return (
     <div className="locator-header">
       <div className="locator-header-labels">
         <span className="locator-header-shelf">{shelfName}</span>
-        {binNumber != null && (
-          <span className="locator-header-bin">BIN {binNumber}</span>
-        )}
+        {binNumber != null && <span className="locator-header-bin">BIN {binNumber}</span>}
       </div>
       <div className="locator-mini-grid-wrap">
         <div
@@ -187,12 +180,10 @@ export function LocatorHeader({
                   data-col={c}
                   aria-label={`${id}: ${ariaDetail}`}
                   aria-pressed={isActive}
-                  onClick={() =>
-                    setActiveIdx((prev) => (prev === idx ? null : idx))
-                  }
+                  onClick={() => setActiveIdx((prev) => (prev === idx ? null : idx))}
                 />
               )
-            })
+            }),
           )}
         </div>
         {activeIdx !== null && (

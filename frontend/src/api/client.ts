@@ -41,7 +41,7 @@ const BASE = ''
 async function check403Revoke(res: Response): Promise<Response> {
   if (res.status === 403) {
     try {
-      const body = await res.json() as { detail?: { type?: string } }
+      const body = (await res.json()) as { detail?: { type?: string } }
       if (body?.detail?.type === 'device_revoked') {
         // Fire mount-independent revoke signal — even if no component is mounted (D-06)
         useSessionStore.getState().triggerRevoke()

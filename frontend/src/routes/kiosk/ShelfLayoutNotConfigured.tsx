@@ -26,9 +26,8 @@ export function ShelfLayoutNotConfigured() {
     <div className="shelf-layout-unconfigured">
       <p className="shelf-layout-unconfigured__heading">Shelf layout not set up yet</p>
       <p className="shelf-layout-unconfigured__body">
-        This collection's records are loaded, but the shelf positions haven't been mapped
-        yet. Ask the owner to set up the shelf layout for this collection in the admin
-        screen.
+        This collection's records are loaded, but the shelf positions haven't been mapped yet. Ask
+        the owner to set up the shelf layout for this collection in the admin screen.
       </p>
     </div>
   )

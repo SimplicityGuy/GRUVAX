@@ -44,11 +44,7 @@ interface AdminStore {
   pendingChangeSet: ChangeSet | null
 
   /** Set after successful PIN login. */
-  setAdminLoggedIn: (
-    expiresAt: string,
-    hardCapAt: string,
-    csrfToken: string,
-  ) => void
+  setAdminLoggedIn: (expiresAt: string, hardCapAt: string, csrfToken: string) => void
 
   /** Called on logout or session expiry. Clears auth state but NOT pendingChangeSet. */
   setAdminLoggedOut: () => void

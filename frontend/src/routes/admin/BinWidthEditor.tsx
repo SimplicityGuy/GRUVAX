@@ -35,13 +35,13 @@ import type { Segment } from '../../api/cubeTypes'
 
 const ROWS = 4
 const COLS = 4
-const MIN = 0.05   // 5% minimum width per segment
+const MIN = 0.05 // 5% minimum width per segment
 
 /** Graduated-blue palette cycled by segment index. */
 const PALETTE: Array<{ bg: string; fg: string }> = [
-  { bg: 'var(--gruvax-blue)',        fg: 'var(--gruvax-white)' },
-  { bg: 'var(--gruvax-blue-light)',  fg: 'var(--gruvax-blue-dark)' },
-  { bg: 'var(--gruvax-blue-dark)',   fg: 'var(--gruvax-white)' },
+  { bg: 'var(--gruvax-blue)', fg: 'var(--gruvax-white)' },
+  { bg: 'var(--gruvax-blue-light)', fg: 'var(--gruvax-blue-dark)' },
+  { bg: 'var(--gruvax-blue-dark)', fg: 'var(--gruvax-white)' },
   { bg: 'var(--gruvax-blue-darker)', fg: 'var(--gruvax-white)' },
 ]
 
@@ -60,9 +60,7 @@ function roundPercents(fractions: number[]): number[] {
   const floors = raw.map((v) => Math.floor(v))
   let deficit = 100 - floors.reduce((a, b) => a + b, 0)
   const result = [...floors]
-  const byRemainder = raw
-    .map((v, i) => ({ i, rem: v - floors[i] }))
-    .sort((a, b) => b.rem - a.rem)
+  const byRemainder = raw.map((v, i) => ({ i, rem: v - floors[i] })).sort((a, b) => b.rem - a.rem)
   for (let k = 0; k < byRemainder.length && deficit > 0; k++) {
     result[byRemainder[k].i] += 1
     deficit -= 1
@@ -197,14 +195,10 @@ export function BinWidthEditor() {
           el('span', { className: 'bwe-seg-name', textContent: seg.label.toUpperCase() }),
         )
       }
-      segDiv.appendChild(
-        el('span', { className: 'bwe-seg-pct', textContent: `${pcts[i]}%` }),
-      )
+      segDiv.appendChild(el('span', { className: 'bwe-seg-pct', textContent: `${pcts[i]}%` }))
 
       if (seg.continues) {
-        segDiv.appendChild(
-          el('span', { className: 'bwe-seg-continues-icon', textContent: '↪' }),
-        )
+        segDiv.appendChild(el('span', { className: 'bwe-seg-continues-icon', textContent: '↪' }))
       }
 
       segNodes.push(segDiv)
@@ -254,7 +248,11 @@ export function BinWidthEditor() {
 
       const onUp = () => {
         handle.classList.remove('bwe-handle--dragging')
-        try { handle.releasePointerCapture(e.pointerId) } catch { /* ignore */ }
+        try {
+          handle.releasePointerCapture(e.pointerId)
+        } catch {
+          /* ignore */
+        }
         document.removeEventListener('pointermove', onMove)
         document.removeEventListener('pointerup', onUp)
         // Commit drag result to React state
@@ -290,91 +288,93 @@ export function BinWidthEditor() {
   // ── Legend ref ───────────────────────────────────────────────────────────────
   const legendRef = useRef<HTMLDivElement>(null)
 
-  const updateLegend = useCallback((segs: Segment[]) => {
-    const root = legendRef.current
-    if (!root) return
-    root.replaceChildren()
+  const updateLegend = useCallback(
+    (segs: Segment[]) => {
+      const root = legendRef.current
+      if (!root) return
+      root.replaceChildren()
 
-    // Largest-remainder rounding so both applied and auto displays sum to exactly 100
-    const pcts = roundPercents(segs.map((s) => s.fraction))
-    const autoPcts = roundPercents(segs.map((s) => s.auto_fraction ?? s.fraction))
-    segs.forEach((seg, i) => {
-      const pal = PALETTE[i % PALETTE.length]
-      const ov = isOverridden(seg)
-      const displayPct = pcts[i]
-      const autoPct = autoPcts[i]
+      // Largest-remainder rounding so both applied and auto displays sum to exactly 100
+      const pcts = roundPercents(segs.map((s) => s.fraction))
+      const autoPcts = roundPercents(segs.map((s) => s.auto_fraction ?? s.fraction))
+      segs.forEach((seg, i) => {
+        const pal = PALETTE[i % PALETTE.length]
+        const ov = isOverridden(seg)
+        const displayPct = pcts[i]
+        const autoPct = autoPcts[i]
 
-      // Swatch
-      const swatch = el('span', {
-        className: 'bwe-leg-swatch',
-        style: { background: pal.bg },
-      })
-
-      // Main info
-      const main = el('div', { className: 'bwe-leg-main' })
-      const nm = el('div', { className: 'bwe-leg-nm', textContent: seg.label.toUpperCase() })
-      if (seg.continues) {
-        nm.appendChild(
-          el('span', {
-            style: { color: 'var(--gruvax-yellow-dark)' },
-            textContent: ' ↪',
-            title: 'continues in next bin',
-          }),
-        )
-      }
-      main.appendChild(nm)
-
-      // Record count (honesty rule: counts come from row-counting v_collection, not catalog math)
-      const rng = el('div', {
-        className: 'bwe-leg-rng',
-        textContent: `${seg.segment_count} record${seg.segment_count !== 1 ? 's' : ''}${seg.continues ? '  ·  spans into next bin' : ''}`,
-      })
-      main.appendChild(rng)
-
-      // Chip + reset
-      if (ov) {
-        const chip = el('span', { className: 'bwe-chip bwe-chip--set' })
-        chip.appendChild(el('span', { className: 'bwe-chip-dot' }))
-        chip.appendChild(
-          document.createTextNode(`OVERRIDE ${displayPct}% · auto was ${autoPct}%`),
-        )
-        main.appendChild(chip)
-
-        const reset = el('button', {
-          className: 'bwe-reset-link',
-          textContent: `reset to ${autoPct}%`,
-          // resetOne is a hoisted function decl below; mutual recursion with updateLegend
-          // eslint-disable-next-line react-hooks/immutability
-          onClick: () => resetOne(seg.label),
+        // Swatch
+        const swatch = el('span', {
+          className: 'bwe-leg-swatch',
+          style: { background: pal.bg },
         })
-        main.appendChild(reset)
-      } else {
-        const chip = el('span', { className: 'bwe-chip bwe-chip--auto' })
-        chip.appendChild(el('span', { className: 'bwe-chip-dot' }))
-        chip.appendChild(document.createTextNode(`AUTO · ${autoPct}% from row counts`))
-        main.appendChild(chip)
-      }
 
-      // Percentage display
-      const pct = el('div', { className: 'bwe-leg-pct' })
-      pct.appendChild(document.createTextNode(String(displayPct)))
-      pct.appendChild(el('span', { style: { fontSize: '11px' }, textContent: '%' }))
+        // Main info
+        const main = el('div', { className: 'bwe-leg-main' })
+        const nm = el('div', { className: 'bwe-leg-nm', textContent: seg.label.toUpperCase() })
+        if (seg.continues) {
+          nm.appendChild(
+            el('span', {
+              style: { color: 'var(--gruvax-yellow-dark)' },
+              textContent: ' ↪',
+              title: 'continues in next bin',
+            }),
+          )
+        }
+        main.appendChild(nm)
 
-      const row = el('div', { className: 'bwe-leg-row' })
-      row.appendChild(swatch)
-      row.appendChild(main)
-      row.appendChild(pct)
-      root.appendChild(row)
-    })
-  }, [binDisplay]) // eslint-disable-line react-hooks/exhaustive-deps
+        // Record count (honesty rule: counts come from row-counting v_collection, not catalog math)
+        const rng = el('div', {
+          className: 'bwe-leg-rng',
+          textContent: `${seg.segment_count} record${seg.segment_count !== 1 ? 's' : ''}${seg.continues ? '  ·  spans into next bin' : ''}`,
+        })
+        main.appendChild(rng)
+
+        // Chip + reset
+        if (ov) {
+          const chip = el('span', { className: 'bwe-chip bwe-chip--set' })
+          chip.appendChild(el('span', { className: 'bwe-chip-dot' }))
+          chip.appendChild(
+            document.createTextNode(`OVERRIDE ${displayPct}% · auto was ${autoPct}%`),
+          )
+          main.appendChild(chip)
+
+          const reset = el('button', {
+            className: 'bwe-reset-link',
+            textContent: `reset to ${autoPct}%`,
+            // resetOne is a hoisted function decl below; mutual recursion with updateLegend
+            // eslint-disable-next-line react-hooks/immutability
+            onClick: () => resetOne(seg.label),
+          })
+          main.appendChild(reset)
+        } else {
+          const chip = el('span', { className: 'bwe-chip bwe-chip--auto' })
+          chip.appendChild(el('span', { className: 'bwe-chip-dot' }))
+          chip.appendChild(document.createTextNode(`AUTO · ${autoPct}% from row counts`))
+          main.appendChild(chip)
+        }
+
+        // Percentage display
+        const pct = el('div', { className: 'bwe-leg-pct' })
+        pct.appendChild(document.createTextNode(String(displayPct)))
+        pct.appendChild(el('span', { style: { fontSize: '11px' }, textContent: '%' }))
+
+        const row = el('div', { className: 'bwe-leg-row' })
+        row.appendChild(swatch)
+        row.appendChild(main)
+        row.appendChild(pct)
+        root.appendChild(row)
+      })
+    },
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [binDisplay],
+  )
 
   // ── Reset helpers ────────────────────────────────────────────────────────────
   function resetOne(label: string) {
     setSegments((prev) => {
       // Drop this label's override, then renormalize so the bin still sums to 100%.
-      const cleared = prev.map((s) =>
-        s.label === label ? { ...s, is_override: false } : { ...s },
-      )
+      const cleared = prev.map((s) => (s.label === label ? { ...s, is_override: false } : { ...s }))
       const updated = renormalize(cleared)
       draggingSegs.current = updated.map((s) => ({ ...s }))
       renderStrip(updated)
@@ -425,7 +425,9 @@ export function BinWidthEditor() {
           ? `Saved · ${overrideCount} override${overrideCount !== 1 ? 's' : ''} written`
           : 'Saved · all widths auto-computed',
       )
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'segments', unitId, rowNum, colNum] })
+      void queryClient.invalidateQueries({
+        queryKey: ['admin', 'segments', unitId, rowNum, colNum],
+      })
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Could not save overrides — try again.')
     } finally {
@@ -464,7 +466,9 @@ export function BinWidthEditor() {
         >
           ← SHELF {shelfLtr}
         </button>
-        <h1 className="bwe-title">SHELF {shelfLtr} · BIN {binDisplay}</h1>
+        <h1 className="bwe-title">
+          SHELF {shelfLtr} · BIN {binDisplay}
+        </h1>
       </header>
 
       {/* Locator header (this bin lit yellow) */}
@@ -506,20 +510,19 @@ export function BinWidthEditor() {
 
       {/* Status messages */}
       {saveMsg && (
-        <p className="editor-save-success" role="status">{saveMsg}</p>
+        <p className="editor-save-success" role="status">
+          {saveMsg}
+        </p>
       )}
       {saveError && (
-        <p className="editor-save-error" role="alert">{saveError}</p>
+        <p className="editor-save-error" role="alert">
+          {saveError}
+        </p>
       )}
 
       {/* Actions */}
       <div className="bwe-actions">
-        <button
-          type="button"
-          className="bwe-btn-ghost"
-          onClick={resetAll}
-          disabled={isSaving}
-        >
+        <button type="button" className="bwe-btn-ghost" onClick={resetAll} disabled={isSaving}>
           ↺ Reset to computed
         </button>
         <button

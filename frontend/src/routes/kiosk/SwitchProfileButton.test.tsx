@@ -19,13 +19,13 @@
  *   4. setSession retains is_device_paired / device_id from the response
  */
 
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { cleanup, render, screen } from "@testing-library/react";
-import { MemoryRouter } from "react-router";
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { cleanup, render, screen } from '@testing-library/react'
+import { MemoryRouter } from 'react-router'
 
-import { SwitchProfileButton } from "./SwitchProfileButton";
-import { useSessionStore } from "../../state/sessionStore";
-import type { ProfileSummary, SessionData } from "../../api/session";
+import { SwitchProfileButton } from './SwitchProfileButton'
+import { useSessionStore } from '../../state/sessionStore'
+import type { ProfileSummary, SessionData } from '../../api/session'
 
 function profile(id: string, name: string): ProfileSummary {
   return {
@@ -35,20 +35,20 @@ function profile(id: string, name: string): ProfileSummary {
     last_sync_status: null,
     last_sync_item_count: null,
     app_token_revoked: false,
-  };
+  }
 }
 
 /** A realistic GET /api/session payload. */
 function session(overrides: Partial<SessionData> = {}): SessionData {
   return {
     profile_count: 2,
-    bound_profile_id: "aaaaaaaa-0000-0000-0000-000000000001",
+    bound_profile_id: 'aaaaaaaa-0000-0000-0000-000000000001',
     profiles: [
-      profile("aaaaaaaa-0000-0000-0000-000000000001", "Alice"),
-      profile("bbbbbbbb-0000-0000-0000-000000000002", "Bob"),
+      profile('aaaaaaaa-0000-0000-0000-000000000001', 'Alice'),
+      profile('bbbbbbbb-0000-0000-0000-000000000002', 'Bob'),
     ],
     ...overrides,
-  };
+  }
 }
 
 function renderButton() {
@@ -56,7 +56,7 @@ function renderButton() {
     <MemoryRouter>
       <SwitchProfileButton />
     </MemoryRouter>,
-  );
+  )
 }
 
 beforeEach(() => {
@@ -69,52 +69,52 @@ beforeEach(() => {
     profiles: [],
     revokePending: false,
     reassignBanner: null,
-  });
-});
+  })
+})
 
 afterEach(() => {
-  cleanup();
-});
+  cleanup()
+})
 
-describe("SwitchProfileButton visibility", () => {
-  it("renders on a browse-bound screen with 2+ profiles", () => {
-    useSessionStore.getState().setSession(session({ is_device_paired: false }));
-    renderButton();
-    expect(screen.queryByRole("button", { name: /switch profile/i })).not.toBeNull();
-  });
+describe('SwitchProfileButton visibility', () => {
+  it('renders on a browse-bound screen with 2+ profiles', () => {
+    useSessionStore.getState().setSession(session({ is_device_paired: false }))
+    renderButton()
+    expect(screen.queryByRole('button', { name: /switch profile/i })).not.toBeNull()
+  })
 
-  it("is absent on a PAIRED device even with 2+ profiles (gruvax-ocrn)", () => {
-    useSessionStore.getState().setSession(session({ is_device_paired: true, device_id: "dev-1" }));
-    renderButton();
-    expect(screen.queryByRole("button", { name: /switch profile/i })).toBeNull();
-  });
+  it('is absent on a PAIRED device even with 2+ profiles (gruvax-ocrn)', () => {
+    useSessionStore.getState().setSession(session({ is_device_paired: true, device_id: 'dev-1' }))
+    renderButton()
+    expect(screen.queryByRole('button', { name: /switch profile/i })).toBeNull()
+  })
 
-  it("is absent on a single-profile deployment (D2-09)", () => {
+  it('is absent on a single-profile deployment (D2-09)', () => {
     useSessionStore.getState().setSession(
       session({
         profile_count: 1,
-        profiles: [profile("aaaaaaaa-0000-0000-0000-000000000001", "Alice")],
+        profiles: [profile('aaaaaaaa-0000-0000-0000-000000000001', 'Alice')],
       }),
-    );
-    renderButton();
-    expect(screen.queryByRole("button", { name: /switch profile/i })).toBeNull();
-  });
-});
+    )
+    renderButton()
+    expect(screen.queryByRole('button', { name: /switch profile/i })).toBeNull()
+  })
+})
 
-describe("sessionStore.setSession", () => {
-  it("retains is_device_paired and device_id (gruvax-ocrn)", () => {
-    useSessionStore.getState().setSession(session({ is_device_paired: true, device_id: "dev-42" }));
+describe('sessionStore.setSession', () => {
+  it('retains is_device_paired and device_id (gruvax-ocrn)', () => {
+    useSessionStore.getState().setSession(session({ is_device_paired: true, device_id: 'dev-42' }))
 
-    const state = useSessionStore.getState();
-    expect(state.isDevicePaired).toBe(true);
-    expect(state.deviceId).toBe("dev-42");
-  });
+    const state = useSessionStore.getState()
+    expect(state.isDevicePaired).toBe(true)
+    expect(state.deviceId).toBe('dev-42')
+  })
 
-  it("defaults the device fields when the response omits them", () => {
-    useSessionStore.getState().setSession(session());
+  it('defaults the device fields when the response omits them', () => {
+    useSessionStore.getState().setSession(session())
 
-    const state = useSessionStore.getState();
-    expect(state.isDevicePaired).toBe(false);
-    expect(state.deviceId).toBeNull();
-  });
-});
+    const state = useSessionStore.getState()
+    expect(state.isDevicePaired).toBe(false)
+    expect(state.deviceId).toBeNull()
+  })
+})

@@ -19,8 +19,7 @@ export function OnboardingScreen() {
     <div className="picker-page picker-page--onboarding">
       <h1 className="picker-heading">NO COLLECTIONS YET</h1>
       <p className="onboarding-body">
-        To get started, ask the owner to set up a profile in the admin panel,
-        then come back here.
+        To get started, ask the owner to set up a profile in the admin panel, then come back here.
       </p>
       <Link to="/admin" className="onboarding-cta">
         OPEN ADMIN PANEL

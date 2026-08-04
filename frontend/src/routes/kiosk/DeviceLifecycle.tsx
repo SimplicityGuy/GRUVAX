@@ -52,9 +52,7 @@ export function RevokeNotice() {
           <line x1="12" y1="16" x2="12.01" y2="16" />
         </svg>
         <h1 className="device-revoke-heading">SCREEN REMOVED</h1>
-        <p className="device-revoke-body">
-          This screen was removed — re-pair to continue.
-        </p>
+        <p className="device-revoke-body">This screen was removed — re-pair to continue.</p>
       </div>
     </div>
   )
@@ -99,9 +97,7 @@ export function ReassignBanner() {
       >
         <polyline points="9 18 15 12 9 6" />
       </svg>
-      <span className="device-reassign-text">
-        MOVED TO {reassignBanner.toUpperCase()}
-      </span>
+      <span className="device-reassign-text">MOVED TO {reassignBanner.toUpperCase()}</span>
     </div>
   )
 }

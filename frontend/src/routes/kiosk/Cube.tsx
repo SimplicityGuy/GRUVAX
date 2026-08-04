@@ -87,9 +87,7 @@ export function Cube({
 
   const isSingleton = barInterval != null && barInterval.start === 0 && barInterval.end === 1
 
-  const handleClick = onTap
-    ? () => onTap({ unit_id: unitId, row, col })
-    : undefined
+  const handleClick = onTap ? () => onTap({ unit_id: unitId, row, col }) : undefined
 
   return (
     <div
@@ -104,21 +102,13 @@ export function Cube({
     >
       <span className="cube__address">{address}</span>
       {shouldRenderBar && barInterval != null && (
-        <SubCubeBar
-          interval={barInterval}
-          confidence={confidence}
-          isSingleton={isSingleton}
-        />
+        <SubCubeBar interval={barInterval} confidence={confidence} isSingleton={isSingleton} />
       )}
       {/* Fill-level bar at the bottom edge (CUBE-07, D-13) — only when fill > 0 */}
-      {fillLevel != null && fillLevel > 0 && (
-        <FillBar fillLevel={fillLevel} heightPx={4} />
-      )}
+      {fillLevel != null && fillLevel > 0 && <FillBar fillLevel={fillLevel} heightPx={4} />}
       {/* Shimmer overlay — decorative ambient cue while admin is mid-edit (D-01/D-02/RTM-04).
           aria-hidden: purely decorative, not data-state — never recolors the cube. */}
-      {shimmerActive && (
-        <div className="cube-shimmer-overlay" aria-hidden="true" />
-      )}
+      {shimmerActive && <div className="cube-shimmer-overlay" aria-hidden="true" />}
     </div>
   )
 }

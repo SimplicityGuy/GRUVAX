@@ -16,7 +16,7 @@
 
 import './StalenessBar.css'
 
-const STALE_THRESHOLD_SECONDS = 14 * 24 * 60 * 60  // 1_209_600s — D-01 LOCKED threshold
+const STALE_THRESHOLD_SECONDS = 14 * 24 * 60 * 60 // 1_209_600s — D-01 LOCKED threshold
 
 interface Props {
   syncAgeSeconds: number | null
@@ -32,11 +32,7 @@ export function StalenessBar({ syncAgeSeconds }: Props) {
   const days = Math.floor(syncAgeSeconds / 86400)
 
   return (
-    <div
-      className="staleness-bar"
-      role="alert"
-      aria-live="polite"
-    >
+    <div className="staleness-bar" role="alert" aria-live="polite">
       {/* AlertTriangle inline SVG — Lucide pattern from Settings.tsx; decorative, not load-bearing */}
       <svg
         xmlns="http://www.w3.org/2000/svg"

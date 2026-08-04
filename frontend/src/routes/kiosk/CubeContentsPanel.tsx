@@ -73,19 +73,10 @@ export function CubeContentsPanel({ cube, onDismiss }: CubeContentsPanelProps) {
   return (
     <>
       {/* Scrim — tap outside panel to dismiss */}
-      <div
-        className="cube-panel-scrim"
-        onClick={onDismiss}
-        aria-hidden="true"
-      />
+      <div className="cube-panel-scrim" onClick={onDismiss} aria-hidden="true" />
 
       {/* Bottom sheet panel */}
-      <div
-        className="cube-panel"
-        role="dialog"
-        aria-label={address}
-        aria-modal="true"
-      >
+      <div className="cube-panel" role="dialog" aria-label={address} aria-modal="true">
         {/* Drag handle */}
         <div className="cube-panel__handle" onClick={onDismiss} aria-label="Close panel" />
 
@@ -93,13 +84,9 @@ export function CubeContentsPanel({ cube, onDismiss }: CubeContentsPanelProps) {
           {/* Heading */}
           <h2 className="cube-panel__heading">{address}</h2>
 
-          {isLoading && (
-            <p className="cube-panel__loading">Loading…</p>
-          )}
+          {isLoading && <p className="cube-panel__loading">Loading…</p>}
 
-          {isError && (
-            <p className="cube-panel__error">Could not load cube contents. Try again.</p>
-          )}
+          {isError && <p className="cube-panel__error">Could not load cube contents. Try again.</p>}
 
           {data && (
             <>
@@ -108,7 +95,9 @@ export function CubeContentsPanel({ cube, onDismiss }: CubeContentsPanelProps) {
                 <div className="cube-panel__empty">
                   {isEmpty ? (
                     <>
-                      <p className="cube-panel__empty-heading">No records assigned to this cube yet.</p>
+                      <p className="cube-panel__empty-heading">
+                        No records assigned to this cube yet.
+                      </p>
                       <p className="cube-panel__empty-body">This cube has no boundaries set.</p>
                     </>
                   ) : (

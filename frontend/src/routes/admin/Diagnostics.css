@@ -55,8 +55,12 @@
 /* ── Shimmer skeleton (loading state) ───────────────────────────────────── */
 
 @keyframes diag-shimmer {
-  0% { background-position: -400px 0; }
-  100% { background-position: 400px 0; }
+  0% {
+    background-position: -400px 0;
+  }
+  100% {
+    background-position: 400px 0;
+  }
 }
 
 .diag-skeleton {
@@ -274,8 +278,9 @@
   padding: var(--gruvax-space-2) var(--gruvax-space-4);
   min-height: 44px;
   cursor: pointer;
-  transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
-              opacity var(--gruvax-duration-fast) var(--gruvax-ease-standard);
+  transition:
+    background var(--gruvax-duration-fast) var(--gruvax-ease-standard),
+    opacity var(--gruvax-duration-fast) var(--gruvax-ease-standard);
 }
 
 .diag-btn-destructive:hover:not(:disabled) {

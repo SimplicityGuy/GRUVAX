@@ -40,7 +40,7 @@ All factories use the _load_rows / _load_snapshot seams — NO DB, NO async.
 
 from __future__ import annotations
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
 from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
@@ -82,7 +82,10 @@ def _build_cache(
 
 
 def _build_cache_multi(
-    boundaries: list[dict],
+    # dict[str, Any] rather than a TypedDict: the values are heterogeneous
+    # (int unit_id/row/col, str|None labels, bool is_empty) and callers build
+    # these inline in test factories.
+    boundaries: list[dict[str, Any]],
 ) -> BoundaryCache:
     """Build a BoundaryCache from a list of boundary dicts.
 

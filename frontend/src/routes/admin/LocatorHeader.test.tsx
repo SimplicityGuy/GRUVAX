@@ -32,9 +32,7 @@ function makeCube(row: number, col: number, overrides?: Partial<AdminCube>): Adm
 describe('LocatorHeader fill shading', () => {
   it('renders .locator-cell--fill with --fill style for a non-empty cube (fill_level 0.75)', () => {
     const cubes = [makeCube(0, 0, { fill_level: 0.75 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     const cell = container.querySelector('[data-row="0"][data-col="0"]')
     expect(cell).toHaveClass('locator-cell--fill')
     expect(cell).toHaveStyle('--fill: 0.75')
@@ -42,9 +40,7 @@ describe('LocatorHeader fill shading', () => {
 
   it('renders .locator-cell--empty and NOT .locator-cell--fill for an empty cube', () => {
     const cubes = [makeCube(0, 0, { is_empty: true, fill_level: 0 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     const cell = container.querySelector('[data-row="0"][data-col="0"]')
     expect(cell).toHaveClass('locator-cell--empty')
     expect(cell).not.toHaveClass('locator-cell--fill')
@@ -52,9 +48,7 @@ describe('LocatorHeader fill shading', () => {
 
   it('renders .locator-cell--lit (not --fill) when the edited bin matches row/col', () => {
     const cubes = [makeCube(2, 1, { fill_level: 0.9 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={2} col={1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={2} col={1} cubes={cubes} />)
     const cell = container.querySelector('[data-row="2"][data-col="1"]')
     expect(cell).toHaveClass('locator-cell--lit')
     expect(cell).not.toHaveClass('locator-cell--fill')
@@ -62,9 +56,7 @@ describe('LocatorHeader fill shading', () => {
 
   it('clamps fill_level > 1.0 to 1 for the --fill custom property (D-03)', () => {
     const cubes = [makeCube(0, 0, { fill_level: 1.5 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     const cell = container.querySelector('[data-row="0"][data-col="0"]')
     expect(cell).toHaveStyle('--fill: 1')
   })
@@ -73,9 +65,7 @@ describe('LocatorHeader fill shading', () => {
 describe('LocatorHeader popover (D-05 / D-06)', () => {
   it('tapping a filled cell reveals a .locator-fill-popover with bin ID and record count', () => {
     const cubes = [makeCube(0, 0, { fill_level: 0.5, record_count: 50 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     const cell = container.querySelector('[data-row="0"][data-col="0"]')!
     fireEvent.click(cell)
     const popover = container.querySelector('.locator-fill-popover')
@@ -90,9 +80,7 @@ describe('LocatorHeader popover (D-05 / D-06)', () => {
     // Must NOT clamp the displayed number to 100% — that would disagree with the
     // kiosk CubeContentsPanel which shows "263% FULL" for the same cube.
     const cubes = [makeCube(0, 0, { fill_level: 2.63, record_count: 250 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     const cell = container.querySelector('[data-row="0"][data-col="0"]')!
     fireEvent.click(cell)
     const popover = container.querySelector('.locator-fill-popover')
@@ -105,9 +93,7 @@ describe('LocatorHeader popover (D-05 / D-06)', () => {
 
   it('caps the displayed percentage at 999% for absurdly overfull cubes', () => {
     const cubes = [makeCube(0, 0, { fill_level: 42, record_count: 4000 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     const cell = container.querySelector('[data-row="0"][data-col="0"]')!
     fireEvent.click(cell)
     const popover = container.querySelector('.locator-fill-popover')
@@ -116,9 +102,7 @@ describe('LocatorHeader popover (D-05 / D-06)', () => {
 
   it('tapping the same cell again dismisses the popover', () => {
     const cubes = [makeCube(0, 0, { fill_level: 0.5 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     const cell = container.querySelector('[data-row="0"][data-col="0"]')!
     fireEvent.click(cell)
     expect(container.querySelector('.locator-fill-popover')).not.toBeNull()
@@ -128,9 +112,7 @@ describe('LocatorHeader popover (D-05 / D-06)', () => {
 
   it('pressing Escape dismisses an open popover', () => {
     const cubes = [makeCube(0, 0, { fill_level: 0.5 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     const cell = container.querySelector('[data-row="0"][data-col="0"]')!
     fireEvent.click(cell)
     expect(container.querySelector('.locator-fill-popover')).not.toBeNull()
@@ -140,9 +122,7 @@ describe('LocatorHeader popover (D-05 / D-06)', () => {
 
   it('anchors the popover LEFT for a left-half column (WR-02)', () => {
     const cubes = [makeCube(0, 0, { fill_level: 0.5 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     fireEvent.click(container.querySelector('[data-row="0"][data-col="0"]')!)
     const popover = container.querySelector('.locator-fill-popover') as HTMLElement
     expect(popover.style.left).not.toBe('')
@@ -151,9 +131,7 @@ describe('LocatorHeader popover (D-05 / D-06)', () => {
 
   it('anchors the popover RIGHT for a right-half column so it does not overflow (WR-02)', () => {
     const cubes = [makeCube(0, 3, { fill_level: 0.5 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     fireEvent.click(container.querySelector('[data-row="0"][data-col="3"]')!)
     const popover = container.querySelector('.locator-fill-popover') as HTMLElement
     expect(popover.style.right).not.toBe('')
@@ -162,9 +140,7 @@ describe('LocatorHeader popover (D-05 / D-06)', () => {
 
   it('tapping an empty cube popover shows bin ID and "Empty bin" text', () => {
     const cubes = [makeCube(0, 0, { is_empty: true, fill_level: 0, record_count: 0 })]
-    const { container } = render(
-      <LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />,
-    )
+    const { container } = render(<LocatorHeader unitId={1} row={-1} col={-1} cubes={cubes} />)
     const cell = container.querySelector('[data-row="0"][data-col="0"]')!
     fireEvent.click(cell)
     const popover = container.querySelector('.locator-fill-popover')
@@ -184,8 +160,6 @@ describe('LocatorHeader accessibility (WR-03)', () => {
   it('labels the edited bin when row/col are set', () => {
     const { container } = render(<LocatorHeader unitId={1} row={0} col={0} />)
     const grid = container.querySelector('.locator-mini-grid')
-    expect(grid?.getAttribute('aria-label')).toBe(
-      'Mini Kallax — edited bin at row 1, col 1',
-    )
+    expect(grid?.getAttribute('aria-label')).toBe('Mini Kallax — edited bin at row 1, col 1')
   })
 })

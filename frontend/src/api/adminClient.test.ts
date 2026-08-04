@@ -28,18 +28,23 @@ afterEach(() => {
 
 describe('uploadImportBoundaries — nested HTTPException(detail=...) error bodies', () => {
   it('surfaces type/message from a NESTED {"detail": {...}} 422 body (parse_error)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => (
-      {
-        ok: false,
-        status: 422,
-        json: async () => ({
-          detail: {
-            type: 'parse_error',
-            message: "Missing or unsupported version field — YAML boundary documents must contain version: '1'",
-          },
-        }),
-      } as Response
-    )))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: false,
+            status: 422,
+            json: async () => ({
+              detail: {
+                type: 'parse_error',
+                message:
+                  "Missing or unsupported version field — YAML boundary documents must contain version: '1'",
+              },
+            }),
+          }) as Response,
+      ),
+    )
 
     const file = makeFile('boundaries.yaml')
     let caught: unknown
@@ -65,16 +70,20 @@ describe('uploadImportBoundaries — nested HTTPException(detail=...) error bodi
   })
 
   it('still handles an already-FLAT 400 body (cubes.py-style JSONResponse convention)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => (
-      {
-        ok: false,
-        status: 400,
-        json: async () => ({
-          type: 'contiguity_violation',
-          message: 'X would be split across non-adjacent bins.',
-        }),
-      } as Response
-    )))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: false,
+            status: 400,
+            json: async () => ({
+              type: 'contiguity_violation',
+              message: 'X would be split across non-adjacent bins.',
+            }),
+          }) as Response,
+      ),
+    )
 
     const file = makeFile('boundaries.csv')
     let caught: unknown
@@ -93,15 +102,19 @@ describe('uploadImportBoundaries — nested HTTPException(detail=...) error bodi
 
 describe('uploadImportSettings — nested HTTPException(detail=...) error bodies', () => {
   it('surfaces type/message from a NESTED {"detail": {...}} 422 body', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => (
-      {
-        ok: false,
-        status: 422,
-        json: async () => ({
-          detail: { type: 'parse_error', message: 'Settings YAML must be a mapping' },
-        }),
-      } as Response
-    )))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(
+        async () =>
+          ({
+            ok: false,
+            status: 422,
+            json: async () => ({
+              detail: { type: 'parse_error', message: 'Settings YAML must be a mapping' },
+            }),
+          }) as Response,
+      ),
+    )
 
     const file = makeFile('settings.yaml')
     let caught: unknown

@@ -102,9 +102,7 @@ export function ResultsList({
             {showNoResults && items.length === 0 ? (
               <>
                 <NoResultsRow />
-                {didYouMean && (
-                  <DidYouMean suggestion={didYouMean} onTap={handleDidYouMeanTap} />
-                )}
+                {didYouMean && <DidYouMean suggestion={didYouMean} onTap={handleDidYouMeanTap} />}
               </>
             ) : (
               items.map((item) => (

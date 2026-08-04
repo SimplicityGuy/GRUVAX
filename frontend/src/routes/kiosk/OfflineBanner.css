@@ -14,10 +14,10 @@
  */
 
 .offline-banner {
-  background: var(--gruvax-blue);         /* reversed: blue-ground vs yellow-ground StalenessBar */
-  color: var(--gruvax-white);             /* white-on-blue — AAA at 18px (D-03) */
+  background: var(--gruvax-blue); /* reversed: blue-ground vs yellow-ground StalenessBar */
+  color: var(--gruvax-white); /* white-on-blue — AAA at 18px (D-03) */
   font-family: var(--gruvax-font-ui);
-  font-size: var(--gruvax-text-body-lg);  /* 18px — matches staleness-bar accessibility floor */
+  font-size: var(--gruvax-text-body-lg); /* 18px — matches staleness-bar accessibility floor */
   font-weight: 400;
   line-height: var(--gruvax-leading-normal);
   padding: var(--gruvax-space-3) var(--gruvax-space-4);

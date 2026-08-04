@@ -45,48 +45,51 @@ export function PinOverlay({ isLocked = false, onUnlock }: PinOverlayProps) {
 
   const retryTimerRef = useRef<ReturnType<typeof setInterval> | null>(null)
 
-  const submitPin = useCallback(async (pin: string) => {
-    setStatus('submitting')
-    try {
-      const { csrf_token: csrfToken } = await adminLogin(pin)
-      // On success, fetch session times then call setAdminLoggedIn.
-      // adminGetSession() requires the session cookie which is now set.
-      // For simplicity, derive expires_at from the idle TTL default (10 min).
-      // AdminShell will poll /api/admin/session immediately and update.
-      const now = new Date()
-      const expires = new Date(now.getTime() + 10 * 60 * 1000).toISOString()
-      const hardCap = new Date(now.getTime() + 30 * 60 * 1000).toISOString()
-      setAdminLoggedIn(expires, hardCap, csrfToken)
-      // Lock re-auth: the session was already active, so setAdminLoggedIn is a
-      // no-op for isLoggedIn — explicitly tell the caller to clear isLocked
-      // and dismiss the overlay (D-03c).
-      if (isLocked) onUnlock?.()
-    } catch (err) {
-      if (err instanceof RateLimitError) {
-        setStatus('ratelimit')
-        setRetrySeconds(err.retryAfterSeconds)
-        setDigits([])
-        setErrorMsg(`Too many attempts. Try again in ${err.retryAfterSeconds}s.`)
-      } else if (err instanceof AuthError) {
-        // Wrong PIN — shake + flash
-        setStatus('error')
-        setShake(true)
-        setTimeout(() => {
-          setShake(false)
-          setStatus('idle')
+  const submitPin = useCallback(
+    async (pin: string) => {
+      setStatus('submitting')
+      try {
+        const { csrf_token: csrfToken } = await adminLogin(pin)
+        // On success, fetch session times then call setAdminLoggedIn.
+        // adminGetSession() requires the session cookie which is now set.
+        // For simplicity, derive expires_at from the idle TTL default (10 min).
+        // AdminShell will poll /api/admin/session immediately and update.
+        const now = new Date()
+        const expires = new Date(now.getTime() + 10 * 60 * 1000).toISOString()
+        const hardCap = new Date(now.getTime() + 30 * 60 * 1000).toISOString()
+        setAdminLoggedIn(expires, hardCap, csrfToken)
+        // Lock re-auth: the session was already active, so setAdminLoggedIn is a
+        // no-op for isLoggedIn — explicitly tell the caller to clear isLocked
+        // and dismiss the overlay (D-03c).
+        if (isLocked) onUnlock?.()
+      } catch (err) {
+        if (err instanceof RateLimitError) {
+          setStatus('ratelimit')
+          setRetrySeconds(err.retryAfterSeconds)
           setDigits([])
-        }, 400)
-      } else {
-        setStatus('error')
-        setErrorMsg('Login failed. Please try again.')
-        setTimeout(() => {
-          setStatus('idle')
-          setDigits([])
-          setErrorMsg('')
-        }, 2000)
+          setErrorMsg(`Too many attempts. Try again in ${err.retryAfterSeconds}s.`)
+        } else if (err instanceof AuthError) {
+          // Wrong PIN — shake + flash
+          setStatus('error')
+          setShake(true)
+          setTimeout(() => {
+            setShake(false)
+            setStatus('idle')
+            setDigits([])
+          }, 400)
+        } else {
+          setStatus('error')
+          setErrorMsg('Login failed. Please try again.')
+          setTimeout(() => {
+            setStatus('idle')
+            setDigits([])
+            setErrorMsg('')
+          }, 2000)
+        }
       }
-    }
-  }, [setAdminLoggedIn, isLocked, onUnlock])
+    },
+    [setAdminLoggedIn, isLocked, onUnlock],
+  )
 
   // Countdown for rate-limit retry
   useEffect(() => {
@@ -109,18 +112,21 @@ export function PinOverlay({ isLocked = false, onUnlock }: PinOverlayProps) {
     }
   }, [status, retrySeconds])
 
-  const handleDigit = useCallback((d: string) => {
-    if (status === 'submitting' || status === 'ratelimit') return
-    if (digits.length >= PIN_LENGTH) return
-    const next = [...digits, d]
-    setDigits(next)
-    // Auto-submit on the 4th digit. Fired from the event handler (not a state
-    // updater — updaters must be pure and are double-invoked under StrictMode)
-    // so the login request fires exactly once.
-    if (next.length === PIN_LENGTH && status === 'idle') {
-      void submitPin(next.join(''))
-    }
-  }, [digits, status, submitPin])
+  const handleDigit = useCallback(
+    (d: string) => {
+      if (status === 'submitting' || status === 'ratelimit') return
+      if (digits.length >= PIN_LENGTH) return
+      const next = [...digits, d]
+      setDigits(next)
+      // Auto-submit on the 4th digit. Fired from the event handler (not a state
+      // updater — updaters must be pure and are double-invoked under StrictMode)
+      // so the login request fires exactly once.
+      if (next.length === PIN_LENGTH && status === 'idle') {
+        void submitPin(next.join(''))
+      }
+    },
+    [digits, status, submitPin],
+  )
 
   const handleBackspace = useCallback(() => {
     if (status === 'submitting' || status === 'ratelimit') return
@@ -140,8 +146,24 @@ export function PinOverlay({ isLocked = false, onUnlock }: PinOverlayProps) {
       <div className={`pin-card${shake ? ' pin-card--shake' : ''}`}>
         {/* Logo mark */}
         <div className="pin-logo" aria-hidden="true">
-          <svg width="48" height="48" viewBox="0 0 48 48" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
-            <rect x="2" y="2" width="44" height="44" rx="8" stroke="var(--gruvax-blue)" strokeWidth="3" fill="var(--gruvax-white)" />
+          <svg
+            width="48"
+            height="48"
+            viewBox="0 0 48 48"
+            fill="none"
+            xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
+          >
+            <rect
+              x="2"
+              y="2"
+              width="44"
+              height="44"
+              rx="8"
+              stroke="var(--gruvax-blue)"
+              strokeWidth="3"
+              fill="var(--gruvax-white)"
+            />
             <rect x="8" y="20" width="14" height="8" rx="2" fill="var(--gruvax-yellow)" />
             <rect x="26" y="20" width="14" height="8" rx="2" fill="var(--gruvax-blue)" />
           </svg>
@@ -152,7 +174,11 @@ export function PinOverlay({ isLocked = false, onUnlock }: PinOverlayProps) {
         </h1>
 
         {!isRateLimit && (
-          <div className="pin-dots" aria-label={`${digits.length} of ${PIN_LENGTH} digits entered`} aria-live="polite">
+          <div
+            className="pin-dots"
+            aria-label={`${digits.length} of ${PIN_LENGTH} digits entered`}
+            aria-live="polite"
+          >
             {Array.from({ length: PIN_LENGTH }, (_, i) => (
               <span
                 key={i}

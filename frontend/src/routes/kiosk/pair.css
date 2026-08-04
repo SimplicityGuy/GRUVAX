@@ -55,7 +55,7 @@
   /* gruvax-qou1: display-xl (48px) overflowed the 480px-tall boot viewport
      when summed with the rest of the surface — display-md is still a clear
      hero label at kiosk viewing distance within the fold budget. */
-  font-size: var(--gruvax-text-display-md);  /* 24px */
+  font-size: var(--gruvax-text-display-md); /* 24px */
   font-weight: 900;
   color: var(--gruvax-text-primary);
   line-height: var(--gruvax-leading-tight);
@@ -69,7 +69,7 @@
 
 .pair-instruction {
   font-family: var(--gruvax-font-ui);
-  font-size: var(--gruvax-text-body-sm);  /* 14px — gruvax-qou1 fold budget */
+  font-size: var(--gruvax-text-body-sm); /* 14px — gruvax-qou1 fold budget */
   font-weight: 400;
   color: var(--gruvax-text-secondary);
   line-height: var(--gruvax-leading-normal);
@@ -85,9 +85,9 @@
   border-radius: var(--gruvax-radius-xl);
   /* gruvax-qou1: fold budget — tighter padding/margins than the original
      space-7 rhythm so the QR + countdown below clear the 480px viewport. */
-  padding: var(--gruvax-space-2) var(--gruvax-space-5);  /* 8px 24px */
-  margin-top: var(--gruvax-space-2);   /* 8px gap above */
-  margin-bottom: var(--gruvax-space-1);  /* 4px gap below */
+  padding: var(--gruvax-space-2) var(--gruvax-space-5); /* 8px 24px */
+  margin-top: var(--gruvax-space-2); /* 8px gap above */
+  margin-bottom: var(--gruvax-space-1); /* 4px gap below */
   display: flex;
   align-items: center;
   justify-content: center;
@@ -101,8 +101,7 @@
 /* Success state — border springs to yellow */
 .pair-code-card--success {
   border-color: var(--gruvax-yellow);
-  transition:
-    border-color var(--gruvax-led-on-duration) var(--gruvax-led-on-ease);
+  transition: border-color var(--gruvax-led-on-duration) var(--gruvax-led-on-ease);
 }
 
 /* Expired state — brief blue-light flash */
@@ -115,7 +114,7 @@
 
 .pair-code-digits {
   display: flex;
-  gap: var(--gruvax-space-3);  /* 12px between digits */
+  gap: var(--gruvax-space-3); /* 12px between digits */
   align-items: center;
 }
 
@@ -128,8 +127,8 @@
   font-size: clamp(40px, 7vw, 56px);
   font-weight: 500;
   color: var(--gruvax-text-primary);
-  line-height: 1.0;
-  letter-spacing: var(--gruvax-tracking-descriptor);  /* 0.2em wide spacing */
+  line-height: 1;
+  letter-spacing: var(--gruvax-tracking-descriptor); /* 0.2em wide spacing */
   /* Fixed-width ch-based box: prevents layout shift on digit change */
   display: inline-block;
   width: 1ch;
@@ -149,7 +148,7 @@
 
 .pair-code-success-text {
   font-family: var(--gruvax-font-display);
-  font-size: var(--gruvax-text-display-md);  /* 24px */
+  font-size: var(--gruvax-text-display-md); /* 24px */
   font-weight: 900;
   letter-spacing: var(--gruvax-tracking-display);
   text-transform: uppercase;
@@ -198,7 +197,7 @@
   display: flex;
   flex-direction: column;
   align-items: center;
-  gap: var(--gruvax-space-1);  /* 4px — gruvax-qou1 fold budget */
+  gap: var(--gruvax-space-1); /* 4px — gruvax-qou1 fold budget */
 }
 
 /* ── Waiting pill ────────────────────────────────────────────────────────── */
@@ -206,18 +205,18 @@
 .pair-waiting-pill {
   display: flex;
   align-items: center;
-  gap: var(--gruvax-space-2);  /* 8px */
+  gap: var(--gruvax-space-2); /* 8px */
   background: var(--gruvax-blue-faint);
   color: var(--gruvax-text-primary);
-  padding: var(--gruvax-space-1) var(--gruvax-space-3);  /* gruvax-qou1 fold budget */
+  padding: var(--gruvax-space-1) var(--gruvax-space-3); /* gruvax-qou1 fold budget */
   border-radius: var(--gruvax-radius-pill);
 }
 
 .pair-waiting-label {
   font-family: var(--gruvax-font-display);
-  font-size: var(--gruvax-text-display-sm);  /* 16px */
+  font-size: var(--gruvax-text-display-sm); /* 16px */
   font-weight: 700;
-  letter-spacing: var(--gruvax-tracking-label);  /* 0.14em */
+  letter-spacing: var(--gruvax-tracking-label); /* 0.14em */
   text-transform: uppercase;
 }
 
@@ -229,15 +228,19 @@
 }
 
 @keyframes pair-spin {
-  from { transform: rotate(0deg); }
-  to   { transform: rotate(360deg); }
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
 }
 
 /* ── Countdown ───────────────────────────────────────────────────────────── */
 
 .pair-countdown {
   font-family: var(--gruvax-font-mono);
-  font-size: var(--gruvax-text-mono-lg);  /* 16px */
+  font-size: var(--gruvax-text-mono-lg); /* 16px */
   font-weight: 500;
   color: var(--gruvax-text-muted);
   line-height: var(--gruvax-leading-normal);
@@ -261,11 +264,11 @@
   /* gruvax-qou1: quiet-zone padding kept at space-2 (not shrunk to space-1)
      — the QR itself shrank to 128px, so a tighter quiet zone would risk
      scan reliability; padding is the more valuable pixel to spend here. */
-  padding: var(--gruvax-space-2);       /* 8px quiet-zone extension */
+  padding: var(--gruvax-space-2); /* 8px quiet-zone extension */
   background: var(--gruvax-white);
   border: 1.5px solid var(--gruvax-border-light);
   border-radius: var(--gruvax-radius-md);
-  margin-top: var(--gruvax-space-1);    /* 4px from .pair-code-card */
+  margin-top: var(--gruvax-space-1); /* 4px from .pair-code-card */
   margin-bottom: var(--gruvax-space-1); /* 4px before .pair-status-row */
 }
 

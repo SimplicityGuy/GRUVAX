@@ -24,7 +24,7 @@ export interface HealthResponse {
   discogsography_api_check: 'ok' | 'failed' | 'stale'
   mqtt: 'ok' | 'degraded'
   version: string
-  started_at: string             // ISO-8601 UTC
+  started_at: string // ISO-8601 UTC
   sync_age_seconds: number | null
 }
 
@@ -115,8 +115,8 @@ export interface LoginResponse {
 
 /** Response from GET /api/admin/session — session expiry times. */
 export interface AdminSession {
-  expires_at: string   // ISO-8601 UTC
-  hard_cap_at: string  // ISO-8601 UTC
+  expires_at: string // ISO-8601 UTC
+  hard_cap_at: string // ISO-8601 UTC
   /**
    * gruvax-6ip0: server-computed DURATION (seconds remaining), not a
    * timestamp — AdminShell derives its idle-expiry countdown from this
@@ -138,20 +138,20 @@ export interface AdminSettings {
   cube_nominal_capacity: number
   session_idle_ttl_seconds: number
   // Phase 6 — LED colors (one per system state, LED-05)
-  led_color_position?: string        // default "#FFD700" (gold)
-  led_color_label_span?: string      // default "#7C3AED" (purple)
-  led_color_error?: string           // default "#E63946"
-  led_color_setup?: string           // default "#0077B6"
-  led_color_all_off?: string         // default "#000000"
-  led_color_ambient?: string         // default "#0051A2" — idle/resting baseline color
+  led_color_position?: string // default "#FFD700" (gold)
+  led_color_label_span?: string // default "#7C3AED" (purple)
+  led_color_error?: string // default "#E63946"
+  led_color_setup?: string // default "#0077B6"
+  led_color_all_off?: string // default "#000000"
+  led_color_ambient?: string // default "#0051A2" — idle/resting baseline color
   // Phase 6 — LED brightness tiers (LED-04, D-24)
-  led_brightness_span?: number       // 0..255, ~50% — label-span tier (D-24: NOT ambient)
-  led_brightness_active?: number     // 0..255, 100% — position/primary tier
-  led_brightness_ambient?: number    // 0..255, low — idle/resting baseline brightness
+  led_brightness_span?: number // 0..255, ~50% — label-span tier (D-24: NOT ambient)
+  led_brightness_active?: number // 0..255, 100% — position/primary tier
+  led_brightness_ambient?: number // 0..255, low — idle/resting baseline brightness
   // Phase 6 — LED highlight lifecycle (D-25)
-  led_highlight_active_ttl_seconds?: number   // default 180s
-  led_highlight_retain_mode?: boolean         // default false
-  led_highlight_retain_ttl_seconds?: number   // default 900s
+  led_highlight_active_ttl_seconds?: number // default 180s
+  led_highlight_retain_mode?: boolean // default false
+  led_highlight_retain_ttl_seconds?: number // default 900s
   // Phase 4 — Sync cadence (D4-06)
   sync_cadence?: '24h' | '12h' | '6h' | 'off'
 }
@@ -174,9 +174,9 @@ export interface AdminSettingsPut {
   led_color_all_off?: string
   led_color_ambient?: string
   // Phase 6 — LED brightness tiers (D-24)
-  led_brightness_span?: number       // label-span tier — NEVER labeled ambient
-  led_brightness_active?: number     // position/primary tier
-  led_brightness_ambient?: number    // idle baseline — NEVER labeled span
+  led_brightness_span?: number // label-span tier — NEVER labeled ambient
+  led_brightness_active?: number // position/primary tier
+  led_brightness_ambient?: number // idle baseline — NEVER labeled span
   // Phase 6 — LED highlight lifecycle
   led_highlight_active_ttl_seconds?: number
   led_highlight_retain_mode?: boolean
@@ -223,11 +223,14 @@ export interface CubeBoundaryEdit {
 export interface ReshuffleDraft {
   mode: 'setup' | 'reshuffle'
   completedSteps: number
-  cuts: Record<string, {
-    first_label: string | null
-    first_catalog: string | null
-    is_empty: boolean
-  }>
+  cuts: Record<
+    string,
+    {
+      first_label: string | null
+      first_catalog: string | null
+      is_empty: boolean
+    }
+  >
   /** crypto.randomUUID() generated before network call; reused on retry (D-04, Pattern 4). */
   idempotencyKey: string | null
   /** ISO-8601 timestamp — used for relative-time display in ReshuffleBanner. */
@@ -239,8 +242,8 @@ export interface ReshuffleDraft {
  * Persisted to localStorage so a session timeout / reload preserves in-progress work.
  */
 export interface ChangeSet {
-  id: string              // client-generated UUID
-  created_at: string      // ISO-8601 when the change-set was started
+  id: string // client-generated UUID
+  created_at: string // ISO-8601 when the change-set was started
   edits: CubeBoundaryEdit[]
 }
 
@@ -314,8 +317,8 @@ export interface AdminCube {
   first_label: string
   first_catalog: string
   is_empty: boolean
-  fill_level: number     // 0.0–1.0+ fraction of nominal capacity
-  record_count: number   // raw count for popover display (cubes.py:211)
+  fill_level: number // 0.0–1.0+ fraction of nominal capacity
+  record_count: number // raw count for popover display (cubes.py:211)
 }
 
 /** Response from GET /api/admin/cubes. */
@@ -358,7 +361,7 @@ export interface ChangeSetHistoryItem {
   change_set_id: string
   /** Source widened in Phase 7 to include wizard/import sources (D-04). */
   source: 'manual' | 'bulk' | 'revert' | 'cut_insert' | 'wizard' | 'reshuffle' | 'csv' | 'yaml'
-  changed_at: string   // ISO-8601 timestamp
+  changed_at: string // ISO-8601 timestamp
   cube_count: number
 }
 
@@ -376,7 +379,7 @@ export interface RevertedCube {
 
 /** Response from POST /api/admin/history/{change_set_id}/revert. */
 export interface RevertResponse {
-  change_set_id: string   // the new inverse change-set UUID
+  change_set_id: string // the new inverse change-set UUID
   reverted: RevertedCube[]
   skipped: RevertedCube[]
 }
@@ -384,17 +387,13 @@ export interface RevertResponse {
 // ── Phase 2: Profile Manager types (plan 02-07) ──────────────────────────────
 
 /** Status enum for a profile (derived server-side from DB columns). */
-export type ProfileStatus =
-  | 'pending'
-  | 'syncing'
-  | 'connected'
-  | 're-auth-required'
+export type ProfileStatus = 'pending' | 'syncing' | 'connected' | 're-auth-required'
 
 /** A profile from GET /api/admin/profiles or GET /api/admin/profiles/{id}. */
 export interface AdminProfile {
-  id: string                                  // UUID
+  id: string // UUID
   display_name: string
-  last_sync_at: string | null                 // ISO-8601 or null
+  last_sync_at: string | null // ISO-8601 or null
   last_sync_status: 'ok' | 'failed' | 'in_progress' | null
   last_sync_error: string | null
   last_sync_item_count: number | null
@@ -432,14 +431,14 @@ export interface ConnectPatPayload {
 /** Info returned by GET /api/invite-codes/{code} (public, no auth). */
 export interface InviteCodeInfo {
   display_name: string
-  expires_at: string   // ISO-8601 UTC
+  expires_at: string // ISO-8601 UTC
 }
 
 /** Response from POST /api/admin/profiles/{id}/invite (owner, PIN-gated). */
 export interface GeneratedInvite {
   code: string
   url: string
-  expires_at: string  // ISO-8601 UTC
+  expires_at: string // ISO-8601 UTC
 }
 
 /** Response from POST /api/invite-codes/{code}/redeem (public, no auth). */

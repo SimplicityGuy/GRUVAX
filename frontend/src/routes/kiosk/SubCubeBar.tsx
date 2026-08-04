@@ -21,7 +21,7 @@ import type { CSSProperties } from 'react'
 import type { SubInterval } from '../../api/types'
 
 /** Confidence threshold below which the "~" text cue appears (D-03). */
-const TEXT_CUE_THRESHOLD = 0.50
+const TEXT_CUE_THRESHOLD = 0.5
 
 interface SubCubeBarProps {
   /** Sub-cube position interval from /api/locate */

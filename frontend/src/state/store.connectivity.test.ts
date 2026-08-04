@@ -24,7 +24,12 @@ function resetStore() {
     subCubeInterval: null,
     confidence: 0,
     animationToken: 0,
-    connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
+    connectivity: {
+      sseConnected: false,
+      lastSeenAt: 0,
+      everConnected: false,
+      bannerVisible: false,
+    },
     shimmerCubes: [],
     shimmerExpiresAt: 0,
   })
@@ -202,9 +207,9 @@ describe('store.connectivity – SSE connection state (D-10)', () => {
 
   it('setSseConnected(true) sets bannerVisible to false', () => {
     // First disconnect so bannerVisible is true, then reconnect
-    useGruvaxStore.getState().setSseConnected(true)  // establish connection
+    useGruvaxStore.getState().setSseConnected(true) // establish connection
     useGruvaxStore.getState().setSseConnected(false) // lose it
-    useGruvaxStore.getState().setSseConnected(true)  // reconnect
+    useGruvaxStore.getState().setSseConnected(true) // reconnect
     const { connectivity } = useGruvaxStore.getState()
     expect(connectivity.bannerVisible).toBe(false)
   })

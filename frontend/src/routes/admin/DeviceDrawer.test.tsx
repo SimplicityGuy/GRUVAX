@@ -56,8 +56,26 @@ const PENDING_DEVICE: DeviceRow = {
 }
 
 const PROFILES_RESPONSE = [
-  { id: 'profile-uuid-1', display_name: 'Default', status: 'connected', last_sync_at: null, last_sync_status: null, last_sync_error: null, last_sync_item_count: null, app_token_revoked: false },
-  { id: 'profile-uuid-2', display_name: 'Robert', status: 'connected', last_sync_at: null, last_sync_status: null, last_sync_error: null, last_sync_item_count: null, app_token_revoked: false },
+  {
+    id: 'profile-uuid-1',
+    display_name: 'Default',
+    status: 'connected',
+    last_sync_at: null,
+    last_sync_status: null,
+    last_sync_error: null,
+    last_sync_item_count: null,
+    app_token_revoked: false,
+  },
+  {
+    id: 'profile-uuid-2',
+    display_name: 'Robert',
+    status: 'connected',
+    last_sync_at: null,
+    last_sync_status: null,
+    last_sync_error: null,
+    last_sync_item_count: null,
+    app_token_revoked: false,
+  },
 ]
 
 // ── Setup / Teardown ─────────────────────────────────────────────────────────
@@ -81,16 +99,19 @@ describe('DeviceDrawer', () => {
   it('auto-submits bind POST after the 4th digit via NumericKeypad', async () => {
     const bindCalls: string[] = []
 
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
-        const body = init?.body ? JSON.parse(init.body as string) : {}
-        bindCalls.push(body.code ?? '')
-      }
-      return {
-        ok: true,
-        json: async () => ({ device_id: 'test-device-id' }),
-      } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
+          const body = init?.body ? JSON.parse(init.body as string) : {}
+          bindCalls.push(body.code ?? '')
+        }
+        return {
+          ok: true,
+          json: async () => ({ device_id: 'test-device-id' }),
+        } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {
@@ -113,9 +134,18 @@ describe('DeviceDrawer', () => {
     expect(btn3).not.toBeNull()
     expect(btn4).not.toBeNull()
 
-    await act(async () => { btn1?.click(); await Promise.resolve() })
-    await act(async () => { btn2?.click(); await Promise.resolve() })
-    await act(async () => { btn3?.click(); await Promise.resolve() })
+    await act(async () => {
+      btn1?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      btn2?.click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      btn3?.click()
+      await Promise.resolve()
+    })
     await act(async () => {
       btn4?.click()
       await Promise.resolve()
@@ -138,18 +168,21 @@ describe('DeviceDrawer', () => {
 
     const patchCalls: Array<{ url: string; body: Record<string, unknown> }> = []
 
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      const method = (init?.method ?? 'GET').toUpperCase()
-      if (typeof url === 'string' && url.includes('/api/admin/profiles') && method === 'GET') {
-        return { ok: true, json: async () => PROFILES_RESPONSE } as Response
-      }
-      if (typeof url === 'string' && url.includes('/api/admin/devices/') && method === 'PATCH') {
-        const body = init?.body ? JSON.parse(init.body as string) : {}
-        patchCalls.push({ url: url as string, body })
-      }
-      // CSRF cookie / admin session stub
-      return { ok: true, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = (init?.method ?? 'GET').toUpperCase()
+        if (typeof url === 'string' && url.includes('/api/admin/profiles') && method === 'GET') {
+          return { ok: true, json: async () => PROFILES_RESPONSE } as Response
+        }
+        if (typeof url === 'string' && url.includes('/api/admin/devices/') && method === 'PATCH') {
+          const body = init?.body ? JSON.parse(init.body as string) : {}
+          patchCalls.push({ url: url as string, body })
+        }
+        // CSRF cookie / admin session stub
+        return { ok: true, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {
@@ -172,9 +205,12 @@ describe('DeviceDrawer', () => {
     })
 
     // Profile picker renders profiles fetched from API
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /robert/i })).toBeTruthy()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: /robert/i })).toBeTruthy()
+      },
+      { timeout: 3000 },
+    )
 
     // Pick "Robert" profile (profile-uuid-2)
     const robertBtn = screen.getByRole('button', { name: /robert/i })
@@ -186,7 +222,7 @@ describe('DeviceDrawer', () => {
 
     // PATCH /api/admin/devices/{id} should have been called with profile_id = 'profile-uuid-2'
     expect(patchCalls.length).toBeGreaterThanOrEqual(1)
-    const patchCall = patchCalls.find(c => c.url.includes(PAIRED_DEVICE.id))
+    const patchCall = patchCalls.find((c) => c.url.includes(PAIRED_DEVICE.id))
     expect(patchCall).toBeTruthy()
     expect(patchCall?.body).toMatchObject({ profile_id: 'profile-uuid-2' })
   })
@@ -203,18 +239,27 @@ describe('DeviceDrawer', () => {
 
     const bindCalls: Array<{ code: string; profile_id?: string }> = []
 
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      const method = (init?.method ?? 'GET').toUpperCase()
-      if (typeof url === 'string' && url.includes('/api/admin/profiles') && method === 'GET') {
-        return { ok: true, json: async () => PROFILES_RESPONSE } as Response
-      }
-      if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
-        const body = init?.body ? JSON.parse(init.body as string) : {}
-        bindCalls.push(body)
-        return { ok: true, json: async () => ({ device_id: PENDING_DEVICE.id, display_name: PENDING_DEVICE.display_name }) } as Response
-      }
-      return { ok: true, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = (init?.method ?? 'GET').toUpperCase()
+        if (typeof url === 'string' && url.includes('/api/admin/profiles') && method === 'GET') {
+          return { ok: true, json: async () => PROFILES_RESPONSE } as Response
+        }
+        if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
+          const body = init?.body ? JSON.parse(init.body as string) : {}
+          bindCalls.push(body)
+          return {
+            ok: true,
+            json: async () => ({
+              device_id: PENDING_DEVICE.id,
+              display_name: PENDING_DEVICE.display_name,
+            }),
+          } as Response
+        }
+        return { ok: true, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {
@@ -237,9 +282,12 @@ describe('DeviceDrawer', () => {
     })
 
     // Profile picker renders profiles fetched from API
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /robert/i })).toBeTruthy()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.getByRole('button', { name: /robert/i })).toBeTruthy()
+      },
+      { timeout: 3000 },
+    )
 
     // Pick "Robert" (non-default) profile — since device has no last_pairing_code,
     // falls back to bind-code, but the pick must NOT be discarded (gruvax-99s).
@@ -251,15 +299,27 @@ describe('DeviceDrawer', () => {
     })
 
     // Should fall back to bind-code mode (NumericKeypad rendered)
-    await waitFor(() => {
-      expect(screen.queryByRole('button', { name: '1' })).toBeTruthy()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.queryByRole('button', { name: '1' })).toBeTruthy()
+      },
+      { timeout: 3000 },
+    )
 
     // Complete the code entry — the bind POST must carry the picked profile_id,
     // not silently omit it (which the backend defaults to the Default profile).
-    await act(async () => { screen.getByRole('button', { name: '1' }).click(); await Promise.resolve() })
-    await act(async () => { screen.getByRole('button', { name: '2' }).click(); await Promise.resolve() })
-    await act(async () => { screen.getByRole('button', { name: '3' }).click(); await Promise.resolve() })
+    await act(async () => {
+      screen.getByRole('button', { name: '1' }).click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      screen.getByRole('button', { name: '2' }).click()
+      await Promise.resolve()
+    })
+    await act(async () => {
+      screen.getByRole('button', { name: '3' }).click()
+      await Promise.resolve()
+    })
     await act(async () => {
       screen.getByRole('button', { name: '4' }).click()
       await Promise.resolve()
@@ -281,19 +341,27 @@ describe('DeviceDrawer', () => {
   it('prefillCode renders confirm screen (not NumericKeypad) and does NOT auto-submit', async () => {
     const bindCalls: string[] = []
 
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
-        const body = init?.body ? JSON.parse(init.body as string) : {}
-        bindCalls.push(body.code ?? '')
-      }
-      return { ok: true, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
+          const body = init?.body ? JSON.parse(init.body as string) : {}
+          bindCalls.push(body.code ?? '')
+        }
+        return { ok: true, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {
       render(
         <QueryClientProvider client={qc}>
-          <DeviceDrawer mode="bind" prefillCode="1234" onClose={vi.fn()} onActionComplete={vi.fn()} />
+          <DeviceDrawer
+            mode="bind"
+            prefillCode="1234"
+            onClose={vi.fn()}
+            onActionComplete={vi.fn()}
+          />
         </QueryClientProvider>,
       )
       await Promise.resolve()
@@ -320,20 +388,31 @@ describe('DeviceDrawer', () => {
   it('tapping PAIR THIS DEVICE calls bind API exactly once with prefillCode', async () => {
     const bindCalls: string[] = []
 
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
-        const body = init?.body ? JSON.parse(init.body as string) : {}
-        bindCalls.push(body.code ?? '')
-        return { ok: true, json: async () => ({ device_id: 'test-device-id', display_name: 'Test Pi' }) } as Response
-      }
-      return { ok: true, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        if (typeof url === 'string' && url.includes('/api/admin/devices/bind')) {
+          const body = init?.body ? JSON.parse(init.body as string) : {}
+          bindCalls.push(body.code ?? '')
+          return {
+            ok: true,
+            json: async () => ({ device_id: 'test-device-id', display_name: 'Test Pi' }),
+          } as Response
+        }
+        return { ok: true, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {
       render(
         <QueryClientProvider client={qc}>
-          <DeviceDrawer mode="bind" prefillCode="1234" onClose={vi.fn()} onActionComplete={vi.fn()} />
+          <DeviceDrawer
+            mode="bind"
+            prefillCode="1234"
+            onClose={vi.fn()}
+            onActionComplete={vi.fn()}
+          />
         </QueryClientProvider>,
       )
       await Promise.resolve()
@@ -359,15 +438,23 @@ describe('DeviceDrawer', () => {
    * Test 6: clicking "Enter a different code" clears prefill and shows NumericKeypad.
    */
   it('Enter a different code link clears prefill and shows NumericKeypad', async () => {
-    vi.stubGlobal('fetch', vi.fn(async () => {
-      return { ok: true, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => {
+        return { ok: true, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {
       render(
         <QueryClientProvider client={qc}>
-          <DeviceDrawer mode="bind" prefillCode="1234" onClose={vi.fn()} onActionComplete={vi.fn()} />
+          <DeviceDrawer
+            mode="bind"
+            prefillCode="1234"
+            onClose={vi.fn()}
+            onActionComplete={vi.fn()}
+          />
         </QueryClientProvider>,
       )
       await Promise.resolve()

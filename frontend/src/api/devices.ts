@@ -90,7 +90,7 @@ export async function bindDevice(body: BindDeviceRequest): Promise<DeviceRow> {
     body: JSON.stringify(body),
   })
   if (!res.ok) {
-    const err = await res.json().catch(() => ({})) as BindDeviceError
+    const err = (await res.json().catch(() => ({}))) as BindDeviceError
     throw Object.assign(new Error('Bind failed'), { status: res.status, detail: err.detail })
   }
   return res.json() as Promise<DeviceRow>

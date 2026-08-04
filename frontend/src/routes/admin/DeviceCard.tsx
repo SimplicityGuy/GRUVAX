@@ -49,9 +49,7 @@ export function DeviceCard({ device, onClick, index }: DeviceCardProps) {
       aria-label={`Edit device ${device.display_name}`}
     >
       <div className="device-card-main">
-        <span className="device-card-name">
-          {device.display_name}
-        </span>
+        <span className="device-card-name">{device.display_name}</span>
         <div className="device-card-right">
           <DeviceStateBadge state={device.state} />
           <ChevronRight size={16} className="device-card-chevron" aria-hidden="true" />
@@ -61,11 +59,17 @@ export function DeviceCard({ device, onClick, index }: DeviceCardProps) {
         <span className="device-card-meta-id">device: {id8}</span>
         {device.state !== 'pending' && device.profile_name && (
           <>
-            <span className="device-card-meta-sep" aria-hidden="true"> · </span>
+            <span className="device-card-meta-sep" aria-hidden="true">
+              {' '}
+              ·{' '}
+            </span>
             <span className="device-card-meta-profile">{device.profile_name}</span>
           </>
         )}
-        <span className="device-card-meta-sep" aria-hidden="true"> · </span>
+        <span className="device-card-meta-sep" aria-hidden="true">
+          {' '}
+          ·{' '}
+        </span>
         <span className="device-card-meta-seen">{lastSeen}</span>
       </p>
     </button>

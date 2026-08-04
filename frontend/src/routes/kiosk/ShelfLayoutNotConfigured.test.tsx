@@ -31,7 +31,12 @@ function resetStore() {
     confidence: 0,
     animationToken: 0,
     shelfLayoutUnavailable: false,
-    connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
+    connectivity: {
+      sseConnected: false,
+      lastSeenAt: 0,
+      everConnected: false,
+      bannerVisible: false,
+    },
     shimmerCubes: [],
     shimmerExpiresAt: 0,
   })
@@ -117,9 +122,7 @@ describe('ShelfLayoutNotConfigured', () => {
 
   it('renders the body plain-language copy', () => {
     render(<ShelfLayoutNotConfigured />)
-    const body = screen.getByText(
-      /This collection.s records are loaded/i,
-    )
+    const body = screen.getByText(/This collection.s records are loaded/i)
     expect(body).toBeDefined()
   })
 

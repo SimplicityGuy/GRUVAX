@@ -56,9 +56,7 @@ export function ProfileDiagnosticsCard({ profile }: ProfileDiagnosticsCardProps)
   const isInitial = profile.last_sync_is_initial
   const newRecordsRowLabel = isInitial ? 'IMPORTED' : 'NEW RECORDS'
   const newRecordsValue =
-    newRecordCount != null && newRecordCount > 0
-      ? newRecordCount.toLocaleString('en-US')
-      : '—'
+    newRecordCount != null && newRecordCount > 0 ? newRecordCount.toLocaleString('en-US') : '—'
   // No yellow on this card (§Color rule). Green for positive counts, muted for zero/null.
   const newRecordsColor =
     newRecordCount != null && newRecordCount > 0
@@ -86,7 +84,10 @@ export function ProfileDiagnosticsCard({ profile }: ProfileDiagnosticsCardProps)
         <div className="diag-status-left">
           <span className="diag-row-label">STATUS</span>
         </div>
-        <span className={`diag-badge diag-badge--${stalenessClass}`} aria-label={`Sync status: ${stalenessClass}`}>
+        <span
+          className={`diag-badge diag-badge--${stalenessClass}`}
+          aria-label={`Sync status: ${stalenessClass}`}
+        >
           {stalenessClass === 'ok' ? 'OK' : stalenessClass === 'stale' ? 'STALE' : 'OUTDATED'}
         </span>
       </div>
@@ -104,10 +105,7 @@ export function ProfileDiagnosticsCard({ profile }: ProfileDiagnosticsCardProps)
         <div className="diag-status-left">
           <span className="diag-row-label">{newRecordsRowLabel}</span>
         </div>
-        <span
-          className="diag-cell-mono"
-          style={{ color: newRecordsColor }}
-        >
+        <span className="diag-cell-mono" style={{ color: newRecordsColor }}>
           {newRecordsValue}
         </span>
       </div>

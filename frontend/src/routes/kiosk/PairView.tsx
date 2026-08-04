@@ -36,7 +36,8 @@ import './pair.css'
 // is invalid: got object"). vitest/jsdom resolves the default correctly, so the unit tests
 // never catch it. Unwrap defensively so both the browser bundle and the test runner get the
 // real component.
-const QRCode = (QRCodeImport as unknown as { default?: typeof QRCodeImport }).default ?? QRCodeImport
+const QRCode =
+  (QRCodeImport as unknown as { default?: typeof QRCodeImport }).default ?? QRCodeImport
 
 /** Format milliseconds remaining as M:SS. */
 function formatCountdown(ms: number): string {
@@ -134,7 +135,7 @@ export function PairView() {
         signal: controller.signal,
       })
       if (!res.ok) throw new Error(`Failed: ${res.status}`)
-      const data = await res.json() as PairingCodeData
+      const data = (await res.json()) as PairingCodeData
       hasEverSucceededRef.current = true
       retryAttemptRef.current = 0
       if (retryTimeoutRef.current) {
@@ -191,7 +192,7 @@ export function PairView() {
         clearTimeout(retryTimeoutRef.current)
       }
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
   // ── Countdown effect — fires when a new pairingCode is received ──────────
@@ -253,7 +254,11 @@ export function PairView() {
       }
 
       // CR-01: read pairStatusRef (always current) instead of captured pairStatus
-      if (clamped <= 60_000 && pairStatusRef.current !== 'expired' && pairStatusRef.current !== 'paired') {
+      if (
+        clamped <= 60_000 &&
+        pairStatusRef.current !== 'expired' &&
+        pairStatusRef.current !== 'paired'
+      ) {
         updatePairStatus('expiring')
       }
 
@@ -310,11 +315,12 @@ export function PairView() {
   const isLoading = isCodeFetching && !pairingCode
   const isWarning = pairStatus === 'expiring'
 
-  const digits = isLoading || !pairingCode
-    ? ['—', '—', '—', '—']
-    : isExpired
+  const digits =
+    isLoading || !pairingCode
       ? ['—', '—', '—', '—']
-      : (pairingCode.code.split('') ?? ['—', '—', '—', '—'])
+      : isExpired
+        ? ['—', '—', '—', '—']
+        : (pairingCode.code.split('') ?? ['—', '—', '—', '—'])
 
   const countdownText =
     remainingMs === null
@@ -396,7 +402,9 @@ export function PairView() {
               <button
                 type="button"
                 className="pair-code-retry-btn"
-                onClick={() => { void fetchNewCode() }}
+                onClick={() => {
+                  void fetchNewCode()
+                }}
                 disabled={isCodeFetching}
               >
                 Tap to retry
@@ -416,10 +424,7 @@ export function PairView() {
 
       {/* QR code block (DEV-04) — visible when code is active and not yet paired/expired */}
       {pairingCode && !isExpired && !isPaired && (
-        <div
-          className="pair-qr-container"
-          aria-label="Scan QR code to pair this device"
-        >
+        <div className="pair-qr-container" aria-label="Scan QR code to pair this device">
           <QRCode
             value={`${window.location.origin}/admin/devices?code=${pairingCode.code}`}
             // gruvax-qou1: 160px measured @800×480 rendered TRUNCATED below

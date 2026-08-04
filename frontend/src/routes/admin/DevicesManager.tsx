@@ -42,10 +42,14 @@ export function DevicesManager() {
       next.delete('code')
       setSearchParams(next, { replace: true })
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  const { data: devices, isLoading, isError } = useQuery({
+  const {
+    data: devices,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['admin', 'devices'],
     queryFn: getAdminDevices,
     staleTime: 30_000,
@@ -101,7 +105,8 @@ export function DevicesManager() {
         <div className="devices-empty-state">
           <p className="devices-empty-heading">NO DEVICES YET</p>
           <p className="devices-empty-body">
-            Pair a kiosk screen to get started. Tap ADD DEVICE and enter the code shown on the kiosk.
+            Pair a kiosk screen to get started. Tap ADD DEVICE and enter the code shown on the
+            kiosk.
           </p>
         </div>
       ) : (
@@ -146,10 +151,7 @@ export function DevicesManager() {
       )}
 
       {actionToast && (
-        <SyncToast
-          message={actionToast.message}
-          onDismiss={() => setActionToast(null)}
-        />
+        <SyncToast message={actionToast.message} onDismiss={() => setActionToast(null)} />
       )}
     </div>
   )

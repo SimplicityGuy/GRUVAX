@@ -68,7 +68,9 @@ export function ProfilePickerCard({ profile }: ProfilePickerCardProps) {
       tabIndex={0}
       aria-label={`Choose ${profile.display_name} collection`}
       aria-busy={isBinding || undefined}
-      onClick={() => { void handleSelect() }}
+      onClick={() => {
+        void handleSelect()
+      }}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
           e.preventDefault()

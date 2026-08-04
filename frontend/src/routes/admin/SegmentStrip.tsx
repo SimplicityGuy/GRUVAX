@@ -27,18 +27,10 @@ export interface SegmentStripProps {
 }
 
 /** Blue-family fill tokens cycled by segment index within each bin. */
-const SEGMENT_FILL_TOKENS = [
-  '--gruvax-blue',
-  '--gruvax-blue-light',
-  '--gruvax-blue-dark',
-] as const
+const SEGMENT_FILL_TOKENS = ['--gruvax-blue', '--gruvax-blue-light', '--gruvax-blue-dark'] as const
 
 /** Text-on-fill tokens (parallel to SEGMENT_FILL_TOKENS). */
-const SEGMENT_TEXT_TOKENS = [
-  '--gruvax-white',
-  '--gruvax-blue-dark',
-  '--gruvax-white',
-] as const
+const SEGMENT_TEXT_TOKENS = ['--gruvax-white', '--gruvax-blue-dark', '--gruvax-white'] as const
 
 /** Sum fractions from index start (inclusive) to end (exclusive). */
 function sumFractions(segs: Segment[], start: number, end: number): number {
@@ -50,7 +42,11 @@ function sumFractions(segs: Segment[], start: number, end: number): number {
 /** Minimum segment width as a fraction (5%). */
 const MIN = 0.05
 
-export function SegmentStrip({ segments, onDragSetOverride, isReadOnly = false }: SegmentStripProps) {
+export function SegmentStrip({
+  segments,
+  onDragSetOverride,
+  isReadOnly = false,
+}: SegmentStripProps) {
   const stripRef = useRef<HTMLDivElement>(null)
   // Mutable copy of fractions for drag computation — reset each render
   const draggingSegs = useRef<Segment[]>([])

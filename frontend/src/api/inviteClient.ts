@@ -33,7 +33,7 @@ async function parseRedeemError(res: Response): Promise<RedeemApiError> {
   let errorType: string | undefined
   let message: string | undefined
   try {
-    const body = await res.json() as Record<string, unknown>
+    const body = (await res.json()) as Record<string, unknown>
     // Backend wraps error info in detail object (FastAPI HTTPException pattern)
     const detail = body.detail
     if (detail && typeof detail === 'object') {

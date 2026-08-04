@@ -20,8 +20,7 @@ const mockAdminState = { isLoggedIn: false }
 
 vi.mock('../../state/adminStore', () => {
   return {
-    useAdminStore: (selector: (s: { isLoggedIn: boolean }) => unknown) =>
-      selector(mockAdminState),
+    useAdminStore: (selector: (s: { isLoggedIn: boolean }) => unknown) => selector(mockAdminState),
   }
 })
 
@@ -56,7 +55,9 @@ vi.mock('../../api/client', async (importOriginal) => {
       estimator_version: 'v1',
     }),
     illuminateRecord: vi.fn().mockResolvedValue(undefined),
-    searchCollection: vi.fn().mockResolvedValue({ items: [SEARCH_ITEM], took_ms: 1, did_you_mean: null }),
+    searchCollection: vi
+      .fn()
+      .mockResolvedValue({ items: [SEARCH_ITEM], took_ms: 1, did_you_mean: null }),
     fetchUnits: vi.fn().mockResolvedValue({ units: [] }),
     fetchCubesWithFill: vi.fn().mockResolvedValue({ cubes: [] }),
   }
@@ -183,7 +184,12 @@ beforeEach(() => {
     selectedResult: null,
     query: '',
     highlight: { primaryCube: null },
-    connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
+    connectivity: {
+      sseConnected: false,
+      lastSeenAt: 0,
+      everConnected: false,
+      bannerVisible: false,
+    },
   })
 
   mockAdminState.isLoggedIn = false
@@ -210,8 +216,6 @@ describe('KioskView — lit cube scrolls into view (gruvax-k0zj)', () => {
     const litEl = document.querySelector('[data-state="lit"]')
     expect(litEl).not.toBeNull()
     expect(scrollIntoViewSpy.mock.instances[scrollIntoViewSpy.mock.calls.length - 1]).toBe(litEl)
-    expect(scrollIntoViewSpy).toHaveBeenLastCalledWith(
-      expect.objectContaining({ block: 'center' }),
-    )
+    expect(scrollIntoViewSpy).toHaveBeenLastCalledWith(expect.objectContaining({ block: 'center' }))
   })
 })

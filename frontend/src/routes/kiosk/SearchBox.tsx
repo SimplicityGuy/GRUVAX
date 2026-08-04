@@ -26,7 +26,12 @@ interface SearchBoxProps {
  * Per 01-UI-SPEC.md §Search Box Component Contract.
  * All colors/fonts/motion from kiosk.css tokens — no hardcoded hex here.
  */
-export function SearchBox({ onDebouncedQuery, isLoading, hasError, isOffline = false }: SearchBoxProps) {
+export function SearchBox({
+  onDebouncedQuery,
+  isLoading,
+  hasError,
+  isOffline = false,
+}: SearchBoxProps) {
   // store.query is the single source of truth for the input value, so external
   // setters (e.g. a "did you mean" tap calling setQuery) update the field too.
   const { query, setQuery, clearSearch } = useGruvaxStore()
@@ -83,7 +88,9 @@ export function SearchBox({ onDebouncedQuery, isLoading, hasError, isOffline = f
         type="search"
         value={query}
         onChange={handleChange}
-        placeholder={isOffline ? 'Search unavailable while offline' : 'Type artist, title, label or catalog#'}
+        placeholder={
+          isOffline ? 'Search unavailable while offline' : 'Type artist, title, label or catalog#'
+        }
         aria-label="Search vinyl collection"
         autoComplete="off"
         autoCorrect="off"

@@ -73,8 +73,13 @@
 }
 
 @keyframes search-error-flash {
-  0%, 100% { border-color: var(--gruvax-error); }
-  50% { border-color: var(--gruvax-blue); }
+  0%,
+  100% {
+    border-color: var(--gruvax-error);
+  }
+  50% {
+    border-color: var(--gruvax-blue);
+  }
 }
 
 .search-box__icon {
@@ -147,12 +152,24 @@
   animation: dot-pulse 1.2s ease-in-out infinite;
 }
 
-.search-box__dot:nth-child(2) { animation-delay: 0.2s; }
-.search-box__dot:nth-child(3) { animation-delay: 0.4s; }
+.search-box__dot:nth-child(2) {
+  animation-delay: 0.2s;
+}
+.search-box__dot:nth-child(3) {
+  animation-delay: 0.4s;
+}
 
 @keyframes dot-pulse {
-  0%, 80%, 100% { transform: scale(0.6); opacity: 0.4; }
-  40% { transform: scale(1); opacity: 1; }
+  0%,
+  80%,
+  100% {
+    transform: scale(0.6);
+    opacity: 0.4;
+  }
+  40% {
+    transform: scale(1);
+    opacity: 1;
+  }
 }
 
 /* ── Results list ────────────────────────────────────────────────────────── */
@@ -394,7 +411,7 @@
 }
 
 /* Lit state — spring on 300ms */
-.cube[data-state="lit"] {
+.cube[data-state='lit'] {
   background: var(--gruvax-cell-lit);
   border-color: var(--gruvax-cell-lit-border);
   box-shadow: var(--gruvax-shadow-led);
@@ -406,19 +423,24 @@
 }
 
 @keyframes led-glow-pulse {
-  0%, 100% { transform: scale(1); }
-  50% { transform: scale(1.04); }
+  0%,
+  100% {
+    transform: scale(1);
+  }
+  50% {
+    transform: scale(1.04);
+  }
 }
 
 /* Dim state — normal unlit cube */
-.cube[data-state="dim"] {
+.cube[data-state='dim'] {
   background: var(--gruvax-cell-dim);
   border-color: var(--gruvax-cell-dim-border);
   box-shadow: none;
 }
 
 /* Empty state — desaturated + dashed border */
-.cube[data-state="empty"] {
+.cube[data-state='empty'] {
   background: var(--gruvax-cell-empty);
   border-color: var(--gruvax-cell-empty-border);
   border-style: dashed;
@@ -437,7 +459,7 @@
    Also guarded behind (hover: hover) since this is a touch kiosk — there is
    no pointer that can "hover" without also having just tapped. */
 @media (hover: hover) {
-  .cube:not([data-state="lit"]):hover {
+  .cube:not([data-state='lit']):hover {
     background: var(--gruvax-cell-hover);
     border-color: var(--gruvax-border);
     border-style: solid;
@@ -469,12 +491,12 @@
 }
 
 /* Address overlay color on lit cell: blue on yellow */
-.cube[data-state="lit"] .cube__address {
+.cube[data-state='lit'] .cube__address {
   color: var(--gruvax-blue);
 }
 
 /* Address overlay on empty cell: slightly dimmer */
-.cube[data-state="empty"] .cube__address {
+.cube[data-state='empty'] .cube__address {
   color: var(--gruvax-text-faint);
 }
 
@@ -498,12 +520,12 @@
   top: 50%;
   transform: translateY(-50%);
   height: 92%;
-  min-width: 4px;                  /* keep a narrow high-confidence interval visible as a line */
+  min-width: 4px; /* keep a narrow high-confidence interval visible as a line */
   border-radius: var(--gruvax-radius-sm);
   background: var(--gruvax-yellow);
   /* Subtle but visible — confidence still drives it, but capped low so the bar
      reads as a soft marker over the cube, not a heavy solid block (~0.30–0.60). */
-  opacity: max(0.30, calc(0.30 + var(--confidence, 0.5) * 0.30));
+  opacity: max(0.3, calc(0.3 + var(--confidence, 0.5) * 0.3));
   pointer-events: none;
   z-index: 1;
 }
@@ -514,7 +536,7 @@
  * used on lit cubes (`.cube[data-state="lit"] .cube__address`). On dim companion
  * cubes the bar stays yellow (good contrast on the light-blue dim fill).
  */
-.cube[data-state="lit"] .sub-cube-bar {
+.cube[data-state='lit'] .sub-cube-bar {
   background: var(--gruvax-blue);
 }
 
@@ -532,10 +554,10 @@
 /* Low-confidence text cue (D-03) — appears above the bar when confidence ≤ 0.50 */
 .sub-cube-bar__cue {
   position: absolute;
-  top: var(--gruvax-space-1);             /* inside, near the top of the tall vertical bar */
-  left: var(--gruvax-space-1);            /* space-1 (4px) from bar left edge */
+  top: var(--gruvax-space-1); /* inside, near the top of the tall vertical bar */
+  left: var(--gruvax-space-1); /* space-1 (4px) from bar left edge */
   font-family: var(--gruvax-font-ui);
-  font-size: var(--gruvax-text-label);    /* 11px */
+  font-size: var(--gruvax-text-label); /* 11px */
   font-weight: 400;
   line-height: var(--gruvax-leading-tight);
   color: var(--gruvax-text-muted);
@@ -553,12 +575,12 @@
 
 .span-underlay__band {
   position: absolute;
-  z-index: 0;                              /* Below .cube (z-index 1) — D-04 lit-cell rule */
-  height: var(--gruvax-space-3);           /* 12px pill height */
-  background: var(--gruvax-yellow-faint);  /* rgba(255,218,0,0.12) */
+  z-index: 0; /* Below .cube (z-index 1) — D-04 lit-cell rule */
+  height: var(--gruvax-space-3); /* 12px pill height */
+  background: var(--gruvax-yellow-faint); /* rgba(255,218,0,0.12) */
   border: 1px solid var(--gruvax-yellow-glow); /* rgba(255,218,0,0.35) */
   border-radius: var(--gruvax-radius-pill); /* 9999px pill */
-  opacity: 0;                              /* Animated by GSAP to 0.60 */
+  opacity: 0; /* Animated by GSAP to 0.60 */
   pointer-events: none;
 }
 
@@ -633,8 +655,12 @@
 }
 
 @keyframes panel-slide-up {
-  from { transform: translateY(100%); }
-  to   { transform: translateY(0); }
+  from {
+    transform: translateY(100%);
+  }
+  to {
+    transform: translateY(0);
+  }
 }
 
 /* Drag handle — centered pill at the top of the panel */
@@ -853,10 +879,18 @@
 }
 
 @keyframes shimmer-sweep {
-  0%   { opacity: 0; }
-  40%  { opacity: 1; }
-  60%  { opacity: 1; }
-  100% { opacity: 0; }
+  0% {
+    opacity: 0;
+  }
+  40% {
+    opacity: 1;
+  }
+  60% {
+    opacity: 1;
+  }
+  100% {
+    opacity: 0;
+  }
 }
 
 /* ── Switch-profile corner button (Surface 6 / D2-09) ───────────────────── */
@@ -871,12 +905,12 @@
   position: fixed;
   /* Stacked ABOVE the kiosk-reset button (which is flush at the bottom edge)
    * so the two bottom-right pills never overlap. */
-  bottom: calc(var(--gruvax-space-5) + 56px);  /* 24px edge + 56px to clear Reset */
-  right: var(--gruvax-space-5);   /* 24px from right edge */
+  bottom: calc(var(--gruvax-space-5) + 56px); /* 24px edge + 56px to clear Reset */
+  right: var(--gruvax-space-5); /* 24px from right edge */
   z-index: var(--gruvax-z-overlay);
   display: flex;
   align-items: center;
-  gap: var(--gruvax-space-1);  /* 4px between icon and label */
+  gap: var(--gruvax-space-1); /* 4px between icon and label */
   background: var(--gruvax-blue);
   color: var(--gruvax-white);
   font-family: var(--gruvax-font-display);
@@ -887,7 +921,7 @@
   border: none;
   border-radius: var(--gruvax-radius-pill); /* 9999px pill */
   padding: var(--gruvax-space-2) var(--gruvax-space-3); /* 8px 12px */
-  min-height: 44px;  /* WCAG 2.5.5 touch target */
+  min-height: 44px; /* WCAG 2.5.5 touch target */
   min-width: 44px;
   cursor: pointer;
   transition: background var(--gruvax-duration-fast) var(--gruvax-ease-standard);
@@ -932,14 +966,20 @@
 }
 
 @keyframes confirm-spring {
-  from { transform: translate(-50%, -50%) scale(0.95); opacity: 0; }
-  to   { transform: translate(-50%, -50%) scale(1); opacity: 1; }
+  from {
+    transform: translate(-50%, -50%) scale(0.95);
+    opacity: 0;
+  }
+  to {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
 }
 
 /* "Switch collection?" heading — Space Grotesk 16px 700, --gruvax-text-primary */
 .switch-confirm-heading {
   font-family: var(--gruvax-font-ui);
-  font-size: var(--gruvax-text-body);  /* 16px */
+  font-size: var(--gruvax-text-body); /* 16px */
   font-weight: 700;
   color: var(--gruvax-text-primary);
   line-height: var(--gruvax-leading-tight);
@@ -949,7 +989,7 @@
 /* "You'll be taken to the profile picker." — Space Grotesk 14px, --gruvax-text-secondary */
 .switch-confirm-body {
   font-family: var(--gruvax-font-ui);
-  font-size: var(--gruvax-text-body-sm);  /* 14px */
+  font-size: var(--gruvax-text-body-sm); /* 14px */
   font-weight: 400;
   color: var(--gruvax-text-secondary);
   line-height: var(--gruvax-leading-normal);
@@ -1082,8 +1122,12 @@
 }
 
 @keyframes pill-appear {
-  from { opacity: 0; }
-  to   { opacity: 1; }
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
 }
 
 /* ── Phase 8: Recently-pulled chip strip (Surface 2 / D-08 / SRCH-09) ───────── */

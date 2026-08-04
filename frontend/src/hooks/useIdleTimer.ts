@@ -38,18 +38,14 @@ export function useIdleTimer(timeoutMs: number, onIdle: () => void): void {
     }
 
     // Register interaction listeners — passive for scroll/touch performance
-    IDLE_EVENTS.forEach((event) =>
-      document.addEventListener(event, reset, { passive: true }),
-    )
+    IDLE_EVENTS.forEach((event) => document.addEventListener(event, reset, { passive: true }))
 
     // Start the initial timer on mount
     reset()
 
     return () => {
       // Cleanup: remove all listeners + clear the pending timer
-      IDLE_EVENTS.forEach((event) =>
-        document.removeEventListener(event, reset),
-      )
+      IDLE_EVENTS.forEach((event) => document.removeEventListener(event, reset))
       if (timerRef.current !== null) clearTimeout(timerRef.current)
     }
   }, [timeoutMs]) // Only re-run when timeoutMs changes

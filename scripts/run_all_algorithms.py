@@ -199,10 +199,14 @@ def _find_local_csv(repo_root: Path) -> Path | None:
     return matches[0] if matches else None
 
 
-def _run_local_csv(repo_root: Path) -> dict[str, dict[str, float]] | None:
+def _run_local_csv(repo_root: Path) -> dict[str, dict[str, dict[str, float]]] | None:
     """Run locate() and locate_cube_only() against the local collection CSV + boundaries.yaml.
 
-    Returns None when the CSV is absent or any loading step fails.
+    Returns None when the CSV is absent or any loading step fails. Otherwise the
+    shape is three levels deep — ``{"local_csv": {"index": {"mae": ...}}}`` — so
+    it merges straight into ``run_all_algorithms``' ``results`` via ``.update()``.
+    The annotation previously claimed two levels, which mypy only began flagging
+    once the checker was pointed at scripts/ (gruvax-etcs).
     This path is silently skipped under --ci.
 
     Phase 5: BoundaryRow no longer has last_label/last_catalog (dropped in SEG-01).
