@@ -14,6 +14,10 @@
 #      SET LOCAL search_path widening (Pitfall 5).
 #   2. Benchmark SLO gate via scripts/check_benchmark.py — SC5
 #      search p95 <= 200 ms, locate p95 <= 50 ms on synthetic data
+#   3. Frontend vitest suite via `just test-spa` — gruvax-mmp1. The SPA's only
+#      other CI coverage is `tsc -b` + `vite build`, which pass on code the
+#      unit tests reject; without this step a frontend regression reaches the
+#      kiosk with every gate green.
 
 name: Test
 
@@ -102,6 +106,20 @@ jobs:
         run: |
           npm --prefix frontend ci
           just build-spa
+
+      # gruvax-mmp1: the vitest suite had no runner anywhere — not this
+      # workflow, not the justfile, not pre-commit — so every frontend
+      # regression was invisible to CI while `tsc -b` and `vite build` stayed
+      # green. Runs here rather than in pre-commit to mirror pytest: the
+      # code-quality gate is for linters (D-02), test suites belong to Test.
+      # Placed before the Postgres seeding it does not need, so a frontend
+      # break fails fast. `just test-spa` wraps `npm run test`, NOT
+      # `npm --prefix frontend exec vitest` — `npm run` sets cwd (which is how
+      # vite.config.ts and its react-qr-code inline resolve), `--prefix` alone
+      # does not. That distinction is what made the prettier hook a silent
+      # no-op for months (gruvax-etcs).
+      - name: Frontend test suite (vitest)
+        run: just test-spa
 
       # Plan 03-05: tests/browser/test_reboot_persistence.py drives a real
       # Chromium via Playwright. `uv sync` installs the playwright package but
