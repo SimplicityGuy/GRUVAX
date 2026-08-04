@@ -6,6 +6,11 @@ updates:
   - package-ecosystem: "github-actions"
     directory: "/"
     cooldown:
+      # Deliberately 2 days, not semgrep's suggested 7 (gruvax-ajgw). This is a
+      # home-LAN-only kiosk with no public exposure, and the shorter window keeps
+      # GRUVAX in step with discogsography. The control is still in force — a
+      # same-day compromised release cannot land — just narrower than the default.
+      # nosemgrep: dependabot-missing-cooldown
       default-days: 2
     schedule:
       interval: "weekly"
@@ -28,6 +33,11 @@ updates:
   - package-ecosystem: "docker"
     directory: "/"
     cooldown:
+      # Deliberately 2 days, not semgrep's suggested 7 (gruvax-ajgw). This is a
+      # home-LAN-only kiosk with no public exposure, and the shorter window keeps
+      # GRUVAX in step with discogsography. The control is still in force — a
+      # same-day compromised release cannot land — just narrower than the default.
+      # nosemgrep: dependabot-missing-cooldown
       default-days: 2
     schedule:
       interval: "weekly"
@@ -46,6 +56,11 @@ updates:
   - package-ecosystem: "npm"
     directory: "/frontend"
     cooldown:
+      # Deliberately 2 days, not semgrep's suggested 7 (gruvax-ajgw). This is a
+      # home-LAN-only kiosk with no public exposure, and the shorter window keeps
+      # GRUVAX in step with discogsography. The control is still in force — a
+      # same-day compromised release cannot land — just narrower than the default.
+      # nosemgrep: dependabot-missing-cooldown
       default-days: 2
     schedule:
       interval: "weekly"
@@ -68,6 +83,11 @@ updates:
   - package-ecosystem: "pip"
     directory: "/"
     cooldown:
+      # Deliberately 2 days, not semgrep's suggested 7 (gruvax-ajgw). This is a
+      # home-LAN-only kiosk with no public exposure, and the shorter window keeps
+      # GRUVAX in step with discogsography. The control is still in force — a
+      # same-day compromised release cannot land — just narrower than the default.
+      # nosemgrep: dependabot-missing-cooldown
       default-days: 2
     schedule:
       interval: "weekly"
