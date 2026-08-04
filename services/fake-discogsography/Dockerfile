@@ -44,15 +44,20 @@ COPY services/fake-discogsography/server.py services/fake-discogsography/seed.ya
 # Create a non-root user (2026 baseline expectation per the GRUVAX stack
 # infrastructure convention — mirrors the main Dockerfile's gruvax user).
 # CWE-250: never run the container process as root.
-RUN groupadd --system fake && useradd --system --gid fake --no-create-home --shell /usr/sbin/nologin fake \
+# UID/GID are pinned rather than auto-assigned so the numeric id in the USER
+# directive below is stable across base-image rebuilds (hadolint DL3066).
+RUN groupadd --system --gid 1001 fake \
+    && useradd --system --uid 1001 --gid fake --no-create-home --shell /usr/sbin/nologin fake \
     && chown -R fake:fake /app
-USER fake
+USER 1001:1001
 
 EXPOSE 8004
 
+# Exec form (hadolint DL3025). The trailing `|| exit 1` of the old shell form was
+# redundant — python already exits non-zero when urlopen raises, and HEALTHCHECK
+# reads the command's exit status directly.
 HEALTHCHECK --interval=30s --timeout=5s --retries=5 --start-period=10s \
-    CMD python -c "import urllib.request as u; req = u.Request('http://127.0.0.1:8004/api/user/collection?limit=1', headers={'Authorization': 'Bearer dscg_dev_seed'}); u.urlopen(req).read()" \
-    || exit 1
+    CMD ["python", "-c", "import urllib.request as u; req = u.Request('http://127.0.0.1:8004/api/user/collection?limit=1', headers={'Authorization': 'Bearer dscg_dev_seed'}); u.urlopen(req).read()"]
 
 # uvicorn serves the in-process FastAPI app exposed at module-level `app`
 # (see server.py). --host 0.0.0.0 so the api container can reach it via

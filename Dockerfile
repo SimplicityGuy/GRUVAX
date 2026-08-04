@@ -67,8 +67,11 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
 FROM python:3.14-slim
 
-# Create a non-root user (security baseline for 2026)
-RUN groupadd --system gruvax && useradd --system --gid gruvax gruvax
+# Create a non-root user (security baseline for 2026).
+# UID/GID are pinned rather than auto-assigned so the numeric id in the USER
+# directive below is stable across base-image rebuilds (hadolint DL3066).
+RUN groupadd --system --gid 1001 gruvax \
+    && useradd --system --uid 1001 --gid gruvax gruvax
 
 WORKDIR /app
 
@@ -115,7 +118,7 @@ content = 'GIT_SHA = \"${GIT_SHA}\"\nBUILD_TIMESTAMP = \"${BUILD_TIMESTAMP}\"\nE
 import pathlib; pathlib.Path('/app/src/gruvax/_version.py').write_text(content)\
 "
 
-USER gruvax
+USER 1001:1001
 
 EXPOSE 8000
 
