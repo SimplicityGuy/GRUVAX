@@ -103,6 +103,10 @@ provision-db:
 build-spa:
     npm --prefix frontend run build
 
+# Run the frontend vitest suite (jsdom; no Postgres, no running API needed)
+test-spa:
+    npm --prefix frontend run test
+
 # Run the Vite dev server (proxies /api → localhost:8000)
 dev-spa:
     npm --prefix frontend run dev
