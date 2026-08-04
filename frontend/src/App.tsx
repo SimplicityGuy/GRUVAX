@@ -1,25 +1,25 @@
-import { useEffect } from "react";
-import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { BrowserRouter, Route, Routes, useNavigate } from "react-router";
-import { AdminShell } from "./routes/admin/AdminShell";
-import { BinWidthEditor } from "./routes/admin/BinWidthEditor";
-import { ConfirmationRoute } from "./routes/admin/ConfirmationScreen";
-import { CubesGrid } from "./routes/admin/CubesGrid";
-import { Diagnostics } from "./routes/admin/Diagnostics";
-import { HistoryView } from "./routes/admin/HistoryView";
-import Import from "./routes/admin/Import";
-import { DevicesManager } from "./routes/admin/DevicesManager";
-import { ProfilesManager } from "./routes/admin/ProfilesManager";
-import { Settings } from "./routes/admin/Settings";
-import { ShelfBinList } from "./routes/admin/ShelfBinList";
-import { Wizard } from "./routes/admin/Wizard";
-import { KioskView } from "./routes/kiosk/KioskView";
-import { PairView } from "./routes/kiosk/PairView";
-import { RevokeNotice } from "./routes/kiosk/DeviceLifecycle";
-import { ProfilePicker } from "./routes/ProfilePicker";
-import { RedeemPage } from "./routes/redeem/RedeemPage";
-import { getSession } from "./api/session";
-import { useSessionStore } from "./state/sessionStore";
+import { useEffect } from 'react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
+import { BrowserRouter, Route, Routes, useNavigate } from 'react-router'
+import { AdminShell } from './routes/admin/AdminShell'
+import { BinWidthEditor } from './routes/admin/BinWidthEditor'
+import { ConfirmationRoute } from './routes/admin/ConfirmationScreen'
+import { CubesGrid } from './routes/admin/CubesGrid'
+import { Diagnostics } from './routes/admin/Diagnostics'
+import { HistoryView } from './routes/admin/HistoryView'
+import Import from './routes/admin/Import'
+import { DevicesManager } from './routes/admin/DevicesManager'
+import { ProfilesManager } from './routes/admin/ProfilesManager'
+import { Settings } from './routes/admin/Settings'
+import { ShelfBinList } from './routes/admin/ShelfBinList'
+import { Wizard } from './routes/admin/Wizard'
+import { KioskView } from './routes/kiosk/KioskView'
+import { PairView } from './routes/kiosk/PairView'
+import { RevokeNotice } from './routes/kiosk/DeviceLifecycle'
+import { ProfilePicker } from './routes/ProfilePicker'
+import { RedeemPage } from './routes/redeem/RedeemPage'
+import { getSession } from './api/session'
+import { useSessionStore } from './state/sessionStore'
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -27,10 +27,10 @@ const queryClient = new QueryClient({
       retry: 1,
       refetchOnWindowFocus: false,
       networkMode: 'always', // OFF-03/D8: do not pause on navigator.onLine=false (PITFALLS 35/36)
-                             // SSE-derived sseConnected is the authoritative offline signal
+      // SSE-derived sseConnected is the authoritative offline signal
     },
   },
-});
+})
 
 /**
  * App root — wraps with TanStack Query provider and react-router.
@@ -72,27 +72,27 @@ const queryClient = new QueryClient({
  * KioskView, so it fires even if KioskView is not mounted (D-06).
  */
 function AppInner() {
-  const navigate = useNavigate();
-  const setSession = useSessionStore((s) => s.setSession);
-  const revokePending = useSessionStore((s) => s.revokePending);
-  const clearBoundProfile = useSessionStore((s) => s.clearBoundProfile);
-  const resetRevoke = useSessionStore((s) => s.resetRevoke);
+  const navigate = useNavigate()
+  const setSession = useSessionStore((s) => s.setSession)
+  const revokePending = useSessionStore((s) => s.revokePending)
+  const clearBoundProfile = useSessionStore((s) => s.clearBoundProfile)
+  const resetRevoke = useSessionStore((s) => s.resetRevoke)
 
   // Session bootstrap effect
   useEffect(() => {
     getSession()
       .then((data) => {
-        setSession(data);
-        const currentPath = window.location.pathname;
+        setSession(data)
+        const currentPath = window.location.pathname
 
         // D3-03: if the device fingerprint is already paired (03-03 session extension),
         // stay on '/' — the paired device should go straight to the bound-profile search UI.
         // Never redirect /pair or /admin to '/' — those are intentional destinations.
         if (data.is_device_paired && data.bound_profile_id) {
-          if (currentPath !== "/" && !currentPath.startsWith("/admin")) {
-            void navigate("/", { replace: true });
+          if (currentPath !== '/' && !currentPath.startsWith('/admin')) {
+            void navigate('/', { replace: true })
           }
-          return;
+          return
         }
 
         // D2-08: if no bound_profile_id, the SPA must go to /select.
@@ -102,36 +102,36 @@ function AppInner() {
         // Exemption: /pair and /redeem/* are always allowed (pairing + invite redemption flows).
         if (
           !data.bound_profile_id &&
-          currentPath !== "/pair" &&
-          !currentPath.startsWith("/admin") &&
-          !currentPath.startsWith("/redeem")
+          currentPath !== '/pair' &&
+          !currentPath.startsWith('/admin') &&
+          !currentPath.startsWith('/redeem')
         ) {
-          void navigate("/select", { replace: true });
+          void navigate('/select', { replace: true })
         }
       })
       .catch(() => {
         // Degrade gracefully — stay on current route (offline / server down).
-      });
+      })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [])
 
   // Global terminal-revoke handler (D-06, T-06-06).
   // Runs at App level — mount-independent of KioskView.
   // Fires from SSE device_revoked event AND 403 device_revoked intercept in client.ts;
   // triggerRevoke() is idempotent so whichever arrives first wins — one notice, one navigation.
   useEffect(() => {
-    if (!revokePending) return;
+    if (!revokePending) return
 
     const timer = setTimeout(() => {
       // clearBoundProfile() nulls boundProfileId → KioskView SSE effect cleanup
       // closes the old EventSource (the effect's return() => es.close() path, D-07).
-      clearBoundProfile();
-      void navigate("/pair", { replace: true });
-      resetRevoke();
-    }, 2500);
+      clearBoundProfile()
+      void navigate('/pair', { replace: true })
+      resetRevoke()
+    }, 2500)
 
-    return () => clearTimeout(timer);
-  }, [revokePending, clearBoundProfile, navigate, resetRevoke]);
+    return () => clearTimeout(timer)
+  }, [revokePending, clearBoundProfile, navigate, resetRevoke])
 
   return (
     <>
@@ -158,7 +158,7 @@ function AppInner() {
         </Route>
       </Routes>
     </>
-  );
+  )
 }
 
 function App() {
@@ -168,7 +168,7 @@ function App() {
         <AppInner />
       </BrowserRouter>
     </QueryClientProvider>
-  );
+  )
 }
 
-export default App;
+export default App

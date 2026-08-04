@@ -24,7 +24,11 @@ export function ProfilesManager() {
   const [drawerTarget, setDrawerTarget] = useState<DrawerTarget>(null)
   const [syncToast, setSyncToast] = useState<{ message: string } | null>(null)
 
-  const { data: profiles, isLoading, isError } = useQuery({
+  const {
+    data: profiles,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['admin', 'profiles'],
     queryFn: getAdminProfiles,
     staleTime: 30_000,
@@ -105,12 +109,7 @@ export function ProfilesManager() {
         />
       )}
 
-      {syncToast && (
-        <SyncToast
-          message={syncToast.message}
-          onDismiss={() => setSyncToast(null)}
-        />
-      )}
+      {syncToast && <SyncToast message={syncToast.message} onDismiss={() => setSyncToast(null)} />}
     </div>
   )
 }

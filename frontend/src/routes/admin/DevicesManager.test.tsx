@@ -59,13 +59,16 @@ describe('DevicesManager', () => {
     // Real timers for waitFor + TanStack Query
     vi.useRealTimers()
 
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      const method = (init?.method ?? 'GET').toUpperCase()
-      if (typeof url === 'string' && url.includes('/api/admin/devices') && method === 'GET') {
-        return { ok: true, json: async () => EMPTY_DEVICES } as Response
-      }
-      return { ok: true, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = (init?.method ?? 'GET').toUpperCase()
+        if (typeof url === 'string' && url.includes('/api/admin/devices') && method === 'GET') {
+          return { ok: true, json: async () => EMPTY_DEVICES } as Response
+        }
+        return { ok: true, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {
@@ -84,10 +87,13 @@ describe('DevicesManager', () => {
     })
 
     // The prefill confirm CTA "PAIR THIS DEVICE" must be visible
-    await waitFor(() => {
-      const pairBtn = screen.queryByRole('button', { name: /pair this device/i })
-      expect(pairBtn).not.toBeNull()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        const pairBtn = screen.queryByRole('button', { name: /pair this device/i })
+        expect(pairBtn).not.toBeNull()
+      },
+      { timeout: 3000 },
+    )
 
     // The NumericKeypad must NOT be rendered (confirm screen, not code-entry)
     const keypadBtn1 = screen.queryByRole('button', { name: '1' })
@@ -98,13 +104,16 @@ describe('DevicesManager', () => {
    * Test 2: mounting at /admin/devices with no ?code= does NOT auto-open bind drawer.
    */
   it('does NOT open bind drawer when no ?code= param is present', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      const method = (init?.method ?? 'GET').toUpperCase()
-      if (typeof url === 'string' && url.includes('/api/admin/devices') && method === 'GET') {
-        return { ok: true, json: async () => EMPTY_DEVICES } as Response
-      }
-      return { ok: true, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = (init?.method ?? 'GET').toUpperCase()
+        if (typeof url === 'string' && url.includes('/api/admin/devices') && method === 'GET') {
+          return { ok: true, json: async () => EMPTY_DEVICES } as Response
+        }
+        return { ok: true, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {

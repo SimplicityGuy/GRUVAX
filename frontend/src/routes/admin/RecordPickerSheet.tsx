@@ -120,11 +120,7 @@ function Autocomplete({
         aria-controls={`${id}-listbox`}
       />
       {open && filtered.length > 0 && !disabled && (
-        <ul
-          id={`${id}-listbox`}
-          role="listbox"
-          className="autocomplete-listbox"
-        >
+        <ul id={`${id}-listbox`} role="listbox" className="autocomplete-listbox">
           {filtered.map((opt) => (
             <li
               key={opt}
@@ -260,7 +256,10 @@ export function RecordPickerSheet({
         setSaveError(err.serverMessage ?? err.message)
         // Do NOT call onCommit or onCancel — sheet stays open for correction.
       } else {
-        const msg = err instanceof Error ? err.message : 'Could not save — check your connection and try again.'
+        const msg =
+          err instanceof Error
+            ? err.message
+            : 'Could not save — check your connection and try again.'
         setSaveError(msg)
       }
     } finally {
@@ -282,11 +281,7 @@ export function RecordPickerSheet({
   return (
     <>
       {/* Scrim */}
-      <div
-        className="sheet-scrim"
-        aria-hidden="true"
-        onClick={onCancel}
-      />
+      <div className="sheet-scrim" aria-hidden="true" onClick={onCancel} />
 
       {/* Bottom sheet */}
       <div

@@ -44,8 +44,17 @@ const SHELF_NAMES = ['SHELF A', 'SHELF B', 'SHELF C', 'SHELF D']
  * .shelf-area container — no forwardRef plumbing needed.
  */
 export function KioskView() {
-  const { highlight, animationToken, labelSpan, subCubeInterval, confidence, clearSearch, setQuery, shelfLayoutUnavailable, selectedReleaseId } =
-    useGruvaxStore()
+  const {
+    highlight,
+    animationToken,
+    labelSpan,
+    subCubeInterval,
+    confidence,
+    clearSearch,
+    setQuery,
+    shelfLayoutUnavailable,
+    selectedReleaseId,
+  } = useGruvaxStore()
   // Phase 4 / D-01/D-03/RTM-04: reactive shimmer state from Zustand
   const shimmerCubes = useGruvaxStore((s) => s.shimmerCubes)
   const shimmerExpiresAt = useGruvaxStore((s) => s.shimmerExpiresAt)
@@ -72,7 +81,10 @@ export function KioskView() {
   const [tappedCube, setTappedCube] = useState<CubeRef | null>(null)
   // Phase 7 (API-04): new-records pill state — set on collection_changed with count > 0;
   // cleared/replaced on the next collection_changed event (D-08).
-  const [newRecordState, setNewRecordState] = useState<{ count: number; isInitial: boolean } | null>(null)
+  const [newRecordState, setNewRecordState] = useState<{
+    count: number
+    isInitial: boolean
+  } | null>(null)
   // The query whose results the user explicitly dismissed (by selecting a row).
   // The dropdown is derived as open when there is a query that hasn't been
   // dismissed — so it reopens automatically on the next keystroke (new query)
@@ -177,19 +189,16 @@ export function KioskView() {
       setSession(data)
       return data
     },
-    staleTime: 4 * 60_000,       // 4 min — treat as fresh for 4 min
+    staleTime: 4 * 60_000, // 4 min — treat as fresh for 4 min
     refetchInterval: 5 * 60_000, // re-poll every 5 min (D4-08 ≤5 min requirement)
     refetchOnWindowFocus: true,
   })
-
 
   // Build a Set<"unitId-row-col"> of empty cubes for O(1) lookup in ShelfGrid
   const emptyCubes = useMemo<Set<string>>(() => {
     if (!cubesData) return new Set()
     return new Set(
-      cubesData.cubes
-        .filter((cb) => cb.is_empty)
-        .map((cb) => `${cb.unit_id}-${cb.row}-${cb.col}`),
+      cubesData.cubes.filter((cb) => cb.is_empty).map((cb) => `${cb.unit_id}-${cb.row}-${cb.col}`),
     )
   }, [cubesData])
 
@@ -354,7 +363,7 @@ export function KioskView() {
       // and true only on a genuine reconnect after a real drop (toast fires) — per D-07.
       // Uses .getState() to avoid stale closure (Pitfall 5).
       const wasOffline = useGruvaxStore.getState().connectivity.bannerVisible
-      useGruvaxStore.getState().setSseConnected(true)  // also clears bannerVisible → false
+      useGruvaxStore.getState().setSseConnected(true) // also clears bannerVisible → false
       resync()
       // Show "Back online" confirmation only when recovering from a real disconnected state (D-07)
       if (wasOffline) {
@@ -453,7 +462,8 @@ export function KioskView() {
             return
           }
           const count = typeof payload.new_record_count === 'number' ? payload.new_record_count : 0
-          const isInitial = typeof payload.is_initial_import === 'boolean' ? payload.is_initial_import : false
+          const isInitial =
+            typeof payload.is_initial_import === 'boolean' ? payload.is_initial_import : false
           if (count > 0) {
             setNewRecordState({ count, isInitial })
           } else {
@@ -506,8 +516,7 @@ export function KioskView() {
   // Derived: the dropdown is open when there is a query that the user has not
   // dismissed by selecting a row. A new query (different string) reopens it
   // automatically; an explicit selection records the query as dismissed.
-  const resultsOpen =
-    debouncedQuery.trim().length > 0 && dismissedQuery !== debouncedQuery
+  const resultsOpen = debouncedQuery.trim().length > 0 && dismissedQuery !== debouncedQuery
 
   // "Did you mean" tap (D-10): set the query the user sees AND trigger the
   // search immediately. setQuery drives the (controlled) SearchBox input;
@@ -538,16 +547,10 @@ export function KioskView() {
     // Resolve animated nodes by stable selectors (Task 2 adds these hooks)
     const primaryCube = container.querySelector<HTMLElement>('[data-state="lit"]')
     const barNode = container.querySelector<HTMLElement>('.sub-cube-bar')
-    const bandNodes = Array.from(
-      container.querySelectorAll<HTMLElement>('.span-underlay__band'),
-    )
+    const bandNodes = Array.from(container.querySelectorAll<HTMLElement>('.span-underlay__band'))
 
     // Track resolved nodes for cleanup
-    const resolvedNodes: Array<HTMLElement | null> = [
-      primaryCube,
-      barNode,
-      ...bandNodes,
-    ]
+    const resolvedNodes: Array<HTMLElement | null> = [primaryCube, barNode, ...bandNodes]
 
     // Apply will-change during animation window (Pi 5 compositor optimization)
     resolvedNodes.forEach((n) => n?.classList.add('is-animating'))
@@ -568,9 +571,7 @@ export function KioskView() {
     bandNodes.forEach((band) => gsap.set(band, { opacity: 0 }))
 
     const isSingleton =
-      subCubeInterval != null &&
-      subCubeInterval.start === 0 &&
-      subCubeInterval.end === 1
+      subCubeInterval != null && subCubeInterval.start === 0 && subCubeInterval.end === 1
 
     if (barNode) {
       if (isSingleton) {
@@ -591,11 +592,7 @@ export function KioskView() {
 
     // Step 1: Span underlay fade-in (0ms → 150ms) — skip if no bands
     if (bandNodes.length > 0) {
-      tl.fromTo(
-        bandNodes,
-        { opacity: 0 },
-        { opacity: 0.6, duration: 0.15, ease: 'power2.out' },
-      )
+      tl.fromTo(bandNodes, { opacity: 0 }, { opacity: 0.6, duration: 0.15, ease: 'power2.out' })
     }
 
     // Step 2a: Primary cube spring pulse — scale out (150ms → 250ms)
@@ -661,9 +658,7 @@ export function KioskView() {
 
   // Derive needs_reauth: prefer server's authoritative needs_reauth field (D4-08);
   // fall back to reading app_token_revoked from the bound profile in the session store.
-  const needsReauth =
-    sessionData?.needs_reauth ??
-    (boundProfile?.app_token_revoked ?? false)
+  const needsReauth = sessionData?.needs_reauth ?? boundProfile?.app_token_revoked ?? false
 
   const isEmptyCollection =
     boundProfile != null &&
@@ -725,8 +720,7 @@ export function KioskView() {
           >
             {newRecordState.isInitial
               ? `IMPORTED ${newRecordState.count.toLocaleString('en-US')} RECORDS`
-              : `${newRecordState.count.toLocaleString('en-US')} NEW RECORDS`
-            }
+              : `${newRecordState.count.toLocaleString('en-US')} NEW RECORDS`}
           </div>
         )}
 
@@ -811,10 +805,7 @@ export function KioskView() {
       </main>
 
       {/* Cube-contents panel (CUBE-09, D-14) — bottom sheet, slides up on cube tap */}
-      <CubeContentsPanel
-        cube={tappedCube}
-        onDismiss={() => setTappedCube(null)}
-      />
+      <CubeContentsPanel cube={tappedCube} onDismiss={() => setTappedCube(null)} />
 
       {/* D2-09: persistent Switch-profile corner button (2+ profiles only).
           Phase 9 / D-05: suppressed while offline (profile-switch is server-dependent). */}
@@ -823,10 +814,7 @@ export function KioskView() {
       {/* Phase 9 / OFF-04 / D-07: "Back online" toast — auto-dismisses after 4s.
           Only shown on genuine offline→online reconnect (bannerVisible was true in onopen). */}
       {showBackOnlineToast && (
-        <SyncToast
-          message="Back online"
-          onDismiss={handleBackOnlineDismiss}
-        />
+        <SyncToast message="Back online" onDismiss={handleBackOnlineDismiss} />
       )}
 
       {/* Phase 8 / PRIV-04 / D-10 / D-12: Reset kiosk button — subtle, fixed bottom-right.
@@ -846,10 +834,7 @@ export function KioskView() {
 
       {/* Phase 8 / D-11: confirm dialog before wiping — focus-trapped alertdialog */}
       {showResetConfirm && (
-        <ResetConfirmDialog
-          onConfirm={handleReset}
-          onCancel={() => setShowResetConfirm(false)}
-        />
+        <ResetConfirmDialog onConfirm={handleReset} onCancel={() => setShowResetConfirm(false)} />
       )}
     </div>
   )

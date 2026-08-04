@@ -86,13 +86,9 @@ export function ShelfGrid({
 
       // API convention: row/col are 0-based — match directly against loop indices
       const isLit =
-        litCube != null &&
-        litCube.unit_id === unit.id &&
-        litCube.row === r &&
-        litCube.col === c
+        litCube != null && litCube.unit_id === unit.id && litCube.row === r && litCube.col === c
 
-      const isEmpty =
-        !isLit && (emptyCubes?.has(`${unit.id}-${r}-${c}`) ?? false)
+      const isEmpty = !isLit && (emptyCubes?.has(`${unit.id}-${r}-${c}`) ?? false)
 
       let state: CubeState = 'dim'
       if (isLit) state = 'lit'
@@ -136,11 +132,7 @@ export function ShelfGrid({
     <div style={{ position: 'relative' }}>
       <div className="shelf-grid">{cells}</div>
       {hasSpan && (
-        <SpanUnderlay
-          labelSpan={unitLabelSpan}
-          cellSize={CELL_SIZE_XL}
-          cellGap={CELL_GAP_XL}
-        />
+        <SpanUnderlay labelSpan={unitLabelSpan} cellSize={CELL_SIZE_XL} cellGap={CELL_GAP_XL} />
       )}
     </div>
   )

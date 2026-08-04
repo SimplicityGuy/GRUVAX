@@ -14,7 +14,7 @@ import { describe, expect, it } from 'vitest'
 import { render, screen } from '@testing-library/react'
 import { StalenessBar } from './StalenessBar'
 
-const STALE_THRESHOLD = 14 * 24 * 60 * 60  // 1_209_600s — D-01
+const STALE_THRESHOLD = 14 * 24 * 60 * 60 // 1_209_600s — D-01
 
 describe('StalenessBar', () => {
   describe('hidden states', () => {

@@ -12,11 +12,7 @@
  * Design tokens only — no hardcoded hex (CLAUDE.md constraint).
  */
 
-export type ProfileStatus =
-  | 'connected'
-  | 'pending'
-  | 'syncing'
-  | 're-auth-required'
+export type ProfileStatus = 'connected' | 'pending' | 'syncing' | 're-auth-required'
 
 interface ProfileStatusBadgeProps {
   status: ProfileStatus

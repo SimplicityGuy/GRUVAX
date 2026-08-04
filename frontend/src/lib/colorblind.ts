@@ -14,19 +14,19 @@
 
 const MATRICES = {
   deuteranopia: [
-    [0.625, 0.375, 0.000],
-    [0.700, 0.300, 0.000],
-    [0.000, 0.300, 0.700],
+    [0.625, 0.375, 0.0],
+    [0.7, 0.3, 0.0],
+    [0.0, 0.3, 0.7],
   ],
   protanopia: [
-    [0.567, 0.433, 0.000],
-    [0.558, 0.442, 0.000],
-    [0.000, 0.242, 0.758],
+    [0.567, 0.433, 0.0],
+    [0.558, 0.442, 0.0],
+    [0.0, 0.242, 0.758],
   ],
   tritanopia: [
-    [0.950, 0.050, 0.000],
-    [0.000, 0.433, 0.567],
-    [0.000, 0.475, 0.525],
+    [0.95, 0.05, 0.0],
+    [0.0, 0.433, 0.567],
+    [0.0, 0.475, 0.525],
   ],
 } as const
 
@@ -38,10 +38,7 @@ export type ColorBlindType = keyof typeof MATRICES
  * Returns the simulated hex string, or the original color on parse failure
  * (guards against malformed hex from the color picker intermediate state).
  */
-export function simulateColorBlindness(
-  hex: string,
-  type: ColorBlindType,
-): string {
+export function simulateColorBlindness(hex: string, type: ColorBlindType): string {
   // Guard against malformed hex (e.g. empty string or partial input)
   if (!/^#[0-9A-Fa-f]{6}$/.test(hex)) {
     return hex

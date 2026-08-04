@@ -81,11 +81,7 @@ export function SwitchProfileConfirm({ onCancel }: SwitchProfileConfirmProps) {
   return (
     <>
       {/* Scrim */}
-      <div
-        className="switch-confirm-scrim"
-        aria-hidden="true"
-        onClick={onCancel}
-      />
+      <div className="switch-confirm-scrim" aria-hidden="true" onClick={onCancel} />
 
       {/* Modal */}
       <div
@@ -98,15 +94,15 @@ export function SwitchProfileConfirm({ onCancel }: SwitchProfileConfirmProps) {
         <h2 id={headingId} className="switch-confirm-heading">
           Switch collection?
         </h2>
-        <p className="switch-confirm-body">
-          You'll be taken to the profile picker.
-        </p>
+        <p className="switch-confirm-body">You'll be taken to the profile picker.</p>
         <div className="switch-confirm-actions">
           <button
             ref={confirmBtnRef}
             type="button"
             className="switch-confirm-btn switch-confirm-btn--confirm"
-            onClick={() => { void handleConfirm() }}
+            onClick={() => {
+              void handleConfirm()
+            }}
           >
             SWITCH
           </button>

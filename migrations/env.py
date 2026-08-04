@@ -18,13 +18,33 @@ from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config
 # Make ``src/`` importable when running ``alembic`` from the project root.
 sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Protocol
 
 from gruvax.settings import settings
 
 
 if TYPE_CHECKING:
     from sqlalchemy.engine import Connection
+
+
+class _DBAPICursor(Protocol):
+    """The slice of the DBAPI cursor API ``set_search_path`` relies on."""
+
+    def execute(self, query: str, params: tuple[object, ...], /) -> object: ...
+
+    def close(self) -> None: ...
+
+
+class _DBAPIConnection(Protocol):
+    """The slice of the DBAPI connection API ``set_search_path`` relies on.
+
+    Structural rather than nominal because the concrete type depends on the
+    driver: under the async psycopg dialect SQLAlchemy hands the ``connect``
+    event an ``AsyncAdapt_psycopg_connection``, which is not exported for
+    annotation.
+    """
+
+    def cursor(self) -> _DBAPICursor: ...
 
 
 # ── Alembic Config object ─────────────────────────────────────────────────────
@@ -114,7 +134,7 @@ async def _make_engine() -> AsyncEngine:
     )
 
     @event.listens_for(connectable.sync_engine, "connect")
-    def set_search_path(dbapi_conn: object, connection_record: object) -> None:
+    def set_search_path(dbapi_conn: _DBAPIConnection, connection_record: object) -> None:
         """Set search_path on each new DBAPI connection via a cursor execute.
 
         When using the async psycopg dialect, ``dbapi_conn`` is an
@@ -125,7 +145,7 @@ async def _make_engine() -> AsyncEngine:
         """
         # Use parameterised pg_catalog.set_config to avoid SQL injection
         # (semgrep rule: formatted-sql-query).
-        cursor = dbapi_conn.cursor()  # type: ignore[union-attr]
+        cursor = dbapi_conn.cursor()
         cursor.execute(
             "SELECT pg_catalog.set_config('search_path', %s, false)",
             (search_path_value,),

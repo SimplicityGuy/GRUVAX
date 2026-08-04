@@ -37,9 +37,8 @@ export function SyncProgressSection({ itemCount, syncStartedAt }: SyncProgressSe
     return () => clearInterval(interval)
   }, [syncStartedAt])
 
-  const countText = itemCount != null
-    ? `${itemCount.toLocaleString('en-US')} items processed`
-    : null
+  const countText =
+    itemCount != null ? `${itemCount.toLocaleString('en-US')} items processed` : null
 
   return (
     <div className="sync-progress-section" aria-live="polite" aria-busy="true">
@@ -47,14 +46,10 @@ export function SyncProgressSection({ itemCount, syncStartedAt }: SyncProgressSe
         <div className="sync-progress-spinner" aria-hidden="true" />
         <span className="sync-progress-label">
           Syncing…
-          {syncStartedAt && (
-            <span className="sync-progress-count"> ({elapsed}s)</span>
-          )}
+          {syncStartedAt && <span className="sync-progress-count"> ({elapsed}s)</span>}
         </span>
       </div>
-      {countText && (
-        <p className="sync-progress-count">{countText}</p>
-      )}
+      {countText && <p className="sync-progress-count">{countText}</p>}
     </div>
   )
 }

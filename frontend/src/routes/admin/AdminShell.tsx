@@ -21,7 +21,7 @@ import { PinOverlay } from './PinOverlay'
 import { ReshuffleBanner } from './ReshuffleBanner'
 import './admin.css'
 
-const POLL_INTERVAL_MS = 30_000    // 30 s — background session sync
+const POLL_INTERVAL_MS = 30_000 // 30 s — background session sync
 const WARNING_THRESHOLD_MS = 60_000 // last 60 s → warning color
 /** Throttle activity-driven session refresh to at most once per 15 s. */
 const ACTIVITY_THROTTLE_MS = 15_000
@@ -52,9 +52,15 @@ export function AdminShell() {
   const sessionExpiresAtRef = useRef(sessionExpiresAt)
   const hardCapExpiresAtRef = useRef(hardCapExpiresAt)
   // Sync ref values in layout effects so the tick interval always reads current
-  useEffect(() => { isLoggedInRef.current = isLoggedIn }, [isLoggedIn])
-  useEffect(() => { sessionExpiresAtRef.current = sessionExpiresAt }, [sessionExpiresAt])
-  useEffect(() => { hardCapExpiresAtRef.current = hardCapExpiresAt }, [hardCapExpiresAt])
+  useEffect(() => {
+    isLoggedInRef.current = isLoggedIn
+  }, [isLoggedIn])
+  useEffect(() => {
+    sessionExpiresAtRef.current = sessionExpiresAt
+  }, [sessionExpiresAt])
+  useEffect(() => {
+    hardCapExpiresAtRef.current = hardCapExpiresAt
+  }, [hardCapExpiresAt])
 
   // ── Tick every second for countdown + expiry check ───────────────────────
   // The expiry check is collapsed into this interval so the setState calls
@@ -63,7 +69,11 @@ export function AdminShell() {
     tickRef.current = setInterval(() => {
       const t = Date.now()
       setNowMs(t)
-      if (isLoggedInRef.current && sessionExpiresAtRef.current > 0 && t >= sessionExpiresAtRef.current) {
+      if (
+        isLoggedInRef.current &&
+        sessionExpiresAtRef.current > 0 &&
+        t >= sessionExpiresAtRef.current
+      ) {
         setAdminLoggedOut()
         setIsLocked(false)
       }
@@ -96,8 +106,12 @@ export function AdminShell() {
     if (!isLoggedIn) return
     // Defer the immediate poll into a 0ms timer callback so setState inside
     // pollSession is not called synchronously in the effect body.
-    const immediateId = setTimeout(() => { void pollSession() }, 0)
-    pollRef.current = setInterval(() => { void pollSession() }, POLL_INTERVAL_MS)
+    const immediateId = setTimeout(() => {
+      void pollSession()
+    }, 0)
+    pollRef.current = setInterval(() => {
+      void pollSession()
+    }, POLL_INTERVAL_MS)
     return () => {
       clearTimeout(immediateId)
       if (pollRef.current) clearInterval(pollRef.current)
@@ -117,9 +131,8 @@ export function AdminShell() {
       if (now - lastActivityRefreshRef.current < ACTIVITY_THROTTLE_MS) return
       // Respect the hard-cap: don't call pollSession when near the hard cap
       // (the banner already warns "activity cannot extend it")
-      const hardCapRem = hardCapExpiresAtRef.current > 0
-        ? hardCapExpiresAtRef.current - now
-        : Infinity
+      const hardCapRem =
+        hardCapExpiresAtRef.current > 0 ? hardCapExpiresAtRef.current - now : Infinity
       if (hardCapRem < 5 * 60_000) return
       lastActivityRefreshRef.current = now
       void pollSession()
@@ -134,7 +147,9 @@ export function AdminShell() {
   }, [isLoggedIn, pollSession])
 
   const handleLogout = useCallback(async () => {
-    await adminLogout().catch(() => {/* ignore network errors on logout */})
+    await adminLogout().catch(() => {
+      /* ignore network errors on logout */
+    })
     setAdminLoggedOut()
     setIsLocked(false)
   }, [setAdminLoggedOut])
@@ -166,65 +181,49 @@ export function AdminShell() {
         <nav className="admin-topbar-nav" aria-label="Admin navigation">
           <NavLink
             to="/admin/settings"
-            className={({ isActive }) =>
-              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
-            }
+            className={({ isActive }) => `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`}
           >
             SETTINGS
           </NavLink>
           <NavLink
             to="/admin/profiles"
-            className={({ isActive }) =>
-              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
-            }
+            className={({ isActive }) => `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`}
           >
             PROFILES
           </NavLink>
           <NavLink
             to="/admin/devices"
-            className={({ isActive }) =>
-              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
-            }
+            className={({ isActive }) => `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`}
           >
             DEVICES
           </NavLink>
           <NavLink
             to="/admin/cubes"
-            className={({ isActive }) =>
-              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
-            }
+            className={({ isActive }) => `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`}
           >
             CUBES
           </NavLink>
           <NavLink
             to="/admin/history"
-            className={({ isActive }) =>
-              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
-            }
+            className={({ isActive }) => `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`}
           >
             HISTORY
           </NavLink>
           <NavLink
             to="/admin/wizard"
-            className={({ isActive }) =>
-              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
-            }
+            className={({ isActive }) => `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`}
           >
             WIZARD
           </NavLink>
           <NavLink
             to="/admin/import"
-            className={({ isActive }) =>
-              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
-            }
+            className={({ isActive }) => `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`}
           >
             IMPORT
           </NavLink>
           <NavLink
             to="/admin/diagnostics"
-            className={({ isActive }) =>
-              `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`
-            }
+            className={({ isActive }) => `admin-nav-tab${isActive ? ' admin-nav-tab--active' : ''}`}
           >
             DIAGNOSTICS
           </NavLink>
@@ -275,7 +274,9 @@ export function AdminShell() {
           <button
             type="button"
             className="admin-icon-btn"
-            onClick={() => { void handleLogout() }}
+            onClick={() => {
+              void handleLogout()
+            }}
             aria-label="Log out"
           >
             {/* Lucide LogOut icon */}
@@ -319,9 +320,7 @@ export function AdminShell() {
       </main>
 
       {/* PIN overlay — shown when not logged in OR when screen is locked */}
-      {showOverlay && (
-        <PinOverlay isLocked={isLocked} onUnlock={handleUnlock} />
-      )}
+      {showOverlay && <PinOverlay isLocked={isLocked} onUnlock={handleUnlock} />}
     </div>
   )
 }

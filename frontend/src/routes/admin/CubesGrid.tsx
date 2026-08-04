@@ -55,10 +55,7 @@ export function CubesGrid() {
     staleTime: 60_000,
   })
 
-  const shelves = useMemo(
-    () => (data ? groupByUnit(data.cubes) : []),
-    [data],
-  )
+  const shelves = useMemo(() => (data ? groupByUnit(data.cubes) : []), [data])
 
   if (isLoading) {
     return (
@@ -97,25 +94,28 @@ export function CubesGrid() {
             </span>
           </div>
 
-          <span className="shelf-card-chevron" aria-hidden="true">{'›'}</span>
+          <span className="shelf-card-chevron" aria-hidden="true">
+            {'›'}
+          </span>
         </button>
       ))}
 
-      {shelves.length === 0 && (
-        <p className="shelves-empty">No shelves configured yet.</p>
-      )}
+      {shelves.length === 0 && <p className="shelves-empty">No shelves configured yet.</p>}
 
       {/* EXPORT BOUNDARIES — secondary action row (UI-SPEC Surface 6, BAK-01) */}
       <div className="shelves-export-row">
         <button
           type="button"
           className="shelves-export-btn"
-          onClick={() => { void downloadBoundariesYaml() }}
+          onClick={() => {
+            void downloadBoundariesYaml()
+          }}
         >
           {/* Lucide Download icon */}
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="16" height="16"
+            width="16"
+            height="16"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -143,10 +143,7 @@ function MiniKallax({ cubes }: { cubes: AdminCube[] }) {
   )
 
   return (
-    <div
-      className="shelf-mini-kallax"
-      aria-hidden="true"
-    >
+    <div className="shelf-mini-kallax" aria-hidden="true">
       {Array.from({ length: ROWS }, (_, r) =>
         Array.from({ length: COLS }, (_, c) => {
           const key = `${r}-${c}`

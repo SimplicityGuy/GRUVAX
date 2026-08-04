@@ -82,11 +82,7 @@ export function ResetConfirmDialog({ onConfirm, onCancel }: ResetConfirmDialogPr
   return (
     <>
       {/* Scrim — tapping outside cancels */}
-      <div
-        className="kiosk-reset-dialog-scrim"
-        aria-hidden="true"
-        onClick={onCancel}
-      />
+      <div className="kiosk-reset-dialog-scrim" aria-hidden="true" onClick={onCancel} />
 
       {/* Modal — role="alertdialog" for destructive action (per UI-SPEC a11y) */}
       <div

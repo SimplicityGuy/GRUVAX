@@ -79,7 +79,13 @@ function mapBindError(type: string | undefined): string {
   }
 }
 
-export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, onActionComplete }: DeviceDrawerProps) {
+export function DeviceDrawer({
+  device,
+  mode: initialMode,
+  prefillCode,
+  onClose,
+  onActionComplete,
+}: DeviceDrawerProps) {
   const queryClient = useQueryClient()
   const sheetRef = useRef<HTMLDivElement>(null)
   const headingId = 'device-drawer-heading'
@@ -100,7 +106,9 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
   const [nameValue, setNameValue] = useState(device?.display_name ?? '')
 
   // Profile-picker: track which context triggered the pick ('bind-to-profile' | 'change-profile')
-  const [profilePickContext, setProfilePickContext] = useState<'bind-to-profile' | 'change-profile'>('change-profile')
+  const [profilePickContext, setProfilePickContext] = useState<
+    'bind-to-profile' | 'change-profile'
+  >('change-profile')
 
   // The profile picked via BIND TO PROFILE when the PENDING fast-path (WR-04) is
   // unavailable and we fall through to manual code entry. Carried across the mode
@@ -127,77 +135,87 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
   }, [])
 
   // ── Bind via code ─────────────────────────────────────────────────────────
-  const handleBind = useCallback(async (code: string) => {
-    setSaveError(null)
-    setIsSaving(true)
-    try {
-      const bound = await bindDevice(
-        pendingBindProfileId ? { code, profile_id: pendingBindProfileId } : { code },
-      )
-      setPendingBindProfileId(null)
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'devices'] })
-      onActionComplete?.(`Device "${bound.display_name}" paired successfully.`)
-      onClose()
-    } catch (err: unknown) {
-      const anyErr = err as { detail?: { type?: string } }
-      setSaveError(mapBindError(anyErr?.detail?.type))
-      setCodeDigits([])
-    } finally {
-      setIsSaving(false)
-    }
-  }, [queryClient, onActionComplete, onClose, pendingBindProfileId])
+  const handleBind = useCallback(
+    async (code: string) => {
+      setSaveError(null)
+      setIsSaving(true)
+      try {
+        const bound = await bindDevice(
+          pendingBindProfileId ? { code, profile_id: pendingBindProfileId } : { code },
+        )
+        setPendingBindProfileId(null)
+        void queryClient.invalidateQueries({ queryKey: ['admin', 'devices'] })
+        onActionComplete?.(`Device "${bound.display_name}" paired successfully.`)
+        onClose()
+      } catch (err: unknown) {
+        const anyErr = err as { detail?: { type?: string } }
+        setSaveError(mapBindError(anyErr?.detail?.type))
+        setCodeDigits([])
+      } finally {
+        setIsSaving(false)
+      }
+    },
+    [queryClient, onActionComplete, onClose, pendingBindProfileId],
+  )
 
   // ── Pick profile ───────────────────────────────────────────────────────────
-  const handlePickProfile = useCallback(async (profileId: string) => {
-    if (!device) return
-    setSaveError(null)
-    setIsSaving(true)
-    try {
-      if (profilePickContext === 'change-profile') {
-        // PAIRED: PATCH profile_id
-        await changeDeviceProfile(device.id, profileId)
-        void queryClient.invalidateQueries({ queryKey: ['admin', 'devices'] })
-        onActionComplete?.(`Profile updated for ${device.display_name}.`)
-        onClose()
-      } else {
-        // PENDING: bind with last pending code if present, else fall back to code entry.
-        // WR-04: The backend does not currently return last_pairing_code in DeviceRow, so
-        // pendingCode will always be undefined and this fast-path is presently inert — the
-        // code always falls through to the 'bind-code' mode below. This branch is preserved
-        // for the planned bind-to-profile flow that will add the field to the API response.
-        const pendingCode = (device as DeviceRow & { last_pairing_code?: string }).last_pairing_code
-        if (pendingCode) {
-          const bound = await bindDevice({ code: pendingCode, profile_id: profileId })
+  const handlePickProfile = useCallback(
+    async (profileId: string) => {
+      if (!device) return
+      setSaveError(null)
+      setIsSaving(true)
+      try {
+        if (profilePickContext === 'change-profile') {
+          // PAIRED: PATCH profile_id
+          await changeDeviceProfile(device.id, profileId)
           void queryClient.invalidateQueries({ queryKey: ['admin', 'devices'] })
-          onActionComplete?.(`Device "${bound.display_name}" paired successfully.`)
+          onActionComplete?.(`Profile updated for ${device.display_name}.`)
           onClose()
         } else {
-          // No pending code available — fall back to manual code entry, carrying
-          // the picked profile forward so the eventual handleBind() call still
-          // binds to it instead of defaulting to the Default profile (gruvax-99s).
-          setPendingBindProfileId(profileId)
-          setDrawerMode('bind-code')
-          setSaveError(null)
+          // PENDING: bind with last pending code if present, else fall back to code entry.
+          // WR-04: The backend does not currently return last_pairing_code in DeviceRow, so
+          // pendingCode will always be undefined and this fast-path is presently inert — the
+          // code always falls through to the 'bind-code' mode below. This branch is preserved
+          // for the planned bind-to-profile flow that will add the field to the API response.
+          const pendingCode = (device as DeviceRow & { last_pairing_code?: string })
+            .last_pairing_code
+          if (pendingCode) {
+            const bound = await bindDevice({ code: pendingCode, profile_id: profileId })
+            void queryClient.invalidateQueries({ queryKey: ['admin', 'devices'] })
+            onActionComplete?.(`Device "${bound.display_name}" paired successfully.`)
+            onClose()
+          } else {
+            // No pending code available — fall back to manual code entry, carrying
+            // the picked profile forward so the eventual handleBind() call still
+            // binds to it instead of defaulting to the Default profile (gruvax-99s).
+            setPendingBindProfileId(profileId)
+            setDrawerMode('bind-code')
+            setSaveError(null)
+          }
         }
+      } catch (err: unknown) {
+        const anyErr = err as { detail?: { type?: string } }
+        setSaveError(mapBindError(anyErr?.detail?.type))
+      } finally {
+        setIsSaving(false)
       }
-    } catch (err: unknown) {
-      const anyErr = err as { detail?: { type?: string } }
-      setSaveError(mapBindError(anyErr?.detail?.type))
-    } finally {
-      setIsSaving(false)
-    }
-  }, [device, profilePickContext, queryClient, onActionComplete, onClose])
+    },
+    [device, profilePickContext, queryClient, onActionComplete, onClose],
+  )
 
   // NumericKeypad digit handler — auto-submit on 4th digit (mirrors PinOverlay.tsx)
-  const handleCodeDigit = useCallback((d: string) => {
-    if (isSaving) return
-    if (codeDigits.length >= 4) return
-    const next = [...codeDigits, d]
-    setCodeDigits(next)
-    if (next.length === 4) {
-      void handleBind(next.join(''))
-    }
-  }, [codeDigits, isSaving, handleBind])
+  const handleCodeDigit = useCallback(
+    (d: string) => {
+      if (isSaving) return
+      if (codeDigits.length >= 4) return
+      const next = [...codeDigits, d]
+      setCodeDigits(next)
+      if (next.length === 4) {
+        void handleBind(next.join(''))
+      }
+    },
+    [codeDigits, isSaving, handleBind],
+  )
 
   const handleCodeBackspace = useCallback(() => {
     if (isSaving) return
@@ -291,20 +309,19 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
   }
 
   // ── Derived heading ───────────────────────────────────────────────────────
-  const heading = drawerMode === 'bind-code'
-    ? ((prefillCode && usePrefill) ? 'PAIR THIS DEVICE' : 'ENTER PAIRING CODE')
-    : (device?.display_name.toUpperCase() ?? '')
+  const heading =
+    drawerMode === 'bind-code'
+      ? prefillCode && usePrefill
+        ? 'PAIR THIS DEVICE'
+        : 'ENTER PAIRING CODE'
+      : (device?.display_name.toUpperCase() ?? '')
 
   const id8 = device ? device.id.replace(/-/g, '').slice(0, 8) : null
 
   return (
     <>
       {/* Scrim */}
-      <div
-        className="sheet-scrim"
-        aria-hidden="true"
-        onClick={isSaving ? undefined : onClose}
-      />
+      <div className="sheet-scrim" aria-hidden="true" onClick={isSaving ? undefined : onClose} />
 
       {/* Bottom sheet */}
       <div
@@ -341,7 +358,11 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
           {drawerMode === 'bind-code' && !(prefillCode && usePrefill) && (
             <>
               {/* 4-digit code display boxes */}
-              <div className="device-drawer-code-display" aria-live="polite" aria-label={`Entered ${codeDigits.length} of 4 digits`}>
+              <div
+                className="device-drawer-code-display"
+                aria-live="polite"
+                aria-label={`Entered ${codeDigits.length} of 4 digits`}
+              >
                 {Array.from({ length: 4 }, (_, i) => (
                   <span
                     key={i}
@@ -434,23 +455,27 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
               {!profilesLoading && profiles && profiles.length === 0 && (
                 <p className="device-profile-picker-empty">No profiles available.</p>
               )}
-              {!profilesLoading && profiles && profiles.map((p) => (
-                <button
-                  key={p.id}
-                  type="button"
-                  className="device-profile-picker-row"
-                  onClick={() => void handlePickProfile(p.id)}
-                  disabled={isSaving}
-                  aria-pressed={device?.profile_id === p.id}
-                >
-                  <span className="device-profile-picker-name">{p.display_name.toUpperCase()}</span>
-                  {device?.profile_id === p.id && (
-                    <span className="device-profile-picker-current" aria-hidden="true">
-                      CURRENT
+              {!profilesLoading &&
+                profiles &&
+                profiles.map((p) => (
+                  <button
+                    key={p.id}
+                    type="button"
+                    className="device-profile-picker-row"
+                    onClick={() => void handlePickProfile(p.id)}
+                    disabled={isSaving}
+                    aria-pressed={device?.profile_id === p.id}
+                  >
+                    <span className="device-profile-picker-name">
+                      {p.display_name.toUpperCase()}
                     </span>
-                  )}
-                </button>
-              ))}
+                    {device?.profile_id === p.id && (
+                      <span className="device-profile-picker-current" aria-hidden="true">
+                        CURRENT
+                      </span>
+                    )}
+                  </button>
+                ))}
             </div>
           )}
 
@@ -463,7 +488,6 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
 
           {/* ── Actions ──────────────────────────────────────────────────── */}
           <div className="sheet-actions">
-
             {/* ── BIND-CODE mode: prefill confirm CTA ── */}
             {drawerMode === 'bind-code' && prefillCode && usePrefill && (
               <>
@@ -503,7 +527,9 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
               <button
                 type="button"
                 className="editor-btn-primary profile-btn-primary"
-                onClick={() => codeDigits.length === 4 ? void handleBind(codeDigits.join('')) : undefined}
+                onClick={() =>
+                  codeDigits.length === 4 ? void handleBind(codeDigits.join('')) : undefined
+                }
                 disabled={isSaving || codeDigits.length < 4}
                 aria-busy={isSaving}
               >
@@ -628,7 +654,10 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
                 <button
                   type="button"
                   className="sheet-cancel-btn"
-                  onClick={() => { setDrawerMode('view'); setSaveError(null) }}
+                  onClick={() => {
+                    setDrawerMode('view')
+                    setSaveError(null)
+                  }}
                   disabled={isSaving}
                 >
                   CANCEL
@@ -712,7 +741,10 @@ export function DeviceDrawer({ device, mode: initialMode, prefillCode, onClose, 
               <button
                 type="button"
                 className="sheet-cancel-btn"
-                onClick={() => { setDrawerMode('view'); setSaveError(null) }}
+                onClick={() => {
+                  setDrawerMode('view')
+                  setSaveError(null)
+                }}
                 disabled={isSaving}
               >
                 CANCEL

@@ -18,7 +18,13 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { el } from '../../lib/dom'
-import type { DiagnosticsData, LogEntry, ProfileDiagnosticEntry, SlowQueryEntry, TopSearchedRow } from '../../api/adminClient'
+import type {
+  DiagnosticsData,
+  LogEntry,
+  ProfileDiagnosticEntry,
+  SlowQueryEntry,
+  TopSearchedRow,
+} from '../../api/adminClient'
 import { getDiagnostics, resetStats } from '../../api/adminClient'
 import { ProfileDiagnosticsCard } from './ProfileDiagnosticsCard'
 import { formatRelativeTime, stalenessStatus } from '../../lib/time'
@@ -74,7 +80,10 @@ function StalenessSection({ syncAgeSec, loading }: StalenessSectionProps): React
         <div className={`diag-staleness-row diag-staleness-row--${status}`}>
           <span className="diag-row-label">DISCOGSOGRAPHY LAST SYNC</span>
           <span className="diag-row-value">{formatSyncAge(syncAgeSec)}</span>
-          <span className={`diag-badge diag-badge--${status}`} aria-label={`Sync status: ${status}`}>
+          <span
+            className={`diag-badge diag-badge--${status}`}
+            aria-label={`Sync status: ${status}`}
+          >
             {status === 'ok' ? 'OK' : status === 'stale' ? 'STALE' : 'OUTDATED'}
           </span>
         </div>
@@ -93,7 +102,11 @@ interface TopSearchedSectionProps {
   onResetComplete: () => void
 }
 
-function TopSearchedSection({ rows, loading, onResetComplete }: TopSearchedSectionProps): React.ReactElement {
+function TopSearchedSection({
+  rows,
+  loading,
+  onResetComplete,
+}: TopSearchedSectionProps): React.ReactElement {
   const [resetState, setResetState] = useState<ResetState>('idle')
   const [resetError, setResetError] = useState('')
   const successTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
@@ -195,7 +208,9 @@ function TopSearchedSection({ rows, loading, onResetComplete }: TopSearchedSecti
             <button
               type="button"
               className="diag-btn-destructive-filled"
-              onClick={() => { void handleYesReset() }}
+              onClick={() => {
+                void handleYesReset()
+              }}
               aria-label="Confirm reset stats"
             >
               YES, RESET
@@ -328,7 +343,9 @@ function SystemStatusSection({
               <span className="diag-row-label">POSTGRES POOL</span>
             </div>
             <div className="diag-status-value-group">
-              <span className="diag-cell-mono">{poolSizeUsed} / {poolSizeMin}</span>
+              <span className="diag-cell-mono">
+                {poolSizeUsed} / {poolSizeMin}
+              </span>
               <span className="diag-sub-label">connections used / min pool size</span>
             </div>
           </div>
@@ -370,9 +387,7 @@ function RecentLogsSection({ logs, loading }: RecentLogsSectionProps): React.Rea
     if (!container) return
 
     if (loading) {
-      container.replaceChildren(
-        el('p', { className: 'diag-logs-empty', textContent: '—' })
-      )
+      container.replaceChildren(el('p', { className: 'diag-logs-empty', textContent: '—' }))
       return
     }
 
@@ -381,17 +396,20 @@ function RecentLogsSection({ logs, loading }: RecentLogsSectionProps): React.Rea
         el('p', {
           className: 'diag-logs-empty',
           textContent: 'No log entries in buffer.',
-        })
+        }),
       )
       return
     }
 
     const lines = logs.map((entry) => {
       const levelClass =
-        entry.level === 'ERROR' ? 'diag-log-error'
-        : entry.level === 'WARNING' ? 'diag-log-warning'
-        : entry.level === 'DEBUG' ? 'diag-log-debug'
-        : 'diag-log-info'
+        entry.level === 'ERROR'
+          ? 'diag-log-error'
+          : entry.level === 'WARNING'
+            ? 'diag-log-warning'
+            : entry.level === 'DEBUG'
+              ? 'diag-log-debug'
+              : 'diag-log-info'
 
       const ts = new Date(entry.ts * 1000).toISOString().replace('T', ' ').slice(0, 19)
 
@@ -442,7 +460,9 @@ function ProfilesDiagnosticsSection({
 }: ProfilesDiagnosticsSectionProps): React.ReactElement {
   return (
     <section className="settings-section" aria-labelledby="profiles-diag-heading">
-      <h2 id="profiles-diag-heading" className="diag-profiles-heading">PROFILES</h2>
+      <h2 id="profiles-diag-heading" className="diag-profiles-heading">
+        PROFILES
+      </h2>
       {loading ? (
         <SectionSkeleton />
       ) : profiles.length === 0 ? (
@@ -544,19 +564,13 @@ export function Diagnostics(): React.ReactElement {
       )}
 
       {/* Section cards */}
-      <StalenessSection
-        syncAgeSec={data?.sync_age_seconds ?? null}
-        loading={isLoading && !data}
-      />
+      <StalenessSection syncAgeSec={data?.sync_age_seconds ?? null} loading={isLoading && !data} />
       <TopSearchedSection
         rows={data?.top_searched ?? []}
         loading={isLoading && !data}
         onResetComplete={handleResetComplete}
       />
-      <SlowQuerySection
-        entries={data?.slow_queries ?? []}
-        loading={isLoading && !data}
-      />
+      <SlowQuerySection entries={data?.slow_queries ?? []} loading={isLoading && !data} />
       <SystemStatusSection
         mqttStatus={data?.mqtt ?? 'disconnected'}
         poolSizeUsed={data?.pool.size_used ?? 0}
@@ -568,10 +582,7 @@ export function Diagnostics(): React.ReactElement {
         profiles={profilesQueryData?.profiles ?? []}
         loading={profilesLoading && !profilesQueryData}
       />
-      <RecentLogsSection
-        logs={data?.recent_logs ?? []}
-        loading={isLoading && !data}
-      />
+      <RecentLogsSection logs={data?.recent_logs ?? []} loading={isLoading && !data} />
     </div>
   )
 }

@@ -39,12 +39,14 @@ function mapRedeemError(err: unknown): { message: string; inline: boolean } {
         }
       case 'pat_rejected':
         return {
-          message: "This token was not accepted. Check that it's valid and has collection access, then try again.",
+          message:
+            "This token was not accepted. Check that it's valid and has collection access, then try again.",
           inline: true,
         }
       case 'user_id_collision':
         return {
-          message: 'This token belongs to someone who already has a profile. Each person needs their own token.',
+          message:
+            'This token belongs to someone who already has a profile. Each person needs their own token.',
           inline: true,
         }
       case 'rate_limited':
@@ -185,14 +187,12 @@ export function RedeemPage() {
         />
 
         {/* Heading */}
-        <h1 className="redeem-heading">
-          CONNECT {displayName.toUpperCase()}
-        </h1>
+        <h1 className="redeem-heading">CONNECT {displayName.toUpperCase()}</h1>
 
         {/* Instruction */}
         <p className="redeem-instruction">
-          To connect {displayName}'s collection, find your Discogs personal
-          access token at discogs.com/settings/developers, then paste it below.
+          To connect {displayName}'s collection, find your Discogs personal access token at
+          discogs.com/settings/developers, then paste it below.
         </p>
 
         {/* Discogs link */}
@@ -227,10 +227,11 @@ export function RedeemPage() {
             aria-label={showPat ? 'Hide token' : 'Show token'}
             disabled={isSubmitting}
           >
-            {showPat
-              ? <EyeOff size={16} aria-hidden="true" />
-              : <Eye size={16} aria-hidden="true" />
-            }
+            {showPat ? (
+              <EyeOff size={16} aria-hidden="true" />
+            ) : (
+              <Eye size={16} aria-hidden="true" />
+            )}
           </button>
         </div>
 
@@ -249,15 +250,14 @@ export function RedeemPage() {
           disabled={isSubmitting || !patValue.trim()}
           aria-busy={isSubmitting}
         >
-          {isSubmitting
-            ? (
-              <>
-                <Loader2 size={16} className="redeem-cta__spinner" aria-hidden="true" />
-                CONNECTING…
-              </>
-            )
-            : 'CONNECT COLLECTION'
-          }
+          {isSubmitting ? (
+            <>
+              <Loader2 size={16} className="redeem-cta__spinner" aria-hidden="true" />
+              CONNECTING…
+            </>
+          ) : (
+            'CONNECT COLLECTION'
+          )}
         </button>
       </div>
     </div>

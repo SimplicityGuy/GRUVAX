@@ -24,13 +24,17 @@ describe('SearchBox', () => {
     })
 
     it('shows the default placeholder when isOffline=false', () => {
-      render(<SearchBox onDebouncedQuery={noop} isLoading={false} hasError={false} isOffline={false} />)
+      render(
+        <SearchBox onDebouncedQuery={noop} isLoading={false} hasError={false} isOffline={false} />,
+      )
       const input = screen.getByRole('searchbox')
       expect(input.getAttribute('placeholder')).toBe('Type artist, title, label or catalog#')
     })
 
     it('renders the loading indicator when isLoading=true and online', () => {
-      render(<SearchBox onDebouncedQuery={noop} isLoading={true} hasError={false} isOffline={false} />)
+      render(
+        <SearchBox onDebouncedQuery={noop} isLoading={true} hasError={false} isOffline={false} />,
+      )
       // The loading status should be present
       const status = screen.queryByRole('status')
       expect(status).not.toBeNull()
@@ -47,25 +51,33 @@ describe('SearchBox', () => {
 
   describe('offline (isOffline=true) — OFF-02, D-06', () => {
     it('the input is disabled when isOffline=true', () => {
-      render(<SearchBox onDebouncedQuery={noop} isLoading={false} hasError={false} isOffline={true} />)
+      render(
+        <SearchBox onDebouncedQuery={noop} isLoading={false} hasError={false} isOffline={true} />,
+      )
       const input = screen.getByRole('searchbox')
       expect(input).toBeDisabled()
     })
 
     it('shows "Search unavailable while offline" placeholder when isOffline=true', () => {
-      render(<SearchBox onDebouncedQuery={noop} isLoading={false} hasError={false} isOffline={true} />)
+      render(
+        <SearchBox onDebouncedQuery={noop} isLoading={false} hasError={false} isOffline={true} />,
+      )
       const input = screen.getByRole('searchbox')
       expect(input.getAttribute('placeholder')).toBe('Search unavailable while offline')
     })
 
     it('does NOT show the original placeholder when offline', () => {
-      render(<SearchBox onDebouncedQuery={noop} isLoading={false} hasError={false} isOffline={true} />)
+      render(
+        <SearchBox onDebouncedQuery={noop} isLoading={false} hasError={false} isOffline={true} />,
+      )
       const input = screen.getByRole('searchbox')
       expect(input.getAttribute('placeholder')).not.toBe('Type artist, title, label or catalog#')
     })
 
     it('suppresses loading indicator while offline even if isLoading=true', () => {
-      render(<SearchBox onDebouncedQuery={noop} isLoading={true} hasError={false} isOffline={true} />)
+      render(
+        <SearchBox onDebouncedQuery={noop} isLoading={true} hasError={false} isOffline={true} />,
+      )
       const status = screen.queryByRole('status')
       expect(status).toBeNull()
     })
@@ -89,7 +101,9 @@ describe('SearchBox', () => {
     it('suppresses the clear-X button while offline even when query is non-empty', () => {
       // Set the store query to simulate a non-empty search
       useGruvaxStore.setState({ query: 'Blue Note' })
-      render(<SearchBox onDebouncedQuery={noop} isLoading={false} hasError={false} isOffline={true} />)
+      render(
+        <SearchBox onDebouncedQuery={noop} isLoading={false} hasError={false} isOffline={true} />,
+      )
       const clearButton = screen.queryByRole('button', { name: /clear search/i })
       expect(clearButton).toBeNull()
       // Restore
@@ -98,7 +112,14 @@ describe('SearchBox', () => {
 
     it('onDebouncedQuery is not called from disabled input interactions', () => {
       const onQuery = vi.fn()
-      render(<SearchBox onDebouncedQuery={onQuery} isLoading={false} hasError={false} isOffline={true} />)
+      render(
+        <SearchBox
+          onDebouncedQuery={onQuery}
+          isLoading={false}
+          hasError={false}
+          isOffline={true}
+        />,
+      )
       // When input is disabled, fireEvent.change won't trigger our handler
       const input = screen.getByRole('searchbox')
       expect(input).toBeDisabled()

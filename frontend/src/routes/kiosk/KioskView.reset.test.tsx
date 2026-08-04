@@ -26,8 +26,7 @@ const mockAdminState = { isLoggedIn: false }
 
 vi.mock('../../state/adminStore', () => {
   return {
-    useAdminStore: (selector: (s: { isLoggedIn: boolean }) => unknown) =>
-      selector(mockAdminState),
+    useAdminStore: (selector: (s: { isLoggedIn: boolean }) => unknown) => selector(mockAdminState),
   }
 })
 
@@ -56,13 +55,15 @@ vi.mock('../../api/client', async (importOriginal) => {
       estimator_version: 'v1',
     }),
     illuminateRecord: vi.fn().mockResolvedValue(undefined),
-    searchCollection: vi.fn().mockImplementation((query: string) =>
-      Promise.resolve(
-        query.trim().length > 0
-          ? { items: [SEARCH_ITEM], took_ms: 1, did_you_mean: null }
-          : { items: [], took_ms: 1, did_you_mean: null },
+    searchCollection: vi
+      .fn()
+      .mockImplementation((query: string) =>
+        Promise.resolve(
+          query.trim().length > 0
+            ? { items: [SEARCH_ITEM], took_ms: 1, did_you_mean: null }
+            : { items: [], took_ms: 1, did_you_mean: null },
+        ),
       ),
-    ),
     fetchUnits: vi.fn().mockResolvedValue({ units: [] }),
     fetchCubesWithFill: vi.fn().mockResolvedValue({ cubes: [] }),
   }
@@ -182,7 +183,12 @@ beforeEach(() => {
     selectedResult: null,
     query: '',
     highlight: { primaryCube: null },
-    connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
+    connectivity: {
+      sseConnected: false,
+      lastSeenAt: 0,
+      everConnected: false,
+      bannerVisible: false,
+    },
   })
 
   mockAdminState.isLoggedIn = false

@@ -71,20 +71,26 @@ function WizardEntryChoice() {
     <div className="wizard-route wizard-entry">
       <h1 className="wizard-entry-heading">{'WIZARD'}</h1>
       <p className="wizard-entry-body">
-        {'Choose how you want to update your cube boundaries. Set up from scratch if this is your first time, or run a reshuffle to re-walk existing shelves after a haul.'}
+        {
+          'Choose how you want to update your cube boundaries. Set up from scratch if this is your first time, or run a reshuffle to re-walk existing shelves after a haul.'
+        }
       </p>
       <div className="wizard-entry-actions">
         <button
           type="button"
           className="wizard-btn wizard-btn--primary"
-          onClick={() => { void navigate('/admin/wizard?mode=setup') }}
+          onClick={() => {
+            void navigate('/admin/wizard?mode=setup')
+          }}
         >
           {'START SETUP WIZARD'}
         </button>
         <button
           type="button"
           className="wizard-btn wizard-btn--outline"
-          onClick={() => { void navigate('/admin/wizard?mode=reshuffle') }}
+          onClick={() => {
+            void navigate('/admin/wizard?mode=reshuffle')
+          }}
         >
           {'START RESHUFFLE'}
         </button>
@@ -99,10 +105,7 @@ function stepKey(step: { unit_id: number; row: number; col: number }): string {
   return `${step.unit_id}/${step.row}/${step.col}`
 }
 
-function buildUpdates(
-  steps: CubeStep[],
-  cuts: Record<string, CutEntry>,
-): CubeBoundaryEdit[] {
+function buildUpdates(steps: CubeStep[], cuts: Record<string, CutEntry>): CubeBoundaryEdit[] {
   return steps.map((step) => {
     const key = stepKey(step)
     const cut = cuts[key]
@@ -166,12 +169,8 @@ function WizardWalk() {
   const [isCommitting, setIsCommitting] = useState(false)
 
   // Idempotency key — generated once, persisted in draft before network call (Pattern 4)
-  const idempotencyKey = useRef<string>(
-    reshuffleDraft?.idempotencyKey ?? crypto.randomUUID(),
-  )
-  const draftStartedAt = useRef<string>(
-    reshuffleDraft?.startedAt ?? new Date().toISOString(),
-  )
+  const idempotencyKey = useRef<string>(reshuffleDraft?.idempotencyKey ?? crypto.randomUUID())
+  const draftStartedAt = useRef<string>(reshuffleDraft?.startedAt ?? new Date().toISOString())
   const idempKeyPersisted = useRef(false)
 
   // ── Fetch cube list to build step sequence ────────────────────────────────
@@ -240,10 +239,9 @@ function WizardWalk() {
 
   // ── Current step state ────────────────────────────────────────────────────
   const currentCut = currentStep ? (cuts[stepKey(currentStep)] ?? null) : null
-  const currentStepDone = currentCut !== null && (
-    currentCut.is_empty ||
-    (!!currentCut.first_label && !!currentCut.first_catalog)
-  )
+  const currentStepDone =
+    currentCut !== null &&
+    (currentCut.is_empty || (!!currentCut.first_label && !!currentCut.first_catalog))
 
   // ── Draft persistence helper (reshuffle mode only) ────────────────────────
   const persistDraft = useCallback(
@@ -371,9 +369,11 @@ function WizardWalk() {
       const updates = buildUpdates(steps, cuts)
       const source: 'wizard' | 'reshuffle' = mode === 'reshuffle' ? 'reshuffle' : 'wizard'
       const result = await adminBulkSave(updates, idempotencyKey.current, source)
-      setReshuffleDraft(null)  // clear localStorage draft on success (D-07)
+      setReshuffleDraft(null) // clear localStorage draft on success (D-07)
       // Navigate to confirmation with result encoded in query params
-      void navigate(`/admin/wizard/done?change_set_id=${encodeURIComponent(result.change_set_id)}&applied=${result.applied}&source=${source}`)
+      void navigate(
+        `/admin/wizard/done?change_set_id=${encodeURIComponent(result.change_set_id)}&applied=${result.applied}&source=${source}`,
+      )
     } catch (err) {
       // gruvax-216: the server now enforces contiguity on the commit path itself,
       // so a rejected commit carries a real, plain-language reason ("This cut
@@ -394,7 +394,9 @@ function WizardWalk() {
   if (cubesLoading) {
     return (
       <div className="wizard-route">
-        <p className="wizard-loading" aria-live="polite">Loading cubes…</p>
+        <p className="wizard-loading" aria-live="polite">
+          Loading cubes…
+        </p>
       </div>
     )
   }
@@ -414,7 +416,9 @@ function WizardWalk() {
     // safe loading state instead of throwing on `step.unit_id` (gruvax-cw8).
     return (
       <div className="wizard-route">
-        <p className="wizard-loading" aria-live="polite">Loading cubes…</p>
+        <p className="wizard-loading" aria-live="polite">
+          Loading cubes…
+        </p>
       </div>
     )
   }
@@ -471,7 +475,9 @@ function WizardWalk() {
             <div className="wizard-validate-errors" role="alert">
               <ul className="wizard-error-list">
                 {validateErrors.map((msg, i) => (
-                  <li key={i} className="wizard-error-item">{msg}</li>
+                  <li key={i} className="wizard-error-item">
+                    {msg}
+                  </li>
                 ))}
               </ul>
             </div>
@@ -480,19 +486,25 @@ function WizardWalk() {
           <button
             type="button"
             className="wizard-btn wizard-btn--outline"
-            onClick={() => { void handleValidate() }}
+            onClick={() => {
+              void handleValidate()
+            }}
           >
             VALIDATE CHANGES
           </button>
 
           {commitError && (
-            <p className="wizard-commit-error" role="alert">{commitError}</p>
+            <p className="wizard-commit-error" role="alert">
+              {commitError}
+            </p>
           )}
 
           <button
             type="button"
             className="wizard-btn wizard-btn--primary"
-            onClick={() => { void handleCommit() }}
+            onClick={() => {
+              void handleCommit()
+            }}
             disabled={validateErrors.length > 0 || isCommitting}
             aria-busy={isCommitting}
           >
@@ -502,7 +514,9 @@ function WizardWalk() {
           <button
             type="button"
             className="wizard-btn wizard-btn--ghost"
-            onClick={() => { setPhase('walking') }}
+            onClick={() => {
+              setPhase('walking')
+            }}
             disabled={isCommitting}
           >
             ← BACK TO WALK
@@ -517,23 +531,26 @@ function WizardWalk() {
               <svg
                 className="wizard-chevron-icon"
                 xmlns="http://www.w3.org/2000/svg"
-                width="16" height="16" viewBox="0 0 24 24"
-                fill="none" stroke="currentColor"
-                strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
+                width="16"
+                height="16"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
                 aria-hidden="true"
               >
                 <polyline points="9 18 15 12 9 6" />
               </svg>
               <p className="wizard-last-step-text">
-                This is the last bin. Everything in your collection from this point forward will
-                be shelved here.
+                This is the last bin. Everything in your collection from this point forward will be
+                shelved here.
               </p>
             </div>
           )}
 
-          <p className="wizard-step-question">
-            {'What\'s the first record in this bin?'}
-          </p>
+          <p className="wizard-step-question">{"What's the first record in this bin?"}</p>
 
           {/* Record card — shows current cut or picker trigger */}
           <div className="wizard-record-card">
@@ -558,10 +575,18 @@ function WizardWalk() {
                   }}
                 >
                   {/* Lucide X */}
-                  <svg xmlns="http://www.w3.org/2000/svg" width="14" height="14"
-                       viewBox="0 0 24 24" fill="none" stroke="currentColor"
-                       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"
-                       aria-hidden="true">
+                  <svg
+                    xmlns="http://www.w3.org/2000/svg"
+                    width="14"
+                    height="14"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden="true"
+                  >
                     <line x1="18" y1="6" x2="6" y2="18" />
                     <line x1="6" y1="6" x2="18" y2="18" />
                   </svg>
@@ -618,7 +643,9 @@ function WizardWalk() {
           unitId={currentStep.unit_id}
           row={currentStep.row}
           col={currentStep.col}
-          onCommit={() => { void handlePickerCommit() }}
+          onCommit={() => {
+            void handlePickerCommit()
+          }}
           onCancel={() => setShowPicker(false)}
         />
       )}

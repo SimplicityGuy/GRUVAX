@@ -34,12 +34,7 @@ import type {
   RevertResponse,
   ValidateResponse,
 } from './types'
-import type {
-  CutPointBody,
-  InsertCutBody,
-  OverridesBody,
-  SegmentsResponse,
-} from './cubeTypes'
+import type { CutPointBody, InsertCutBody, OverridesBody, SegmentsResponse } from './cubeTypes'
 
 const BASE = ''
 
@@ -62,10 +57,7 @@ function getCsrfToken(): string {
  * Exported so sibling admin clients (e.g. ``api/devices.ts``) reuse the single
  * CSRF/credentials path instead of re-implementing it (CR-01).
  */
-export async function adminFetch(
-  path: string,
-  options: RequestInit = {},
-): Promise<Response> {
+export async function adminFetch(path: string, options: RequestInit = {}): Promise<Response> {
   const method = (options.method ?? 'GET').toUpperCase()
   const isMutating = ['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)
 
@@ -213,9 +205,7 @@ export async function adminGetCubeBoundary(
  *
  * The backend ValidateRequest model uses key `updates` (CR-02).
  */
-export async function validateBoundary(
-  edits: CubeBoundaryEdit[],
-): Promise<ValidateResponse> {
+export async function validateBoundary(edits: CubeBoundaryEdit[]): Promise<ValidateResponse> {
   const res = await adminFetch('/api/admin/cubes/validate', {
     method: 'POST',
     body: JSON.stringify({ updates: edits }),
@@ -237,9 +227,7 @@ export async function getDistinctLabels(): Promise<LabelOption[]> {
 
 /** GET /api/admin/labels/{label}/catalogs — catalog numbers for a specific label. */
 export async function getCatalogsForLabel(label: string): Promise<CatalogOption[]> {
-  const res = await adminFetch(
-    `/api/admin/labels/${encodeURIComponent(label)}/catalogs`,
-  )
+  const res = await adminFetch(`/api/admin/labels/${encodeURIComponent(label)}/catalogs`)
   if (!res.ok) {
     throw new Error(`Failed to fetch catalogs for label: ${res.status}`)
   }
@@ -277,7 +265,7 @@ export async function adminBulkSave(
     let errorMessage: string | undefined
     let errorType: string | undefined
     try {
-      const body = await res.json() as Record<string, unknown>
+      const body = (await res.json()) as Record<string, unknown>
       if (typeof body.message === 'string') errorMessage = body.message
       if (typeof body.type === 'string') errorType = body.type
     } catch {
@@ -377,7 +365,7 @@ export async function setCutPoint(
     body: JSON.stringify(body),
   })
   if (res.status === 400) {
-    const errBody = await res.json() as Record<string, unknown>
+    const errBody = (await res.json()) as Record<string, unknown>
     throw new BulkSaveError(
       400,
       typeof errBody.type === 'string' ? errBody.type : undefined,
@@ -409,7 +397,7 @@ export async function setOverrides(
     body: JSON.stringify(overrides),
   })
   if (res.status === 400) {
-    const errBody = await res.json() as Record<string, unknown>
+    const errBody = (await res.json()) as Record<string, unknown>
     throw new BulkSaveError(
       400,
       typeof errBody.type === 'string' ? errBody.type : undefined,
@@ -440,7 +428,7 @@ export async function insertCut(body: InsertCutBody): Promise<InsertCutResult> {
     body: JSON.stringify(body),
   })
   if (res.status === 400) {
-    const errBody = await res.json() as Record<string, unknown>
+    const errBody = (await res.json()) as Record<string, unknown>
     throw new BulkSaveError(
       400,
       typeof errBody.type === 'string' ? errBody.type : undefined,
@@ -705,13 +693,13 @@ export async function uploadImportBoundaries(
   // Derive Content-Type from file extension; fall back to file.type if set.
   const ext = file.name.split('.').pop()?.toLowerCase()
   const contentType =
-    ext === 'csv' ? 'text/csv'
-    : (ext === 'yaml' || ext === 'yml') ? 'application/x-yaml'
-    : file.type || 'application/octet-stream'
+    ext === 'csv'
+      ? 'text/csv'
+      : ext === 'yaml' || ext === 'yml'
+        ? 'application/x-yaml'
+        : file.type || 'application/octet-stream'
 
-  const path = dryRun
-    ? '/api/admin/import/boundaries?dry_run=true'
-    : '/api/admin/import/boundaries'
+  const path = dryRun ? '/api/admin/import/boundaries?dry_run=true' : '/api/admin/import/boundaries'
 
   const extraHeaders: Record<string, string> = { 'Content-Type': contentType }
   // Idempotency-Key is only sent for the real commit (not dry_run).
@@ -729,11 +717,13 @@ export async function uploadImportBoundaries(
     let errorType: string | undefined
     let errorMessage: string | undefined
     try {
-      const rawBody = await res.json() as Record<string, unknown>
+      const rawBody = (await res.json()) as Record<string, unknown>
       parsedBody = flattenErrorBody(rawBody)
       if (typeof parsedBody.type === 'string') errorType = parsedBody.type
       if (typeof parsedBody.message === 'string') errorMessage = parsedBody.message
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     throw new BulkSaveError(res.status, errorType, errorMessage, parsedBody)
   }
   return res.json() as Promise<CommitResponse | BoundariesDryRunPreview>
@@ -765,11 +755,13 @@ export async function uploadImportSettings(file: File): Promise<{ updated: strin
     let errorType: string | undefined
     let errorMessage: string | undefined
     try {
-      const rawBody = await res.json() as Record<string, unknown>
+      const rawBody = (await res.json()) as Record<string, unknown>
       parsedBody = flattenErrorBody(rawBody)
       if (typeof parsedBody.type === 'string') errorType = parsedBody.type
       if (typeof parsedBody.message === 'string') errorMessage = parsedBody.message
-    } catch { /* ignore */ }
+    } catch {
+      /* ignore */
+    }
     throw new BulkSaveError(res.status, errorType, errorMessage, parsedBody)
   }
   return res.json() as Promise<{ updated: string[] }>
@@ -851,7 +843,7 @@ async function parseProfileError(res: Response): Promise<ProfileApiError> {
   let errorType: string | undefined
   let message: string | undefined
   try {
-    const body = await res.json() as Record<string, unknown>
+    const body = (await res.json()) as Record<string, unknown>
     errorType = typeof body.type === 'string' ? body.type : undefined
     message = typeof body.message === 'string' ? body.message : undefined
     if (!message && typeof body.detail === 'object' && body.detail !== null) {
@@ -881,9 +873,7 @@ export async function getAdminProfile(id: string): Promise<AdminProfile> {
 }
 
 /** POST /api/admin/profiles — create a PENDING profile. */
-export async function createAdminProfile(
-  payload: CreateProfilePayload,
-): Promise<AdminProfile> {
+export async function createAdminProfile(payload: CreateProfilePayload): Promise<AdminProfile> {
   const res = await adminFetch('/api/admin/profiles', {
     method: 'POST',
     body: JSON.stringify(payload),
@@ -966,9 +956,7 @@ export async function syncAdminProfile(
 }
 
 /** DELETE /api/admin/profiles/{id} — soft-delete profile. */
-export async function deleteAdminProfile(
-  id: string,
-): Promise<{ id: string; status: string }> {
+export async function deleteAdminProfile(id: string): Promise<{ id: string; status: string }> {
   const res = await adminFetch(`/api/admin/profiles/${id}`, {
     method: 'DELETE',
   })

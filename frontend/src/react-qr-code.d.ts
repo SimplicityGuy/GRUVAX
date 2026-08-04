@@ -11,20 +11,20 @@
  * `node_modules/react-qr-code/types/index.d.ts`.
  */
 
-import type * as React from 'react';
+import type * as React from 'react'
 
 export interface QRCodeProps extends React.SVGProps<SVGSVGElement> {
-  value: string;
+  value: string
   /** @default 128 */
-  size?: number;
+  size?: number
   /** @default "#FFFFFF" */
-  bgColor?: React.CSSProperties['backgroundColor'];
+  bgColor?: React.CSSProperties['backgroundColor']
   /** @default "#000000" */
-  fgColor?: React.CSSProperties['color'];
+  fgColor?: React.CSSProperties['color']
   /** @default "L" */
-  level?: 'L' | 'M' | 'H' | 'Q';
-  title?: string;
+  level?: 'L' | 'M' | 'H' | 'Q'
+  title?: string
 }
 
-declare const QRCode: React.ComponentType<QRCodeProps>;
-export default QRCode;
+declare const QRCode: React.ComponentType<QRCodeProps>
+export default QRCode

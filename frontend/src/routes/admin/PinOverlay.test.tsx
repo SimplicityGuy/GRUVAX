@@ -35,16 +35,19 @@ async function tapDigits(digits: string[]) {
 
 describe('PinOverlay', () => {
   it('calls onUnlock on a correct PIN while isLocked (D-03c unlock path)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (typeof url === 'string' && url.includes('/api/admin/login')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ csrf_token: 'test-csrf' }),
-        } as Response
-      }
-      return { ok: true, status: 200, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (typeof url === 'string' && url.includes('/api/admin/login')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ csrf_token: 'test-csrf' }),
+          } as Response
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response
+      }),
+    )
 
     const onUnlock = vi.fn()
 
@@ -67,16 +70,19 @@ describe('PinOverlay', () => {
   })
 
   it('does not require onUnlock when not locked (fresh login)', async () => {
-    vi.stubGlobal('fetch', vi.fn(async (url: string) => {
-      if (typeof url === 'string' && url.includes('/api/admin/login')) {
-        return {
-          ok: true,
-          status: 200,
-          json: async () => ({ csrf_token: 'test-csrf' }),
-        } as Response
-      }
-      return { ok: true, status: 200, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (typeof url === 'string' && url.includes('/api/admin/login')) {
+          return {
+            ok: true,
+            status: 200,
+            json: async () => ({ csrf_token: 'test-csrf' }),
+          } as Response
+        }
+        return { ok: true, status: 200, json: async () => ({}) } as Response
+      }),
+    )
 
     await act(async () => {
       render(<PinOverlay />)

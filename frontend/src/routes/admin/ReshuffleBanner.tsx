@@ -54,7 +54,7 @@ export function ReshuffleBanner() {
   }
 
   function handleDiscardConfirm() {
-    setReshuffleDraft(null)  // clears store + localStorage (D-07)
+    setReshuffleDraft(null) // clears store + localStorage (D-07)
     setConfirming(false)
   }
 
@@ -89,9 +89,7 @@ export function ReshuffleBanner() {
           <p className="reshuffle-banner-heading">
             {`RESHUFFLE IN PROGRESS — ${completedSteps} OF ${totalSteps} STEPS DONE`}
           </p>
-          <p className="reshuffle-banner-subline">
-            {`Started ${startedAgo}`}
-          </p>
+          <p className="reshuffle-banner-subline">{`Started ${startedAgo}`}</p>
           <div className="reshuffle-banner-actions">
             <button
               type="button"

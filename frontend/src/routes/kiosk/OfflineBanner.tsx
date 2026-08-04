@@ -51,11 +51,7 @@ export function OfflineBanner() {
     : 'No network — trying to reconnect…'
 
   return (
-    <div
-      className="offline-banner"
-      role="alert"
-      aria-live="polite"
-    >
+    <div className="offline-banner" role="alert" aria-live="polite">
       {/* WifiOff inline SVG — aria-hidden="true" per StalenessBar pattern */}
       <svg
         xmlns="http://www.w3.org/2000/svg"

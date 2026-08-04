@@ -83,7 +83,8 @@ export function el<K extends keyof HTMLElementTagNameMap>(
     if (tabIndex !== undefined) elem.tabIndex = Number(tabIndex)
     if (title !== undefined) elem.title = String(title)
     if (type !== undefined && 'type' in elem) (elem as HTMLInputElement).type = String(type)
-    if (disabled !== undefined && 'disabled' in elem) (elem as HTMLButtonElement).disabled = Boolean(disabled)
+    if (disabled !== undefined && 'disabled' in elem)
+      (elem as HTMLButtonElement).disabled = Boolean(disabled)
 
     if (style && typeof style === 'object') {
       Object.assign(elem.style, style)
@@ -97,10 +98,14 @@ export function el<K extends keyof HTMLElementTagNameMap>(
 
     // Event listeners
     if (typeof onClick === 'function') elem.addEventListener('click', onClick as EventListener)
-    if (typeof onPointerDown === 'function') elem.addEventListener('pointerdown', onPointerDown as EventListener)
-    if (typeof onPointerMove === 'function') elem.addEventListener('pointermove', onPointerMove as EventListener)
-    if (typeof onPointerUp === 'function') elem.addEventListener('pointerup', onPointerUp as EventListener)
-    if (typeof onKeyDown === 'function') elem.addEventListener('keydown', onKeyDown as EventListener)
+    if (typeof onPointerDown === 'function')
+      elem.addEventListener('pointerdown', onPointerDown as EventListener)
+    if (typeof onPointerMove === 'function')
+      elem.addEventListener('pointermove', onPointerMove as EventListener)
+    if (typeof onPointerUp === 'function')
+      elem.addEventListener('pointerup', onPointerUp as EventListener)
+    if (typeof onKeyDown === 'function')
+      elem.addEventListener('keydown', onKeyDown as EventListener)
 
     // ARIA attributes and other string attributes
     for (const [k, v] of Object.entries(rest)) {

@@ -49,11 +49,19 @@ repos:
         args: [-x, "tests", -s, "B608"]
 
   - repo: https://github.com/hadolint/hadolint
-    rev: 4e697ba704fd23b2409b947a319c19c3ee54d24f  # frozen: v2.14.0
+    rev: 2eece55955ced00200be9729e9728cb7dacca505  # frozen: v2.15.1
     hooks:
       # docker variant: runs hadolint via its image so no host binary is required
       # (the `hadolint` system hook fails in CI with "Executable hadolint not found").
       - id: hadolint-docker
+        # The rev alone does NOT pin the linter. Upstream's entry is
+        # `ghcr.io/hadolint/hadolint hadolint` — no tag, so Docker resolves
+        # :latest — and that line is identical at every tag. The rev said
+        # v2.14.0 while :latest served 2.15.1, whose new DL3066/DL3025 rules
+        # turned main red on Dockerfiles nobody had touched (gruvax-ajgw).
+        # Overriding entry pins the image by digest; keep this digest and the
+        # rev above on the same hadolint version when bumping.
+        entry: ghcr.io/hadolint/hadolint@sha256:32dac94127fd60b7b7e3fbfc65e1383b9b5e25c9bfd7b8536de7a539fe68a12d hadolint
 
   - repo: https://github.com/IamTheFij/docker-pre-commit
     rev: f626253b23de45412865c07fd076ff95d4cd77a7  # frozen: v3.0.1
@@ -95,7 +103,11 @@ repos:
         language: system
         types: [python]
         pass_filenames: false
-        args: ["--strict", "src/gruvax/"]
+        # Whole repo, not just src/gruvax/ — scoping to the package left real
+        # errors in migrations/, fixtures/ and scripts/ invisible to CI
+        # (gruvax-etcs). Strictness and the tests/ exclusion both come from
+        # [tool.mypy] in pyproject.toml, so this needs no --strict flag.
+        args: ["."]
       - id: eslint
         name: eslint
         entry: npm --prefix frontend run lint
@@ -104,7 +116,14 @@ repos:
         pass_filenames: false
       - id: prettier
         name: prettier
-        entry: npm --prefix frontend exec prettier -- --check src/
+        # `npm run` executes the script with cwd=frontend, so `src/` resolves to
+        # frontend/src and frontend/.prettierrc.json is picked up. Do NOT go back
+        # to `npm --prefix frontend exec prettier -- --check src/`: --prefix moves
+        # package resolution but NOT the process cwd, so `src/` resolved against
+        # the repo root and this hook silently linted the Python package instead
+        # (prettier has no parser for .py, so it matched nothing and always
+        # passed). It also re-downloaded prettier on every run.
+        entry: npm --prefix frontend run format:check
         language: system
         files: '^frontend/src/.*\.(ts|tsx|css)$'
         pass_filenames: false

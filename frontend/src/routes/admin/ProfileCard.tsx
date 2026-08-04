@@ -55,16 +55,17 @@ export function ProfileCard({ profile, onClick, index }: ProfileCardProps) {
       aria-label={`Edit profile ${profile.display_name}`}
     >
       <div className="profile-card-main">
-        <span className="profile-card-name">
-          {profile.display_name}
-        </span>
+        <span className="profile-card-name">{profile.display_name}</span>
         <ProfileStatusBadge status={profile.status as ProfileStatus} />
       </div>
       <p className="profile-card-meta">
         <span className="profile-card-meta-sync">{syncText}</span>
         {countText && (
           <>
-            <span className="profile-card-meta-sep" aria-hidden="true"> · </span>
+            <span className="profile-card-meta-sep" aria-hidden="true">
+              {' '}
+              ·{' '}
+            </span>
             <span className="profile-card-meta-count">{countText}</span>
           </>
         )}

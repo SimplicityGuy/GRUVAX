@@ -58,9 +58,7 @@ export function DidYouMean({ suggestion, onTap }: DidYouMeanProps) {
       <div className="did-you-mean__text">
         <span className="did-you-mean__copy">
           {'Did you mean '}
-          <strong className="did-you-mean__term">
-            {suggestion.toUpperCase()}
-          </strong>
+          <strong className="did-you-mean__term">{suggestion.toUpperCase()}</strong>
           {'?'}
         </span>
       </div>

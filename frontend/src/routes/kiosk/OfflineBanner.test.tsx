@@ -28,7 +28,12 @@ describe('OfflineBanner', () => {
   beforeEach(() => {
     // Reset store to connected state (banner should be hidden by default)
     useGruvaxStore.setState({
-      connectivity: { sseConnected: true, lastSeenAt: Date.now(), everConnected: true, bannerVisible: false },
+      connectivity: {
+        sseConnected: true,
+        lastSeenAt: Date.now(),
+        everConnected: true,
+        bannerVisible: false,
+      },
     })
     // Default: online
     mockNavigatorOnLine(true)
@@ -38,7 +43,12 @@ describe('OfflineBanner', () => {
     // Restore default state
     mockNavigatorOnLine(true)
     useGruvaxStore.setState({
-      connectivity: { sseConnected: true, lastSeenAt: Date.now(), everConnected: true, bannerVisible: false },
+      connectivity: {
+        sseConnected: true,
+        lastSeenAt: Date.now(),
+        everConnected: true,
+        bannerVisible: false,
+      },
     })
   })
 
@@ -46,7 +56,12 @@ describe('OfflineBanner', () => {
     it('renders nothing when never connected (sseConnected=false, everConnected=false, bannerVisible=false)', () => {
       // Simulates initial bootstrap / 403 device_unknown — first SSE connection never opened
       useGruvaxStore.setState({
-        connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
+        connectivity: {
+          sseConnected: false,
+          lastSeenAt: 0,
+          everConnected: false,
+          bannerVisible: false,
+        },
       })
       const { container } = render(<OfflineBanner />)
       expect(container.firstChild).toBeNull()
@@ -54,7 +69,12 @@ describe('OfflineBanner', () => {
 
     it('queryByRole("alert") is null when never connected', () => {
       useGruvaxStore.setState({
-        connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
+        connectivity: {
+          sseConnected: false,
+          lastSeenAt: 0,
+          everConnected: false,
+          bannerVisible: false,
+        },
       })
       render(<OfflineBanner />)
       expect(screen.queryByRole('alert')).toBeNull()
@@ -64,7 +84,12 @@ describe('OfflineBanner', () => {
   describe('connected state', () => {
     it('renders nothing when bannerVisible is false (sseConnected=true)', () => {
       useGruvaxStore.setState({
-        connectivity: { sseConnected: true, lastSeenAt: Date.now(), everConnected: true, bannerVisible: false },
+        connectivity: {
+          sseConnected: true,
+          lastSeenAt: Date.now(),
+          everConnected: true,
+          bannerVisible: false,
+        },
       })
       const { container } = render(<OfflineBanner />)
       expect(container.firstChild).toBeNull()
@@ -72,7 +97,12 @@ describe('OfflineBanner', () => {
 
     it('queryByRole("alert") is null when bannerVisible is false', () => {
       useGruvaxStore.setState({
-        connectivity: { sseConnected: true, lastSeenAt: Date.now(), everConnected: true, bannerVisible: false },
+        connectivity: {
+          sseConnected: true,
+          lastSeenAt: Date.now(),
+          everConnected: true,
+          bannerVisible: false,
+        },
       })
       render(<OfflineBanner />)
       expect(screen.queryByRole('alert')).toBeNull()
@@ -83,7 +113,12 @@ describe('OfflineBanner', () => {
     beforeEach(() => {
       // offline-confirmed: was connected, then lost (gap-closure 09-05)
       useGruvaxStore.setState({
-        connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: true, bannerVisible: true },
+        connectivity: {
+          sseConnected: false,
+          lastSeenAt: 0,
+          everConnected: true,
+          bannerVisible: true,
+        },
       })
       mockNavigatorOnLine(true)
     })
@@ -131,7 +166,12 @@ describe('OfflineBanner', () => {
     beforeEach(() => {
       // offline-confirmed: was connected, then lost (gap-closure 09-05)
       useGruvaxStore.setState({
-        connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: true, bannerVisible: true },
+        connectivity: {
+          sseConnected: false,
+          lastSeenAt: 0,
+          everConnected: true,
+          bannerVisible: true,
+        },
       })
       mockNavigatorOnLine(false)
     })

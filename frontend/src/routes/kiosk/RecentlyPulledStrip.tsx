@@ -58,9 +58,7 @@ export function RecentlyPulledStrip() {
                 <span className="recently-pulled-chip__primary">
                   {item.primary_artist ? `${item.primary_artist} – ${item.title}` : item.title}
                 </span>
-                <span className="recently-pulled-chip__catalog">
-                  {item.catalog_number}
-                </span>
+                <span className="recently-pulled-chip__catalog">{item.catalog_number}</span>
               </button>
             </div>
           )

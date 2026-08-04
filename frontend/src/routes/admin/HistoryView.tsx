@@ -89,9 +89,10 @@ export function HistoryView() {
         ...prev,
         loadingId: null,
         revertedIds: new Set([...prev.revertedIds, changeSetId]),
-        skippedByOriginalId: result.skipped.length > 0
-          ? { ...prev.skippedByOriginalId, [changeSetId]: result.skipped }
-          : prev.skippedByOriginalId,
+        skippedByOriginalId:
+          result.skipped.length > 0
+            ? { ...prev.skippedByOriginalId, [changeSetId]: result.skipped }
+            : prev.skippedByOriginalId,
       }))
     } catch {
       setRevertState((prev) => ({
@@ -105,7 +106,9 @@ export function HistoryView() {
   if (isLoading) {
     return (
       <div className="history-view">
-        <p className="history-loading" aria-live="polite">Loading history...</p>
+        <p className="history-loading" aria-live="polite">
+          Loading history...
+        </p>
       </div>
     )
   }
@@ -113,7 +116,9 @@ export function HistoryView() {
   if (isError) {
     return (
       <div className="history-view">
-        <p className="history-error" role="alert">Failed to load history. Try refreshing.</p>
+        <p className="history-error" role="alert">
+          Failed to load history. Try refreshing.
+        </p>
       </div>
     )
   }
@@ -125,9 +130,7 @@ export function HistoryView() {
       <div className="history-view">
         <div className="history-empty">
           <h2 className="history-empty-heading">No changes yet</h2>
-          <p className="history-empty-body">
-            Save your first boundary edit to see it here.
-          </p>
+          <p className="history-empty-body">Save your first boundary edit to see it here.</p>
         </div>
       </div>
     )
@@ -137,7 +140,9 @@ export function HistoryView() {
     <div className="history-view">
       <header className="history-header">
         <h1 className="history-heading">CHANGE HISTORY</h1>
-        <p className="history-subheading">{items.length} change set{items.length !== 1 ? 's' : ''}</p>
+        <p className="history-subheading">
+          {items.length} change set{items.length !== 1 ? 's' : ''}
+        </p>
       </header>
 
       <ul className="history-list" role="list" aria-label="Change sets">
@@ -150,14 +155,14 @@ export function HistoryView() {
 
           // Phase 7: Extended source badge map (D-04)
           const SOURCE_BADGE_MAP: Record<string, string> = {
-            manual:     'EDIT',
-            bulk:       'BULK EDIT',
-            revert:     'UNDO',
+            manual: 'EDIT',
+            bulk: 'BULK EDIT',
+            revert: 'UNDO',
             cut_insert: 'CUT EDIT',
-            wizard:     'WIZARD SETUP',
-            reshuffle:  'RESHUFFLE',
-            csv:        'CSV IMPORT',
-            yaml:       'YAML IMPORT',
+            wizard: 'WIZARD SETUP',
+            reshuffle: 'RESHUFFLE',
+            csv: 'CSV IMPORT',
+            yaml: 'YAML IMPORT',
           }
           const sourceLabel = SOURCE_BADGE_MAP[item.source] ?? item.source.toUpperCase()
 
@@ -165,22 +170,21 @@ export function HistoryView() {
             <li key={item.change_set_id} className="history-card">
               <div className="history-card-header">
                 <div className="history-card-meta">
-                  <span className="history-change-set-id">
-                    {item.change_set_id.slice(0, 8)}
-                  </span>
+                  <span className="history-change-set-id">{item.change_set_id.slice(0, 8)}</span>
                   <span className="history-source-badge" data-source={item.source}>
                     {sourceLabel}
                   </span>
                   {isReverted && (
-                    <span className="history-reverted-pill" aria-label="This change set has been reverted">
+                    <span
+                      className="history-reverted-pill"
+                      aria-label="This change set has been reverted"
+                    >
                       REVERTED
                     </span>
                   )}
                 </div>
                 <div className="history-card-right">
-                  <span className="history-timestamp">
-                    {formatTimestamp(item.changed_at)}
-                  </span>
+                  <span className="history-timestamp">{formatTimestamp(item.changed_at)}</span>
                   <span className="history-cube-count">
                     {item.cube_count} cube{item.cube_count !== 1 ? 's' : ''}
                   </span>
@@ -190,9 +194,8 @@ export function HistoryView() {
               {/* Conflict report banner (after revert with skips) */}
               {skipped.length > 0 && (
                 <div className="history-conflict-banner" role="alert" aria-live="polite">
-                  {skipped.length} cube{skipped.length !== 1 ? 's' : ''} were skipped
-                  — changed since this edit and not reverted:
-                  {' '}{skipped.map(formatCubeRef).join(', ')}.
+                  {skipped.length} cube{skipped.length !== 1 ? 's' : ''} were skipped — changed
+                  since this edit and not reverted: {skipped.map(formatCubeRef).join(', ')}.
                 </div>
               )}
 
@@ -219,8 +222,8 @@ export function HistoryView() {
                   ) : (
                     <div className="history-confirm-row" role="dialog" aria-label="Confirm revert">
                       <p className="history-confirm-copy">
-                        Revert this change set? This will restore the previous boundary
-                        values as a new, undoable change.
+                        Revert this change set? This will restore the previous boundary values as a
+                        new, undoable change.
                       </p>
                       <div className="history-confirm-buttons">
                         <button

@@ -125,7 +125,12 @@ beforeEach(() => {
   // Reset store to clean state before each test (gap-closure 09-05: include everConnected)
   useGruvaxStore.setState({
     selectedReleaseId: null,
-    connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
+    connectivity: {
+      sseConnected: false,
+      lastSeenAt: 0,
+      everConnected: false,
+      bannerVisible: false,
+    },
   })
   // D2-04: seed sessionStore with a bound profile so the SSE effect creates
   // an EventSource (per-profile guard: no profile → no EventSource created).
@@ -268,7 +273,7 @@ describe('KioskView EventSource consumer', () => {
     const calledKeys = invalidateSpy.mock.calls.map(
       (args) => (args[0] as { queryKey?: unknown[] }).queryKey,
     )
-    expect(calledKeys).toContainEqual(['search'])   // RED until B-01 listener is added
+    expect(calledKeys).toContainEqual(['search']) // RED until B-01 listener is added
   })
 
   // Phase 6 (D-06): device_revoked SSE event sets revokePending via triggerRevoke()
@@ -386,7 +391,12 @@ describe('KioskView EventSource consumer', () => {
     const qc = makeQueryClient()
     // Ensure clean state — bannerVisible=false, everConnected=false (never-connected / initial store state)
     useGruvaxStore.setState({
-      connectivity: { sseConnected: false, lastSeenAt: 0, everConnected: false, bannerVisible: false },
+      connectivity: {
+        sseConnected: false,
+        lastSeenAt: 0,
+        everConnected: false,
+        bannerVisible: false,
+      },
     })
 
     const { container } = await act(async () =>

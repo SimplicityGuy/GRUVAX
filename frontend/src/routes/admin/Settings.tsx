@@ -19,7 +19,16 @@
 
 import { useEffect, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { changePin, downloadBoundariesYaml, downloadSettingsYaml, getAdminSettings, ledsAllOff, ledsDiagnostic, putAdminSettings, uploadImportSettings } from '../../api/adminClient'
+import {
+  changePin,
+  downloadBoundariesYaml,
+  downloadSettingsYaml,
+  getAdminSettings,
+  ledsAllOff,
+  ledsDiagnostic,
+  putAdminSettings,
+  uploadImportSettings,
+} from '../../api/adminClient'
 import { ColorBlindPreview } from '../../components/ColorBlindPreview'
 import './admin.css'
 
@@ -50,9 +59,9 @@ export function Settings() {
   const [ledColorAllOff, setLedColorAllOff] = useState('#000000')
   const [ledColorAmbient, setLedColorAmbient] = useState('#0051A2')
   // Phase 6: LED brightness tiers (LED-04, D-24 naming — three distinct tiers)
-  const [ledBrightnessSpan, setLedBrightnessSpan] = useState(128)       // label-span tier
-  const [ledBrightnessActive, setLedBrightnessActive] = useState(255)   // position tier
-  const [ledBrightnessAmbient, setLedBrightnessAmbient] = useState(40)  // idle baseline
+  const [ledBrightnessSpan, setLedBrightnessSpan] = useState(128) // label-span tier
+  const [ledBrightnessActive, setLedBrightnessActive] = useState(255) // position tier
+  const [ledBrightnessAmbient, setLedBrightnessAmbient] = useState(40) // idle baseline
   // Phase 6: LED highlight lifecycle (D-25)
   const [ledHighlightTtl, setLedHighlightTtl] = useState(180)
   const [ledRetainMode, setLedRetainMode] = useState(false)
@@ -89,14 +98,19 @@ export function Settings() {
         if (s.led_color_ambient) setLedColorAmbient(s.led_color_ambient)
         if (s.led_brightness_span !== undefined) setLedBrightnessSpan(s.led_brightness_span)
         if (s.led_brightness_active !== undefined) setLedBrightnessActive(s.led_brightness_active)
-        if (s.led_brightness_ambient !== undefined) setLedBrightnessAmbient(s.led_brightness_ambient)
-        if (s.led_highlight_active_ttl_seconds !== undefined) setLedHighlightTtl(s.led_highlight_active_ttl_seconds)
+        if (s.led_brightness_ambient !== undefined)
+          setLedBrightnessAmbient(s.led_brightness_ambient)
+        if (s.led_highlight_active_ttl_seconds !== undefined)
+          setLedHighlightTtl(s.led_highlight_active_ttl_seconds)
         if (s.led_highlight_retain_mode !== undefined) setLedRetainMode(s.led_highlight_retain_mode)
-        if (s.led_highlight_retain_ttl_seconds !== undefined) setLedRetainTtl(s.led_highlight_retain_ttl_seconds)
+        if (s.led_highlight_retain_ttl_seconds !== undefined)
+          setLedRetainTtl(s.led_highlight_retain_ttl_seconds)
         // Phase 4: sync cadence (D4-06)
         if (s.sync_cadence) setSyncCadence(s.sync_cadence)
       })
-      .catch(() => {/* proceed with defaults */})
+      .catch(() => {
+        /* proceed with defaults */
+      })
   }, [])
 
   const handleSaveSettings = async () => {
@@ -120,7 +134,7 @@ export function Settings() {
 
   // Phase 4: Auto-save cadence onChange (D4-06)
   const handleSaveCadence = async (value: CadenceValue) => {
-    setSyncCadence(value)     // optimistic update
+    setSyncCadence(value) // optimistic update
     setCadenceStatus('idle')
     setCadenceError('')
     try {
@@ -247,16 +261,19 @@ export function Settings() {
       setTimeout(() => setBackupImportStatus('idle'), 4000)
     } catch {
       setBackupImportStatus('error')
-      setBackupImportError('Settings could not be applied. Check that the file is a valid GRUVAX settings export.')
+      setBackupImportError(
+        'Settings could not be applied. Check that the file is a valid GRUVAX settings export.',
+      )
     }
   }
 
   return (
     <div className="settings-page">
-
       {/* ── Change PIN ──────────────────────────────────────────────────────── */}
       <section className="settings-section" aria-labelledby="pin-heading">
-        <h2 id="pin-heading" className="settings-heading">CHANGE PIN</h2>
+        <h2 id="pin-heading" className="settings-heading">
+          CHANGE PIN
+        </h2>
 
         <div className="settings-field">
           <label className="settings-label" htmlFor="current-pin">
@@ -295,17 +312,23 @@ export function Settings() {
         </div>
 
         {pinError && (
-          <p className="settings-error" role="alert">{pinError}</p>
+          <p className="settings-error" role="alert">
+            {pinError}
+          </p>
         )}
 
         {pinStatus === 'saved' && (
-          <p className="settings-success" role="status">PIN updated successfully.</p>
+          <p className="settings-success" role="status">
+            PIN updated successfully.
+          </p>
         )}
 
         <button
           type="button"
           className="settings-btn-primary"
-          onClick={() => { void handleChangePin() }}
+          onClick={() => {
+            void handleChangePin()
+          }}
           disabled={pinStatus === 'saving'}
         >
           {pinStatus === 'saving' ? 'SAVING…' : 'SAVE NEW PIN'}
@@ -314,7 +337,9 @@ export function Settings() {
 
       {/* ── Nominal capacity ────────────────────────────────────────────────── */}
       <section className="settings-section" aria-labelledby="capacity-heading">
-        <h2 id="capacity-heading" className="settings-heading">CAPACITY & TIMEOUT</h2>
+        <h2 id="capacity-heading" className="settings-heading">
+          CAPACITY & TIMEOUT
+        </h2>
 
         <div className="settings-field">
           <label className="settings-label" htmlFor="nominal-capacity">
@@ -345,9 +370,7 @@ export function Settings() {
             max={30}
             value={idleMin}
             onChange={(e) =>
-              setIdleMin(
-                Math.min(30, Math.max(5, parseInt(e.target.value, 10) || 10)),
-              )
+              setIdleMin(Math.min(30, Math.max(5, parseInt(e.target.value, 10) || 10)))
             }
             className="settings-number-input"
           />
@@ -357,17 +380,23 @@ export function Settings() {
         </div>
 
         {settingsError && (
-          <p className="settings-error" role="alert">{settingsError}</p>
+          <p className="settings-error" role="alert">
+            {settingsError}
+          </p>
         )}
 
         {settingsStatus === 'saved' && (
-          <p className="settings-success" role="status">Settings saved.</p>
+          <p className="settings-success" role="status">
+            Settings saved.
+          </p>
         )}
 
         <button
           type="button"
           className="settings-btn-primary"
-          onClick={() => { void handleSaveSettings() }}
+          onClick={() => {
+            void handleSaveSettings()
+          }}
           disabled={settingsStatus === 'saving'}
         >
           {settingsStatus === 'saving' ? 'SAVING…' : 'SAVE SETTINGS'}
@@ -376,7 +405,9 @@ export function Settings() {
 
       {/* ── Sync cadence (Phase 4, D4-06) ──────────────────────────────────── */}
       <section className="settings-section" aria-labelledby="cadence-heading">
-        <h2 id="cadence-heading" className="settings-heading">SYNC</h2>
+        <h2 id="cadence-heading" className="settings-heading">
+          SYNC
+        </h2>
 
         <div className="settings-field">
           <label className="settings-label" htmlFor="sync-cadence">
@@ -386,7 +417,9 @@ export function Settings() {
             id="sync-cadence"
             className="settings-select"
             value={syncCadence}
-            onChange={(e) => { void handleSaveCadence(e.target.value as CadenceValue) }}
+            onChange={(e) => {
+              void handleSaveCadence(e.target.value as CadenceValue)
+            }}
           >
             <option value="24h">Every 24 hours</option>
             <option value="12h">Every 12 hours</option>
@@ -397,31 +430,69 @@ export function Settings() {
             Syncs run at 03:00, 15:00 (12h), 09:00/21:00 (6h) server time.
           </p>
           {cadenceStatus === 'saved' && (
-            <p className="settings-cadence-saved" role="status">Saved</p>
+            <p className="settings-cadence-saved" role="status">
+              Saved
+            </p>
           )}
           {cadenceStatus === 'error' && (
-            <p className="settings-cadence-error" role="alert">{cadenceError}</p>
+            <p className="settings-cadence-error" role="alert">
+              {cadenceError}
+            </p>
           )}
         </div>
       </section>
 
       {/* ── LEDs (Phase 6, LED-04, LED-05, D-18, D-19) ─────────────────────── */}
       <section className="settings-section settings-section--leds" aria-labelledby="leds-heading">
-        <h2 id="leds-heading" className="settings-heading">LEDS</h2>
+        <h2 id="leds-heading" className="settings-heading">
+          LEDS
+        </h2>
 
         {/* ── Color pickers ─────────────────────────────────────────────────── */}
         {(
           [
-            { id: 'led-color-position',   label: 'POSITION COLOR',   value: ledColorPosition,   setter: setLedColorPosition },
-            { id: 'led-color-label-span', label: 'LABEL SPAN COLOR', value: ledColorLabelSpan,  setter: setLedColorLabelSpan },
-            { id: 'led-color-error',      label: 'ERROR COLOR',      value: ledColorError,      setter: setLedColorError },
-            { id: 'led-color-setup',      label: 'SETUP COLOR',      value: ledColorSetup,      setter: setLedColorSetup },
-            { id: 'led-color-all-off',    label: 'ALL OFF COLOR',    value: ledColorAllOff,     setter: setLedColorAllOff },
-            { id: 'led-color-ambient',    label: 'AMBIENT COLOR',    value: ledColorAmbient,    setter: setLedColorAmbient },
+            {
+              id: 'led-color-position',
+              label: 'POSITION COLOR',
+              value: ledColorPosition,
+              setter: setLedColorPosition,
+            },
+            {
+              id: 'led-color-label-span',
+              label: 'LABEL SPAN COLOR',
+              value: ledColorLabelSpan,
+              setter: setLedColorLabelSpan,
+            },
+            {
+              id: 'led-color-error',
+              label: 'ERROR COLOR',
+              value: ledColorError,
+              setter: setLedColorError,
+            },
+            {
+              id: 'led-color-setup',
+              label: 'SETUP COLOR',
+              value: ledColorSetup,
+              setter: setLedColorSetup,
+            },
+            {
+              id: 'led-color-all-off',
+              label: 'ALL OFF COLOR',
+              value: ledColorAllOff,
+              setter: setLedColorAllOff,
+            },
+            {
+              id: 'led-color-ambient',
+              label: 'AMBIENT COLOR',
+              value: ledColorAmbient,
+              setter: setLedColorAmbient,
+            },
           ] as const
         ).map(({ id, label, value, setter }) => (
           <div key={id} className="settings-field">
-            <label className="settings-label" htmlFor={id}>{label}</label>
+            <label className="settings-label" htmlFor={id}>
+              {label}
+            </label>
             <div className="settings-color-row">
               <input
                 id={id}
@@ -451,13 +522,30 @@ export function Settings() {
         {/* ── Brightness sliders ───────────────────────────────────────────── */}
         {(
           [
-            { id: 'led-brightness-span',    label: 'SPAN BRIGHTNESS (LABEL SPAN)',   value: ledBrightnessSpan,    setter: setLedBrightnessSpan },
-            { id: 'led-brightness-active',  label: 'ACTIVE BRIGHTNESS (POSITION)',   value: ledBrightnessActive,  setter: setLedBrightnessActive },
-            { id: 'led-brightness-ambient', label: 'AMBIENT BRIGHTNESS (IDLE)',       value: ledBrightnessAmbient, setter: setLedBrightnessAmbient },
+            {
+              id: 'led-brightness-span',
+              label: 'SPAN BRIGHTNESS (LABEL SPAN)',
+              value: ledBrightnessSpan,
+              setter: setLedBrightnessSpan,
+            },
+            {
+              id: 'led-brightness-active',
+              label: 'ACTIVE BRIGHTNESS (POSITION)',
+              value: ledBrightnessActive,
+              setter: setLedBrightnessActive,
+            },
+            {
+              id: 'led-brightness-ambient',
+              label: 'AMBIENT BRIGHTNESS (IDLE)',
+              value: ledBrightnessAmbient,
+              setter: setLedBrightnessAmbient,
+            },
           ] as const
         ).map(({ id, label, value, setter }) => (
           <div key={id} className="settings-field">
-            <label className="settings-label" htmlFor={id}>{label}</label>
+            <label className="settings-label" htmlFor={id}>
+              {label}
+            </label>
             <div className="settings-range-row">
               <input
                 id={id}
@@ -533,22 +621,30 @@ export function Settings() {
         )}
 
         {ledsError && (
-          <p className="settings-error" role="alert">{ledsError}</p>
+          <p className="settings-error" role="alert">
+            {ledsError}
+          </p>
         )}
 
         {ledsStatus === 'saved' && (
-          <p className="settings-success" role="status">LED settings saved.</p>
+          <p className="settings-success" role="status">
+            LED settings saved.
+          </p>
         )}
 
         {ledsActionMsg && (
-          <p className="settings-success" role="status">{ledsActionMsg}</p>
+          <p className="settings-success" role="status">
+            {ledsActionMsg}
+          </p>
         )}
 
         <div className="settings-actions settings-actions--leds">
           <button
             type="button"
             className="settings-btn-primary"
-            onClick={() => { void handleSaveLeds() }}
+            onClick={() => {
+              void handleSaveLeds()
+            }}
             disabled={ledsStatus === 'saving'}
           >
             {ledsStatus === 'saving' ? 'SAVING…' : 'SAVE LED SETTINGS'}
@@ -556,14 +652,18 @@ export function Settings() {
           <button
             type="button"
             className="settings-btn-secondary"
-            onClick={() => { void handleLedsAllOff() }}
+            onClick={() => {
+              void handleLedsAllOff()
+            }}
           >
             ALL OFF
           </button>
           <button
             type="button"
             className="settings-btn-secondary"
-            onClick={() => { void handleLedsDiagnostic() }}
+            onClick={() => {
+              void handleLedsDiagnostic()
+            }}
           >
             RUN DIAGNOSTIC
           </button>
@@ -571,7 +671,10 @@ export function Settings() {
       </section>
 
       {/* ── Segment Overrides (Phase 5, UI-SPEC §H) ─────────────────────────── */}
-      <section className="settings-section settings-section--overrides" aria-labelledby="overrides-heading">
+      <section
+        className="settings-section settings-section--overrides"
+        aria-labelledby="overrides-heading"
+      >
         <h2 id="overrides-heading" className="settings-heading settings-heading--xl">
           SEGMENT OVERRIDES
         </h2>
@@ -587,31 +690,35 @@ export function Settings() {
             max={20}
             value={driftThresholdPct}
             onChange={(e) =>
-              setDriftThresholdPct(
-                Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 3)),
-              )
+              setDriftThresholdPct(Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 3)))
             }
             className="settings-number-input settings-number-input--mono"
           />
           <p className="settings-hint">
-            Show a review alert when an override drifts more than this far from
-            the row-count fraction. Default: 3%.
+            Show a review alert when an override drifts more than this far from the row-count
+            fraction. Default: 3%.
           </p>
         </div>
 
         {driftError && (
-          <p className="settings-error" role="alert">{driftError}</p>
+          <p className="settings-error" role="alert">
+            {driftError}
+          </p>
         )}
 
         {driftStatus === 'saved' && (
-          <p className="settings-success" role="status">Drift threshold saved.</p>
+          <p className="settings-success" role="status">
+            Drift threshold saved.
+          </p>
         )}
 
         <div className="settings-actions">
           <button
             type="button"
             className="settings-btn-primary"
-            onClick={() => { void handleSaveDriftThreshold() }}
+            onClick={() => {
+              void handleSaveDriftThreshold()
+            }}
             disabled={driftStatus === 'saving'}
           >
             {driftStatus === 'saving' ? 'SAVING…' : 'SAVE THRESHOLD'}
@@ -629,19 +736,24 @@ export function Settings() {
 
       {/* ── BACKUP & RESTORE (Phase 7, BAK-02) ──────────────────────────────── */}
       <section className="settings-section" aria-labelledby="backup-restore-heading">
-        <h2 id="backup-restore-heading" className="settings-heading">BACKUP &amp; RESTORE</h2>
+        <h2 id="backup-restore-heading" className="settings-heading">
+          BACKUP &amp; RESTORE
+        </h2>
 
         <div className="settings-backup-actions">
           {/* Export boundaries */}
           <button
             type="button"
             className="settings-backup-btn"
-            onClick={() => { void downloadBoundariesYaml() }}
+            onClick={() => {
+              void downloadBoundariesYaml()
+            }}
           >
             {/* Lucide Download icon */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="14" height="14"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -661,12 +773,15 @@ export function Settings() {
           <button
             type="button"
             className="settings-backup-btn"
-            onClick={() => { void downloadSettingsYaml() }}
+            onClick={() => {
+              void downloadSettingsYaml()
+            }}
           >
             {/* Lucide Download icon */}
             <svg
               xmlns="http://www.w3.org/2000/svg"
-              width="14" height="14"
+              width="14"
+              height="14"
               viewBox="0 0 24 24"
               fill="none"
               stroke="currentColor"
@@ -684,14 +799,12 @@ export function Settings() {
         </div>
 
         {/* Import settings — label triggers hidden file input */}
-        <label
-          className="settings-backup-import-label"
-          htmlFor="settings-import-input"
-        >
+        <label className="settings-backup-import-label" htmlFor="settings-import-input">
           {/* Lucide Upload icon */}
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="14" height="14"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"

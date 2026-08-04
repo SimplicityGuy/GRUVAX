@@ -22,17 +22,17 @@ import './admin.css'
 // ── Source label maps ────────────────────────────────────────────────────────
 
 const SOURCE_HEADINGS: Record<string, string> = {
-  wizard:    'BOUNDARIES COMMITTED',
+  wizard: 'BOUNDARIES COMMITTED',
   reshuffle: 'RESHUFFLE COMMITTED',
-  csv:       'IMPORT COMMITTED',
-  yaml:      'IMPORT COMMITTED',
+  csv: 'IMPORT COMMITTED',
+  yaml: 'IMPORT COMMITTED',
 }
 
 const SOURCE_SUBLINES: Record<string, string> = {
-  wizard:    'Operation: Wizard setup',
+  wizard: 'Operation: Wizard setup',
   reshuffle: 'Operation: Reshuffle',
-  csv:       'Operation: CSV import',
-  yaml:      'Operation: YAML import',
+  csv: 'Operation: CSV import',
+  yaml: 'Operation: YAML import',
 }
 
 // ── Props ────────────────────────────────────────────────────────────────────
@@ -65,7 +65,8 @@ export function ConfirmationScreen({ changeSetId, applied, source }: Confirmatio
         {/* Lucide CheckCircle */}
         <svg
           xmlns="http://www.w3.org/2000/svg"
-          width="48" height="48"
+          width="48"
+          height="48"
           viewBox="0 0 24 24"
           fill="none"
           stroke="currentColor"
@@ -103,7 +104,8 @@ export function ConfirmationScreen({ changeSetId, applied, source }: Confirmatio
               /* Lucide Check — 1500ms swap, no animation per UI-SPEC Motion Contract */
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="14" height="14"
+                width="14"
+                height="14"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -118,7 +120,8 @@ export function ConfirmationScreen({ changeSetId, applied, source }: Confirmatio
               /* Lucide Copy */
               <svg
                 xmlns="http://www.w3.org/2000/svg"
-                width="14" height="14"
+                width="14"
+                height="14"
                 viewBox="0 0 24 24"
                 fill="none"
                 stroke="currentColor"
@@ -168,9 +171,9 @@ export function ConfirmationRoute() {
   const changeSetId = searchParams.get('change_set_id') ?? ''
   const applied = parseInt(searchParams.get('applied') ?? '0', 10)
   const sourceRaw = searchParams.get('source') ?? 'wizard'
-  const source = (['wizard', 'reshuffle', 'csv', 'yaml'].includes(sourceRaw)
-    ? sourceRaw
-    : 'wizard') as 'wizard' | 'reshuffle' | 'csv' | 'yaml'
+  const source = (
+    ['wizard', 'reshuffle', 'csv', 'yaml'].includes(sourceRaw) ? sourceRaw : 'wizard'
+  ) as 'wizard' | 'reshuffle' | 'csv' | 'yaml'
 
   if (!changeSetId) {
     // No result — bounce back to wizard
@@ -178,11 +181,5 @@ export function ConfirmationRoute() {
     return null
   }
 
-  return (
-    <ConfirmationScreen
-      changeSetId={changeSetId}
-      applied={applied}
-      source={source}
-    />
-  )
+  return <ConfirmationScreen changeSetId={changeSetId} applied={applied} source={source} />
 }

@@ -41,8 +41,26 @@ import type { SearchResult } from '../../api/types'
 const TEST_PROFILE_ID = '00000000-0000-0000-0000-000000000001'
 
 const ITEMS: SearchResult[] = [
-  { release_id: 1156, title: 'Verve Title 6', primary_artist: 'Artist 1156', label: 'Verve', catalog_number: 'V-6', format: 'LP', year: 1960, rank: 1 },
-  { release_id: 1157, title: 'Verve Title 7', primary_artist: 'Artist 1157', label: 'Verve', catalog_number: 'V-7', format: 'LP', year: 1961, rank: 2 },
+  {
+    release_id: 1156,
+    title: 'Verve Title 6',
+    primary_artist: 'Artist 1156',
+    label: 'Verve',
+    catalog_number: 'V-6',
+    format: 'LP',
+    year: 1960,
+    rank: 1,
+  },
+  {
+    release_id: 1157,
+    title: 'Verve Title 7',
+    primary_artist: 'Artist 1157',
+    label: 'Verve',
+    catalog_number: 'V-7',
+    format: 'LP',
+    year: 1961,
+    rank: 2,
+  },
 ]
 
 beforeEach(() => {

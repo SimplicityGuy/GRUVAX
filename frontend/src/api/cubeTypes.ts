@@ -24,7 +24,7 @@ export interface CubeContentsResponse {
   last_catalog: string | null
   is_empty: boolean
   total_count: number
-  fill_level: number   // 0.0+; > 1.0 means overstuffed
+  fill_level: number // 0.0+; > 1.0 means overstuffed
   sample_records: SampleRecord[]
 }
 
@@ -38,7 +38,7 @@ export interface CubeBoundaryWithFill {
   row: number
   col: number
   is_empty: boolean
-  fill_level: number   // 0.0+; > 1.0 means overstuffed
+  fill_level: number // 0.0+; > 1.0 means overstuffed
 }
 
 /** Extended cubes response including fill_level per cube. */
@@ -54,11 +54,11 @@ export interface CubesWithFillResponse {
  */
 export interface Segment {
   label: string
-  fraction: number         // applied fraction (override ?? auto)
-  is_override: boolean     // true if fraction was set by admin
-  auto_fraction: number    // count-derived fraction (always present)
-  continues: boolean       // true if this label straddles into the next bin
-  segment_count: number    // row count for this label in this bin
+  fraction: number // applied fraction (override ?? auto)
+  is_override: boolean // true if fraction was set by admin
+  auto_fraction: number // count-derived fraction (always present)
+  continues: boolean // true if this label straddles into the next bin
+  segment_count: number // row count for this label in this bin
 }
 
 /** Response from GET /api/admin/cubes/{u}/{r}/{c}/segments */
@@ -76,7 +76,7 @@ export interface CutPointBody {
 /** One override entry for POST /api/admin/cubes/{u}/{r}/{c}/overrides */
 export interface OverrideEntry {
   label: string
-  fraction: number | null  // null = remove override
+  fraction: number | null // null = remove override
 }
 
 /** Body for POST /api/admin/cubes/{u}/{r}/{c}/overrides */

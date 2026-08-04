@@ -37,10 +37,7 @@ vi.mock('../../api/adminClient', async (importOriginal) => {
   }
 })
 
-import {
-  getAdminProfile,
-  syncAdminProfile,
-} from '../../api/adminClient'
+import { getAdminProfile, syncAdminProfile } from '../../api/adminClient'
 import { ProfileDrawer } from './ProfileDrawer'
 import type { AdminProfile } from '../../api/types'
 
@@ -113,11 +110,7 @@ async function renderAndStartSync(
 ) {
   render(
     <QueryClientProvider client={queryClient}>
-      <ProfileDrawer
-        target={CONNECTED_PROFILE}
-        onClose={vi.fn()}
-        onSyncComplete={onSyncComplete}
-      />
+      <ProfileDrawer target={CONNECTED_PROFILE} onClose={vi.fn()} onSyncComplete={onSyncComplete} />
     </QueryClientProvider>,
   )
 
@@ -202,9 +195,12 @@ describe('ProfileDrawer poll-until-terminal', () => {
     // Restore real timers so waitFor's internal setInterval works
     vi.useRealTimers()
 
-    await waitFor(() => {
-      expect(screen.queryByText(/sync complete/i)).not.toBeNull()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.queryByText(/sync complete/i)).not.toBeNull()
+      },
+      { timeout: 3000 },
+    )
 
     expect(onSyncComplete).toHaveBeenCalledOnce()
     expect(onSyncComplete).toHaveBeenCalledWith('Sync complete — 3,000 records')
@@ -234,11 +230,12 @@ describe('ProfileDrawer poll-until-terminal', () => {
     // Restore real timers for waitFor
     vi.useRealTimers()
 
-    await waitFor(() => {
-      expect(
-        screen.queryByText(/sync failed\. tap sync now to try again/i),
-      ).not.toBeNull()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.queryByText(/sync failed\. tap sync now to try again/i)).not.toBeNull()
+      },
+      { timeout: 3000 },
+    )
 
     expect(onSyncComplete).not.toHaveBeenCalled()
   })
@@ -252,10 +249,10 @@ describe('ProfileDrawer poll-until-terminal', () => {
    */
   it('Test 3: poll continues through in_progress AND null ticks (>= 3 fetches)', async () => {
     vi.mocked(getAdminProfile)
-      .mockResolvedValueOnce(IN_PROGRESS_TICK)    // tick 1
-      .mockResolvedValueOnce(TRANSIENT_NULL_TICK)  // tick 2 — bug trigger
-      .mockResolvedValueOnce(IN_PROGRESS_TICK)    // tick 3 — should be called by new code
-      .mockResolvedValueOnce(TERMINAL_OK_TICK)    // tick 4
+      .mockResolvedValueOnce(IN_PROGRESS_TICK) // tick 1
+      .mockResolvedValueOnce(TRANSIENT_NULL_TICK) // tick 2 — bug trigger
+      .mockResolvedValueOnce(IN_PROGRESS_TICK) // tick 3 — should be called by new code
+      .mockResolvedValueOnce(TERMINAL_OK_TICK) // tick 4
       .mockResolvedValue(TERMINAL_OK_TICK)
 
     const queryClient = makeQueryClient()
@@ -304,11 +301,12 @@ describe('ProfileDrawer retry after a failed sync (gruvax-4wc)', () => {
     await driveOneTick(2100)
 
     vi.useRealTimers()
-    await waitFor(() => {
-      expect(
-        screen.queryByText(/sync failed\. tap sync now to try again/i),
-      ).not.toBeNull()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.queryByText(/sync failed\. tap sync now to try again/i)).not.toBeNull()
+      },
+      { timeout: 3000 },
+    )
     vi.useFakeTimers({ shouldAdvanceTime: false })
 
     // Retry: tap SYNC NOW again — flush the syncAdminProfile promise only,
@@ -324,9 +322,7 @@ describe('ProfileDrawer retry after a failed sync (gruvax-4wc)', () => {
 
     // The stale 'failed' error must NOT have reappeared yet — the new sync's
     // own poll hasn't resolved. The drawer should be back in its syncing UI.
-    expect(
-      screen.queryByText(/sync failed\. tap sync now to try again/i),
-    ).toBeNull()
+    expect(screen.queryByText(/sync failed\. tap sync now to try again/i)).toBeNull()
     expect(screen.queryByText(/syncing…/i)).not.toBeNull()
 
     // Drive the retry's own ticks through to its real terminal ('ok').
@@ -334,9 +330,12 @@ describe('ProfileDrawer retry after a failed sync (gruvax-4wc)', () => {
     await driveOneTick(2100)
 
     vi.useRealTimers()
-    await waitFor(() => {
-      expect(screen.queryByText(/sync complete/i)).not.toBeNull()
-    }, { timeout: 3000 })
+    await waitFor(
+      () => {
+        expect(screen.queryByText(/sync complete/i)).not.toBeNull()
+      },
+      { timeout: 3000 },
+    )
 
     // Exactly one success callback, with the RETRY run's count (3,000) — not a
     // leftover/duplicate call from the stale 'failed' cache.

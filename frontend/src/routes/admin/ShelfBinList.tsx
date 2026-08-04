@@ -135,7 +135,11 @@ export function ShelfBinList() {
   }, [])
 
   // ── Data ─────────────────────────────────────────────────────────────────────
-  const { data: cubesData, isLoading, isError } = useQuery({
+  const {
+    data: cubesData,
+    isLoading,
+    isError,
+  } = useQuery({
     queryKey: ['admin', 'cubes'],
     queryFn: adminGetCubes,
     staleTime: 60_000,
@@ -145,7 +149,7 @@ export function ShelfBinList() {
     if (!cubesData) return []
     return cubesData.cubes
       .filter((c) => c.unit_id === unitId && !c.is_empty)
-      .sort((a, b) => a.row !== b.row ? a.row - b.row : a.col - b.col)
+      .sort((a, b) => (a.row !== b.row ? a.row - b.row : a.col - b.col))
   }, [cubesData, unitId])
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
@@ -263,9 +267,7 @@ export function ShelfBinList() {
       {/* Bin-card list */}
       <div className="sbl-list">
         {/* Insert-cut divider BEFORE first bin */}
-        {configuredBins.length > 0 && (
-          <InsertCutDivider onTap={() => openInsertAfter(null)} />
-        )}
+        {configuredBins.length > 0 && <InsertCutDivider onTap={() => openInsertAfter(null)} />}
 
         {configuredBins.map((cube) => {
           const display = binNum(cube)
@@ -395,11 +397,7 @@ function BinCard({
       </div>
 
       {/* Edit segments action */}
-      <button
-        type="button"
-        className="sbl-edit-segments-btn"
-        onClick={onEditSegments}
-      >
+      <button type="button" className="sbl-edit-segments-btn" onClick={onEditSegments}>
         ✎ EDIT SEGMENTS
       </button>
     </div>

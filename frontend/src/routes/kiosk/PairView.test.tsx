@@ -48,7 +48,11 @@ const EXPIRES_AT_ISO = new Date(FAKE_NOW_MS + 5 * 60 * 1000 - 1000).toISOString(
 function makeFetch(callCount: { value: number }) {
   return vi.fn(async (url: string, init?: RequestInit) => {
     const method = init?.method?.toUpperCase() ?? 'GET'
-    if (typeof url === 'string' && url.includes('/api/devices/pairing-codes') && method === 'POST') {
+    if (
+      typeof url === 'string' &&
+      url.includes('/api/devices/pairing-codes') &&
+      method === 'POST'
+    ) {
       callCount.value += 1
       return {
         ok: true,
@@ -220,7 +224,8 @@ describe('PairView', () => {
     expect(qrContainer).not.toBeNull()
     // The bind URL is embedded in the SVG as the QR payload — react-qr-code encodes it in the path data.
     // We assert the container exists and the code '1234' is reflected in the digits on screen.
-    const hasCode = container.textContent?.includes('1') &&
+    const hasCode =
+      container.textContent?.includes('1') &&
       container.textContent?.includes('2') &&
       container.textContent?.includes('3') &&
       container.textContent?.includes('4')
@@ -232,22 +237,32 @@ describe('PairView', () => {
    */
   it('QR container is absent when the device is paired', async () => {
     // Return 'paired' from /api/devices/me immediately
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      const method = init?.method?.toUpperCase() ?? 'GET'
-      if (typeof url === 'string' && url.includes('/api/devices/pairing-codes') && method === 'POST') {
-        return {
-          ok: true,
-          json: async () => ({ code: '9999', expires_at: new Date(FAKE_NOW_MS + 5 * 60 * 1000).toISOString() }),
-        } as Response
-      }
-      if (typeof url === 'string' && url.includes('/api/devices/me')) {
-        return {
-          ok: true,
-          json: async () => ({ state: 'paired', profile_id: 'some-profile-id' }),
-        } as Response
-      }
-      return { ok: false, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method?.toUpperCase() ?? 'GET'
+        if (
+          typeof url === 'string' &&
+          url.includes('/api/devices/pairing-codes') &&
+          method === 'POST'
+        ) {
+          return {
+            ok: true,
+            json: async () => ({
+              code: '9999',
+              expires_at: new Date(FAKE_NOW_MS + 5 * 60 * 1000).toISOString(),
+            }),
+          } as Response
+        }
+        if (typeof url === 'string' && url.includes('/api/devices/me')) {
+          return {
+            ok: true,
+            json: async () => ({ state: 'paired', profile_id: 'some-profile-id' }),
+          } as Response
+        }
+        return { ok: false, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {
@@ -281,27 +296,34 @@ describe('PairView', () => {
   it('QR container is absent when code has expired', async () => {
     const soonExpiredAt = new Date(FAKE_NOW_MS + 1100).toISOString()
     let callIndex = 0
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      const method = init?.method?.toUpperCase() ?? 'GET'
-      if (typeof url === 'string' && url.includes('/api/devices/pairing-codes') && method === 'POST') {
-        callIndex += 1
-        if (callIndex === 1) {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method?.toUpperCase() ?? 'GET'
+        if (
+          typeof url === 'string' &&
+          url.includes('/api/devices/pairing-codes') &&
+          method === 'POST'
+        ) {
+          callIndex += 1
+          if (callIndex === 1) {
+            return {
+              ok: true,
+              json: async () => ({ code: '5678', expires_at: soonExpiredAt }),
+            } as Response
+          }
+          // Reroll: never resolves — keeps pairStatus in 'expired'
+          return new Promise<Response>(() => {}) as Promise<Response>
+        }
+        if (typeof url === 'string' && url.includes('/api/devices/me')) {
           return {
             ok: true,
-            json: async () => ({ code: '5678', expires_at: soonExpiredAt }),
+            json: async () => ({ state: 'unpaired', profile_id: null }),
           } as Response
         }
-        // Reroll: never resolves — keeps pairStatus in 'expired'
-        return new Promise<Response>(() => {}) as Promise<Response>
-      }
-      if (typeof url === 'string' && url.includes('/api/devices/me')) {
-        return {
-          ok: true,
-          json: async () => ({ state: 'unpaired', profile_id: null }),
-        } as Response
-      }
-      return { ok: false, json: async () => ({}) } as Response
-    }))
+        return { ok: false, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {
@@ -346,25 +368,41 @@ describe('PairView', () => {
     const soonExpiredAt = new Date(FAKE_NOW_MS + 1100).toISOString()
     const recoveredExpiresAt = new Date(FAKE_NOW_MS + 1100 + 5 * 60 * 1000).toISOString()
     let callIndex = 0
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      const method = init?.method?.toUpperCase() ?? 'GET'
-      if (typeof url === 'string' && url.includes('/api/devices/pairing-codes') && method === 'POST') {
-        callIndex += 1
-        if (callIndex === 1) {
-          return { ok: true, json: async () => ({ code: '5678', expires_at: soonExpiredAt }) } as Response
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method?.toUpperCase() ?? 'GET'
+        if (
+          typeof url === 'string' &&
+          url.includes('/api/devices/pairing-codes') &&
+          method === 'POST'
+        ) {
+          callIndex += 1
+          if (callIndex === 1) {
+            return {
+              ok: true,
+              json: async () => ({ code: '5678', expires_at: soonExpiredAt }),
+            } as Response
+          }
+          if (callIndex === 2) {
+            // The reroll attempt fails (mirrors devices.py's code_generation_failed 500).
+            return { ok: false, status: 500, json: async () => ({}) } as Response
+          }
+          // The auto-retry succeeds with a fresh code.
+          return {
+            ok: true,
+            json: async () => ({ code: '4321', expires_at: recoveredExpiresAt }),
+          } as Response
         }
-        if (callIndex === 2) {
-          // The reroll attempt fails (mirrors devices.py's code_generation_failed 500).
-          return { ok: false, status: 500, json: async () => ({}) } as Response
+        if (typeof url === 'string' && url.includes('/api/devices/me')) {
+          return {
+            ok: true,
+            json: async () => ({ state: 'unpaired', profile_id: null }),
+          } as Response
         }
-        // The auto-retry succeeds with a fresh code.
-        return { ok: true, json: async () => ({ code: '4321', expires_at: recoveredExpiresAt }) } as Response
-      }
-      if (typeof url === 'string' && url.includes('/api/devices/me')) {
-        return { ok: true, json: async () => ({ state: 'unpaired', profile_id: null }) } as Response
-      }
-      return { ok: false, json: async () => ({}) } as Response
-    }))
+        return { ok: false, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {
@@ -423,24 +461,34 @@ describe('PairView', () => {
     // A naive `new Date(expires_at).getTime() - Date.now()` diff would render
     // an hours-long countdown here instead of the true ~5 minutes.
     const skewedExpiresAtIso = new Date(FAKE_NOW_MS + 3 * 60 * 60 * 1000).toISOString()
-    vi.stubGlobal('fetch', vi.fn(async (url: string, init?: RequestInit) => {
-      const method = init?.method?.toUpperCase() ?? 'GET'
-      if (typeof url === 'string' && url.includes('/api/devices/pairing-codes') && method === 'POST') {
-        callCount.value += 1
-        return {
-          ok: true,
-          json: async () => ({
-            code: '1234',
-            expires_at: skewedExpiresAtIso,
-            remaining_seconds: 299,
-          }),
-        } as Response
-      }
-      if (typeof url === 'string' && url.includes('/api/devices/me')) {
-        return { ok: true, json: async () => ({ state: 'unpaired', profile_id: null }) } as Response
-      }
-      return { ok: false, json: async () => ({}) } as Response
-    }))
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string, init?: RequestInit) => {
+        const method = init?.method?.toUpperCase() ?? 'GET'
+        if (
+          typeof url === 'string' &&
+          url.includes('/api/devices/pairing-codes') &&
+          method === 'POST'
+        ) {
+          callCount.value += 1
+          return {
+            ok: true,
+            json: async () => ({
+              code: '1234',
+              expires_at: skewedExpiresAtIso,
+              remaining_seconds: 299,
+            }),
+          } as Response
+        }
+        if (typeof url === 'string' && url.includes('/api/devices/me')) {
+          return {
+            ok: true,
+            json: async () => ({ state: 'unpaired', profile_id: null }),
+          } as Response
+        }
+        return { ok: false, json: async () => ({}) } as Response
+      }),
+    )
 
     const qc = makeQueryClient()
     await act(async () => {

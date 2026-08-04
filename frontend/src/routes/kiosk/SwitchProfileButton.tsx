@@ -57,11 +57,7 @@ export function SwitchProfileButton() {
         <span>SWITCH</span>
       </button>
 
-      {showConfirm && (
-        <SwitchProfileConfirm
-          onCancel={() => setShowConfirm(false)}
-        />
-      )}
+      {showConfirm && <SwitchProfileConfirm onCancel={() => setShowConfirm(false)} />}
     </>
   )
 }
