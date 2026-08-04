@@ -24,6 +24,7 @@ import uuid
 
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
+import psycopg
 import pytest
 import pytest_asyncio
 
@@ -31,9 +32,54 @@ from gruvax.app import create_app
 from tests.cookies import cookie_header
 
 
+_DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+
+
+def _dsn() -> str:
+    """Sync DSN for seeding — strips the SQLAlchemy-style ``+psycopg`` scheme."""
+    from gruvax.settings import settings
+
+    return settings.DATABASE_URL.replace("postgresql+psycopg://", "postgresql://", 1)
+
+
 @pytest_asyncio.fixture(scope="module")
 async def client(db_pool):  # type: ignore[no-untyped-def]
-    """Module-scoped async test client with full ASGI lifespan."""
+    """Module-scoped async test client with full ASGI lifespan.
+
+    Seeds the test PIN itself instead of inheriting one from whatever ran
+    earlier (gruvax-h2qw). Two reasons it cannot be left implicit:
+
+    1.  conftest's ``admin_session`` looks like the seeder but is not. Its
+        upsert is guarded on ``getattr(client, "app", None)``, and httpx >=0.28
+        removed ``AsyncClient.app``, so the guard is never satisfied and the
+        seed silently no-ops (gruvax-enz). This module does not use that
+        fixture anyway — it has its own ``_login``.
+    2.  The PIN reached the database only because several tests/integration
+        modules hand-roll this same INSERT, and pytest collects ``integration/``
+        before ``unit/``. So this module passed under the full ``tests/`` tree
+        (what CI runs) and failed under ``just test-unit``'s subset — a test
+        that passed for a reason unrelated to what it asserts.
+
+    Seeding here makes the module self-contained in either invocation.
+    """
+    from gruvax.auth.pin import hash_pin
+
+    # Seeded over a SYNC psycopg connection, matching the integration modules
+    # (e.g. test_cache_reload_profile_scoping). Do NOT reach for the session-
+    # scoped ``db_pool`` here: this fixture is module-scoped, so it runs on a
+    # different event loop, and awaiting that pool deadlocks until PoolTimeout.
+    # ``db_pool`` stays in the signature only to order DB availability first.
+    with psycopg.connect(_dsn()) as conn, conn.cursor() as cur:
+        cur.execute(
+            "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+            " VALUES (%s::uuid, 'auth.pin_hash', %s,"
+            " 'Test PIN seeded by test_reshuffle_draft', now())"
+            " ON CONFLICT (profile_id, key) DO UPDATE"
+            "  SET value = EXCLUDED.value, updated_at = now()",
+            (_DEFAULT_PROFILE_UUID, f'"{hash_pin("0000")}"'),
+        )
+        conn.commit()
+
     app = create_app()
     async with (
         LifespanManager(app) as manager,
@@ -53,8 +99,14 @@ async def _login(client) -> dict:  # type: ignore[no-untyped-def]
     resolve the per-profile session required by get_write_target.
     """
     res = await client.post("/api/admin/login", json={"pin": "0000"})
-    if res.status_code != 200:
-        return {}
+    # Fail here with the status, rather than returning {} for the caller to
+    # assert on: the old silent-{} path surfaced as a bare "assert {}" that said
+    # nothing about WHY the login failed (gruvax-h2qw).
+    assert res.status_code == 200, (
+        f"admin login failed with {res.status_code}: {res.text}. "
+        "The module's client fixture seeds auth.pin_hash, so this points at the "
+        "login contract or the seed itself — not at test ordering."
+    )
     cookies = dict(res.cookies)
     # WR-01 (Phase 6 CR fix): validate_boundary depends on get_write_target;
     # the browse-binding cookie is required so the resolved profile scopes
@@ -168,7 +220,6 @@ async def test_resume_revalidates_stale_cut(client) -> None:  # type: ignore[no-
     if the existing phantom check already handles this case.
     """
     auth = await _login(client)
-    assert auth, "Login must be available for stale-cut re-validation test"
 
     # A stale cut: label/catalog pair that does not exist in v_collection
     # (these are purely synthetic and should never match real collection data)

@@ -11,7 +11,12 @@ _default:
 test:
     uv run pytest tests/ -q --tb=short
 
-# Run unit + property tests only (no Postgres needed)
+# Run unit + property tests only — the fast subset. REQUIRES Postgres.
+#
+# It is NOT Postgres-free despite the name: ~15 of the 54 files here build the
+# real app or open a connection (test_queries, test_session, test_stats,
+# test_reshuffle_draft, …), and the recipe exits 1 on connection refused
+# without one. The old "(no Postgres needed)" note was simply wrong (gruvax-h2qw).
 test-unit:
     uv run pytest tests/unit/ tests/property/ -x -q
 
