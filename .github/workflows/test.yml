@@ -18,6 +18,10 @@
 #      other CI coverage is `tsc -b` + `vite build`, which pass on code the
 #      unit tests reject; without this step a frontend regression reaches the
 #      kiosk with every gate green.
+#   4. Unit + property subset via `just test-unit`, run BEFORE the full tree —
+#      gruvax-h2qw. Guards the developer entry point, which CI never exercised
+#      and which had rotted red. Must stay ahead of the full suite: afterwards
+#      the shared DB carries an auth.pin_hash row and the gate is vacuous.
 
 name: Test
 
@@ -157,6 +161,20 @@ jobs:
       # rows to exercise the index-backed FTS path within SLO.
       - name: Seed synthetic profile_collection
         run: psql postgresql://gruvax:gruvax@localhost:5432/gruvax < tests/fixtures/synth_profile_collection.sql
+
+      # gruvax-h2qw: run the fast subset FIRST, against a database that has no
+      # auth.pin_hash row yet. Order is the whole point — `just test-unit` is
+      # the developer entry point, and it had rotted red without CI noticing
+      # because CI only ever ran the full tests/ tree. Under the full tree
+      # pytest collects integration/ before unit/, and several integration
+      # modules hand-roll an auth.pin_hash INSERT into the shared DB, so a unit
+      # test that never seeded a PIN still found one and passed.
+      #
+      # Running this AFTER the full suite would be a vacuous gate: the PIN
+      # would already be seeded and the subset would pass no matter what. Keep
+      # it here, before the seeding side effects exist.
+      - name: Unit + property subset (guards `just test-unit`)
+        run: just test-unit
 
       # Full test suite (benchmarks are skipped by addopts --benchmark-disable)
       - name: Test suite
