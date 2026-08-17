@@ -18,6 +18,20 @@ Topic structure (locked contract — ARCHITECTURE.md §"MQTT Topic Design"):
 
 NEVER retain command topics (illuminate/span/sub) — stale-command-replay footgun
 (see ARCHITECTURE.md §"Retained Hygiene").
+
+Dead-code scan note (gruvax-e4k7, Repowise index @ 3f72378): this module and
+``publishers.py::publish_all_off``/``run_diagnostic`` were flagged unreferenced.
+Verified false positive — ``publishers.py`` imports this module and calls
+``illuminate_topic``, ``span_topic``, ``sub_topic``, ``state_topic``,
+``all_off_topic`` and ``status_wildcard`` from live, tested code wired to
+``POST /api/admin/leds/off`` and ``POST /api/admin/leds/diagnostic``
+(``src/gruvax/api/admin/leds.py``, registered in ``app.py`` via
+``create_admin_router()``). ``diagnostic_topic`` alone has no Python caller;
+it is kept as the locked-contract placeholder for a future firmware-triggered
+diagnostic command (see the ``diagnostic`` row above and ARCHITECTURE.md
+§"MQTT Topic Design") — the v1 diagnostic sweep is driven server-side via
+``state/*`` publishes instead, since no physical firmware exists yet
+(Phase 6: "Hardware Stubbed").
 """
 
 from __future__ import annotations
