@@ -7,7 +7,9 @@ from typing import TYPE_CHECKING
 
 import pytest
 
-from scripts.run_all_algorithms import _load_local_boundaries, _run_local_csv
+from fixtures.synth_collection import all_shapes
+from gruvax.estimator.collection_snapshot import RecordRow
+from scripts.run_all_algorithms import _load_local_boundaries, _p95, _run_local_csv, _score_shape
 
 
 if TYPE_CHECKING:
@@ -64,3 +66,35 @@ def test_present_csv_empty_collection_fails(local_collection: Path) -> None:
 
 def test_absent_optional_csv_remains_absent(tmp_path: Path) -> None:
     assert _run_local_csv(tmp_path) is None
+
+
+def test_empty_timing_census_is_zero() -> None:
+    assert _p95([]) == 0.0
+
+
+@pytest.mark.parametrize(
+    "count,rank", [(2, 2), (3, 3), (5, 5), (10, 10), (20, 19), (21, 20), (100, 95)]
+)
+@pytest.mark.parametrize("scorer", ["synthetic", "local_csv"])
+def test_both_scorers_report_nearest_rank_p95(
+    local_collection: Path, monkeypatch: pytest.MonkeyPatch, count: int, rank: int, scorer: str
+) -> None:
+    ticks = iter(t for i in range(1, count + 1) for t in (0.0, i / 1000, 0.0, (100 + i) / 1000))
+    monkeypatch.setattr("scripts.run_all_algorithms.time.perf_counter", lambda: next(ticks))
+    if scorer == "local_csv":
+        (local_collection / "RWlodarczyk-collection-synthetic.csv").write_text(
+            "Label,Catalog#\n" + "".join(f"Blue Note,BLP {1000 + i}\n" for i in range(count))
+        )
+        results = _run_local_csv(local_collection)
+        assert results is not None
+        metrics = results["local_csv"]
+    else:
+        cache, snapshot, _ = all_shapes()["uniform_dense"]()
+        label = "UniformDense"
+        snapshot._load_snapshot(
+            {label.casefold(): [RecordRow(i, label, f"UD {i:03d}") for i in range(1, count + 1)]}
+        )
+        selected_truth = {i: (i - 1) / (count - 1) for i in range(1, count + 1)}
+        metrics = _score_shape(cache, snapshot, selected_truth, label)
+    assert metrics["index"]["p95_ms"] == pytest.approx(rank)
+    assert metrics["cube_only"]["p95_ms"] == pytest.approx(100 + rank)

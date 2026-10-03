@@ -37,6 +37,7 @@ from __future__ import annotations
 
 import argparse
 import csv as csv_mod
+import math
 from pathlib import Path
 import sys
 import time
@@ -73,6 +74,14 @@ CUBE_ONLY_NULL_MIDPOINT: float = 0.5
 def _midpoint(start: float, end: float) -> float:
     """Return the midpoint of a [start, end] interval."""
     return (start + end) / 2.0
+
+
+def _p95(timings: list[float]) -> float:
+    """Nearest-rank p95, matching the dedicated benchmark budget checker."""
+    if not timings:
+        return 0.0
+    ordered = sorted(timings)
+    return ordered[math.ceil(len(ordered) * 0.95) - 1]
 
 
 def _score_shape(
@@ -161,13 +170,6 @@ def _score_shape(
 
     def _mae(errors: list[float]) -> float:
         return sum(errors) / len(errors) if errors else 0.0
-
-    def _p95(timings: list[float]) -> float:
-        if not timings:
-            return 0.0
-        sorted_t = sorted(timings)
-        idx = max(0, int(len(sorted_t) * 0.95) - 1)
-        return sorted_t[idx]
 
     def _mean(vals: list[float]) -> float:
         return sum(vals) / len(vals) if vals else 0.0
@@ -312,13 +314,6 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, dict[str, float]]] | 
             total_cube_ms.append(celapsed)
             total_cube_conf.append(cres.confidence)
             total_cube_errors.append(0.0)
-
-        def _p95(ts: list[float]) -> float:
-            if not ts:
-                return 0.0
-            s = sorted(ts)
-            idx = max(0, int(len(s) * 0.95) - 1)
-            return s[idx]
 
         def _mean(vs: list[float]) -> float:
             return sum(vs) / len(vs) if vs else 0.0
