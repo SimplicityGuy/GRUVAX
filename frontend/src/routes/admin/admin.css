@@ -3357,7 +3357,7 @@
   position: absolute;
   top: 0;
   bottom: 0;
-  width: 26px; /* generous touch/hit target (sketch 001 .handle) */
+  width: 44px; /* minimum touch target; renderStrip omits overlapping handles */
   display: flex;
   align-items: center;
   justify-content: center;

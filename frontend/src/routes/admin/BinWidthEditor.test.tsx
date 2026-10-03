@@ -65,7 +65,7 @@ afterEach(() => {
   useAdminStore.getState().setPendingChangeSet(null)
 })
 
-async function renderEditor() {
+async function renderEditor(count = 2) {
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false, gcTime: 0 } } })
   const view = render(
     <QueryClientProvider client={queryClient}>
@@ -76,7 +76,7 @@ async function renderEditor() {
       </MemoryRouter>
     </QueryClientProvider>,
   )
-  await waitFor(() => expect(document.querySelectorAll('.bwe-seg')).toHaveLength(2))
+  await waitFor(() => expect(document.querySelectorAll('.bwe-seg')).toHaveLength(count))
   return view
 }
 
@@ -118,5 +118,78 @@ describe('BinWidthEditor visible override contract (gruvax-y75)', () => {
     expect(useAdminStore.getState().pendingChangeSet!.edits[0]).toMatchObject({
       segment_overrides: saved,
     })
+  })
+})
+
+describe('BinWidthEditor safe touch geometry and fractions (gruvax-yl6b)', () => {
+  it('omits thin adjacent handles and never submits a negative fraction for a realistic sliver bin', async () => {
+    const fractions = [1, 1, 2, 40, 46].map((n) => n / 90)
+    vi.mocked(getUnitSegments).mockResolvedValue({ segments: segments(fractions) })
+    await renderEditor(5)
+    const handles = Array.from(document.querySelectorAll<HTMLElement>('.bwe-handle'))
+    expect(handles.map((h) => h.dataset.boundaryIndex)).toEqual(['3'])
+    dragHandle(handles[0], (600 * 44) / 90, -100)
+    const widths = Array.from(document.querySelectorAll<HTMLElement>('.bwe-seg')).map((s) =>
+      parseFloat(s.style.width),
+    )
+    widths.forEach((width) => expect(width).toBeGreaterThan(0))
+    expect(widths.reduce((sum, width) => sum + width, 0)).toBeCloseTo(100, 2)
+    fireEvent.click(screen.getByRole('button', { name: 'Save overrides' }))
+    await screen.findByText(/Saved/)
+    const overrides = vi.mocked(setOverrides).mock.calls[0][3].overrides
+    overrides
+      .filter((o) => o.fraction !== null)
+      .forEach((o) => expect(o.fraction).toBeGreaterThanOrEqual(0.05 - 1e-12))
+    expect(overrides.reduce((sum, o) => sum + (o.fraction ?? 0), 0)).toBeLessThan(1)
+  })
+
+  it('keeps visible handle centers 44px apart and recalculates after a resize', async () => {
+    const fractions = [0.06, 0.06, 0.06, 0.06, 0.76]
+    vi.mocked(getUnitSegments).mockResolvedValue({ segments: segments(fractions) })
+    await renderEditor(5)
+    const centers = () =>
+      Array.from(document.querySelectorAll<HTMLElement>('.bwe-handle')).map(
+        (h) => (parseFloat(h.style.left) / 100) * stripWidth,
+      )
+    expect(centers()).toHaveLength(2)
+    const first = centers()
+    expect(first[1] - first[0]).toBeGreaterThanOrEqual(44)
+    stripWidth = 400
+    fireEvent(window, new Event('resize'))
+    const resized = centers()
+    expect(resized).toHaveLength(2)
+    expect(resized[1] - resized[0]).toBeGreaterThanOrEqual(44)
+    expect(document.querySelectorAll('.bwe-handle')[1]).toHaveAttribute('data-boundary-index', '2')
+  })
+
+  it.each([-100, 1000])(
+    'clamps an extreme pointer at %s while keeping both labels positive and the sum intact',
+    async (clientX) => {
+      await renderEditor()
+      dragHandle(document.querySelector('.bwe-handle')!, 300, clientX)
+      fireEvent.click(screen.getByRole('button', { name: 'Save overrides' }))
+      await screen.findByText('Saved · 2 overrides written')
+      const values = vi.mocked(setOverrides).mock.calls[0][3].overrides.map((o) => o.fraction!)
+      expect(Math.min(...values)).toBeCloseTo(0.05)
+      expect(values.reduce((sum, value) => sum + value, 0)).toBeCloseTo(1)
+    },
+  )
+
+  it.each([
+    [-0.1, 1.1],
+    [0.6, 0.6],
+    [0, 1],
+    [NaN, 0.5],
+    [Infinity, 0.5],
+  ])('blocks invalid widths %j before a request or success message', async (...fractions) => {
+    vi.mocked(getUnitSegments).mockResolvedValue({ segments: segments(fractions) })
+    await renderEditor()
+    fireEvent.click(screen.getByRole('button', { name: 'Save overrides' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Widths must be positive and total 100%',
+    )
+    expect(setOverrides).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Saved/)).not.toBeInTheDocument()
+    expect(useAdminStore.getState().pendingChangeSet).toBeNull()
   })
 })

@@ -36,6 +36,22 @@ import type { Segment } from '../../api/cubeTypes'
 const ROWS = 4
 const COLS = 4
 const MIN = 0.05 // 5% minimum width per segment
+const HANDLE_SIZE = 44 // minimum touch target and spacing in pixels
+
+function validWidths(segs: Segment[]): boolean {
+  return (
+    segs.length > 0 &&
+    segs.every((s) => Number.isFinite(s.fraction) && s.fraction > 0 && s.fraction <= 1) &&
+    Math.abs(segs.reduce((sum, s) => sum + s.fraction, 0) - 1) <= 1e-6
+  )
+}
+
+function dragPosition(clientX: number, rect: DOMRect, left: number, right: number): number | null {
+  if (![clientX, rect.left, rect.width, left, right].every(Number.isFinite)) return null
+  if (rect.width <= 0 || right - left < 2 * MIN) return null
+  const position = (clientX - rect.left) / rect.width
+  return Math.max(left + MIN, Math.min(right - MIN, position))
+}
 
 /** Graduated-blue palette cycled by segment index. */
 const PALETTE: Array<{ bg: string; fg: string }> = [
@@ -205,13 +221,24 @@ export function BinWidthEditor() {
     })
 
     strip.replaceChildren(...segNodes)
+    if (!validWidths(segs)) return
 
     // Build drag handles between adjacent segments
     let cum = 0
+    let previousHandleX = -Infinity
+    const stripWidth = strip.getBoundingClientRect().width
     for (let i = 0; i < segs.length - 1; i++) {
       cum += segs[i].fraction
+      // Narrow adjacent labels cannot support the minimum on both sides.
+      if (segs[i].fraction < MIN || segs[i + 1].fraction < MIN) continue
+      const handleX = cum * stripWidth
+      // Omit crowded handles rather than painting one touch target over another.
+      if (handleX < HANDLE_SIZE / 2 || stripWidth - handleX < HANDLE_SIZE / 2) continue
+      if (handleX - previousHandleX < HANDLE_SIZE) continue
+      previousHandleX = handleX
       const handle = el('div', {
         className: 'bwe-handle',
+        dataset: { boundaryIndex: String(i) },
         style: { left: `${(cum * 100).toFixed(4)}%` },
       })
       handle.appendChild(el('div', { className: 'bwe-grip' }))
@@ -235,8 +262,8 @@ export function BinWidthEditor() {
       const right = left + segs[idx].fraction + segs[idx + 1].fraction
 
       const onMove = (ev: PointerEvent) => {
-        let pos = (ev.clientX - rect.left) / rect.width
-        pos = Math.max(left + MIN, Math.min(right - MIN, pos))
+        const pos = dragPosition(ev.clientX, rect, left, right)
+        if (pos === null) return
         draggingSegs.current[idx].fraction = pos - left
         draggingSegs.current[idx + 1].fraction = right - pos
         // Mark both as override during drag
@@ -405,6 +432,11 @@ export function BinWidthEditor() {
     setSaveError(null)
     setSaveMsg(null)
     try {
+      if (!validWidths(segments)) {
+        throw new Error(
+          'Widths must be positive and total 100%. Adjust widths or reload before saving.',
+        )
+      }
       const idempotencyKey = crypto.randomUUID()
       await setOverrides(
         unitId,
@@ -442,6 +474,20 @@ export function BinWidthEditor() {
     updateCaption(segments)
     updateLegend(segments)
   }, [segments, renderStrip, updateLegend])
+
+  // Re-evaluate physical handle spacing when the editor changes width.
+  useEffect(() => {
+    const wrap = stripWrapRef.current
+    if (!wrap) return
+    const redraw = () => renderStrip(draggingSegs.current)
+    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(redraw)
+    observer?.observe(wrap)
+    window.addEventListener('resize', redraw)
+    return () => {
+      observer?.disconnect()
+      window.removeEventListener('resize', redraw)
+    }
+  }, [isLoading, renderStrip])
 
   // ── Summary line ─────────────────────────────────────────────────────────────
   const labelCount = segments.length
@@ -497,7 +543,10 @@ export function BinWidthEditor() {
       <div className="bwe-continue-cap" ref={captionRef} />
 
       {/* Hint */}
-      <p className="bwe-hint">Drag a yellow handle to set a physical-width override</p>
+      <p className="bwe-hint">
+        Drag a yellow handle to set a physical-width override. Handles appear where both labels have
+        room to drag.
+      </p>
 
       {/* Membership vs. cosmetics: widths here are display-only; which labels
           live in this bin is determined by the cut points. */}
