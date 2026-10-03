@@ -175,3 +175,21 @@ def test_returns_cut_point_entry_instances() -> None:
     csv_data = "unit_id,row,col,first_label,first_catalog,is_empty\n1,0,0,A,B,false\n"
     entries = parse_csv_boundaries(csv_data)
     assert all(isinstance(e, CutPointEntry) for e in entries)
+
+
+@pytest.mark.parametrize("line", ["1,0,0,Alpha", "1,0,0,Alpha,A1,false,extra"])
+def test_ragged_rows_report_line_context(line: str) -> None:
+    with pytest.raises(ValueError, match="CSV line 2"):
+        parse_csv_boundaries("unit_id,row,col,first_label,first_catalog,is_empty\n" + line)
+
+
+def test_bad_address_reports_line_and_column() -> None:
+    with pytest.raises(ValueError, match=r"CSV line 2.*row"):
+        parse_csv_boundaries(
+            "unit_id,row,col,first_label,first_catalog,is_empty\n1,nope,0,Alpha,A1,false"
+        )
+
+
+def test_unterminated_quoted_header_has_parse_context() -> None:
+    with pytest.raises(ValueError, match="CSV line 1"):
+        parse_csv_boundaries('"unit_id,row,col,first_label,first_catalog,is_empty')

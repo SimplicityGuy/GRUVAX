@@ -143,3 +143,20 @@ async def test_malformed_yaml_rejected_without_any_import_mutation(import_api, d
     assert "cubes" in response.json()["detail"]["message"]
     assert await import_state(db_pool, app, profiles) == before
     assert all(queue.empty() for queue in queues)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("row", ["1,0,0,Alpha", "1,0,0,Alpha,A1,false,extra"])
+async def test_ragged_csv_rejected_without_import_mutation(import_api, db_pool, row):  # type: ignore[no-untyped-def]
+    client, headers, app, profiles, queues = import_api
+    before = await import_state(db_pool, app, profiles)
+    response = await client.post(
+        "/api/admin/import/boundaries",
+        content="unit_id,row,col,first_label,first_catalog,is_empty\n" + row,
+        headers={**headers, "Content-Type": "text/csv"},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"]["type"] == "parse_error"
+    assert "CSV line 2" in response.json()["detail"]["message"]
+    assert await import_state(db_pool, app, profiles) == before
+    assert all(queue.empty() for queue in queues)
