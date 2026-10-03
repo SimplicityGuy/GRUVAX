@@ -199,10 +199,36 @@ def _find_local_csv(repo_root: Path) -> Path | None:
     return matches[0] if matches else None
 
 
+def _load_local_boundaries(path: Path) -> BoundaryCache:
+    """Load the same nested unit/cube fixture used by development and CI."""
+    with path.open() as f:
+        raw = yaml.safe_load(f)
+    if not isinstance(raw, dict):
+        raise ValueError("Boundary fixture must contain units with nested cubes")
+    rows = [
+        BoundaryRow(
+            unit_id=unit["unit_id"],
+            row=cube["row"],
+            col=cube["col"],
+            first_label=cube.get("first_label"),
+            first_catalog=cube.get("first_catalog"),
+            is_empty=cube.get("is_empty", False),
+        )
+        for unit in raw.get("units", [])
+        for cube in unit["cubes"]
+    ]
+    if not rows:
+        raise ValueError("Boundary fixture contains no cubes")
+    cache = BoundaryCache()
+    cache._load_rows(rows)
+    return cache
+
+
 def _run_local_csv(repo_root: Path) -> dict[str, dict[str, dict[str, float]]] | None:
     """Run locate() and locate_cube_only() against the local collection CSV + boundaries.yaml.
 
-    Returns None when the CSV is absent or any loading step fails. Otherwise the
+    Returns None only when the optional CSV is absent. Present but invalid input
+    raises an error instead of reporting a misleading empty comparison. The
     shape is three levels deep — ``{"local_csv": {"index": {"mae": ...}}}`` — so
     it merges straight into ``run_all_algorithms``' ``results`` via ``.update()``.
     The annotation previously claimed two levels, which mypy only began flagging
@@ -218,29 +244,7 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, dict[str, float]]] | 
 
     try:
         boundaries_path = repo_root / "fixtures" / "boundaries.yaml"
-        if not boundaries_path.exists():
-            print(f"  [skip] fixtures/boundaries.yaml not found at {boundaries_path}")
-            return None
-
-        # Load boundaries — Phase 5: cut-point model (no last_*)
-        with boundaries_path.open() as f:
-            raw = yaml.safe_load(f)
-
-        boundary_rows: list[BoundaryRow] = []
-        for item in raw.get("boundaries", []):
-            boundary_rows.append(
-                BoundaryRow(
-                    unit_id=item["unit_id"],
-                    row=item["row"],
-                    col=item["col"],
-                    first_label=item.get("first_label"),
-                    first_catalog=item.get("first_catalog"),
-                    # last_label and last_catalog dropped in Phase 5 (SEG-01)
-                    is_empty=item.get("is_empty", False),
-                )
-            )
-        cache = BoundaryCache()
-        cache._load_rows(boundary_rows)
+        cache = _load_local_boundaries(boundaries_path)
 
         # Load collection CSV
         records_by_label: dict[str, list[RecordRow]] = {}
@@ -260,6 +264,8 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, dict[str, float]]] | 
                     RecordRow(release_id=release_id, label=label, catalog_number=catalog)
                 )
 
+        if not records_by_label:
+            raise ValueError("Local collection CSV contains no labelled records")
         snapshot = CollectionSnapshot()
         snapshot._load_snapshot(records_by_label)
 
@@ -345,8 +351,7 @@ def _run_local_csv(repo_root: Path) -> dict[str, dict[str, dict[str, float]]] | 
         }
 
     except Exception as exc:
-        print(f"  [skip] Local CSV path failed: {exc}")
-        return None
+        raise RuntimeError(f"Local CSV path failed: {exc}") from exc
 
 
 # ── Main harness function ─────────────────────────────────────────────────────
