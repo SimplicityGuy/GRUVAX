@@ -14,6 +14,7 @@ from uuid import UUID
 
 from fastapi import Depends, HTTPException, Request, Response, status
 
+from gruvax.auth.session_policy import admin_session_policy
 from gruvax.auth.sessions import (
     BROWSE_BINDING_COOKIE,
     CSRF_COOKIE,
@@ -692,7 +693,11 @@ async def require_admin(
         )
 
     # Sliding window: refresh expires_at on every valid request (D-04)
-    new_expires_at = now + timedelta(seconds=settings.SESSION_TTL_SECONDS)
+    idle_ttl, _ = admin_session_policy(
+        getattr(request.app.state, "settings_cache", {}), settings.SESSION_TTL_SECONDS
+    )
+    # Updating policy never extends the session's immutable, minted hard cap.
+    new_expires_at = min(now + timedelta(seconds=idle_ttl), hard_expires_at)
     async with pool.connection() as conn:
         await conn.execute(
             "UPDATE gruvax.admin_sessions SET last_seen_at = %s, expires_at = %s WHERE id = %s",

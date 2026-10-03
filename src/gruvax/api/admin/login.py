@@ -27,6 +27,8 @@ Rate-limiting implementation note:
 from __future__ import annotations
 
 import logging
+import math
+from time import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -34,6 +36,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from gruvax.api.admin.limiter import _LOGIN_RATE, _rate_limiter
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.auth.pin import verify_pin
+from gruvax.auth.session_policy import admin_session_policy
 from gruvax.auth.sessions import (
     clear_session_cookies,
     create_session,
@@ -65,12 +68,15 @@ def _check_login_rate_limit(request: Request) -> None:
     client_ip: str = request.client.host if request.client else "unknown"
     allowed = _rate_limiter.hit(_LOGIN_RATE, "login", client_ip)
     if not allowed:
+        reset_at = _rate_limiter.get_window_stats(_LOGIN_RATE, "login", client_ip).reset_time
+        retry_after = max(1, math.ceil(reset_at - time()))
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
                 "type": "rate_limited",
                 "message": "Too many login attempts. Try again later.",
             },
+            headers={"Retry-After": str(retry_after)},
         )
 
 
@@ -143,21 +149,22 @@ async def login(
             detail={"type": "invalid_pin"},
         )
 
+    # Admin/PIN policy is global under the default profile, independent of browse binding.
+    idle_ttl, hard_cap = admin_session_policy(
+        getattr(request.app.state, "settings_cache", {}), settings.SESSION_TTL_SECONDS
+    )
     # Correct PIN — create server-side session row + set cookies
     async with pool.connection() as conn:
-        csrf_token = await create_session(
+        session = await create_session(
             conn,
             response,
             settings.SESSION_SECRET,
-            settings.SESSION_TTL_SECONDS,
+            idle_ttl,
+            hard_cap,
         )
 
-    # Return the CSRF token; let the client poll /session for expiry times.
-    # session_id would be None here — cookie is on the RESPONSE not the request.
-    return {
-        "csrf_token": csrf_token,
-        "message": "Login successful",
-    }
+    # Metadata is minted from the same server times persisted with the cookies.
+    return {**session, "message": "Login successful"}
 
 
 @router.post("/logout")
@@ -206,7 +213,8 @@ async def get_session(
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
             "SELECT expires_at, hard_expires_at,"
-            " EXTRACT(EPOCH FROM (expires_at - NOW()))::int AS expires_in_seconds"
+            " EXTRACT(EPOCH FROM (expires_at - NOW()))::int AS expires_in_seconds,"
+            " EXTRACT(EPOCH FROM (hard_expires_at - NOW()))::int AS hard_cap_in_seconds"
             " FROM gruvax.admin_sessions WHERE id = %s",
             (session_id,),
         )
@@ -218,8 +226,9 @@ async def get_session(
             detail="Session not found",
         )
 
-    expires_at, hard_expires_at, expires_in_seconds = row
+    expires_at, hard_expires_at, expires_in_seconds, hard_cap_in_seconds = row
     return {
+        "hard_cap_in_seconds": max(0, int(hard_cap_in_seconds)),
         "expires_at": expires_at.isoformat()
         if hasattr(expires_at, "isoformat")
         else str(expires_at),

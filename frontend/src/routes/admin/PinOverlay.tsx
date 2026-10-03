@@ -49,15 +49,8 @@ export function PinOverlay({ isLocked = false, onUnlock }: PinOverlayProps) {
     async (pin: string) => {
       setStatus('submitting')
       try {
-        const { csrf_token: csrfToken } = await adminLogin(pin)
-        // On success, fetch session times then call setAdminLoggedIn.
-        // adminGetSession() requires the session cookie which is now set.
-        // For simplicity, derive expires_at from the idle TTL default (10 min).
-        // AdminShell will poll /api/admin/session immediately and update.
-        const now = new Date()
-        const expires = new Date(now.getTime() + 10 * 60 * 1000).toISOString()
-        const hardCap = new Date(now.getTime() + 30 * 60 * 1000).toISOString()
-        setAdminLoggedIn(expires, hardCap, csrfToken)
+        const session = await adminLogin(pin)
+        setAdminLoggedIn(session, session.csrf_token)
         // Lock re-auth: the session was already active, so setAdminLoggedIn is a
         // no-op for isLoggedIn — explicitly tell the caller to clear isLocked
         // and dismiss the overlay (D-03c).

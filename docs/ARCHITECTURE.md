@@ -411,7 +411,7 @@ Four independent cookie-based mechanisms coexist; none of them share state:
 
 | Cookie | Set by | Scope | Notes |
 |--------|--------|-------|-------|
-| `gruvax_session` | `POST /api/admin/login` | Admin PIN session | `HttpOnly`, `SameSite=Strict`; itsdangerous-signed session UUID; sliding idle TTL (`SESSION_TTL_SECONDS`, default 600s) refreshed per authenticated request, hard cap 1800s |
+| `gruvax_session` | `POST /api/admin/login` | Admin PIN session | `HttpOnly`, `SameSite=Strict`; itsdangerous-signed session UUID; global default-profile `session.idle_ttl_seconds` refreshed per authenticated request (`SESSION_TTL_SECONDS` fallback, default 600s), clamped to the immutable cap minted at login from `session.hard_cap_seconds` (fallback 1800s) |
 | `gruvax_csrf` | `POST /api/admin/login` | Admin PIN session | NOT `HttpOnly` (SPA reads it); double-submit — echoed as `X-CSRF-Token` on every mutating admin request; `require_admin` rejects mismatches with 403 |
 | `gruvax_browse_binding` | `POST /api/session/bind` (or auto-bind on `GET /api/session` when exactly one profile exists) | Read-only browsing | NOT `HttpOnly` (SPA derives the per-profile SSE URL from it); `SameSite=Strict`; max-age 7 days; plain UUID, validated against the active-profiles set server-side on every request — no PIN required to browse/search on the trusted home LAN |
 | `gruvax_device_fp` | `POST /api/devices/pairing-codes` (first call) | Kiosk device identity | `HttpOnly` (JS never reads it — session-equivalent secret); max-age 30 days so it survives reboots; identifies a `devices` row independent of the browse-binding cookie |

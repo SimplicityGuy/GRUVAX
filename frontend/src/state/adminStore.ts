@@ -15,7 +15,7 @@
 
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { ChangeSet, ReshuffleDraft } from '../api/types'
+import type { AdminSession, ChangeSet, ReshuffleDraft } from '../api/types'
 
 interface AdminStore {
   /** Whether the admin session is currently authenticated. */
@@ -44,23 +44,13 @@ interface AdminStore {
   pendingChangeSet: ChangeSet | null
 
   /** Set after successful PIN login. */
-  setAdminLoggedIn: (expiresAt: string, hardCapAt: string, csrfToken: string) => void
+  setAdminLoggedIn: (session: AdminSession, csrfToken: string) => void
 
   /** Called on logout or session expiry. Clears auth state but NOT pendingChangeSet. */
   setAdminLoggedOut: () => void
 
-  /**
-   * Update the sliding expiry time (called by AdminShell on /session poll).
-   * Only updates expiresAt — hard cap is immutable for the session lifetime.
-   *
-   * gruvax-6ip0: takes a server-computed DURATION (seconds remaining), not
-   * a timestamp — sessionExpiresAt is derived as `Date.now() + seconds*1000`
-   * entirely on the browser's own clock, so a skewed client clock never gets
-   * mixed with the server's absolute expires_at (which is what previously
-   * made a skewed client either see an inflated countdown, or session-out
-   * while the server-side session was still valid).
-   */
-  refreshExpiry: (expiresInSeconds: number) => void
+  /** Refresh both server-authoritative deadlines, using durations to avoid clock skew. */
+  refreshExpiry: (session: AdminSession) => void
 
   /** Replace the entire pending change-set (or clear it with null). */
   setPendingChangeSet: (cs: ChangeSet | null) => void
@@ -76,6 +66,15 @@ interface AdminStore {
   setReshuffleDraft: (draft: ReshuffleDraft | null) => void
 }
 
+/** Keep BOTH deadlines on one browser-clock anchor; server timestamps are informational. */
+function sessionDeadlines(session: AdminSession) {
+  const now = Date.now()
+  return {
+    sessionExpiresAt: now + session.expires_in_seconds * 1000,
+    hardCapExpiresAt: now + session.hard_cap_in_seconds * 1000,
+  }
+}
+
 export const useAdminStore = create<AdminStore>()(
   persist(
     (set) => ({
@@ -85,13 +84,8 @@ export const useAdminStore = create<AdminStore>()(
       csrfToken: null,
       pendingChangeSet: null,
 
-      setAdminLoggedIn: (expiresAt, hardCapAt, csrfToken) =>
-        set({
-          isLoggedIn: true,
-          sessionExpiresAt: new Date(expiresAt).getTime(),
-          hardCapExpiresAt: new Date(hardCapAt).getTime(),
-          csrfToken,
-        }),
+      setAdminLoggedIn: (session, csrfToken) =>
+        set({ isLoggedIn: true, ...sessionDeadlines(session), csrfToken }),
 
       setAdminLoggedOut: () =>
         set({
@@ -102,8 +96,7 @@ export const useAdminStore = create<AdminStore>()(
           // pendingChangeSet intentionally NOT cleared — preserved across re-auth
         }),
 
-      refreshExpiry: (expiresInSeconds) =>
-        set({ sessionExpiresAt: Date.now() + expiresInSeconds * 1000 }),
+      refreshExpiry: (session) => set(sessionDeadlines(session)),
 
       setPendingChangeSet: (cs) => set({ pendingChangeSet: cs }),
 

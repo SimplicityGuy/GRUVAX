@@ -108,7 +108,7 @@ export type CubeState = 'dim' | 'lit' | 'empty'
 // ── Admin API types ────────────────────────────────────────────────────────
 
 /** Response from POST /api/admin/login — includes CSRF token for double-submit. */
-export interface LoginResponse {
+export interface LoginResponse extends AdminSession {
   csrf_token: string
   message: string
 }
@@ -125,6 +125,8 @@ export interface AdminSession {
    * actual sliding-window session state.
    */
   expires_in_seconds: number
+  /** Server-computed hard-cap duration; anchor to the browser clock like idle expiry. */
+  hard_cap_in_seconds: number
 }
 
 /** Response from GET /api/admin/settings — nominal capacity, idle TTL, and LED knobs.
@@ -137,6 +139,7 @@ export interface AdminSession {
 export interface AdminSettings {
   cube_nominal_capacity: number
   session_idle_ttl_seconds: number
+  session_hard_cap_seconds?: number
   // Phase 6 — LED colors (one per system state, LED-05)
   led_color_position?: string // default "#FFD700" (gold)
   led_color_label_span?: string // default "#7C3AED" (purple)
@@ -166,6 +169,7 @@ export interface AdminSettings {
 export interface AdminSettingsPut {
   cube_nominal_capacity?: number
   session_idle_ttl_seconds?: number
+  session_hard_cap_seconds?: number
   // Phase 6 — LED colors
   led_color_position?: string
   led_color_label_span?: string

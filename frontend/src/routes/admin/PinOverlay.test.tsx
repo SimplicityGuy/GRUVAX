@@ -11,9 +11,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, render, screen } from '@testing-library/react'
 
 import { PinOverlay } from './PinOverlay'
+import { useAdminStore } from '../../state/adminStore'
 
 beforeEach(() => {
   vi.useFakeTimers({ shouldAdvanceTime: false })
+  vi.setSystemTime(new Date('2026-01-01T12:00:00Z'))
+  useAdminStore.getState().setAdminLoggedOut()
 })
 
 afterEach(() => {
@@ -42,7 +45,13 @@ describe('PinOverlay', () => {
           return {
             ok: true,
             status: 200,
-            json: async () => ({ csrf_token: 'test-csrf' }),
+            json: async () => ({
+              csrf_token: 'test-csrf',
+              expires_at: '2099-01-01T00:00:00Z',
+              hard_cap_at: '2099-01-01T01:00:00Z',
+              expires_in_seconds: 120,
+              hard_cap_in_seconds: 900,
+            }),
           } as Response
         }
         return { ok: true, status: 200, json: async () => ({}) } as Response
@@ -77,7 +86,13 @@ describe('PinOverlay', () => {
           return {
             ok: true,
             status: 200,
-            json: async () => ({ csrf_token: 'test-csrf' }),
+            json: async () => ({
+              csrf_token: 'test-csrf',
+              expires_at: '2099-01-01T00:00:00Z',
+              hard_cap_at: '2099-01-01T01:00:00Z',
+              expires_in_seconds: 120,
+              hard_cap_in_seconds: 900,
+            }),
           } as Response
         }
         return { ok: true, status: 200, json: async () => ({}) } as Response
@@ -101,5 +116,76 @@ describe('PinOverlay', () => {
 
     // No error thrown from a missing onUnlock; overlay's own callback is optional.
     expect(screen.queryByRole('alert')).toBeNull()
+  })
+  it.each([900, 3600])(
+    'uses server login durations for a %is hard cap despite clock skew',
+    async (cap) => {
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            ({
+              ok: true,
+              status: 200,
+              json: async () => ({
+                csrf_token: 'policy-csrf',
+                message: 'Login successful',
+                expires_at: '2099-01-01T00:00:00Z',
+                hard_cap_at: '2099-01-01T01:00:00Z',
+                expires_in_seconds: 120,
+                hard_cap_in_seconds: cap,
+              }),
+            }) as Response,
+        ),
+      )
+      render(<PinOverlay />)
+      const localNow = Date.now()
+      await tapDigits(['1', '2', '3', '4'])
+      const store = useAdminStore.getState()
+      expect(store.isLoggedIn).toBe(true)
+      expect(store.csrfToken).toBe('policy-csrf')
+      expect(store.sessionExpiresAt).toBe(localNow + 120_000)
+      expect(store.hardCapExpiresAt).toBe(localNow + cap * 1000)
+    },
+  )
+  it('counts down the returned window remainder and accepts input after reset', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: { type: 'rate_limited' } }), {
+          status: 429,
+          headers: { 'Retry-After': '10' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            csrf_token: 'retry-csrf',
+            expires_at: '2099-01-01T00:00:00Z',
+            hard_cap_at: '2099-01-01T01:00:00Z',
+            expires_in_seconds: 120,
+            hard_cap_in_seconds: 900,
+          }),
+          { status: 200 },
+        ),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PinOverlay />)
+    await tapDigits(['1', '2', '3', '4'])
+    expect(screen.getByRole('alert')).toHaveTextContent('Try again in 10s.')
+    expect(screen.queryByRole('button', { name: '1' })).toBeNull()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(9000)
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent('Try again in 1s.')
+    expect(screen.queryByRole('button', { name: '1' })).toBeNull()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: '1' })).toBeEnabled()
+    await tapDigits(['1', '2', '3', '4'])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(useAdminStore.getState().csrfToken).toBe('retry-csrf')
   })
 })

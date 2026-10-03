@@ -95,7 +95,7 @@ async def create_session(
     secret_key: str,
     idle_ttl_seconds: int,
     hard_cap_seconds: int = HARD_CAP_SECONDS,
-) -> str:
+) -> dict[str, str | int]:
     """Insert a session row and set both session + CSRF cookies.
 
     Follows the ``%s`` placeholder + ``conn.execute`` + ``conn.commit`` pattern
@@ -110,12 +110,12 @@ async def create_session(
         hard_cap_seconds: Hard session cap (seconds, default 30 min).
 
     Returns:
-        The CSRF token string (also set as the ``gruvax_csrf`` cookie value).
+        CSRF token, authoritative expiry timestamps, and remaining durations.
     """
     session_id = str(uuid.uuid4())
     now = datetime.now(UTC)
-    expires_at = now + timedelta(seconds=idle_ttl_seconds)
     hard_expires_at = now + timedelta(seconds=hard_cap_seconds)
+    expires_at = min(now + timedelta(seconds=idle_ttl_seconds), hard_expires_at)
 
     await conn.execute(
         "INSERT INTO gruvax.admin_sessions"
@@ -149,7 +149,13 @@ async def create_session(
         samesite="strict",
         secure=False,
     )
-    return csrf_token
+    return {
+        "csrf_token": csrf_token,
+        "expires_at": expires_at.isoformat(),
+        "hard_cap_at": hard_expires_at.isoformat(),
+        "expires_in_seconds": min(idle_ttl_seconds, hard_cap_seconds),
+        "hard_cap_in_seconds": hard_cap_seconds,
+    }
 
 
 async def get_session_id(request: Any, secret_key: str) -> str | None:

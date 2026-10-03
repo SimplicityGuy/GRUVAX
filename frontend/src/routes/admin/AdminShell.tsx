@@ -88,11 +88,8 @@ export function AdminShell() {
     if (!isLoggedIn) return
     try {
       const session = await adminGetSession()
-      // gruvax-6ip0: pass the server-computed DURATION, not the absolute
-      // expires_at — refreshExpiry re-anchors it off the browser's own
-      // Date.now(), so a skewed client clock never gets mixed with the
-      // server's clock (see adminStore.ts's refreshExpiry doc).
-      refreshExpiry(session.expires_in_seconds)
+      // Preserve clock-skew protection for idle AND hard-cap authority on every poll.
+      refreshExpiry(session)
     } catch (err) {
       if (err instanceof AuthError) {
         // Session expired or revoked — force re-auth
