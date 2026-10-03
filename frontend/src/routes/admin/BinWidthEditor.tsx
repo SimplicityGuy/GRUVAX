@@ -75,6 +75,25 @@ function safeHandlePositions(
   return positions
 }
 
+function requireValidWidths(segs: Segment[]): void {
+  if (!validWidths(segs)) {
+    throw new Error(
+      'Widths must be positive and total 100%. Adjust widths or reload before saving.',
+    )
+  }
+}
+
+function observeEditorWidth(wrap: HTMLElement | null, redraw: () => void): () => void {
+  if (!wrap) return () => {}
+  const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(redraw)
+  observer?.observe(wrap)
+  window.addEventListener('resize', redraw)
+  return () => {
+    observer?.disconnect()
+    window.removeEventListener('resize', redraw)
+  }
+}
+
 /** Graduated-blue palette cycled by segment index. */
 const PALETTE: Array<{ bg: string; fg: string }> = [
   { bg: 'var(--gruvax-blue)', fg: 'var(--gruvax-white)' },
@@ -443,11 +462,7 @@ export function BinWidthEditor() {
     setSaveError(null)
     setSaveMsg(null)
     try {
-      if (!validWidths(segments)) {
-        throw new Error(
-          'Widths must be positive and total 100%. Adjust widths or reload before saving.',
-        )
-      }
+      requireValidWidths(segments)
       const idempotencyKey = crypto.randomUUID()
       await setOverrides(
         unitId,
@@ -487,18 +502,10 @@ export function BinWidthEditor() {
   }, [segments, renderStrip, updateLegend])
 
   // Re-evaluate physical handle spacing when the editor changes width.
-  useEffect(() => {
-    const wrap = stripWrapRef.current
-    if (!wrap) return
-    const redraw = () => renderStrip(draggingSegs.current)
-    const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(redraw)
-    observer?.observe(wrap)
-    window.addEventListener('resize', redraw)
-    return () => {
-      observer?.disconnect()
-      window.removeEventListener('resize', redraw)
-    }
-  }, [isLoading, renderStrip])
+  useEffect(
+    () => observeEditorWidth(stripWrapRef.current, () => renderStrip(draggingSegs.current)),
+    [isLoading, renderStrip],
+  )
 
   // ── Summary line ─────────────────────────────────────────────────────────────
   const labelCount = segments.length
