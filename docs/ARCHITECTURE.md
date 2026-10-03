@@ -324,9 +324,20 @@ A known unavailable connection returns both fields as false.
 ### HighlightRegistry
 
 An in-process `HighlightRegistry` (app-scoped) tracks active highlight tasks. Each
-illuminate request schedules a TTL revert: after the configured `idle_ttl_seconds`, the
-registry publishes an all-off payload for that cube to prevent stale highlights after the
-kiosk idles.
+illuminate request uses `led_highlight.retain_mode` to choose its lifecycle:
+
+- Default mode (`false`) cancels prior highlights and restores their affected cubes
+  to ambient before publishing the new highlight. Its revert timer reads
+  `led_highlight.active_ttl_seconds` (default 180 seconds).
+- Retain mode (`true`) keeps prior highlights and gives each new highlight an
+  independent revert timer using `led_highlight.retain_ttl_seconds` (default
+  900 seconds).
+
+On expiry, `publish_ambient` restores the configured ambient color and brightness
+on only that highlight's affected cubes via retained `state/*` messages. It does
+not publish `all/off` or clear every cube. These LED TTLs are separate from the
+admin session's `session.idle_ttl_seconds`. The implementation is
+[`mqtt/lifecycle.py`](../src/gruvax/mqtt/lifecycle.py).
 
 ---
 
@@ -349,12 +360,34 @@ a long-lived SSE connection can never hold a pool slot).
 | Event | Payload | Kiosk action |
 |-------|---------|--------------|
 | `server_hello` | `{version, profile_id}` | Confirms connection; resets backoff |
-| `boundary_changed` | `{unit_id, row, col, change_set_id}` | Refetch boundaries, re-render grid |
-| `admin_editing` | `{unit_id, row, col}` | Show "admin is editing" indicator on the cube |
-| `collection_changed` | `{profile_id}` | Refetch collection-derived state after a sync completes |
+| `boundary_changed` | `{cube_ids: [{unit, row, col}], change_set_id}` | Refetch boundaries, re-render grid |
+| `admin_editing` | `{cube_ids: [{unit, row, col}], editing}` | Set or clear the editing shimmer for the listed cubes |
+| `collection_changed` | `{profile_id, new_record_count, is_initial_import}` | Refetch collection-derived state after a sync completes |
 | `device_revoked` | `{device_id}` | Kiosk drops back to the pairing screen immediately |
-| `device_reassigned` | `{device_id, old_profile_id}` | Kiosk reloads into its newly assigned profile |
+| `device_reassigned` | `{device_id}` | Kiosk reloads into its newly assigned profile |
 | `server_shutdown` | `{}` | Begin exponential backoff reconnect cycle |
+
+Cube addresses in these events use the integer field `unit`, not `unit_id`.
+`change_set_id` is a UUID string for history-producing writes, but is `null`
+when deleting a segment override. `editing` and `is_initial_import` are booleans;
+`new_record_count` is the number of newly added releases, not the total collection
+size. Device events carry only the device UUID: reassignment is published on the
+old profile's channel, without an `old_profile_id` payload field.
+
+`server_hello` is generated directly for each new SSE connection, after binding
+validation. Its `version` comes from `version.GIT_SHA` (the same build source as
+`GET /api/version`), and `profile_id` is the canonical UUID string. It is not a
+startup event replayed from the profile bus.
+
+Producer sources: [`api/events.py`](../src/gruvax/api/events.py) (hello),
+[`api/admin/cubes.py`](../src/gruvax/api/admin/cubes.py),
+[`segments.py`](../src/gruvax/api/admin/segments.py),
+[`import_.py`](../src/gruvax/api/admin/import_.py), and
+[`history.py`](../src/gruvax/api/admin/history.py) (boundary changes),
+[`editing.py`](../src/gruvax/api/admin/editing.py) (editing),
+[`sync/profile_sync.py`](../src/gruvax/sync/profile_sync.py) (collection changes),
+[`devices.py`](../src/gruvax/api/admin/devices.py) (revoke/reassignment), and
+[`app.py`](../src/gruvax/app.py) (shutdown).
 
 The `EventBus` is now **one instance per profile**, held in
 `app.state.event_bus_registry[str(profile_id)]`. Admin writes call
