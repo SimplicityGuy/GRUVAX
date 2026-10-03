@@ -779,7 +779,7 @@ export function KioskView() {
               <ShelfLabel name={SHELF_NAMES[idx] ?? `SHELF ${idx + 1}`} />
               <ShelfGrid
                 unit={unit}
-                shelfIndex={idx}
+                units={sortedUnits}
                 litCube={highlight.primaryCube}
                 emptyCubes={emptyCubes}
                 labelSpan={labelSpan}
@@ -800,7 +800,7 @@ export function KioskView() {
                   <ShelfLabel name={SHELF_NAMES[idx] ?? `SHELF ${idx + 1}`} />
                   <ShelfGrid
                     unit={{ id: idx + 1, display_name: '', rows: 4, cols: 4, ordering: idx + 1 }}
-                    shelfIndex={idx}
+                    units={sortedUnits}
                     litCube={highlight.primaryCube}
                     emptyCubes={emptyCubes}
                     labelSpan={labelSpan}
@@ -818,7 +818,11 @@ export function KioskView() {
       </main>
 
       {/* Cube-contents panel (CUBE-09, D-14) — bottom sheet, slides up on cube tap */}
-      <CubeContentsPanel cube={tappedCube} onDismiss={() => setTappedCube(null)} />
+      <CubeContentsPanel
+        cube={tappedCube}
+        units={sortedUnits}
+        onDismiss={() => setTappedCube(null)}
+      />
 
       {/* D2-09: persistent Switch-profile corner button (2+ profiles only).
           Phase 9 / D-05: suppressed while offline (profile-switch is server-dependent). */}

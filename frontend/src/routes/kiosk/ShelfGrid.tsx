@@ -1,12 +1,13 @@
 import { Cube } from './Cube'
+import { rowLetter, unitRowOffset } from '../../lib/shelf'
 import { SpanUnderlay } from './SpanUnderlay'
 import { CELL_GAP_XL, CELL_SIZE_XL } from './gridGeometry'
 import type { CubeRef, CubeState, SubInterval, Unit } from '../../api/types'
 
 interface ShelfGridProps {
   unit: Unit
-  /** 0-based shelf index used to assign row letter labels (0 → A-D, 1 → E-H, etc.) */
-  shelfIndex: number
+  /** Full configured layout; row addresses follow ordering and actual unit row counts. */
+  units?: readonly Unit[]
   /** Which cube is currently lit — null if none */
   litCube: CubeRef | null
   /** Set of cube keys flagged as empty, formatted "unitId-row-col" (0-based) */
@@ -50,8 +51,8 @@ interface ShelfGridProps {
  * var(--gruvax-cell-gap-xl) — never hardcoded px values.
  *
  * Address scheme:
- *   Shelf A (shelfIndex=0) rows A-D, columns 1-4 → "A1".."D4"
- *   Shelf B (shelfIndex=1) rows E-H, columns 1-4 → "E1".."H4"
+ *   Rows use cumulative configured row counts in unit ordering, continuing past Z.
+ *   Addresses are display-only; React keys use durable unit/row/col coordinates.
  * (CUBE-06)
  *
  * API convention: row and col are 0-based (matching cube_boundaries seed).
@@ -62,7 +63,7 @@ interface ShelfGridProps {
  */
 export function ShelfGrid({
   unit,
-  shelfIndex,
+  units = [unit],
   litCube,
   emptyCubes,
   labelSpan = [],
@@ -72,17 +73,16 @@ export function ShelfGrid({
   onCubeTap,
   shimmerCubes = new Set(),
 }: ShelfGridProps) {
-  const ROW_LETTERS = 'ABCDEFGH'
-  const baseRowOffset = shelfIndex * 4
+  const baseRowOffset = unitRowOffset(unit.id, units)
 
   const cells: React.ReactNode[] = []
 
   for (let r = 0; r < unit.rows; r++) {
     for (let c = 0; c < unit.cols; c++) {
       // Human-readable address label — display only, not used for API matching
-      const rowLetter = ROW_LETTERS[baseRowOffset + r] ?? '?'
+      const letter = rowLetter(baseRowOffset + r)
       const colNumber = c + 1
-      const address = `${rowLetter}${colNumber}`
+      const address = `${letter}${colNumber}`
 
       // API convention: row/col are 0-based — match directly against loop indices
       const isLit =
@@ -99,7 +99,7 @@ export function ShelfGrid({
 
       cells.push(
         <Cube
-          key={address}
+          key={cubeKey}
           unitId={unit.id}
           row={r}
           col={c}

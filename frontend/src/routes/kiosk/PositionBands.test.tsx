@@ -14,7 +14,7 @@ describe('record position bands', () => {
     const { container } = render(
       <ShelfGrid
         unit={unit}
-        shelfIndex={0}
+
         litCube={primary}
         labelSpan={[primary, neighbor]}
         subCubeInterval={edgeBand}
@@ -36,7 +36,7 @@ describe('record position bands', () => {
     const { container } = render(
       <ShelfGrid
         unit={unit}
-        shelfIndex={0}
+
         litCube={primary}
         labelSpan={[primary]}
         subCubeInterval={{ start: 0, end: 1, crosses_boundary: false }}
@@ -56,7 +56,7 @@ describe('record position bands', () => {
     const { container } = render(
       <ShelfGrid
         unit={unit}
-        shelfIndex={0}
+
         litCube={primary}
         labelSpan={[primary]}
         subCubeInterval={null}
