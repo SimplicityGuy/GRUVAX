@@ -11,7 +11,12 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BulkSaveError, uploadImportBoundaries, uploadImportSettings } from './adminClient'
+import {
+  BulkSaveError,
+  uploadImportBoundaries,
+  uploadImportSettings,
+  validateBoundary,
+} from './adminClient'
 
 function makeFile(name: string, content = 'irrelevant'): File {
   return new File([content], name, { type: 'text/plain' })
@@ -128,5 +133,31 @@ describe('uploadImportSettings — nested HTTPException(detail=...) error bodies
     const err = caught as BulkSaveError
     expect(err.errorType).toBe('parse_error')
     expect(err.serverMessage).toBe('Settings YAML must be a mapping')
+  })
+})
+
+describe('validateBoundary status contracts (gruvax-s35)', () => {
+  it('returns HTTP 200 phantom findings for the existing per-cube UI', async () => {
+    const body = {
+      valid: false,
+      results: [{ valid: false, phantom: true, message: 'No match in collection.' }],
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response(JSON.stringify(body), { status: 200 })),
+    )
+    expect(await validateBoundary([])).toEqual(body)
+  })
+
+  it('keeps a non-JSON HTTP error typed without fabricating a server message', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('unavailable', { status: 503 })),
+    )
+    await expect(validateBoundary([])).rejects.toMatchObject({
+      status: 503,
+      serverMessage: undefined,
+      body: {},
+    })
   })
 })

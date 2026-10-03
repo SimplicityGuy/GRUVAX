@@ -338,9 +338,11 @@ function WizardWalk() {
           .map((r) => r.message ?? r.error ?? 'Validation error')
         setValidateErrors(msgs)
       }
-    } catch {
+    } catch (err) {
       setValidateErrors([
-        'Something went wrong checking your changes. Check your connection and try again.',
+        err instanceof BulkSaveError && err.serverMessage
+          ? err.serverMessage
+          : 'Something went wrong checking your changes. Check your connection and try again.',
       ])
     }
   }

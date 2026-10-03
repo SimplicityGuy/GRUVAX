@@ -200,7 +200,8 @@ export async function adminGetCubeBoundary(
 }
 
 /**
- * POST /api/admin/cubes/validate — dry-run boundary validation (always HTTP 200).
+ * POST /api/admin/cubes/validate — dry-run boundary validation.
+ * Phantom results use HTTP 200; contiguity rejection uses a structured HTTP 400.
  * Never writes to the database.
  *
  * The backend ValidateRequest model uses key `updates` (CR-02).
@@ -211,7 +212,14 @@ export async function validateBoundary(edits: CubeBoundaryEdit[]): Promise<Valid
     body: JSON.stringify({ updates: edits }),
   })
   if (!res.ok) {
-    throw new Error(`Validate failed: ${res.status}`)
+    const rawBody = (await res.json().catch(() => ({}))) as Record<string, unknown>
+    const body = flattenErrorBody(rawBody)
+    throw new BulkSaveError(
+      res.status,
+      typeof body.type === 'string' ? body.type : undefined,
+      typeof body.message === 'string' ? body.message : undefined,
+      body,
+    )
   }
   return res.json() as Promise<ValidateResponse>
 }
@@ -790,7 +798,7 @@ export class RateLimitError extends Error {
 }
 
 /**
- * Thrown by ``adminBulkSave`` and the import upload functions on a non-200 response.
+ * Thrown by boundary validation/commit and the import upload functions on a non-200 response.
  *
  * ``errorType``    mirrors the server's ``type`` field (e.g. ``boundary_order_error``,
  *                  ``phantom_boundary``).  ``undefined`` for non-400 HTTP errors.

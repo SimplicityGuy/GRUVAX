@@ -496,7 +496,8 @@ async def validate_boundary(
     2. Calls validate_contiguity across all proposed updates.
     3. Computes movement_counts from the in-memory SegmentCache (diff preview).
 
-    Returns HTTP 400 on phantom (when force=False) or contiguity violation.
+    Returns HTTP 200 with valid=False and per-cube results on phantom errors.
+    Returns HTTP 400 with type/message on contiguity violation.
     Returns HTTP 200 with valid=True + movement_counts when all checks pass.
 
     This endpoint performs NO INSERT/UPDATE/DELETE (T-03-14, ADMN-07).

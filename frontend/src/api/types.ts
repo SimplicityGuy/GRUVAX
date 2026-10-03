@@ -295,7 +295,7 @@ export interface ValidateItem {
   movement_counts?: MovementCount[]
 }
 
-/** Response from POST /api/admin/cubes/validate (dry-run — always HTTP 200). */
+/** HTTP 200 dry-run results, including phantoms; contiguity errors use HTTP 400. */
 export interface ValidateResponse {
   valid: boolean
   results: ValidateItem[]
