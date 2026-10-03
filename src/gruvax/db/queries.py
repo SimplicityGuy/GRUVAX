@@ -205,7 +205,8 @@ async def search_collection(
 
     Path A — FTS (with optional catalog boost):
         ``fts_vector @@ websearch_to_tsquery('gruvax.gruvax_fts', %s)``
-        Scored by ``ts_rank_cd(fts_vector, query, 4)``.  The ``gruvax.gruvax_fts``
+        Scored by ``0.8 * ts_rank_cd(fts_vector, query, 36)`` (rank /
+        (rank + 1), below every catalog prefix even with repetitive text).  The ``gruvax.gruvax_fts``
         config folds accents (unaccent → english_stem, migration 0013) so an
         ASCII query like ``Bjork`` matches the stored ``Björk`` (gruvax-w4a7).
         When ``is_catalog_query(q)`` is True (SRCH-08/D-12), catalog_number
@@ -215,7 +216,7 @@ async def search_collection(
     Path B — Catalog prefix:
         ``lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
           LIKE %s ESCAPE '\\'``
-        Fixed score 0.9 (reliably hits ``BLP 4195`` from ``blp4195``). The
+        Exact normalized match scores 1.0; prefixes score 0.9 (reliably hits ``BLP 4195`` from ``blp4195``). The
         LIKE pattern is built by ``_catalog_like_pattern`` (Python-side),
         which collapses separators the same way as the column-side
         ``regexp_replace`` and backslash-escapes ``%``/``_``/``\\`` so a
@@ -282,8 +283,8 @@ WITH fts AS (
             setweight(to_tsvector('gruvax.gruvax_fts', coalesce(v.catalog_number, '')), 'A')
             || setweight(v.fts_vector, 'C'),
             tsq.query,
-            4
-        ) AS score
+            36
+        ) * 0.8 AS score
     FROM gruvax.profile_collection v
     CROSS JOIN websearch_to_tsquery('gruvax.gruvax_fts', %s) AS tsq(query)
     WHERE v.profile_id = %s::uuid
@@ -304,7 +305,8 @@ cat AS (
         catalog_number,
         NULL::text    AS format,
         year,
-        0.9::float AS score
+        CASE WHEN lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g')) = %s
+             THEN 1.0 ELSE 0.9 END::float AS score
     FROM gruvax.profile_collection
     WHERE profile_id = %s::uuid
       AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
@@ -354,6 +356,7 @@ LIMIT %s
         params: tuple[Any, ...] = (
             q,
             profile_id,
+            _SEP_COLLAPSE.sub("", q).lower(),
             profile_id,
             _catalog_like_pattern(q),
             limit,
@@ -378,7 +381,7 @@ WITH fts AS (
         NULL::text   AS format,
         v.year,
         CASE WHEN numnode(tsq.query) = 0 THEN 0.2
-             ELSE ts_rank_cd(v.fts_vector, tsq.query, 4) END AS score
+             ELSE ts_rank_cd(v.fts_vector, tsq.query, 36) * 0.8 END AS score
     FROM gruvax.profile_collection v
     CROSS JOIN websearch_to_tsquery('gruvax.gruvax_fts', %s) AS tsq(query)
     WHERE v.profile_id = %s::uuid
@@ -399,7 +402,8 @@ cat AS (
         catalog_number,
         NULL::text    AS format,
         year,
-        0.9::float AS score
+        CASE WHEN lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g')) = %s
+             THEN 1.0 ELSE 0.9 END::float AS score
     FROM gruvax.profile_collection
     WHERE profile_id = %s::uuid
       AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
@@ -456,6 +460,7 @@ LIMIT %s
             profile_id,
             term_prefix,
             term_prefix,
+            _SEP_COLLAPSE.sub("", q).lower(),
             profile_id,
             _catalog_like_pattern(q),
             limit,
