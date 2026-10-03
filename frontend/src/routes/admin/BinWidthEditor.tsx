@@ -53,6 +53,28 @@ function dragPosition(clientX: number, rect: DOMRect, left: number, right: numbe
   return Math.max(left + MIN, Math.min(right - MIN, position))
 }
 
+function safeHandlePositions(
+  segs: Segment[],
+  stripWidth: number,
+): Array<{ index: number; fraction: number }> {
+  if (!validWidths(segs) || !Number.isFinite(stripWidth) || stripWidth <= 0) return []
+  const positions = []
+  let cumulative = 0
+  let previousX = -Infinity
+  for (let index = 0; index < segs.length - 1; index++) {
+    cumulative += segs[index].fraction
+    // Narrow adjacent labels cannot support the minimum on both sides.
+    if (segs[index].fraction < MIN || segs[index + 1].fraction < MIN) continue
+    const x = cumulative * stripWidth
+    // Omit crowded handles rather than painting one touch target over another.
+    if (x < HANDLE_SIZE / 2 || stripWidth - x < HANDLE_SIZE / 2) continue
+    if (x - previousX < HANDLE_SIZE) continue
+    previousX = x
+    positions.push({ index, fraction: cumulative })
+  }
+  return positions
+}
+
 /** Graduated-blue palette cycled by segment index. */
 const PALETTE: Array<{ bg: string; fg: string }> = [
   { bg: 'var(--gruvax-blue)', fg: 'var(--gruvax-white)' },
@@ -221,25 +243,14 @@ export function BinWidthEditor() {
     })
 
     strip.replaceChildren(...segNodes)
-    if (!validWidths(segs)) return
 
-    // Build drag handles between adjacent segments
-    let cum = 0
-    let previousHandleX = -Infinity
-    const stripWidth = strip.getBoundingClientRect().width
-    for (let i = 0; i < segs.length - 1; i++) {
-      cum += segs[i].fraction
-      // Narrow adjacent labels cannot support the minimum on both sides.
-      if (segs[i].fraction < MIN || segs[i + 1].fraction < MIN) continue
-      const handleX = cum * stripWidth
-      // Omit crowded handles rather than painting one touch target over another.
-      if (handleX < HANDLE_SIZE / 2 || stripWidth - handleX < HANDLE_SIZE / 2) continue
-      if (handleX - previousHandleX < HANDLE_SIZE) continue
-      previousHandleX = handleX
+    // Build only independently grabbable handles between adjacent segments.
+    const positions = safeHandlePositions(segs, strip.getBoundingClientRect().width)
+    for (const { index: i, fraction } of positions) {
       const handle = el('div', {
         className: 'bwe-handle',
         dataset: { boundaryIndex: String(i) },
-        style: { left: `${(cum * 100).toFixed(4)}%` },
+        style: { left: `${(fraction * 100).toFixed(4)}%` },
       })
       handle.appendChild(el('div', { className: 'bwe-grip' }))
       // attachDragH is a hoisted function decl below; mutual recursion with renderStrip

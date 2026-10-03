@@ -193,3 +193,23 @@ describe('BinWidthEditor safe touch geometry and fractions (gruvax-yl6b)', () =>
     expect(useAdminStore.getState().pendingChangeSet).toBeNull()
   })
 })
+
+it('keeps native Reset controls reachable when a narrow override has no drag handle', async () => {
+  const narrow = segments([0.03, 0.97])
+  narrow[0] = { ...narrow[0], auto_fraction: 0.01, is_override: true }
+  narrow[1].auto_fraction = 0.99
+  vi.mocked(getUnitSegments).mockResolvedValue({ segments: narrow })
+  await renderEditor()
+  expect(document.querySelectorAll('.bwe-handle')).toHaveLength(0)
+  const reset = screen.getByRole('button', { name: 'reset to 1%' })
+  reset.focus()
+  expect(reset).toHaveFocus()
+  fireEvent.click(reset)
+  expect(document.querySelectorAll('.bwe-chip--auto')).toHaveLength(2)
+  expect(parseFloat(document.querySelector<HTMLElement>('.bwe-seg')!.style.width)).toBeCloseTo(1)
+  fireEvent.click(screen.getByRole('button', { name: 'Save overrides' }))
+  await screen.findByText('Saved · all widths auto-computed')
+  expect(vi.mocked(setOverrides).mock.calls[0][3].overrides.every((o) => o.fraction === null)).toBe(
+    true,
+  )
+})
