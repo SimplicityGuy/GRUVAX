@@ -10,8 +10,11 @@ from pathlib import Path
 import sys
 
 from alembic import context
+from alembic.script import ScriptDirectory
+from alembic.script.revision import RangeNotAncestorError
+from alembic.util import CommandError
 import psycopg
-from sqlalchemy import event, pool
+from sqlalchemy import event, pool, text
 from sqlalchemy.ext.asyncio import AsyncEngine, async_engine_from_config
 
 
@@ -20,6 +23,7 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from typing import TYPE_CHECKING, Protocol
 
+from gruvax.db.migration_safety import PROFILE_DOWNGRADE_GUARD
 from gruvax.settings import settings
 
 
@@ -95,7 +99,9 @@ def do_run_migrations(connection: Connection) -> None:
     context.configure(
         connection=connection,
         target_metadata=target_metadata,
-        transaction_per_migration=True,
+        # A downgrade refusal or later failure must roll back the entire chain,
+        # including earlier revision/schema changes, rather than commit each step.
+        transaction_per_migration=False,
         # Pin alembic_version to the public schema so that the downgrade's
         # DROP SCHEMA gruvax does not cascade-delete the version table before
         # Alembic can clean it up internally.
@@ -103,7 +109,24 @@ def do_run_migrations(connection: Connection) -> None:
     )
 
     with context.begin_transaction():
+        _guard_profile_downgrade(connection)
         context.run_migrations()
+
+
+def _guard_profile_downgrade(connection: Connection) -> None:
+    """Check the whole downgrade chain before any migration can mutate data."""
+    current = context.get_context().get_current_heads()
+    if not current:
+        return
+    script = ScriptDirectory.from_config(config)
+    try:
+        steps = list(script.iterate_revisions(current, context.get_revision_argument()))
+    except CommandError, RangeNotAncestorError:
+        # Destination is not an ancestor (upgrade or invalid revision); Alembic
+        # handles that command normally and still reports invalid destinations.
+        return
+    if any(step.revision in {"0009", "0010"} for step in steps):
+        connection.execute(text(PROFILE_DOWNGRADE_GUARD))
 
 
 async def _make_engine() -> AsyncEngine:

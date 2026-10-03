@@ -21,18 +21,33 @@ in Plan 02-01. The fixture and helper patterns mirror test_migrate_0009.py exact
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 import subprocess
 from typing import TYPE_CHECKING
 
 import psycopg
 import pytest
+import pytest_asyncio
 
-from gruvax.settings import settings
+from tests.fixtures.migration_databases import (
+    migration_db as migration_db,
+    migration_pool as migration_pool,
+)
 
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def db_pool(migration_pool, migration_db):  # type: ignore[no-untyped-def]
+    """Register the owned pool locally and verify its actual database before use."""
+    expected = psycopg.conninfo.conninfo_to_dict(migration_db[0])["dbname"]
+    async with migration_pool.connection() as conn:
+        actual = await (await conn.execute("SELECT current_database()")).fetchone()
+    assert actual == (expected,)
+    yield migration_pool
 
 
 # ── shared helpers ──────────────────────────────────────────────────────────
@@ -42,11 +57,7 @@ LEGACY_SEED_PATH = (
 )
 
 
-def _conninfo() -> str:
-    return settings.DATABASE_URL.replace("postgresql+psycopg://", "postgresql://", 1)
-
-
-async def _alembic(action: str, target: str) -> None:
+async def _alembic(action: str, target: str, database_url: str) -> None:
     """Run ``alembic <action> <target>`` via subprocess inside the test process.
 
     Uses asyncio.to_thread to avoid blocking the event loop — mirrors the
@@ -62,6 +73,7 @@ async def _alembic(action: str, target: str) -> None:
         subprocess.run,
         cmd,
         cwd=str(cwd),
+        env={**os.environ, "DATABASE_URL": database_url},
         capture_output=True,
         text=True,
         timeout=120,
@@ -78,20 +90,20 @@ async def _alembic(action: str, target: str) -> None:
 import pytest_asyncio  # noqa: E402
 
 
-@pytest_asyncio.fixture
-async def fresh_head(db_pool) -> AsyncIterator[None]:  # type: ignore[no-untyped-def]
+@pytest_asyncio.fixture(loop_scope="session")
+async def fresh_head(db_pool, migration_db) -> AsyncIterator[None]:  # type: ignore[no-untyped-def]
     """Ensure the schema is at HEAD before each test, with the legacy seed loaded.
 
     Mirrors the fresh_head fixture from test_migrate_0009.py.
     """
     assert LEGACY_SEED_PATH.is_file(), f"legacy seed missing at {LEGACY_SEED_PATH}"
     seed_sql = LEGACY_SEED_PATH.read_text()
-    async with await psycopg.AsyncConnection.connect(_conninfo(), autocommit=True) as boot:
+    async with await psycopg.AsyncConnection.connect(migration_db[0], autocommit=True) as boot:
         await boot.execute(seed_sql)
 
-    await _alembic("upgrade", "head")
+    await _alembic("upgrade", "head", migration_db[1])
     yield
-    # Leave HEAD in place for the next test.
+    # The owned pool/database fixtures close and drop this test database.
 
 
 # ── Behaviour 1: round-trip ──────────────────────────────────────────────────
@@ -101,6 +113,7 @@ async def fresh_head(db_pool) -> AsyncIterator[None]:  # type: ignore[no-untyped
 async def test_roundtrip_clean(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
+    migration_db,
 ) -> None:
     """Behaviour 1: upgrade head → downgrade base → upgrade head exits 0 after legacy seed.
 
@@ -110,8 +123,8 @@ async def test_roundtrip_clean(
     - Re-upgrade from base succeeds (idempotent with the legacy seed present).
     """
     # Already at HEAD (fresh_head). Walk it all the way down + back up.
-    await _alembic("downgrade", "base")
-    await _alembic("upgrade", "head")
+    await _alembic("downgrade", "base", migration_db[1])
+    await _alembic("upgrade", "head", migration_db[1])
 
     # Verify the profiles table survived the round-trip.
     async with db_pool.connection() as conn, conn.cursor() as cur:

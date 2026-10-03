@@ -20,16 +20,23 @@ Must differ from gruvax_session (admin) and gruvax_csrf (CSRF double-submit).
 
 from __future__ import annotations
 
-import os
+import uuid
 
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
+import psycopg
 import pytest
 import pytest_asyncio
 
+import gruvax.app as app_module
 from gruvax.app import create_app
 from gruvax.auth.sessions import CSRF_COOKIE, SESSION_COOKIE
+from gruvax.settings import settings
 from tests.cookies import cookie_header
+from tests.fixtures.migration_databases import (
+    migration_db as migration_db,
+    migration_pool as migration_pool,
+)
 
 
 # ── browse-binding cookie name (D2-10) ───────────────────────────────────────
@@ -47,14 +54,53 @@ assert BROWSE_BINDING_COOKIE != CSRF_COOKIE, (
 )
 
 
+@pytest_asyncio.fixture(loop_scope="session")
+async def db_pool(migration_pool, migration_db):  # type: ignore[no-untyped-def]
+    """Register the owned pool locally and verify its actual database before use."""
+    expected = psycopg.conninfo.conninfo_to_dict(migration_db[0])["dbname"]
+    async with migration_pool.connection() as conn:
+        actual = await (await conn.execute("SELECT current_database()")).fetchone()
+    assert actual == (expected,)
+    yield migration_pool
+
+
 # ── fixtures ──────────────────────────────────────────────────────────────────
 
 
-@pytest_asyncio.fixture(scope="module")
-async def client(db_pool):  # type: ignore[no-untyped-def]
-    """Module-scoped async test client with full ASGI lifespan."""
-    if not os.environ.get("SESSION_SECRET"):
-        os.environ["SESSION_SECRET"] = "test-session-secret-for-pytest-only"
+@pytest.fixture
+def parent_profile_sentinel():  # type: ignore[no-untyped-def]
+    """Keep a deliberate active parent profile throughout the mounted lifespan."""
+    parent = settings.DATABASE_URL.replace("postgresql+psycopg://", "postgresql://", 1)
+    sentinel = uuid.uuid4()
+    with psycopg.connect(parent, autocommit=True) as conn:
+        conn.execute(
+            "INSERT INTO gruvax.profiles (id, display_name, app_token_encrypted, app_token_revoked)"
+            " VALUES (%s, %s, %s, TRUE)",
+            (sentinel, f"Bootstrap parent {sentinel}", b""),
+        )
+        before = conn.execute(
+            "SELECT to_jsonb(p) FROM gruvax.profiles p WHERE id = %s", (sentinel,)
+        ).fetchone()
+    assert before is not None
+    try:
+        yield sentinel
+    finally:
+        with psycopg.connect(parent, autocommit=True) as conn:
+            try:
+                after = conn.execute(
+                    "SELECT to_jsonb(p) FROM gruvax.profiles p WHERE id = %s", (sentinel,)
+                ).fetchone()
+                assert after == before
+            finally:
+                conn.execute("DELETE FROM gruvax.profiles WHERE id = %s", (sentinel,))
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def client(db_pool, migration_db, monkeypatch, parent_profile_sentinel):  # type: ignore[no-untyped-def]
+    """Function-owned async client and full lifespan on a fresh database."""
+    # Route the real lifespan to this test's owned pool, leaving global settings
+    # and the shared parent database untouched. Lifespan retains pool cleanup.
+    monkeypatch.setattr(app_module, "create_pool", lambda **_kwargs: db_pool)
 
     from gruvax.auth.pin import hash_pin
 
@@ -71,6 +117,15 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
         pool = app.state.db_pool
         _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
         async with pool.connection() as conn:
+            actual = await (await conn.execute("SELECT current_database()")).fetchone()
+            expected = psycopg.conninfo.conninfo_to_dict(migration_db[0])["dbname"]
+            assert actual == (expected,)
+            sentinel = await (
+                await conn.execute(
+                    "SELECT id FROM gruvax.profiles WHERE id = %s", (parent_profile_sentinel,)
+                )
+            ).fetchone()
+            assert sentinel is None
             await conn.execute(
                 "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
                 " VALUES (%s::uuid, 'auth.pin_hash', %s::jsonb,"
@@ -83,9 +138,9 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
         yield ac
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(loop_scope="session")
 async def admin_session(client, db_pool):  # type: ignore[no-untyped-def]
-    """Module-local override of the conftest admin_session fixture.
+    """Function-local override of the conftest admin_session fixture.
 
     The conftest version accesses ``client.app.state.db_pool``, which
     requires the client to expose ``.app``.  The session-bootstrap test
@@ -98,6 +153,28 @@ async def admin_session(client, db_pool):  # type: ignore[no-untyped-def]
     assert res.status_code == 200, f"admin_session: login failed {res.status_code}: {res.text}"
     csrf = res.cookies.get("gruvax_csrf") or res.json().get("csrf_token")
     return {"cookies": res.cookies, "csrf_token": csrf}
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def second_profile(db_pool):  # type: ignore[no-untyped-def]
+    """Own the second profile in this function's disposable database and loop."""
+    async with db_pool.connection() as conn:
+        row = await (
+            await conn.execute(
+                "INSERT INTO gruvax.profiles (display_name, app_token_encrypted, app_token_revoked) VALUES ('Sam', %s, TRUE) RETURNING id::text",
+                (b"",),
+            )
+        ).fetchone()
+        await conn.commit()
+    assert row is not None
+    try:
+        yield row[0]
+    finally:
+        async with db_pool.connection() as conn:
+            await conn.execute(
+                "UPDATE gruvax.profiles SET deleted_at = now() WHERE id = %s::uuid", (row[0],)
+            )
+            await conn.commit()
 
 
 # ── tests ─────────────────────────────────────────────────────────────────────
@@ -123,11 +200,7 @@ async def test_single_profile_auto_binds(
         await cur.execute("SELECT COUNT(*) FROM gruvax.profiles WHERE deleted_at IS NULL")
         count_row = await cur.fetchone()
     active_count = count_row[0] if count_row else 0
-    if active_count != 1:
-        pytest.skip(
-            f"test_single_profile_auto_binds requires exactly 1 active profile, "
-            f"found {active_count}. This test must run without the second_profile fixture."
-        )
+    assert active_count == 1, "Owned single-profile fixture must contain exactly one active profile"
 
     res = await client.get("/api/session")
     assert res.status_code == 200, (
@@ -165,9 +238,8 @@ async def test_two_profiles_unbound(
     must NOT auto-bind — it returns bound_profile_id = null so the SPA routes to /select.
     """
     # second_profile fixture has seeded a second profile in the DB.
-    # Clear any browse-binding cookie left by a prior test so this test starts with
-    # no browse-binding cookie as designed (the module-scoped client accumulates cookies
-    # across tests; we explicitly clear before this isolated assertion).
+    # Ensure this owned client has no browse-binding cookie for the two-profile
+    # bootstrap assertion.
     client.cookies.delete(BROWSE_BINDING_COOKIE)
     res = await client.get("/api/session")  # No cookies — no browse binding
     assert res.status_code == 200, (

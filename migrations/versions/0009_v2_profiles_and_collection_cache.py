@@ -31,7 +31,8 @@ discogsography (DEP-02). Single atomic migration covers:
 
 Conventions (carried from 0001-0008):
   - All DDL via op.execute() with explicit constraint/index names.
-  - downgrade() fully reverses upgrade() — CI round-trip gate enforces.
+  - downgrade() reverses the GRUVAX schema for default-only data; non-default
+    profile data is refused and shared extensions remain installed.
   - alembic_version lives in public; search_path via env.py connect listener.
   - Module-level _NAME = \"\"\"...\"\"\" constants; op.execute(_NAME) in upgrade()/
     downgrade(); never inline triple-quoted strings inside functions.
@@ -66,6 +67,8 @@ GRANT NOTE (for operator, after upgrading to this revision):
 from __future__ import annotations
 
 from alembic import op
+
+from gruvax.db.migration_safety import PROFILE_DOWNGRADE_GUARD
 
 
 # revision identifiers, used by Alembic.
@@ -253,10 +256,9 @@ LEFT JOIN artists      a  ON a.id = r.primary_artist_id
 
 
 def upgrade() -> None:
-    # pgcrypto provides gen_random_uuid() — needed for profiles.id default.
-    # Pin to public schema so the extension's schema dep doesn't block 0001's
-    # downgrade `DROP SCHEMA gruvax`. The runtime pool's search_path resolves
-    # gen_random_uuid() via the public-search-path fallback (D-12).
+    # PostgreSQL 13+ provides gen_random_uuid() in pg_catalog; profiles do not
+    # require pgcrypto. Keep the historical conditional install for compatibility,
+    # pinned to public so it is independent of the GRUVAX schema lifecycle.
     op.execute("CREATE EXTENSION IF NOT EXISTS pgcrypto WITH SCHEMA public")
 
     op.execute(_CREATE_PROFILES)
@@ -287,6 +289,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Direct downgrade from 0009 must also preserve metadata/PAT/collection.
+    op.execute(PROFILE_DOWNGRADE_GUARD)
     # Pitfall 5: re-broaden the search_path so v_collection's unqualified
     # body resolves against the legacy gruvax_dev / discogsography schema.
     # The runtime pool (D-12) only carries `gruvax, public`; the legacy
@@ -312,8 +316,7 @@ def downgrade() -> None:
     op.execute("DROP INDEX IF EXISTS gruvax.uq_profiles_display_name_active")
     op.execute("DROP TABLE IF EXISTS gruvax.profiles")
 
-    # 0009 is pgcrypto's only consumer in GRUVAX (profiles.id DEFAULT
-    # gen_random_uuid()). Drop on downgrade so 0001's `DROP SCHEMA gruvax`
-    # has no extension dep blocking it. IF EXISTS keeps the round-trip
-    # idempotent in case the extension was already removed by an operator.
-    op.execute("DROP EXTENSION IF EXISTS pgcrypto")
+    # Extensions are shared database resources owned by the operator. Never
+    # drop pgcrypto on GRUVAX rollback (same convention as 0003's pg_trgm).
+    # The public-schema install already avoids a dependency on the GRUVAX schema;
+    # UUID defaults use PostgreSQL's core pg_catalog.gen_random_uuid().
