@@ -129,6 +129,7 @@ async def illuminate(
     # Resolve per-profile settings_cache when profile_id is provided (D2-04).
     # Fall back to the legacy flat settings_cache (P1 / startup edge case).
     settings_cache: dict[str, Any]
+    default_settings: dict[str, Any] = getattr(request.app.state, "settings_cache", {})
     if profile_id is not None:
         settings_cache_registry: dict[str, dict[str, Any]] | None = getattr(
             request.app.state, "settings_cache_registry", None
@@ -136,12 +137,15 @@ async def illuminate(
         if settings_cache_registry is not None:
             # gruvax-kol: the registry is keyed by canonical lowercase UUID, so a
             # client-supplied uppercase/unhyphenated spelling of the SAME profile
-            # must not silently degrade to {} (default LED colours).
-            settings_cache = settings_cache_registry.get(canonical_profile_id(profile_id), {})
+            # must not silently degrade to compiled-in LED colours. Unknown
+            # profiles use the configured default cache, as absent IDs do.
+            settings_cache = settings_cache_registry.get(
+                canonical_profile_id(profile_id), default_settings
+            )
         else:
-            settings_cache = getattr(request.app.state, "settings_cache", {})
+            settings_cache = default_settings
     else:
-        settings_cache = getattr(request.app.state, "settings_cache", {})
+        settings_cache = default_settings
     registry = getattr(request.app.state, "highlight_registry", None)
 
     if client is not None and registry is not None:
