@@ -271,3 +271,13 @@ empty for `init-sync`'s real sync to populate. Recovery: unset `GRUVAX_ENV`, the
 fresh install) or manually `DELETE FROM gruvax.profile_collection WHERE profile_id =
 '00000000-0000-0000-0000-000000000001'` on the shared Postgres so `init-sync`'s idempotency
 precheck sees an empty collection on the next `docker compose up -d` and runs the real sync.
+
+## Authenticated broker readiness
+
+When enabling `password_file` and `allow_anonymous false` in
+`mosquitto/mosquitto.conf`, mount the generated password file using the commented
+Compose volume entry and set matching `MQTT_USERNAME` / `MQTT_PASSWORD` in `.env`.
+The broker healthcheck uses these same credentials to subscribe to
+`$SYS/broker/uptime`. If custom ACLs are enabled, allow this account to read that
+topic. Missing or incorrect credentials fail readiness; the API continues to
+wait for a healthy broker. Anonymous development needs no password.
