@@ -28,6 +28,7 @@ from __future__ import annotations
 
 import asyncio
 import os
+from unittest.mock import AsyncMock
 import uuid as _uuid_module
 
 from asgi_lifespan import LifespanManager
@@ -36,6 +37,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from gruvax.discogsography.errors import PATRejected
 from tests.cookies import cookie_header
 
 
@@ -263,7 +265,7 @@ async def test_redeem_success(client, db_pool) -> None:  # type: ignore[no-untyp
     # Redeem with a valid fake PAT (the in-process fake accepts any dscg_* token)
     redeem_res = await client.post(
         f"/api/invite-codes/{code}/redeem",
-        json={"pat": "dscg_test_member_token"},
+        json={"pat": "dscg_test_member_token".ljust(50, "x")},
     )
     assert redeem_res.status_code == 200, (
         f"POST /api/invite-codes/{code}/redeem expected 200, "
@@ -299,7 +301,7 @@ async def test_redeem_second_use_rejected(client, db_pool) -> None:  # type: ign
     # First redeem — should succeed
     first_res = await client.post(
         f"/api/invite-codes/{code}/redeem",
-        json={"pat": "dscg_test_member_token"},
+        json={"pat": "dscg_test_member_token".ljust(50, "x")},
     )
     if first_res.status_code != 200:
         pytest.skip(f"first redeem returned {first_res.status_code} — skipping second-use check")
@@ -307,7 +309,7 @@ async def test_redeem_second_use_rejected(client, db_pool) -> None:  # type: ign
     # Second redeem — must be rejected (code already consumed)
     second_res = await client.post(
         f"/api/invite-codes/{code}/redeem",
-        json={"pat": "dscg_test_member_token"},
+        json={"pat": "dscg_test_member_token".ljust(50, "x")},
     )
     assert second_res.status_code == 404, (
         f"Second redeem of already-consumed code expected 404, "
@@ -322,14 +324,11 @@ async def test_redeem_second_use_rejected(client, db_pool) -> None:  # type: ign
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_redeem_bad_pat(client) -> None:  # type: ignore[no-untyped-def]
-    """Redeem with invalid PAT returns 401 pat_rejected (AUTH-02, T-07-03).
-
-    Uses a token that does NOT start with 'dscg_' — the in-process fake returns 401
-    for any non-dscg_* prefix token.
-
-    RED until Plan 02 ships the redeem endpoint.
-    """
+async def test_redeem_bad_pat(client, monkeypatch) -> None:  # type: ignore[no-untyped-def]
+    """A shape-valid PAT rejected upstream still returns 401 pat_rejected."""
+    monkeypatch.setattr(
+        "gruvax.api.invite_codes._run_test_sync", AsyncMock(side_effect=PATRejected())
+    )
     cookies = await _login(client)
     gen_res = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/invite",
@@ -339,10 +338,10 @@ async def test_redeem_bad_pat(client) -> None:  # type: ignore[no-untyped-def]
         pytest.skip(f"invite generation returned {gen_res.status_code}")
     code = gen_res.json()["code"]
 
-    # Invalid PAT — does not start with 'dscg_'
+    # Shape alone does not establish upstream authorization.
     redeem_res = await client.post(
         f"/api/invite-codes/{code}/redeem",
-        json={"pat": "INVALID_TOKEN_NOT_DSCG"},
+        json={"pat": "dscg_rejected_member_token".ljust(50, "x")},
     )
     assert redeem_res.status_code == 401, (
         f"Redeem with invalid PAT expected 401 pat_rejected, "
@@ -385,7 +384,7 @@ async def test_redeem_expired(client, db_pool) -> None:  # type: ignore[no-untyp
 
     redeem_res = await client.post(
         f"/api/invite-codes/{code}/redeem",
-        json={"pat": "dscg_test_member_token"},
+        json={"pat": "dscg_test_member_token".ljust(50, "x")},
     )
     assert redeem_res.status_code == 404, (
         f"Expired invite code expected 404, got {redeem_res.status_code}: {redeem_res.text}. "
@@ -416,7 +415,7 @@ async def test_redeem_rotates_token(client, db_pool) -> None:  # type: ignore[no
     # Step 1: connect an initial PAT via the owner flow
     connect_res = await client.post(
         f"/api/admin/profiles/{_DEFAULT_PROFILE_UUID}/connect",
-        json={"pat": "dscg_initial_token"},
+        json={"pat": "dscg_initial_token".ljust(50, "x")},
         headers={**headers, **cookie_header(cookies)},
     )
     if connect_res.status_code not in (200, 201):
@@ -437,7 +436,7 @@ async def test_redeem_rotates_token(client, db_pool) -> None:  # type: ignore[no
     # This tests that D-10 (overwrite existing token) works correctly.
     redeem_res = await client.post(
         f"/api/invite-codes/{code}/redeem",
-        json={"pat": "dscg_new_member_token"},
+        json={"pat": "dscg_new_member_token".ljust(50, "x")},
     )
     assert redeem_res.status_code == 200, (
         f"Redeem onto a profile with existing token expected 200 (D-10 rotation), "

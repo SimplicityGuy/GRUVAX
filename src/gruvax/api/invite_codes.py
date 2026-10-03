@@ -42,6 +42,7 @@ from pydantic import BaseModel
 from gruvax.api.admin.limiter import _REDEEM_RATE, _rate_limiter
 from gruvax.api.admin.profile_sync import _run_sync_background
 from gruvax.api.deps import get_pool, require_admin
+from gruvax.api.pat_validation import WebPAT  # noqa: TC001 — Pydantic needs this at runtime.
 from gruvax.discogsography.errors import (
     NetworkError,
     PATRejected,
@@ -118,7 +119,7 @@ _SELECT_INVITE = (
 class RedeemRequest(BaseModel):
     """Request body for POST /invite-codes/{code}/redeem."""
 
-    pat: str
+    pat: WebPAT
 
 
 # ── Helpers ────────────────────────────────────────────────────────────────────

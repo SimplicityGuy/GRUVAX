@@ -48,7 +48,7 @@ from tests.cookies import cookie_header
 # ── constants ─────────────────────────────────────────────────────────────────
 
 _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
-_TEST_PAT = "dscg_test_pat_PURGE_TEST_secret_bbb"
+_TEST_PAT = "dscg_test_pat_PURGE_TEST_secret_bbb".ljust(50, "x")
 _TEST_PIN = "0000"
 
 
