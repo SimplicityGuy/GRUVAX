@@ -10,13 +10,14 @@ import pytest
 import pytest_asyncio
 
 from gruvax.api.deps import require_admin
+import gruvax.app as app_module
 from gruvax.app import create_app
 from gruvax.sync import profile_sync
 from gruvax.sync.pat_crypto import encrypt_pat
 
 
 @pytest_asyncio.fixture(loop_scope="session")
-async def retention_client(db_pool):  # type: ignore[no-untyped-def]
+async def retention_client(db_pool, monkeypatch):  # type: ignore[no-untyped-def]
     async with db_pool.connection() as conn:
         row = await (
             await conn.execute(
@@ -27,6 +28,9 @@ async def retention_client(db_pool):  # type: ignore[no-untyped-def]
         await conn.commit()
     assert row is not None
     profile_id = row[0]
+    # This fixture controls manual sync interleavings. Automatic catch-up is
+    # covered separately and must not compete for this test profile's lock.
+    monkeypatch.setattr(app_module, "_startup_catchup_sweep", AsyncMock())
     app = create_app()
     app.dependency_overrides[require_admin] = lambda: {"role": "admin"}
     async with (
@@ -102,7 +106,7 @@ async def test_delete_and_purge_during_fetch_cannot_resurrect_collection(
         ).fetchone()
     assert status is not None and status[0] is True
     assert status[1] != "ok" and status[2] == before[0]
-    assert isinstance(outcome, RuntimeError) and "deleted" in str(outcome).lower()
+    assert isinstance(outcome, profile_sync.ProfileDeletedDuringSync)
     assert profile_id not in app.state.snapshot_registry
     publish.assert_not_awaited()
     upstream.aclose.assert_awaited_once()

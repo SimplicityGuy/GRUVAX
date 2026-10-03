@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from psycopg import Error as DatabaseError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from gruvax.api.admin.router import create_admin_router
@@ -71,6 +72,7 @@ from gruvax.sync.nightly import (
 if TYPE_CHECKING:
     from collections.abc import AsyncGenerator
 
+    from psycopg_pool import AsyncConnectionPool
     from starlette.responses import Response
     from starlette.types import Scope
 
@@ -119,9 +121,39 @@ class SpaStaticFiles(StaticFiles):
         return response
 
 
+async def _stop_background_tasks(app: FastAPI) -> None:
+    """Finish cancellation before MQTT and database resources are released."""
+    tasks = tuple(app.state.background_tasks)
+    for task in tasks:
+        task.cancel()
+    await asyncio.gather(*tasks, return_exceptions=True)
+    app.state.background_tasks.clear()
+
+
+def _degrade_database(app: FastAPI, phase: str, exc: Exception) -> None:
+    app.state.db_ok = False
+    app.state.profile_collection_ready = False
+    app.state.db_pool = None
+    logger.error("Database startup phase %s failed; serving degraded: %s", phase, exc)
+
+
 @asynccontextmanager
 async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
-    """FastAPI lifespan: startup setup → yield → teardown."""
+    """Own startup resources even when initialization fails before yielding."""
+    app.state.background_tasks = set()
+    pool = create_pool(min_size=2, max_size=10)
+    async with contextlib.AsyncExitStack() as resources:
+        resources.push_async_callback(pool.close)
+        resources.push_async_callback(disconnect_mqtt, app)
+        resources.push_async_callback(_stop_background_tasks, app)
+        async with _initialize_and_serve(app, pool):
+            yield
+    logger.info("GRUVAX API shutdown complete")
+
+
+@asynccontextmanager
+async def _initialize_and_serve(app: FastAPI, pool: AsyncConnectionPool) -> AsyncGenerator[None]:
+    """Initialize application state and serve with guaranteed outer cleanup."""
 
     # ── 0. Structured-JSON logging + log ring buffer (OBS-02, D-12) ─────────
     # Configure before the pool opens so all subsequent log calls emit JSON.
@@ -132,7 +164,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     configure_logging(settings.LOG_LEVEL, _log_ring)
 
     # ── 1. DB pool ───────────────────────────────────────────────────────────
-    pool = create_pool(min_size=2, max_size=10)
     await pool.open()
     app.state.db_pool = pool
     app.state.db_ok = True
@@ -158,7 +189,7 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         app.state.profile_collection_ready = True
         logger.info("profile_collection probe: OK")
     except Exception as exc:
-        app.state.profile_collection_ready = False
+        _degrade_database(app, "profile_collection probe", exc)
         logger.error(
             "profile_collection probe FAILED — search will return 503 until resolved. "
             "Run `alembic upgrade head` and `gruvax-sync --profile default`. Details: %s",
@@ -186,9 +217,13 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # Fetch all non-deleted profile IDs for eager load (D2-02).
     # Empty-cache profiles (no sync yet) are valid — P7 guard: load regardless
     # of app_token_revoked.
-    async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute("SELECT id FROM gruvax.profiles WHERE deleted_at IS NULL")
-        profile_rows = await cur.fetchall()
+    try:
+        async with pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute("SELECT id FROM gruvax.profiles WHERE deleted_at IS NULL")
+            profile_rows = await cur.fetchall()
+    except Exception as exc:
+        profile_rows = []
+        _degrade_database(app, "profiles", exc)
 
     for (pid,) in profile_rows:
         pid_str = str(pid)
@@ -297,8 +332,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     # in-flight publish.  Keep a strong reference in this app-scoped set until the
     # task completes, then discard via add_done_callback.  The illuminate endpoint
     # reuses this same set (see gruvax.api.illuminate).
-    app.state.background_tasks = set()
-
     # ── 1c. Per-profile-state background refresh (Plan 02-02 / SYN-02) ──────
     # P2 generalises _refresh_default_profile_state to ALL non-deleted profiles.
     # Reads gruvax.profiles.last_sync_at + last_sync_status + app_token_revoked
@@ -318,6 +351,8 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     app.state.default_profile_app_token_revoked = True
 
     async def _refresh_all_profiles_state() -> None:
+        if not app.state.db_ok:
+            return
         while True:
             try:
                 async with pool.connection() as conn, conn.cursor() as cur:
@@ -363,25 +398,32 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
     _state_task.add_done_callback(_log_state_task_exc)
     logger.info("all_profiles_state background refresh task scheduled (60s cadence)")
 
-    # ── 1d. Nightly sync scheduler — startup sweeps + loop (Phase 4 / SYN-01) ──
-    # Order (D4-11): one-shot sweeps run BEFORE registering the loop task so the
-    # sweeps' results are visible in logs as distinct startup phases.
-    #
-    # Step 1: read cadence for catch-up threshold.
-    _nightly_cadence = await _read_sync_cadence(pool)
-    #
-    # Step 2: catch-up sweep — sync any non-revoked profiles staler than the
-    # cadence (D4-02). Sequentially per profile; same skip policy as the loop.
-    await _startup_catchup_sweep(pool, app.state, _nightly_cadence)
-    #
-    # Step 3: purge sweep — remove profile_collection rows for soft-deleted
-    # profiles that were never purged at delete-time (D4-11/D4-12). Separate
-    # from catch-up: independently testable, visible as distinct startup phase.
-    await _startup_purge_sweep(pool)
-    #
+    # ── Nightly scheduler: local purge before readiness, network catch-up after.
+    _nightly_cadence = "off"
+    try:
+        _nightly_cadence = await _read_sync_cadence(pool)
+    except Exception as exc:
+        _degrade_database(app, "cadence", exc)
+    try:
+        await _startup_purge_sweep(pool)
+    except Exception as exc:
+        _degrade_database(app, "purge", exc)
+
     # Step 4: register the nightly loop (CR-01 strong-ref pattern, same as
     # _state_task above so the GC cannot cancel the task mid-flight).
-    _sync_task = asyncio.create_task(_sync_loop(pool, app.state))
+    async def _catchup_then_nightly() -> None:
+        if not app.state.db_ok:
+            return
+        try:
+            await _startup_catchup_sweep(pool, app.state, _nightly_cadence)
+        except DatabaseError as exc:
+            _degrade_database(app, "catchup", exc)
+            return
+        except Exception as exc:
+            logger.warning("Startup catch-up failed; retaining loaded caches: %s", exc)
+        await _sync_loop(pool, app.state)
+
+    _sync_task = asyncio.create_task(_catchup_then_nightly())
     app.state.background_tasks.add(_sync_task)
     _sync_task.add_done_callback(app.state.background_tasks.discard)
 
@@ -430,10 +472,6 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None]:
         )
     except Exception as exc:
         logger.warning("cancel_and_revert_all on shutdown raised (ignored): %s", exc)
-
-    await disconnect_mqtt(app)
-    await pool.close()
-    logger.info("GRUVAX API shutdown complete")
 
 
 def create_app() -> FastAPI:

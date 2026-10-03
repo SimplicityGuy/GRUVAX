@@ -59,6 +59,7 @@ __all__ = ["DiscogsographyClient"]
 # Test 4 / Test 6 don't wall-clock blow up; large enough that retries are
 # observable in time-sensitive tests (Test 3, Test 10).
 _HTTP_MAX_ATTEMPTS = 4  # 1 initial + 3 retries (per CONTEXT.md spec)
+_MAX_RETRY_AFTER_SECONDS = 300
 _NETWORK_MAX_ATTEMPTS = 2  # 1 initial + 1 retry (per CONTEXT.md spec)
 
 
@@ -68,14 +69,15 @@ def _parse_retry_after(value: str | None) -> dt.timedelta:
     The discogsography v1 contract guarantees seconds. RESEARCH §Pitfall 4
     notes that if a future upstream library bump ever sends a date, an
     unguarded ``int()`` parse would crash. Default to 1s on any parse
-    failure — the cost of an aggressive retry is far smaller than the cost
+    failure; valid numeric waits are capped at five minutes so a hostile or
+    mistaken header cannot park a sync indefinitely. The cost of an aggressive retry is far smaller than the cost
     of a sync that silently dies on a contract drift.
     """
     if not value:
         return dt.timedelta(seconds=1)
     try:
-        return dt.timedelta(seconds=max(1, int(float(value))))
-    except TypeError, ValueError:
+        return dt.timedelta(seconds=min(_MAX_RETRY_AFTER_SECONDS, max(1, int(float(value)))))
+    except TypeError, ValueError, OverflowError:
         return dt.timedelta(seconds=1)
 
 
@@ -145,6 +147,7 @@ class DiscogsographyClient:
             async for outer_attempt in stamina.retry_context(
                 on=self._should_retry_network,
                 attempts=_NETWORK_MAX_ATTEMPTS,
+                timeout=None,  # Bound attempts, not elapsed Retry-After/request time.
                 wait_initial=0.05,
                 wait_max=0.1,
                 wait_jitter=0.01,
@@ -171,6 +174,7 @@ class DiscogsographyClient:
             async for inner_attempt in stamina.retry_context(
                 on=self._should_retry_http,
                 attempts=_HTTP_MAX_ATTEMPTS,
+                timeout=None,
                 wait_initial=0.05,
                 wait_max=2.0,  # cap so 429 Retry-After:1 still dominates wait
                 wait_jitter=0.01,

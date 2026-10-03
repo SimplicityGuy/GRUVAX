@@ -392,8 +392,11 @@ client wrapping `GET /api/user/collection` (paged, `Authorization: Bearer <PAT>`
 - **Sync triggers:** on profile connect (synchronous `limit=1` test call, then async full
   sync), manual "Sync now" (admin button, 202 Accepted), and a nightly background loop
   (`gruvax.sync.nightly`, DST-safe, configurable cadence: 24h/12h/6h/off, default 03:00
-  local, fire hours read from `gruvax.settings`). A startup catch-up sweep syncs any
-  stale non-revoked profile before the loop registers; a startup purge sweep removes
+  local in the configured IANA `TZ` (default `America/Los_Angeles`), fire hours
+  read from `gruvax.settings`). A startup catch-up sweep syncs any
+  stale non-revoked profile in a tracked background task before the nightly loop
+  begins; HTTP readiness does not wait for upstream catch-up. A local startup
+  purge sweep removes
   `profile_collection` rows for soft-deleted profiles never cleaned up at delete-time.
 - **Dev/CI:** `fake-discogsography` (`src/gruvax/_internal/fake_discogsography.py`) is a
   sibling FastAPI service implementing the same contract against seeded synthetic data,
@@ -516,7 +519,7 @@ flowchart TD
     ALIAS --> MQTT[Connect MQTT best-effort]
     MQTT --> HIGHLIGHT[Init HighlightRegistry]
     HIGHLIGHT --> STATE["Schedule 60s all-profiles\nstate-refresh task"]
-    STATE --> SWEEPS["Nightly-sync startup sweeps:\ncatch-up, then purge"]
+    STATE --> SWEEPS["Nightly-sync startup sweeps:\nlocal purge, then background catch-up"]
     SWEEPS --> SYNCLOOP[Schedule nightly-sync loop task]
     SYNCLOOP --> AMBIENT[Publish ambient LED baseline]
     AMBIENT --> SERVE[Yield — serving requests]
