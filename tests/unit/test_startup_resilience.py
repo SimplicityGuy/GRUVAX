@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock
 
 from fastapi import FastAPI
 from httpx import ASGITransport, AsyncClient
+from psycopg.errors import UndefinedTable
 import pytest
 
 import gruvax.app as app_module
@@ -59,13 +60,15 @@ async def test_database_bootstrap_failure_serves_degraded_and_closes(
         monkeypatch.setattr(
             app_module,
             target,
-            AsyncMock(side_effect=RuntimeError("synthetic missing startup table")),
+            AsyncMock(side_effect=UndefinedTable("synthetic missing startup table")),
         )
     app = app_module.create_app()
     async with (
         app_module.lifespan(app),
         AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
     ):
+        if fault == "catchup":
+            await asyncio.sleep(0)
         health = await client.get("/api/health")
         assert health.status_code == 200
         assert health.json()["status"] == "degraded"
@@ -112,3 +115,55 @@ async def test_shutdown_cancels_and_gathers_tasks_before_pool_close(startup) -> 
         await asyncio.sleep(0)
     assert task.done()
     assert order == ["task stopped", "pool closed"]
+
+
+@pytest.mark.asyncio
+async def test_slow_catchup_does_not_block_health_and_precedes_nightly(startup, monkeypatch):  # type: ignore[no-untyped-def]
+    begun, finish, nightly = asyncio.Event(), asyncio.Event(), asyncio.Event()
+
+    async def catchup(*_):  # type: ignore[no-untyped-def]
+        begun.set()
+        await finish.wait()
+
+    async def loop(*_):  # type: ignore[no-untyped-def]
+        nightly.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(app_module, "_startup_catchup_sweep", catchup)
+    monkeypatch.setattr(app_module, "_sync_loop", loop)
+    app = app_module.create_app()
+    async with (
+        asyncio.timeout(2),
+        app_module.lifespan(app),
+        AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client,
+    ):
+        await begun.wait()
+        response = await client.get("/api/health")
+        assert response.status_code == 200
+        assert not nightly.is_set(), "nightly work must wait for catch-up, not readiness"
+        finish.set()
+        await nightly.wait()
+    assert not app.state.background_tasks
+
+
+@pytest.mark.asyncio
+async def test_catchup_network_failure_keeps_loaded_database_available(startup, monkeypatch):  # type: ignore[no-untyped-def]
+    pool, _, _ = startup
+    nightly = asyncio.Event()
+
+    async def loop(*_):  # type: ignore[no-untyped-def]
+        nightly.set()
+        await asyncio.Event().wait()
+
+    monkeypatch.setattr(
+        app_module,
+        "_startup_catchup_sweep",
+        AsyncMock(side_effect=RuntimeError("synthetic upstream failure")),
+    )
+    monkeypatch.setattr(app_module, "_sync_loop", loop)
+    app = app_module.create_app()
+    async with app_module.lifespan(app):
+        await asyncio.wait_for(nightly.wait(), timeout=2)
+        assert app.state.db_pool is pool
+        assert app.state.db_ok is True
+        assert app.state.profile_collection_ready is True

@@ -36,6 +36,7 @@ from typing import TYPE_CHECKING, Any
 
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
+from psycopg import Error as DatabaseError
 from starlette.exceptions import HTTPException as StarletteHTTPException
 
 from gruvax.api.admin.router import create_admin_router
@@ -397,40 +398,32 @@ async def _initialize_and_serve(app: FastAPI, pool: AsyncConnectionPool) -> Asyn
     _state_task.add_done_callback(_log_state_task_exc)
     logger.info("all_profiles_state background refresh task scheduled (60s cadence)")
 
-    # ── 1d. Nightly sync scheduler — startup sweeps + loop (Phase 4 / SYN-01) ──
-    # Order (D4-11): one-shot sweeps run BEFORE registering the loop task so the
-    # sweeps' results are visible in logs as distinct startup phases.
-    #
-    # Step 1: read cadence for catch-up threshold.
+    # ── Nightly scheduler: local purge before readiness, network catch-up after.
     _nightly_cadence = "off"
     try:
         _nightly_cadence = await _read_sync_cadence(pool)
     except Exception as exc:
         _degrade_database(app, "cadence", exc)
-    #
-    # Step 2: catch-up sweep — sync any non-revoked profiles staler than the
-    # cadence (D4-02). Sequentially per profile; same skip policy as the loop.
-    try:
-        await _startup_catchup_sweep(pool, app.state, _nightly_cadence)
-    except Exception as exc:
-        _degrade_database(app, "catchup", exc)
-    #
-    # Step 3: purge sweep — remove profile_collection rows for soft-deleted
-    # profiles that were never purged at delete-time (D4-11/D4-12). Separate
-    # from catch-up: independently testable, visible as distinct startup phase.
     try:
         await _startup_purge_sweep(pool)
     except Exception as exc:
         _degrade_database(app, "purge", exc)
 
-    #
     # Step 4: register the nightly loop (CR-01 strong-ref pattern, same as
     # _state_task above so the GC cannot cancel the task mid-flight).
-    async def _run_sync_if_ready() -> None:
-        if app.state.db_ok:
-            await _sync_loop(pool, app.state)
+    async def _catchup_then_nightly() -> None:
+        if not app.state.db_ok:
+            return
+        try:
+            await _startup_catchup_sweep(pool, app.state, _nightly_cadence)
+        except DatabaseError as exc:
+            _degrade_database(app, "catchup", exc)
+            return
+        except Exception as exc:
+            logger.warning("Startup catch-up failed; retaining loaded caches: %s", exc)
+        await _sync_loop(pool, app.state)
 
-    _sync_task = asyncio.create_task(_run_sync_if_ready())
+    _sync_task = asyncio.create_task(_catchup_then_nightly())
     app.state.background_tasks.add(_sync_task)
     _sync_task.add_done_callback(app.state.background_tasks.discard)
 

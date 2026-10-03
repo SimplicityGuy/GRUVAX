@@ -11,10 +11,11 @@ This module owns:
 Design decision: catch-up and purge are TWO separate one-shot startup sweeps rather
 than one combined pass. This makes each sweep independently testable, visible as
 distinct startup phases in logs, and keeps them from masking each other's failures.
-The lifespan calls:
-  1. await _startup_catchup_sweep(pool, app_state, cadence)  — stale-profile sync
-  2. await _startup_purge_sweep(pool)                         — orphan collection rows
-  3. asyncio.create_task(_sync_loop(pool, app_state))        — CR-01 strong-ref loop
+The lifespan purges local orphan rows before readiness, then schedules a tracked
+background task that catches up stale profiles before entering the nightly loop.
+HTTP readiness does not wait for upstream network work; successful catch-up refreshes
+caches and publishes the usual SSE events. Shutdown cancels this task before closing
+the pool.
 
 Security invariants:
   - All DML uses ``%s``/``%s::uuid`` placeholders — no f-string SQL (bandit B608).
@@ -136,7 +137,7 @@ async def _sync_loop(pool: Any, app_state: Any) -> None:
     This sleep→sync ordering means the loop does NOT sync on startup — it only
     fires at the scheduled wall-clock time (03:00 etc., D4-01).  Staleness at boot
     is the responsibility of the separate _startup_catchup_sweep (D4-02), which
-    runs before this task is registered.  Keeping the routine loop sleep-first
+    runs in the same background task before the loop begins.  Keeping the routine loop sleep-first
     avoids a full re-sync of every profile on each process restart (rate-limit
     safety) and prevents the loop from racing unrelated in-flight requests.
 
