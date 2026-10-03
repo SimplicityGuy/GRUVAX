@@ -82,7 +82,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import JSONResponse
 
 from gruvax.api.deps import require_admin
-from gruvax.sync.profile_sync import sync_profile
+from gruvax.sync.profile_sync import ProfileDeletedDuringSync, sync_profile
 
 
 logger = logging.getLogger(__name__)
@@ -172,6 +172,8 @@ async def _run_sync_background(profile_id: str, app_state: Any) -> None:
     """
     try:
         await sync_profile(profile_id, app_state)
+    except ProfileDeletedDuringSync:
+        logger.info("background sync cancelled for deleted profile=%s", profile_id)
     except Exception as exc:
         logger.exception("background sync failed for profile=%s: %s", profile_id, exc)
         # last_sync_status is already 'failed' via _record_failure inside

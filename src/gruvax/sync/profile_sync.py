@@ -192,7 +192,7 @@ async def _record_failure(
                 "    last_sync_status = 'failed', "
                 "    last_sync_error = %s, "
                 "    app_token_revoked = TRUE "
-                "WHERE id = %s::uuid",
+                "WHERE id = %s::uuid AND deleted_at IS NULL",
                 (error_tag, profile_id),
             )
         else:
@@ -200,7 +200,7 @@ async def _record_failure(
                 "UPDATE gruvax.profiles SET "
                 "    last_sync_status = 'failed', "
                 "    last_sync_error = %s "
-                "WHERE id = %s::uuid",
+                "WHERE id = %s::uuid AND deleted_at IS NULL",
                 (error_tag, profile_id),
             )
         await conn.commit()
@@ -304,6 +304,24 @@ async def _ingest_into_staging(
 _SHRINK_GUARD_RATIO = 0.98
 
 
+class ProfileDeletedDuringSync(RuntimeError):
+    """The profile was deleted while its upstream collection was being fetched."""
+
+
+async def _lock_profile_for_swap(conn: AsyncConnection[Any], profile_id: str) -> bool:
+    """Lock an active profile until swap commit; return whether this is its first sync."""
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT last_sync_at IS NULL FROM gruvax.profiles "
+            "WHERE id = %s::uuid AND deleted_at IS NULL FOR UPDATE",
+            (profile_id,),
+        )
+        row = await cur.fetchone()
+    if row is None:
+        raise ProfileDeletedDuringSync("Profile deleted during sync; collection swap cancelled")
+    return bool(row[0])
+
+
 class ShrinkGuardTripped(Exception):
     """Raised when a sync would shrink the cached collection beyond tolerance.
 
@@ -362,15 +380,10 @@ async def _swap_inside_tx(
             cached one by more than the configured tolerance and
             ``allow_shrink`` is False (gruvax-envc).
     """
-    # Pitfall 4: capture is_initial_import BEFORE the UPDATE that sets last_sync_at.
-    # READ last_sync_at IS NULL here — after the UPDATE it will always be non-NULL.
-    async with conn.cursor() as cur:
-        await cur.execute(
-            "SELECT last_sync_at IS NULL AS is_initial FROM gruvax.profiles WHERE id = %s::uuid",
-            (profile_id,),
-        )
-        initial_row = await cur.fetchone()
-    is_initial_import: bool = bool(initial_row[0]) if initial_row else True
+    # The row lock serializes with soft-delete's UPDATE: a preceding delete
+    # cancels this swap, and a later delete waits for commit before purging.
+    # Capture initial-import state before the success UPDATE (Pitfall 4).
+    is_initial_import = await _lock_profile_for_swap(conn, profile_id)
 
     # gruvax-envc: total rows currently cached for this profile, captured
     # BEFORE the DELETE — the shrink-guard baseline.
@@ -667,7 +680,7 @@ async def sync_profile(
                 "UPDATE gruvax.profiles SET "
                 "    last_sync_status = 'in_progress', "
                 "    last_sync_error = NULL "
-                "WHERE id = %s::uuid",
+                "WHERE id = %s::uuid AND deleted_at IS NULL",
                 (profile_id,),
             )
             await conn.commit()
@@ -720,6 +733,10 @@ async def sync_profile(
                 "took_ms": took_ms,
                 "user_id": user_id,
             }
+        except ProfileDeletedDuringSync:
+            # The swap TX rolled back. Do not stamp failed/ok metadata on a
+            # deleted profile or refresh/publish its evicted caches.
+            raise
         except _CacheRefreshFailed as wrapper:
             # Post-commit cache refresh failure: swap is durable, status='ok'.
             # Unwrap and re-raise the original exception so the caller sees
