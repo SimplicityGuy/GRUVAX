@@ -289,6 +289,12 @@ internal Compose network only (port 1883 is not exposed to the LAN).
 - `all/off` clears retained `state/*` topics by publishing an empty payload with
   `retain=True` (MQTT protocol: `retain=True` + empty payload = delete retained message).
 
+Retained `state/*` uses the existing payload names: `gruvax.illuminate.v1`
+for primary and ambient state, and `gruvax.span.v1` for non-primary span cubes.
+`mqtt.schemas.StatePayload` documents this union. The primary retained value
+wins when the cube also belongs to its label span; each cube is written once.
+The span command still includes the full label span.
+
 The API supervises a fresh MQTT client on each connection attempt. Disconnects
 and publish failures immediately make MQTT health degraded; retries remain
 noncritical to API startup, and shutdown awaits the client context cleanup.

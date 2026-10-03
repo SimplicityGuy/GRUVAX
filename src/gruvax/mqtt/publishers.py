@@ -211,7 +211,7 @@ async def fan_out_illuminate(
     change_id = str(uuid.uuid4())
 
     publish_tasks = []
-    state_publishes: list[tuple[str, bytes]] = []
+    state_publishes: dict[str, bytes] = {}
 
     # Illuminate (primary cube) — LED-01
     if primary is not None:
@@ -239,12 +239,7 @@ async def fan_out_illuminate(
         )
 
         # Retained state for primary cube
-        state_publishes.append(
-            (
-                topics.state_topic(prefix, u, r, c),
-                ill_bytes,
-            )
-        )
+        state_publishes[topics.state_topic(prefix, u, r, c)] = ill_bytes
 
     # Span (all label-span cubes) — LED-02
     if label_span:
@@ -275,12 +270,9 @@ async def fan_out_illuminate(
         # Retained state for each span cube
         for cube in label_span:
             su, sr, sc = cube["unit_id"], cube["row"], cube["col"]
-            state_publishes.append(
-                (
-                    topics.state_topic(prefix, su, sr, sc),
-                    span_bytes,
-                )
-            )
+            # Firmware boot reads one retained value per cube. Primary wins
+            # over its membership in span; duplicate span cubes publish once.
+            state_publishes.setdefault(topics.state_topic(prefix, su, sr, sc), span_bytes)
 
     # Sub-interval — LED-03
     if sub_interval is not None and primary is not None:
@@ -363,7 +355,7 @@ async def fan_out_illuminate(
 
     # ── Publish retained state/* topics (QoS 1, retain=True) ─────────────────
     expiry_props = _make_expiry_props(expiry_seconds)
-    for state_t, state_payload in state_publishes:
+    for state_t, state_payload in state_publishes.items():
         await safe_publish(
             client,
             state_t,
