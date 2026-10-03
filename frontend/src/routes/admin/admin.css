@@ -4027,7 +4027,7 @@
 
 .wizard-entry-heading {
   font-family: var(--gruvax-font-display);
-  font-size: var(--gruvax-text-display);
+  font-size: var(--gruvax-text-display-md);
   font-weight: 900;
   letter-spacing: var(--gruvax-tracking-label);
   color: var(--gruvax-blue);
@@ -5955,7 +5955,7 @@
   font-size: var(--gruvax-text-body-sm); /* 14px */
   color: var(--gruvax-text-primary);
   background: var(--gruvax-white);
-  border: 1px solid var(--gruvax-border-default);
+  border: 1px solid var(--gruvax-border-light);
   border-radius: var(--gruvax-radius-md);
   padding: var(--gruvax-space-2) var(--gruvax-space-3);
   min-height: 44px; /* touch target floor */
