@@ -13,11 +13,13 @@
  */
 
 import { useState, useMemo, useEffect } from 'react'
-import type { AdminCube } from '../../api/types'
-import { shelfLetter } from '../../lib/shelf'
+import type { AdminCube, Unit } from '../../api/types'
+import { cubeAddress } from '../../lib/shelf'
 
 interface LocatorHeaderProps {
   unitId: number
+  /** Full physical layout for the shared kiosk/admin cube address. */
+  units?: readonly Unit[]
   /** 0-based row of the edited bin */
   row: number
   /** 0-based col of the edited bin */
@@ -32,11 +34,6 @@ interface LocatorHeaderProps {
   /** Fill/occupancy data for the whole shelf — passed from ShelfBinList.
    *  When absent the component falls back to dim/lit behavior. */
   cubes?: AdminCube[]
-}
-
-/** Derive the bin ID string, e.g. unitId=1, row=0, col=0, cols=4 → "A1" */
-function binId(unitId: number, r: number, c: number, cols: number): string {
-  return `${shelfLetter(unitId)}${r * cols + c + 1}`
 }
 
 /**
@@ -83,6 +80,7 @@ export function LocatorHeader({
   rows = 4,
   cols = 4,
   cubes,
+  units = [{ id: unitId, display_name: shelfName, rows, cols, ordering: 1 }],
 }: LocatorHeaderProps) {
   // Map keyed "${row}-${col}" filtered to this unit for O(1) per-cell lookup
   const cubeMap = useMemo(() => {
@@ -122,7 +120,10 @@ export function LocatorHeader({
   const activeRow = activeIdx !== null ? Math.floor(activeIdx / cols) : -1
   const activeCol = activeIdx !== null ? activeIdx % cols : -1
   const activeCube = activeIdx !== null ? cubeMap.get(`${activeRow}-${activeCol}`) : undefined
-  const activeBinId = activeIdx !== null ? binId(unitId, activeRow, activeCol, cols) : ''
+  const activeBinId =
+    activeIdx !== null
+      ? cubeAddress({ unit_id: unitId, row: activeRow, col: activeCol }, units)
+      : ''
 
   return (
     <div className="locator-header">
@@ -163,7 +164,7 @@ export function LocatorHeader({
               const idx = r * cols + c
               const isActive = activeIdx === idx
 
-              const id = binId(unitId, r, c, cols)
+              const id = cubeAddress({ unit_id: unitId, row: r, col: c }, units)
               const ariaDetail = isEdited
                 ? 'edited bin'
                 : isEmpty

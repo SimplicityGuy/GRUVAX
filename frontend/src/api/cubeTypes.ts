@@ -20,8 +20,6 @@ export interface CubeContentsResponse {
   col: number
   first_label: string | null
   first_catalog: string | null
-  last_label: string | null
-  last_catalog: string | null
   is_empty: boolean
   total_count: number
   fill_level: number // 0.0+; > 1.0 means overstuffed

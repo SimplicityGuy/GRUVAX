@@ -15,9 +15,7 @@ const UNIT: Unit = { id: 1, display_name: 'Shelf A', rows: 4, cols: 4, ordering:
 
 describe('ShelfGrid – 0-based cube lighting (Bug 1 fix)', () => {
   it('lights the top-left cube when litCube is {unit_id:1, row:0, col:0}', () => {
-    const { container } = render(
-      <ShelfGrid unit={UNIT} shelfIndex={0} litCube={{ unit_id: 1, row: 0, col: 0 }} />,
-    )
+    const { container } = render(<ShelfGrid unit={UNIT} litCube={{ unit_id: 1, row: 0, col: 0 }} />)
 
     const litCells = container.querySelectorAll('[data-state="lit"]')
     expect(litCells).toHaveLength(1)
@@ -31,9 +29,7 @@ describe('ShelfGrid – 0-based cube lighting (Bug 1 fix)', () => {
   })
 
   it('lights the bottom-right cube when litCube is {unit_id:1, row:3, col:3}', () => {
-    const { container } = render(
-      <ShelfGrid unit={UNIT} shelfIndex={0} litCube={{ unit_id: 1, row: 3, col: 3 }} />,
-    )
+    const { container } = render(<ShelfGrid unit={UNIT} litCube={{ unit_id: 1, row: 3, col: 3 }} />)
 
     const litCells = container.querySelectorAll('[data-state="lit"]')
     expect(litCells).toHaveLength(1)
@@ -46,16 +42,14 @@ describe('ShelfGrid – 0-based cube lighting (Bug 1 fix)', () => {
   })
 
   it('lights no cubes when litCube is null', () => {
-    const { container } = render(<ShelfGrid unit={UNIT} shelfIndex={0} litCube={null} />)
+    const { container } = render(<ShelfGrid unit={UNIT} litCube={null} />)
 
     const litCells = container.querySelectorAll('[data-state="lit"]')
     expect(litCells).toHaveLength(0)
   })
 
   it('does not light any cube on a different unit_id', () => {
-    const { container } = render(
-      <ShelfGrid unit={UNIT} shelfIndex={0} litCube={{ unit_id: 2, row: 0, col: 0 }} />,
-    )
+    const { container } = render(<ShelfGrid unit={UNIT} litCube={{ unit_id: 2, row: 0, col: 0 }} />)
 
     const litCells = container.querySelectorAll('[data-state="lit"]')
     expect(litCells).toHaveLength(0)
@@ -63,9 +57,7 @@ describe('ShelfGrid – 0-based cube lighting (Bug 1 fix)', () => {
 
   it('renders empty state for cubes in the emptyCubes set', () => {
     const emptyCubes = new Set(['1-2-3'])
-    const { container } = render(
-      <ShelfGrid unit={UNIT} shelfIndex={0} litCube={null} emptyCubes={emptyCubes} />,
-    )
+    const { container } = render(<ShelfGrid unit={UNIT} litCube={null} emptyCubes={emptyCubes} />)
 
     const emptyCells = container.querySelectorAll('[data-state="empty"]')
     expect(emptyCells).toHaveLength(1)
@@ -78,7 +70,7 @@ describe('ShelfGrid – 0-based cube lighting (Bug 1 fix)', () => {
     const { container } = render(
       <ShelfGrid
         unit={UNIT}
-        shelfIndex={0}
+
         litCube={{ unit_id: 1, row: 0, col: 0 }}
         emptyCubes={emptyCubes}
       />,

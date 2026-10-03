@@ -5,7 +5,7 @@
  * Fetches GET /api/cubes/{u}/{r}/{c} via TanStack Query and renders:
  *   - Cube address heading "CUBE B2"
  *   - Fill level row "94 RECORDS · 99% FULL"
- *   - First / last boundary records
+ *   - First cut point and sampled records
  *   - ~7 evenly-sampled records
  *   - Empty-state copy (D-16)
  *   - D-16: "EDIT THIS CUBE" link-button when admin is logged in
@@ -19,24 +19,16 @@
 import { useQuery } from '@tanstack/react-query'
 import { fetchCubeContents } from '../../api/client'
 import { useAdminStore } from '../../state/adminStore'
-import type { CubeRef } from '../../api/types'
+import type { CubeRef, Unit } from '../../api/types'
+import { cubeAddress } from '../../lib/shelf'
 
 interface CubeContentsPanelProps {
   /** The cube that was tapped. null = panel closed. */
   cube: CubeRef | null
+  /** Same configured layout used by the tapped kiosk grid. */
+  units?: readonly Unit[]
   /** Called to close the panel (tap outside / drag handle). */
   onDismiss: () => void
-}
-
-/**
- * Format a cube's address for display ("CUBE B2").
- * Row letters: A-H (Shelf A rows A-D, Shelf B rows E-H).
- */
-function cubeAddress(unitId: number, row: number, col: number): string {
-  const ROW_LETTERS = 'ABCDEFGH'
-  const baseOffset = (unitId - 1) * 4
-  const rowLetter = ROW_LETTERS[baseOffset + row] ?? '?'
-  return `CUBE ${rowLetter}${col + 1}`
 }
 
 /**
@@ -47,7 +39,7 @@ function formatFillPct(fillLevel: number): string {
   return `${Math.min(Math.round(fillLevel * 100), 999)}%`
 }
 
-export function CubeContentsPanel({ cube, onDismiss }: CubeContentsPanelProps) {
+export function CubeContentsPanel({ cube, units = [], onDismiss }: CubeContentsPanelProps) {
   const isLoggedIn = useAdminStore((s) => s.isLoggedIn)
 
   const panelOpen = cube !== null
@@ -64,7 +56,7 @@ export function CubeContentsPanel({ cube, onDismiss }: CubeContentsPanelProps) {
 
   if (!panelOpen) return null
 
-  const address = cube ? cubeAddress(cube.unit_id, cube.row, cube.col) : ''
+  const address = cube ? `CUBE ${cubeAddress(cube, units)}` : ''
 
   // Determine empty-state copy (UI-SPEC §H Copywriting, D-16)
   const isEmpty = data?.is_empty ?? false
@@ -142,20 +134,12 @@ export function CubeContentsPanel({ cube, onDismiss }: CubeContentsPanelProps) {
                     />
                   </div>
 
-                  {/* First / Last boundary records */}
+                  {/* First cut point — Phase 5 stores no last boundary */}
                   {(data.first_label || data.first_catalog) && (
                     <div className="cube-panel__boundary-row">
                       <span className="cube-panel__boundary-label">FIRST</span>
                       <span className="cube-panel__boundary-value">
                         {data.first_label} {data.first_catalog}
-                      </span>
-                    </div>
-                  )}
-                  {(data.last_label || data.last_catalog) && (
-                    <div className="cube-panel__boundary-row">
-                      <span className="cube-panel__boundary-label">LAST</span>
-                      <span className="cube-panel__boundary-value">
-                        {data.last_label} {data.last_catalog}
                       </span>
                     </div>
                   )}

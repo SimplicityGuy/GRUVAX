@@ -67,6 +67,15 @@ function makeQueryClient() {
 
 async function renderWizard(path = '/admin/wizard') {
   const qc = makeQueryClient()
+  qc.setQueryData(['units'], {
+    units: [1, 2].map((id) => ({
+      id,
+      display_name: '',
+      rows: 4,
+      cols: 4,
+      ordering: id,
+    })),
+  })
   const view = render(
     <QueryClientProvider client={qc}>
       <MemoryRouter initialEntries={[path]}>

@@ -34,6 +34,8 @@ import {
 import type { CubeBoundaryEdit } from '../../api/types'
 import { useAdminStore } from '../../state/adminStore'
 import { LocatorHeader } from './LocatorHeader'
+import { orderedUnits, shelfName } from '../../lib/shelf'
+import { useUnits } from '../../hooks/useUnits'
 import { RecordPickerSheet } from './RecordPickerSheet'
 import './admin.css'
 
@@ -145,6 +147,12 @@ export function Wizard() {
 // ── Wizard walk engine ────────────────────────────────────────────────────────
 
 function WizardWalk() {
+  const {
+    data: unitsData,
+    isPending: unitsPending,
+    isError: unitsError,
+    refetch: retryUnits,
+  } = useUnits()
   const navigate = useNavigate()
   const [searchParams] = useSearchParams()
   const { reshuffleDraft, setReshuffleDraft } = useAdminStore()
@@ -181,13 +189,18 @@ function WizardWalk() {
   })
 
   const steps = useMemo<CubeStep[]>(() => {
-    if (!cubesData) return []
+    if (!cubesData || !unitsData?.units.length) return []
+    const position = new Map(orderedUnits(unitsData.units).map((unit, index) => [unit.id, index]))
     return [...cubesData.cubes].sort((a, b) => {
-      if (a.unit_id !== b.unit_id) return a.unit_id - b.unit_id
+      if (a.unit_id !== b.unit_id)
+        return (
+          (position.get(a.unit_id) ?? Infinity) - (position.get(b.unit_id) ?? Infinity) ||
+          a.unit_id - b.unit_id
+        )
       if (a.row !== b.row) return a.row - b.row
       return a.col - b.col
     })
-  }, [cubesData])
+  }, [cubesData, unitsData])
 
   const totalSteps = steps.length
   const currentStep = steps[currentStepIndex] ?? null
@@ -393,7 +406,24 @@ function WizardWalk() {
   }
 
   // ── Render ────────────────────────────────────────────────────────────────
-  if (cubesLoading) {
+  if (unitsError || (unitsData && unitsData.units.length === 0)) {
+    return (
+      <div className="wizard-route">
+        <p className="wizard-empty" role="alert">
+          Could not load shelf layout. Try again before editing bins.
+        </p>
+        <button
+          type="button"
+          className="wizard-btn wizard-btn--outline"
+          onClick={() => void retryUnits()}
+        >
+          TRY AGAIN
+        </button>
+      </div>
+    )
+  }
+
+  if (cubesLoading || unitsPending) {
     return (
       <div className="wizard-route">
         <p className="wizard-loading" aria-live="polite">
@@ -426,8 +456,7 @@ function WizardWalk() {
   }
 
   const step = currentStep
-  const shelfLetter = String.fromCharCode(64 + (step?.unit_id ?? 1))
-  const shelfName = `SHELF ${shelfLetter}`
+  const shelfDisplayName = shelfName(step.unit_id, unitsData?.units ?? [])
   const stepNumber = currentStepIndex + 1
   const binNumber = step.row * 4 + step.col + 1
   const progressPct = totalSteps > 0 ? (currentStepIndex / totalSteps) * 100 : 0
@@ -445,11 +474,12 @@ function WizardWalk() {
           unitId={step.unit_id}
           row={step.row}
           col={step.col}
-          shelfName={shelfName}
+          shelfName={shelfDisplayName}
+          units={unitsData?.units ?? []}
           binNumber={binNumber}
         />
         <span className="wizard-step-indicator">
-          {`${shelfName} · STEP `}
+          {`${shelfDisplayName} · STEP `}
           <span className="wizard-step-mono">{`${stepNumber} / ${totalSteps}`}</span>
         </span>
       </div>
