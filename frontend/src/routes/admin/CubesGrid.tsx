@@ -4,8 +4,8 @@
  * Tapping a shelf entry navigates to /admin/cubes/:unit (ShelfBinList).
  * Each shelf shows:
  *   - "SHELF A" display name (via shelf.ts shelfName())
- *   - Mini 4×4 Kallax preview (lit cells = configured bins)
- *   - Bin count: "{n} of 16 bins configured"
+ *   - Mini configured Kallax preview (lit cells = configured bins)
+ *   - Bin count: "{n} of {rows × cols} bins configured"
  *
  * No raw unit/row/col triples are shown — all addressing uses SHELF A / BIN n notation.
  * Design tokens only — no hardcoded hex (CLAUDE.md constraint).
@@ -15,16 +15,14 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { adminGetCubes, downloadBoundariesYaml } from '../../api/adminClient'
-import { orderedUnits, shelfName } from '../../lib/shelf'
+import { orderedUnits, shelfName, unitDimensions } from '../../lib/shelf'
 import { useUnits } from '../../hooks/useUnits'
 import type { AdminCube, Unit } from '../../api/types'
 
-const ROWS = 4
-const COLS = 4
-const TOTAL_BINS = ROWS * COLS
-
 interface ShelfSummary {
   unitId: number
+  rows: number
+  cols: number
   displayName: string
   configuredCount: number
   cubes: AdminCube[]
@@ -42,6 +40,7 @@ function groupByUnit(cubes: AdminCube[], units: readonly Unit[]): ShelfSummary[]
     .sort(([a], [b]) => (position.get(a) ?? Infinity) - (position.get(b) ?? Infinity) || a - b)
     .map(([unitId, unitCubes]) => ({
       unitId,
+      ...unitDimensions(unitId, units),
       displayName: shelfName(unitId, units),
       configuredCount: unitCubes.filter((c) => !c.is_empty).length,
       cubes: unitCubes,
@@ -87,16 +86,16 @@ export function CubesGrid() {
           type="button"
           className="shelf-card"
           onClick={() => void navigate(`/admin/cubes/${shelf.unitId}`)}
-          aria-label={`${shelf.displayName}: ${shelf.configuredCount} of ${TOTAL_BINS} bins configured`}
+          aria-label={`${shelf.displayName}: ${shelf.configuredCount} of ${shelf.rows * shelf.cols} bins configured`}
         >
-          {/* Mini 4×4 Kallax preview */}
-          <MiniKallax cubes={shelf.cubes} />
+          {/* Mini configured Kallax preview */}
+          <MiniKallax cubes={shelf.cubes} rows={shelf.rows} cols={shelf.cols} />
 
           {/* Shelf label + bin count */}
           <div className="shelf-card-info">
             <span className="shelf-card-name">{shelf.displayName}</span>
             <span className="shelf-card-count">
-              {shelf.configuredCount} of {TOTAL_BINS} bins configured
+              {shelf.configuredCount} of {shelf.rows * shelf.cols} bins configured
             </span>
           </div>
 
@@ -141,17 +140,24 @@ export function CubesGrid() {
   )
 }
 
-/** Compact 4×4 Kallax preview — lit cells = configured (non-empty) bins. */
-function MiniKallax({ cubes }: { cubes: AdminCube[] }) {
+/** Compact configured Kallax preview — lit cells = configured (non-empty) bins. */
+function MiniKallax({ cubes, rows, cols }: { cubes: AdminCube[]; rows: number; cols: number }) {
   const configuredKeys = useMemo(
     () => new Set(cubes.filter((c) => !c.is_empty).map((c) => `${c.row}-${c.col}`)),
     [cubes],
   )
 
   return (
-    <div className="shelf-mini-kallax" aria-hidden="true">
-      {Array.from({ length: ROWS }, (_, r) =>
-        Array.from({ length: COLS }, (_, c) => {
+    <div
+      className="shelf-mini-kallax"
+      style={{
+        gridTemplateColumns: `repeat(${cols}, 12px)`,
+        gridTemplateRows: `repeat(${rows}, 12px)`,
+      }}
+      aria-hidden="true"
+    >
+      {Array.from({ length: rows }, (_, r) =>
+        Array.from({ length: cols }, (_, c) => {
           const key = `${r}-${c}`
           return (
             <div

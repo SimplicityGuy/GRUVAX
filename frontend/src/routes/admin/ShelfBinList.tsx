@@ -30,7 +30,7 @@ import { LocatorHeader } from './LocatorHeader'
 import { SegmentStrip } from './SegmentStrip'
 import { RecordPickerSheet } from './RecordPickerSheet'
 import { adminGetCubes, getUnitSegments } from '../../api/adminClient'
-import { shelfName } from '../../lib/shelf'
+import { shelfName, unitDimensions, binNumber } from '../../lib/shelf'
 import { useUnits } from '../../hooks/useUnits'
 import { useSessionStore } from '../../state/sessionStore'
 import type { AdminCube, AdminCubesResponse } from '../../api/types'
@@ -86,16 +86,8 @@ function useAdminCubesInvalidation(): void {
   }, [queryClient, profileId])
 }
 
-const ROWS = 4
-const COLS = 4
-
 /** How long the newly-committed bin glows yellow before settling to normal. */
 const CHANGE_ANIM_MS = 3000
-
-/** Stable display bin number (1-based, row-major). */
-function binNum(cube: AdminCube): number {
-  return cube.row * COLS + cube.col + 1
-}
 
 /** Stable per-cube key within a unit. */
 function cubeKey(cube: AdminCube): string {
@@ -118,6 +110,7 @@ export function ShelfBinList() {
   const units = unitsData?.units ?? []
 
   const unitId = Number(unit)
+  const { rows, cols } = unitDimensions(unitId, units)
 
   // D-04: invalidate ['admin','cubes'] when collection or boundaries change externally.
   // Admin SSE listener opens on mount, closes on unmount (no leaked EventSource).
@@ -158,7 +151,7 @@ export function ShelfBinList() {
 
   // ── Handlers ─────────────────────────────────────────────────────────────────
   function openInsertAfter(afterCube: AdminCube | null) {
-    const afterDisplay = afterCube ? binNum(afterCube) : 0
+    const afterDisplay = afterCube ? binNumber(afterCube, cols) : 0
     setInsertState({ afterCube, afterDisplay })
   }
 
@@ -234,7 +227,7 @@ export function ShelfBinList() {
   }
 
   const shelfDisplayName = shelfName(unitId, units)
-  const totalBins = ROWS * COLS
+  const totalBins = rows * cols
   const unconfiguredCount = totalBins - configuredBins.length
 
   return (
@@ -262,8 +255,8 @@ export function ShelfBinList() {
           col={-1}
           shelfName={shelfDisplayName}
           units={units}
-          rows={ROWS}
-          cols={COLS}
+          rows={rows}
+          cols={cols}
           cubes={cubesData?.cubes ?? []}
         />
       </div>
@@ -274,7 +267,7 @@ export function ShelfBinList() {
         {configuredBins.length > 0 && <InsertCutDivider onTap={() => openInsertAfter(null)} />}
 
         {configuredBins.map((cube) => {
-          const display = binNum(cube)
+          const display = binNumber(cube, cols)
 
           return (
             <div key={cubeKey(cube)}>
