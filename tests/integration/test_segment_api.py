@@ -73,8 +73,8 @@ def reset_login_rate_limit() -> None:  # type: ignore[return]
     The login endpoint uses a module-level singleton ``FixedWindowRateLimiter``
     backed by ``MemoryStorage``. Tests in this module call ``_login()`` once per
     test; after 5 calls the fixed-window limiter returns 429, causing all
-    remaining tests to skip with "Login not implemented". Resetting before each
-    test prevents that false-skip cascade. Pattern mirrors test_admin_auth.py.
+    remaining authenticated tests to fail. Resetting before each
+    test prevents unrelated rate-limit failures. Pattern mirrors test_admin_auth.py.
     """
     from gruvax.api.admin.limiter import limiter
 
@@ -83,11 +83,11 @@ def reset_login_rate_limit() -> None:  # type: ignore[return]
 
 @pytest_asyncio.fixture(loop_scope="session")
 async def client(db_pool):  # type: ignore[no-untyped-def]
-    """Module-scoped async test client with full ASGI lifespan.
+    """Function-scoped async test client with full ASGI lifespan.
 
     Re-seeds boundaries to the canonical fixture BEFORE the app starts so the
     app's BoundaryCache (loaded once at lifespan startup) sees known state. The
-    suite shares the dev DB and does not otherwise reset it, so mutating tests
+    suite shares the isolated validation DB and does not otherwise reset it, so mutating tests
     (insert-cut) would otherwise leave later runs working on polluted data.
     """
     from gruvax.db.seed_boundaries import load_boundaries
@@ -176,7 +176,7 @@ async def test_get_segments_404_unknown_bin(client) -> None:  # type: ignore[no-
         headers=cookie_header(auth["cookies"]),
     )
 
-    # If the endpoint doesn't exist, we skip; otherwise we require 404 for unknown bin
+    # A successful known-bin request above proves the route exists.
 
     assert response.status_code == 404, (
         f"Expected 404 for non-existent bin, got {response.status_code}: {response.text}"
@@ -611,29 +611,22 @@ async def test_insert_cut_shelf_overflow_rejected(client) -> None:  # type: igno
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
 
-    # Either 400 (shelf_overflow or no cube after) or 404 (cube not found)
-    if response.status_code == 404:
-        # The target cube doesn't exist — also acceptable (no overflow possible)
-        return
-
-    # Must return 400 for shelf_overflow OR 404 for target cube not found
-    assert response.status_code in (400, 404), (
-        f"Expected 400 (shelf_overflow) or 404 (not found) for last-position insert, "
+    # The seeded last cube must reject insertion with shelf_overflow.
+    assert response.status_code == 400, (
+        f"Expected 400 (shelf_overflow) for last-position insert, "
         f"got {response.status_code}: {response.text}"
     )
     if response.status_code == 400:
         body = response.json()
-        assert body.get("type") in ("shelf_overflow", "cube_not_found"), (
-            f"400 response must have shelf_overflow or cube_not_found type: {body}"
+        assert body.get("type") == "shelf_overflow", (
+            f"400 response must have shelf_overflow type: {body}"
         )
 
 
 async def _seed_test_pin(db_pool) -> None:  # type: ignore[no-untyped-def]
     """Seed the test PIN ("0000") so ``_login`` succeeds.
 
-    The shared ``admin_session`` fixture is broken under this httpx version (it
-    references the removed ``AsyncClient.app``), so auth tests in this module fall
-    back to the skip-prone ``_login``. This helper seeds the hash directly through
+    Each function-scoped client needs a known PIN before login. Seed it through
     ``db_pool`` (same DATABASE_URL the app uses), mirroring the conftest's
     JSON-quoted ``settings.value`` format.
     """
@@ -718,7 +711,7 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
             [*filter(None, before.values()), "BLP 1010"]
         ), "insert-cut changed the set of cut points beyond adding the new one"
     finally:
-        # Full cleanup — the suite shares the dev DB, so restore everything this
+        # Full cleanup — the suite shares the isolated validation DB, so restore everything this
         # test mutated:
         #   * boundary_history 'cut_insert' rows would break `test_migrate_0005`'s
         #     downgrade (it restores the old CHECK: source IN manual/bulk/revert).
@@ -1059,19 +1052,6 @@ async def test_set_override_requires_admin_401() -> None:
 
 
 # ── SEG-08: locate p95 ≤ 50 ms preserved ─────────────────────────────────────
-
-
-@pytest.mark.skip(
-    reason="Benchmark validated in Plan 05-03 (locate_by_segment); see test_locate.py"
-)
-def test_locate_p95_le_50ms() -> None:
-    """SEG-08: /api/locate p95 latency preserved at ≤ 50 ms after segment estimator.
-
-    Requirement: SEG-08 — p95 <= 50 ms preserved; verified via pytest-benchmark
-    against the live DB in Plan 05-03 after locate_by_segment is implemented.
-    See: pytest tests/integration/test_locate.py --benchmark-only
-    """
-    pytest.skip("Benchmark latency gate validated in Plan 05-03")
 
 
 # ── INT-A: boundary_changed payload-contract tests (10-01) ───────────────────

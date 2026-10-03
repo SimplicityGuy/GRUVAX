@@ -31,6 +31,9 @@ import yaml
 from gruvax.db.pool import create_pool
 
 
+pytest_plugins = ["tests.pattern_policy"]
+
+
 # Path to the committed synthetic boundary fixture
 FIXTURE_DIR = Path(__file__).parent.parent / "fixtures"
 BOUNDARIES_YAML = FIXTURE_DIR / "boundaries.yaml"

@@ -203,6 +203,7 @@ async def test_selection_count_7d_resets_after_8_days(db_pool) -> None:  # type:
 
 
 @pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.behavior_no_raise
 async def test_increment_functions_take_only_release_id(db_pool) -> None:  # type: ignore[no-untyped-def]
     """increment_search_count and increment_selection_count accept pool + int only.
 

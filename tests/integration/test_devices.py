@@ -763,7 +763,7 @@ async def test_reinstate_conflict_when_profile_has_new_active_device(  # type: i
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_profile_soft_delete_detaches(client, db_pool) -> None:  # type: ignore[no-untyped-def]
+async def test_profile_soft_delete_detaches(client, db_pool, second_profile) -> None:  # type: ignore[no-untyped-def]
     """Profile soft-delete detaches bound device → device.profile_id becomes NULL (DEV-02).
 
     RED until Plan 03-02 ships the soft-delete handling via ON DELETE SET NULL FK.
@@ -785,26 +785,11 @@ async def test_profile_soft_delete_detaches(client, db_pool) -> None:  # type: i
     # without impacting the default profile used by other tests)
     admin = await _admin_login(client)
 
-    # Create a test profile
-    create_res = await client.post(
-        "/api/admin/profiles",
-        json={"display_name": "Test Soft-Delete Profile"},
-        headers={
-            "X-CSRF-Token": admin["csrf_token"],
-            **cookie_header(admin["cookies"]),
-        },
-    )
-    if create_res.status_code != 200:
-        pytest.skip("create profile endpoint not yet available")
-
-    test_profile_id = create_res.json().get("id")
-    if not test_profile_id:
-        pytest.skip("could not create test profile")
+    test_profile_id = second_profile
 
     # Generate + bind device to the test profile
     gen_res = await client.post("/api/devices/pairing-codes")
-    if gen_res.status_code != 200:
-        pytest.skip("pairing-codes endpoint not yet implemented")
+    assert gen_res.status_code == 200, gen_res.text
     code = gen_res.json()["code"]
     fp_cookies = gen_res.cookies
 
@@ -816,26 +801,24 @@ async def test_profile_soft_delete_detaches(client, db_pool) -> None:  # type: i
             **cookie_header(admin["cookies"]),
         },
     )
-    if bind_res.status_code != 200:
-        # Try binding to default profile then reassign
-        bind_res = await client.post(
-            "/api/admin/devices/bind",
-            json={"code": code},
-            headers={
-                "X-CSRF-Token": admin["csrf_token"],
-                **cookie_header(admin["cookies"]),
-            },
-        )
-        if bind_res.status_code != 200:
-            pytest.skip("bind not yet implemented")
-
-    # Soft-delete the test profile via SQL (the admin delete endpoint may be profile-aware)
+    assert bind_res.status_code == 200, bind_res.text
+    assert bind_res.json()["profile_id"] == test_profile_id
+    delete_res = await client.delete(
+        f"/api/admin/profiles/{test_profile_id}",
+        headers={"X-CSRF-Token": admin["csrf_token"], **cookie_header(admin["cookies"])},
+    )
+    assert delete_res.status_code == 200, delete_res.text
     async with db_pool.connection() as conn:
-        await conn.execute(
-            "UPDATE gruvax.profiles SET deleted_at = NOW() WHERE id = %s::uuid",
-            (test_profile_id,),
-        )
-        await conn.commit()
+        row = await (
+            await conn.execute(
+                "SELECT profile_id FROM gruvax.devices WHERE fingerprint = %s",
+                (
+                    gen_res.cookies.get(FINGERPRINT_COOKIE)
+                    or client.cookies.get(FINGERPRINT_COOKIE),
+                ),
+            )
+        ).fetchone()
+    assert row is not None and row[0] is None, "Soft-delete must detach the bound device"
 
     # After soft-delete, the device's profile_id must be NULL (detached)
     # This is the ON DELETE SET NULL / soft-delete handler contract.

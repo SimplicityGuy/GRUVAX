@@ -276,6 +276,9 @@ def test_primary_cube_in_label_span(multi_label_props_fixture) -> None:  # type:
             snapshot=snapshot,
         )
 
+        assert result.primary_cube is not None, (
+            "Covered synthetic records must yield a non-null outcome"
+        )
         if result.primary_cube is not None:
             assert result.primary_cube in result.label_span, (
                 f"primary_cube {result.primary_cube} must be in label_span "
@@ -314,6 +317,9 @@ def test_sub_cube_interval_bounds(multi_label_props_fixture) -> None:  # type: i
                 snapshot=snapshot,
             )
 
+            assert result.sub_cube_interval is not None, (
+                "Covered synthetic records must yield a non-null outcome"
+            )
             if result.sub_cube_interval is not None:
                 si = result.sub_cube_interval
                 assert 0.0 <= si.start <= si.end <= 1.0, (
@@ -353,6 +359,9 @@ def test_monotone_position_within_label(multi_label_props_fixture) -> None:  # t
             catalog_number=rec.catalog_number,
             segment_cache=seg_cache,
             snapshot=snapshot,
+        )
+        assert result.sub_cube_interval is not None, (
+            "Covered synthetic records must yield a non-null outcome"
         )
         if result.sub_cube_interval is not None:
             starts.append(result.sub_cube_interval.start)
@@ -434,6 +443,12 @@ def test_cosmetic_stability(extra_spaces: int, uppercase: bool) -> None:
     )
 
     # Both results must have the same sub_cube_interval (POS-01 normalization)
+    assert canonical_result.sub_cube_interval is not None, (
+        "Covered synthetic records must yield a non-null outcome"
+    )
+    assert variant_result.sub_cube_interval is not None, (
+        "Covered synthetic records must yield a non-null outcome"
+    )
     if (
         canonical_result.sub_cube_interval is not None
         and variant_result.sub_cube_interval is not None

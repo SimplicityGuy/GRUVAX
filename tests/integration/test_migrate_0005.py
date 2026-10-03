@@ -172,6 +172,7 @@ async def test_fraction_check_rejects_zero(migrate_pool) -> None:  # type: ignor
 
 
 @pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.behavior_no_raise
 async def test_fraction_check_accepts_boundary(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """DB CHECK accepts segment_overrides.fraction = 1.0 (inclusive upper bound)."""
     unit_id = await _get_unit_id(migrate_pool)
@@ -207,6 +208,7 @@ async def test_fraction_check_accepts_boundary(migrate_pool) -> None:  # type: i
 
 
 @pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.behavior_no_raise
 async def test_source_check_accepts_cut_insert(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """boundary_history.source='cut_insert' is accepted after migration 0005."""
     import uuid

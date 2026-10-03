@@ -315,6 +315,7 @@ async def test_span_brightness_uses_span_tier() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.behavior_no_raise
 async def test_degraded_mode_no_raise() -> None:
     """fan_out_illuminate with client=None returns without raising (D-01 / SC5).
 

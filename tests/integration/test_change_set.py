@@ -39,6 +39,12 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
         yield ac
 
 
+@pytest.fixture(scope="module", autouse=True)
+def _seeded_admin_session(admin_session):  # type: ignore[no-untyped-def]
+    """Use explicit shared PIN seeding even when this module runs alone."""
+    return admin_session
+
+
 async def _login(client) -> dict:  # type: ignore[no-untyped-def]
     """Helper: log in and return cookies + csrf token dict.
 
@@ -46,8 +52,7 @@ async def _login(client) -> dict:  # type: ignore[no-untyped-def]
     write requests resolve the per-profile session required by get_write_target.
     """
     res = await client.post("/api/admin/login", json={"pin": "0000"})
-    if res.status_code != 200:
-        return {}
+    assert res.status_code == 200, res.text
     cookies = dict(res.cookies)
     # Bind the default profile so get_write_target resolves without session_unbound (D-02).
     cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
@@ -64,8 +69,6 @@ async def test_bulk_writes_history(client) -> None:  # type: ignore[no-untyped-d
     All cubes in a single bulk request share the same change_set_id (D-10).
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping bulk history test")
 
     idempotency_key = str(uuid.uuid4())
     response = await client.post(
@@ -89,8 +92,7 @@ async def test_bulk_writes_history(client) -> None:  # type: ignore[no-untyped-d
             **cookie_header(auth["cookies"]),
         },
     )
-    if response.status_code == 404:
-        pytest.skip("Bulk endpoint not yet implemented")
+    assert response.status_code == 200, response.text
 
     assert response.status_code == 200, (
         f"Expected 200 from bulk save, got {response.status_code}: {response.text}"
@@ -107,8 +109,6 @@ async def test_idempotency_key_replay(client) -> None:  # type: ignore[no-untype
     D-10 / Pitfall 7: a retry on flaky LAN Wi-Fi must not create two history rows.
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping idempotency test")
 
     idempotency_key = str(uuid.uuid4())
     payload = {
@@ -135,8 +135,6 @@ async def test_idempotency_key_replay(client) -> None:  # type: ignore[no-untype
         json=payload,
         headers={**headers, **cookie_header(auth["cookies"])},
     )
-    if res1.status_code == 404:
-        pytest.skip("Bulk endpoint not yet implemented")
     assert res1.status_code == 200
 
     # Second request with same Idempotency-Key — must return same response
@@ -161,8 +159,6 @@ async def test_revert_writes_inverse(client) -> None:  # type: ignore[no-untyped
     The revert is itself undoable (D-11).
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping revert test")
 
     # First make a change to create a history entry
     idempotency_key = str(uuid.uuid4())
@@ -187,8 +183,6 @@ async def test_revert_writes_inverse(client) -> None:  # type: ignore[no-untyped
             **cookie_header(auth["cookies"]),
         },
     )
-    if bulk_res.status_code == 404:
-        pytest.skip("Bulk endpoint not yet implemented")
     assert bulk_res.status_code == 200
 
     change_set_id = bulk_res.json().get("change_set_id")
@@ -199,8 +193,7 @@ async def test_revert_writes_inverse(client) -> None:  # type: ignore[no-untyped
         f"/api/admin/history/{change_set_id}/revert",
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if revert_res.status_code == 404:
-        pytest.skip("Revert endpoint not yet implemented")
+    assert revert_res.status_code == 200, revert_res.text
 
     assert revert_res.status_code == 200, (
         f"Expected 200 from revert, got {revert_res.status_code}: {revert_res.text}"
@@ -218,20 +211,18 @@ async def test_revert_conflict_skip(client) -> None:  # type: ignore[no-untyped-
     No silent clobber: only non-conflicting cubes are reverted.
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping conflict-skip test")
 
-    # Make original change to cube (1,2,0)
+    # Make original change to cube (1,3,2)
     orig_res = await client.post(
         "/api/admin/cubes/bulk",
         json={
             "updates": [
                 {
                     "unit_id": 1,
-                    "row": 2,
-                    "col": 0,
+                    "row": 3,
+                    "col": 2,
                     "first_label": "Verve",
-                    "first_catalog": "V 8001",
+                    "first_catalog": "V 61001",
                     "is_empty": False,
                     "force": True,
                 }
@@ -243,11 +234,9 @@ async def test_revert_conflict_skip(client) -> None:  # type: ignore[no-untyped-
             **cookie_header(auth["cookies"]),
         },
     )
-    if orig_res.status_code == 404:
-        pytest.skip("Bulk endpoint not yet implemented")
-    if orig_res.status_code != 200:
-        pytest.skip("Bulk endpoint returned unexpected status")
+    assert orig_res.status_code == 200, orig_res.text
 
+    assert orig_res.status_code == 200, orig_res.text
     original_change_set_id = orig_res.json().get("change_set_id")
 
     # Make a NEWER change to the same cube
@@ -257,10 +246,10 @@ async def test_revert_conflict_skip(client) -> None:  # type: ignore[no-untyped-
             "updates": [
                 {
                     "unit_id": 1,
-                    "row": 2,
-                    "col": 0,
+                    "row": 3,
+                    "col": 2,
                     "first_label": "Verve",
-                    "first_catalog": "V 8200",
+                    "first_catalog": "V 61002",
                     "is_empty": False,
                     "force": True,
                 }
@@ -274,20 +263,19 @@ async def test_revert_conflict_skip(client) -> None:  # type: ignore[no-untyped-
     )
     assert newer_res.status_code == 200
 
-    # Now revert the ORIGINAL change-set — cube (1,2,0) was changed by newer → must be skipped
+    # Now revert the ORIGINAL change-set — cube (1,3,2) was changed by newer → must be skipped
     revert_res = await client.post(
         f"/api/admin/history/{original_change_set_id}/revert",
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if revert_res.status_code == 404:
-        pytest.skip("Revert endpoint not yet implemented")
+    assert revert_res.status_code == 200, revert_res.text
 
     assert revert_res.status_code == 200
     body = revert_res.json()
     # The conflicting cube must be in the skipped list
     assert "skipped" in body, "Revert response must include skipped list for conflicts (D-12)"
     assert len(body.get("skipped", [])) >= 1, (
-        "The conflicting cube (1,2,0) must appear in the skipped list"
+        "The conflicting cube (1,3,2) must appear in the skipped list"
     )
 
 
@@ -299,8 +287,6 @@ async def test_revert_is_undoable(client) -> None:  # type: ignore[no-untyped-de
     the revert change-sets, and the revert change-set must be revertable.
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping revert-is-undoable test")
 
     # Make a change
     bulk_res = await client.post(
@@ -324,10 +310,7 @@ async def test_revert_is_undoable(client) -> None:  # type: ignore[no-untyped-de
             **cookie_header(auth["cookies"]),
         },
     )
-    if bulk_res.status_code == 404:
-        pytest.skip("Bulk endpoint not yet implemented")
-    if bulk_res.status_code != 200:
-        pytest.skip("Bulk save failed — skipping undoable test")
+    assert bulk_res.status_code == 200, bulk_res.text
 
     change_set_id = bulk_res.json().get("change_set_id")
 
@@ -336,10 +319,7 @@ async def test_revert_is_undoable(client) -> None:  # type: ignore[no-untyped-de
         f"/api/admin/history/{change_set_id}/revert",
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if revert_res.status_code == 404:
-        pytest.skip("Revert endpoint not yet implemented")
-    if revert_res.status_code != 200:
-        pytest.skip("Revert failed — skipping undoable test")
+    assert revert_res.status_code == 200, revert_res.text
 
     revert_change_set_id = revert_res.json().get("change_set_id")
     assert revert_change_set_id, "Revert must return its own change_set_id"
@@ -349,8 +329,7 @@ async def test_revert_is_undoable(client) -> None:  # type: ignore[no-untyped-de
         "/api/admin/history",
         headers=cookie_header(auth["cookies"]),
     )
-    if history_res.status_code == 404:
-        pytest.skip("History endpoint not yet implemented")
+    assert history_res.status_code == 200, history_res.text
 
     assert history_res.status_code == 200
     history = history_res.json().get("history", [])
@@ -429,8 +408,7 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
     ):
         # Log in
         login_res = await ac.post("/api/admin/login", json={"pin": "0000"})
-        if login_res.status_code != 200:
-            pytest.skip("Login not implemented — skipping re-derive test")
+        assert login_res.status_code == 200, login_res.text
         # Merge the browse-binding cookie so get_write_target resolves without 400 (D-02).
         auth_cookies = dict(login_res.cookies)
         auth_cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
@@ -443,8 +421,6 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
             "/api/admin/cubes/1/0/1/segments",
             headers=cookie_header(auth_cookies),
         )
-        if pre_seg_res.status_code == 404:
-            pytest.skip("GET segments endpoint not implemented or cube (1,0,1) not in cache")
         assert pre_seg_res.status_code == 200, (
             f"Expected 200 from GET segments, got {pre_seg_res.status_code}: {pre_seg_res.text}"
         )
@@ -481,8 +457,6 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
                 **cookie_header(auth_cookies),
             },
         )
-        if bulk_res.status_code == 404:
-            pytest.skip("Bulk endpoint not yet implemented — skipping re-derive test")
         assert bulk_res.status_code == 200, (
             f"Expected 200 from bulk write, got {bulk_res.status_code}: {bulk_res.text}"
         )
@@ -506,8 +480,6 @@ async def test_revert_rederives_segment_cache(db_pool) -> None:  # type: ignore[
             f"/api/admin/history/{change_set_id}/revert",
             headers={"X-CSRF-Token": csrf_token, **cookie_header(auth_cookies)},
         )
-        if revert_res.status_code == 404:
-            pytest.skip("Revert endpoint not yet implemented — skipping re-derive test")
         assert revert_res.status_code == 200, (
             f"Expected 200 from revert, got {revert_res.status_code}: {revert_res.text}"
         )
@@ -625,8 +597,7 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
         ):
             # Log in
             login_res = await ac.post("/api/admin/login", json={"pin": "0000"})
-            if login_res.status_code != 200:
-                pytest.skip("Login not implemented — skipping publish test")
+            assert login_res.status_code == 200, login_res.text
             # Merge the browse-binding cookie so get_write_target resolves without 400 (D-02).
             auth_cookies = dict(login_res.cookies)
             auth_cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
@@ -654,8 +625,6 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
                     **cookie_header(auth_cookies),
                 },
             )
-            if bulk_res.status_code == 404:
-                pytest.skip("Bulk endpoint not yet implemented — skipping publish test")
             assert bulk_res.status_code == 200, (
                 f"Bulk write failed: {bulk_res.status_code}: {bulk_res.text}"
             )
@@ -670,8 +639,6 @@ async def test_revert_publishes_boundary_changed(db_pool) -> None:  # type: igno
                 f"/api/admin/history/{change_set_id}/revert",
                 headers={"X-CSRF-Token": csrf_token, **cookie_header(auth_cookies)},
             )
-            if revert_res.status_code == 404:
-                pytest.skip("Revert endpoint not yet implemented — skipping publish test")
             assert revert_res.status_code == 200, (
                 f"Revert failed: {revert_res.status_code}: {revert_res.text}"
             )

@@ -79,6 +79,7 @@ def test_midpoint_is_real_record_property(label: str, record_nums: list[int]) ->
         snapshot=snapshot,
     )
 
+    assert result is not None, "Covered synthetic records must yield a non-null outcome"
     if result is not None:
         record_ids = {r.release_id for r in records}
         assert result.release_id in record_ids, (

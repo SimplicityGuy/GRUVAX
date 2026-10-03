@@ -4,6 +4,7 @@ set -euo pipefail
 
 just setup
 just lint
+uv run python scripts/check_test_patterns.py
 uv run mypy --strict .
 npm --prefix frontend run lint
 npm --prefix frontend run format:check
