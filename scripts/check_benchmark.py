@@ -11,15 +11,16 @@ SLO budgets (v1 acceptance criteria, SC#5):
   - locate algo  (test_locate_benchmark)     : p95 <=  50 ms
 
 SC#5 specifies p95, not mean. pytest-benchmark's JSON does not emit a p95 field,
-but it does include the raw per-round samples under stats["data"], so we compute
-the 95th percentile (nearest-rank) ourselves. If "data" is unavailable we fall
-back to "mean" and say so, so the gate degrades loudly rather than silently.
+but it does include raw per-round samples under stats["data"]. We compute
+the nearest-rank 95th percentile and fail if samples are absent or invalid.
+Use --require to reject missing expected benchmarks even when another passes.
 
 This script is stdlib-only (json + math + sys) — no third-party imports required.
 """
 
 from __future__ import annotations
 
+import argparse
 import json
 import math
 from pathlib import Path
@@ -27,27 +28,29 @@ import sys
 
 
 def _p95_ms(stats: dict[str, object]) -> tuple[float, str]:
-    """Return (value_ms, metric_label) — p95 from raw samples, else mean fallback."""
+    """Return (value_ms, metric_label) — p95 from raw samples, or a failing sentinel."""
     data = stats.get("data")
-    if isinstance(data, list) and data:
+    if not isinstance(data, list) or not data:
+        return float("inf"), "missing-p95-samples"
+    try:
         samples = sorted(float(x) for x in data)
-        # Nearest-rank percentile: index = ceil(0.95 * N) - 1, clamped to [0, N-1].
-        rank = max(0, min(len(samples) - 1, math.ceil(0.95 * len(samples)) - 1))
-        return samples[rank] * 1000.0, "p95"
-    mean_s = stats.get("mean", float("inf"))
-    return float(mean_s) * 1000.0 if isinstance(mean_s, (int, float)) else float(
-        "inf"
-    ), "mean(fallback)"
+    except TypeError, ValueError:
+        return float("inf"), "invalid-p95-samples"
+    if any(not math.isfinite(x) or x < 0 for x in samples):
+        return float("inf"), "invalid-p95-samples"
+    rank = math.ceil(0.95 * len(samples)) - 1
+    return samples[rank] * 1000.0, "p95"
 
 
 # SLO budgets in milliseconds (seconds * 1000 conversion is applied below)
 _BUDGETS: dict[str, float] = {
     "test_search_slo_benchmark": 200.0,
     "test_locate_benchmark": 50.0,
+    "test_locate_slo_benchmark": 50.0,
 }
 
 
-def _check(path: str) -> bool:
+def _check(path: str, required: tuple[str, ...] = ()) -> bool:
     """Parse benchmark JSON and check each known benchmark against its budget.
 
     Returns True if all budgets pass, False if any breach is found.
@@ -62,13 +65,16 @@ def _check(path: str) -> bool:
         print(f"ERROR: benchmark file is not valid JSON: {exc}", file=sys.stderr)
         return False
 
+    if not isinstance(data, dict):
+        print("ERROR: benchmark JSON must be an object", file=sys.stderr)
+        return False
     benchmarks = data.get("benchmarks", [])
     if not benchmarks:
         print("ERROR: no benchmarks found in JSON file", file=sys.stderr)
         return False
 
     passed = True
-    checked = 0
+    checked: set[str] = set()
 
     for bench in benchmarks:
         name: str = bench.get("name", "")
@@ -76,12 +82,12 @@ def _check(path: str) -> bool:
         short_name = name.rsplit("::", maxsplit=1)[-1] if "::" in name else name
 
         for budget_key, budget_ms in _BUDGETS.items():
-            if budget_key not in short_name:
+            if budget_key != short_name.split("[", 1)[0]:
                 continue
 
             stats = bench.get("stats", {})
             value_ms, metric = _p95_ms(stats)
-            checked += 1
+            checked.add(budget_key)
 
             if value_ms <= budget_ms:
                 print(f"PASS  {short_name}: {metric}={value_ms:.2f}ms <= {budget_ms:.0f}ms")
@@ -93,25 +99,25 @@ def _check(path: str) -> bool:
                 )
                 passed = False
 
-    if checked == 0:
-        # No known benchmarks found — this may mean test IDs changed; warn but don't fail
-        # (the test itself will fail if the benchmark didn't run at all)
-        known = ", ".join(_BUDGETS.keys())
+    if not checked:
+        print("ERROR: no known SLO benchmarks were checked", file=sys.stderr)
+        passed = False
+    missing = set(required) - checked
+    if missing:
         print(
-            f"WARNING: none of the known benchmarks ({known}) found in {path}.",
-            file=sys.stderr,
+            f"ERROR: required SLO benchmarks missing: {', '.join(sorted(missing))}", file=sys.stderr
         )
-        print("  Check that --benchmark-only was passed and the tests ran.", file=sys.stderr)
+        passed = False
 
     return passed
 
 
 def main() -> None:
-    if len(sys.argv) != 2:
-        print(f"Usage: {sys.argv[0]} <benchmark.json>", file=sys.stderr)
-        sys.exit(2)
-
-    ok = _check(sys.argv[1])
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("path")
+    parser.add_argument("--require", nargs="+", choices=sorted(_BUDGETS), default=[])
+    args = parser.parse_args()
+    ok = _check(args.path, tuple(args.require))
     sys.exit(0 if ok else 1)
 
 

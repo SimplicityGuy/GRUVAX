@@ -103,6 +103,9 @@ jobs:
       - name: Install dependencies
         run: uv sync --frozen
 
+      - name: Test pattern gate
+        run: uv run python scripts/check_test_patterns.py
+
       # tests/browser/test_kiosk_viewport.py (gruvax-ull6) renders the real SPA
       # at the pinned 800x480 kiosk viewport via FastAPI's StaticFiles mount,
       # which only activates when static/ exists (see src/gruvax/app.py).
@@ -192,4 +195,4 @@ jobs:
           uv run pytest \
             tests/unit/test_algorithm.py::test_locate_benchmark \
             --benchmark-only --benchmark-json=benchmark.json -q
-          uv run python scripts/check_benchmark.py benchmark.json
+          uv run python scripts/check_benchmark.py benchmark.json --require test_locate_benchmark

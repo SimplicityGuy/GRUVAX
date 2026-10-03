@@ -1,13 +1,13 @@
 """Integration tests for PRIV-02 + PRIV-03 privacy guarantees.
 
 CI-locks two privacy invariants that are already de-facto true (per L-04):
-  - PRIV-02: raw query text never appears in app.state.log_ring_buffer
+  - PRIV-02: raw query text never appears in emitted server JSON or the log ring
   - PRIV-02: uvicorn.access logger is suppressed to WARNING or higher
   - PRIV-03: no gruvax.search_log table exists (stats are aggregate-only)
 
 Tests:
   - test_query_never_in_logs:          After a search request, the probe term is
-                                        absent from every ring-buffer entry.
+                                        absent from the full emitted JSON and every ring-buffer entry.
   - test_uvicorn_access_log_suppressed: uvicorn.access level >= WARNING (regression
                                         guard for logging_config.py:188).
   - test_no_search_log_table:           Active schema has no search_log table
@@ -26,8 +26,10 @@ from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
 import pytest
 import pytest_asyncio
+import structlog
 
 from gruvax.app import create_app
+from gruvax.logging_config import configure_logging
 
 
 # Unique probe term — chosen to be absent from any legitimate log message so the
@@ -70,8 +72,8 @@ async def privacy_client(db_pool):  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_query_never_in_logs(privacy_client) -> None:  # type: ignore[no-untyped-def]
-    """PRIV-02: raw query text must never appear in the in-process log ring buffer.
+async def test_query_never_in_logs(privacy_client, capfd, caplog) -> None:  # type: ignore[no-untyped-def]
+    """PRIV-02: raw query text must never reach the real JSON emission channel.
 
     Drives a real search request through the ASGI client (the app is live under
     LifespanManager) and then inspects every entry in ``app.state.log_ring_buffer``.
@@ -82,12 +84,20 @@ async def test_query_never_in_logs(privacy_client) -> None:  # type: ignore[no-u
     """
     ac, app = privacy_client
 
-    # Drive a real search request containing the probe term in the query string.
-    # The endpoint may return 200 (zero results is fine — SRCH-04) or a non-200
-    # status (e.g. 400 session_unbound if no bound profile is set in the test
-    # environment).  Either way, the ring-buffer assertion is what matters here:
-    # the query text must never reach the buffer regardless of the response code.
-    await ac.get(f"/api/search?q={PROBE_TERM}&limit=5")
+    # Configure the real console JSON handler while descriptor capture is active.
+    configure_logging("INFO", app.state.log_ring_buffer)
+    capfd.readouterr()
+    structlog.get_logger("gruvax.privacy_test").info("privacy capture is active")
+    ac.cookies.set("gruvax_browse_binding", "00000000-0000-0000-0000-000000000001")
+    # The test's HTTP client logs the full request URI; it is outside the server.
+    # Suppress only that harness logger, while capturing every server JSON field.
+    with caplog.at_level(logging.WARNING, logger="httpx"):
+        response = await ac.get(f"/api/search?q={PROBE_TERM}&limit=5")
+    assert response.status_code == 200, response.text
+    captured = capfd.readouterr()
+    emitted = captured.out + captured.err
+    assert "privacy capture is active" in emitted, "Real JSON emission channel was not captured"
+    assert PROBE_TERM not in emitted, f"PRIV-02 raw query leaked in emitted JSON: {emitted}"
 
     ring = list(app.state.log_ring_buffer)
     offenders = [entry for entry in ring if PROBE_TERM in entry.get("msg", "")]

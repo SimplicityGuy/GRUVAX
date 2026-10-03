@@ -16,6 +16,8 @@ import time
 from typing import Any
 from unittest.mock import MagicMock
 
+import pytest
+
 from gruvax.middleware.timing import SLO_THRESHOLDS_MS, record_slow_query
 
 
@@ -141,6 +143,7 @@ class TestRecordSlowQuery:
             record_slow_query(app, "/api/search", total_ms=300.0, db_ms=0.0)
         assert len(ring) == 3
 
+    @pytest.mark.behavior_no_raise
     def test_no_app_state_ring_does_not_crash(self) -> None:
         """If app.state.slow_query_ring is absent, record_slow_query is a no-op."""
         app = MagicMock()

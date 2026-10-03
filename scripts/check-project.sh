@@ -4,6 +4,7 @@ set -euo pipefail
 
 just setup
 just lint
+uv run python scripts/check_test_patterns.py
 uv run mypy --strict .
 npm --prefix frontend run lint
 npm --prefix frontend run format:check
@@ -62,4 +63,4 @@ uv run pytest tests/ -ra --cov=gruvax --cov-report=term-missing
 just slo
 uv run pytest tests/unit/test_algorithm.py::test_locate_benchmark \
   --benchmark-only --benchmark-json="$benchmark"
-uv run python scripts/check_benchmark.py "$benchmark"
+uv run python scripts/check_benchmark.py "$benchmark" --require test_locate_benchmark
