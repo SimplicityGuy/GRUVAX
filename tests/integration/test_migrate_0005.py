@@ -18,19 +18,27 @@ from __future__ import annotations
 import pytest
 import pytest_asyncio
 
-from gruvax.db.pool import create_pool
+from tests.fixtures.migration_databases import (
+    migration_db as migration_db,
+    migration_pool as migration_pool,
+)
 
 
 # ── Session-scoped DB pool (mirrors pattern from test_locate.py) ─────────────
 
 
-@pytest_asyncio.fixture(scope="module")
-async def migrate_pool():  # type: ignore[no-untyped-def]
-    """Module-scoped async psycopg pool for migration tests."""
-    pool = create_pool(min_size=1, max_size=2, open=False)
-    await pool.open()
-    yield pool
-    await pool.close()
+@pytest_asyncio.fixture(loop_scope="session")
+async def migrate_pool(migration_pool):  # type: ignore[no-untyped-def]
+    """Function-owned migrated database with explicit synthetic unit/cube seed."""
+    async with migration_pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.units (id, display_name, rows, cols, ordering) VALUES (1, 'Migration test unit', 1, 1, 0)"
+        )
+        await conn.execute(
+            "INSERT INTO gruvax.cube_boundaries (profile_id, unit_id, row, col, first_label, first_catalog, is_empty) VALUES ('00000000-0000-0000-0000-000000000001'::uuid, 1, 0, 0, 'Synthetic', 'S1', FALSE)"
+        )
+        await conn.commit()
+    yield migration_pool
 
 
 # ── Helper ────────────────────────────────────────────────────────────────────
@@ -65,8 +73,7 @@ async def _get_unit_id(pool) -> int:  # type: ignore[no-untyped-def]
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute("SELECT id FROM gruvax.units LIMIT 1")
         row = await cur.fetchone()
-    if row is None:
-        pytest.skip("No rows in gruvax.units — integration DB not seeded")
+    assert row is not None, "Owned migration fixture must seed its unit"
     return int(row[0])
 
 
@@ -80,29 +87,28 @@ async def _get_first_cube(pool, unit_id: int) -> tuple[int, int, int]:  # type: 
             (unit_id,),
         )
         row = await cur.fetchone()
-    if row is None:
-        pytest.skip(f"No non-empty cubes in cube_boundaries for unit_id={unit_id}")
+    assert row is not None, "Owned migration fixture must seed a nonempty cube"
     return int(row[0]), int(row[1]), int(row[2])
 
 
 # ── Schema presence tests (post-upgrade assertions) ───────────────────────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.asyncio(loop_scope="session")
 async def test_segment_overrides_table_exists(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """Migration 0005 creates the gruvax.segment_overrides table (SEG-01)."""
     exists = await _table_exists(migrate_pool, "segment_overrides")
     assert exists, "gruvax.segment_overrides table should exist after migration 0005"
 
 
-@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.asyncio(loop_scope="session")
 async def test_last_label_column_absent(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """Migration 0005 drops last_label from cube_boundaries (D-05 / SEG-01)."""
     exists = await _column_exists(migrate_pool, "cube_boundaries", "last_label")
     assert not exists, "last_label column should NOT exist in cube_boundaries after migration 0005"
 
 
-@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.asyncio(loop_scope="session")
 async def test_last_catalog_column_absent(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """Migration 0005 drops last_catalog from cube_boundaries (D-05 / SEG-01)."""
     exists = await _column_exists(migrate_pool, "cube_boundaries", "last_catalog")
@@ -114,7 +120,7 @@ async def test_last_catalog_column_absent(migrate_pool) -> None:  # type: ignore
 # ── fraction CHECK constraint tests (T-05-01 / V5 security control) ──────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.asyncio(loop_scope="session")
 async def test_fraction_check_rejects_over_one(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """DB CHECK rejects segment_overrides.fraction > 1.0 (T-05-01 / V5 security control).
 
@@ -145,7 +151,7 @@ async def test_fraction_check_rejects_over_one(migrate_pool) -> None:  # type: i
     )
 
 
-@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.asyncio(loop_scope="session")
 async def test_fraction_check_rejects_zero(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """DB CHECK rejects segment_overrides.fraction = 0.0 (exclusive lower bound)."""
     import psycopg
@@ -171,7 +177,7 @@ async def test_fraction_check_rejects_zero(migrate_pool) -> None:  # type: ignor
     )
 
 
-@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.asyncio(loop_scope="session")
 @pytest.mark.behavior_no_raise
 async def test_fraction_check_accepts_boundary(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """DB CHECK accepts segment_overrides.fraction = 1.0 (inclusive upper bound)."""
@@ -207,7 +213,7 @@ async def test_fraction_check_accepts_boundary(migrate_pool) -> None:  # type: i
 # ── boundary_history.source CHECK tests ──────────────────────────────────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.asyncio(loop_scope="session")
 @pytest.mark.behavior_no_raise
 async def test_source_check_accepts_cut_insert(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """boundary_history.source='cut_insert' is accepted after migration 0005."""
@@ -263,7 +269,7 @@ async def test_source_check_accepts_cut_insert(migrate_pool) -> None:  # type: i
         await conn.commit()
 
 
-@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.asyncio(loop_scope="session")
 async def test_source_check_rejects_unknown_source(migrate_pool) -> None:  # type: ignore[no-untyped-def]
     """boundary_history.source rejects values outside the allowed set."""
     import uuid
@@ -326,8 +332,8 @@ async def test_source_check_rejects_unknown_source(migrate_pool) -> None:  # typ
 # ── Round-trip test: downgrade to 0004 → upgrade head ────────────────────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
-async def test_0005_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.asyncio(loop_scope="session")
+async def test_0005_round_trip_down_up(migrate_pool, migration_db) -> None:  # type: ignore[no-untyped-def]
     """Migration 0005 round-trips clean: downgrade to 0004 then upgrade to head.
 
     Uses subprocess to invoke alembic to test the actual migration execution
@@ -345,22 +351,17 @@ async def test_0005_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no
     0005 — ``-1`` from a newer head would only land on 0005 and leave
     segment_overrides in place.
     """
+    import os
     import subprocess
     import sys
 
-    # Clear boundary_history first. On the shared dev DB other modules' import /
-    # wizard tests commit history rows with source labels (csv/yaml/wizard/import)
-    # that the OLDER 0006 source CHECK forbids; the 0007→0006 downgrade step then
-    # fails with a CheckViolation. This is a SCHEMA round-trip test — the history
-    # data is irrelevant to it, so clearing it makes the test order-independent.
-    async with migrate_pool.connection() as conn:
-        await conn.execute("DELETE FROM gruvax.boundary_history")
-        await conn.commit()
+    # This test owns a fresh database; no shared history/profile deletion is needed.
 
     # Downgrade to 0004 (drops migration 0005's segment model, independent of any
     # newer migrations layered above 0005).
     result = subprocess.run(
         [sys.executable, "-m", "alembic", "downgrade", "0004"],
+        env={**os.environ, "DATABASE_URL": migration_db[1]},
         capture_output=True,
         text=True,
     )
@@ -377,6 +378,7 @@ async def test_0005_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no
     # Upgrade back to head (0004 → 0005)
     result = subprocess.run(
         [sys.executable, "-m", "alembic", "upgrade", "head"],
+        env={**os.environ, "DATABASE_URL": migration_db[1]},
         capture_output=True,
         text=True,
     )

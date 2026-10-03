@@ -45,8 +45,9 @@ Conventions (carried from 0001-0009):
   - Raw op.execute SQL — NOT op.alter_column(nullable=...) — so Alembic's
     reflection path cannot mis-handle the FK + composite-PK shape (RESEARCH
     anti-pattern).
-  - downgrade() fully reverses upgrade() — the CI round-trip gate
-    (upgrade head -> downgrade base -> upgrade head) enforces fidelity.
+  - downgrade() reverses upgrade() only for default-only data; it refuses
+    before mutation when non-default profile data exists. The default-only CI
+    round-trip (upgrade head -> downgrade base -> upgrade head) enforces fidelity.
 
 Idempotence note:
   Each PK reconstruction is wrapped in a ``DO $$`` guard keyed on the table's
@@ -67,6 +68,8 @@ Round-trip note:
 from __future__ import annotations
 
 from alembic import op
+
+from gruvax.db.migration_safety import PROFILE_DOWNGRADE_GUARD
 
 
 # revision identifiers, used by Alembic.
@@ -394,14 +397,6 @@ BEGIN
     END IF;
 END $$
 """
-_DEDUP_SETTINGS_BEFORE_PK_RESTORE = (
-    "DELETE FROM gruvax.settings "
-    "WHERE profile_id != '00000000-0000-0000-0000-000000000001'::uuid "
-    "  AND key IN ("
-    "    SELECT key FROM gruvax.settings "
-    "    WHERE profile_id = '00000000-0000-0000-0000-000000000001'::uuid"
-    "  )"
-)
 _RESTORE_PK_SETTINGS = """
 DO $$
 DECLARE
@@ -507,6 +502,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Also guard direct/emitted migration execution before its first mutation.
+    op.execute(PROFILE_DOWNGRADE_GUARD)
     # Reverse order, with PK restore BEFORE the DROP NOT NULL: Postgres refuses
     # to DROP NOT NULL on a column while it is still part of a PRIMARY KEY
     # ("column is in a primary key"), so profile_id must leave the PKs first.
@@ -520,11 +517,8 @@ def downgrade() -> None:
     #    legal. 0009's backfill seeded every row to the default profile, so
     #    dropping the profile_id-leading PK leaves a valid state, no orphan rows.
     #
-    #    For settings: dedup duplicate keys across profiles before restoring the
-    #    simpler (key)-only PK, keeping only the default-profile rows for any key
-    #    that appears under multiple profiles. This prevents UniqueViolation when
-    #    per-profile default settings were seeded during normal operation.
-    op.execute(_DEDUP_SETTINGS_BEFORE_PK_RESTORE)
+    #    The preservation guard guarantees default-only keys; never deduplicate
+    #    or delete user data to make rollback possible.
     op.execute(_RESTORE_PK_SEGMENT_OVERRIDES)
     op.execute(_RESTORE_PK_RECORD_STATS)
     op.execute(_RESTORE_PK_SETTINGS)

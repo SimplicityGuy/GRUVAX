@@ -20,6 +20,7 @@ SSE + httpx note:
 from __future__ import annotations
 
 import asyncio
+import json
 import threading
 import time
 
@@ -142,16 +143,16 @@ async def test_sse_headers(live_server) -> None:  # type: ignore[no-untyped-def]
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no-untyped-def]
+async def test_boundary_changed_latency(live_server, record_property) -> None:  # type: ignore[no-untyped-def]
     """Admin PUT → kiosk receives boundary_changed via SSE in <500ms.
 
     This is the primary ADMN-11 gate (roadmap criterion 1: ~500ms live re-render).
 
     Protocol:
       1. Open an SSE reader task on GET /api/events.
-      2. Wait ~50ms for the SSE connection to establish.
+      2. Wait for the connected frame, proving the subscriber is attached.
       3. Record t0, then issue PUT /api/admin/cubes/1/0/0/boundary (force=True).
-      4. Assert boundary_changed appears in the stream within 0.5s of t0.
+      4. Timestamp the complete boundary_changed frame and require <0.5s from t0.
       5. Restore the original fixture boundary so other tests are unaffected.
 
     Uses force=True to skip the phantom check (synthetic values won't be in
@@ -159,8 +160,7 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
     after the test to avoid contaminating test_locate.py and others.
     """
     auth = await _login(live_server)
-    if not auth:
-        pytest.skip("Admin login not implemented — skipping SSE latency test")
+    assert auth, "Admin login must succeed before exercising SSE latency"
 
     # Fixture boundary for cube 1/0/0 (boundaries.yaml row 0, col 0).
     # Phase 5 (SEG-01): last_label / last_catalog removed from request bodies.
@@ -177,7 +177,8 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
         "force": True,
     }
 
-    received = asyncio.Event()
+    ready = asyncio.Event()
+    received: asyncio.Future[float] = asyncio.get_running_loop().create_future()
     sse_url = f"/api/events/{DEFAULT_PROFILE_UUID}"
     sse_cookies = {BROWSE_BINDING_COOKIE: DEFAULT_PROFILE_UUID}
 
@@ -186,49 +187,53 @@ async def test_boundary_changed_latency(live_server) -> None:  # type: ignore[no
             httpx.AsyncClient(base_url=live_server) as ac,
             ac.stream("GET", sse_url, headers=cookie_header(sse_cookies)) as response,
         ):
+            assert response.status_code == 200
+            event_name = ""
+            event_data = ""
             async for line in response.aiter_lines():
-                if "boundary_changed" in line:
-                    received.set()
+                if line == ": connected":
+                    ready.set()
+                elif line.startswith("event: "):
+                    event_name = line.removeprefix("event: ")
+                elif line.startswith("data: "):
+                    event_data = line.removeprefix("data: ")
+                elif not line and event_name == "boundary_changed":
+                    arrival = time.perf_counter()
+                    data = json.loads(event_data)
+                    assert data["cube_ids"] == [{"unit": 1, "row": 0, "col": 0}]
+                    assert data["change_set_id"]
+                    received.set_result(arrival)
                     return
 
-    sse_task = asyncio.create_task(read_sse())
-    # Let the SSE connection establish before triggering the write
-    await asyncio.sleep(0.05)
-
-    t0 = time.perf_counter()
-    # Admin PUT triggers boundary_changed fan-out (after cache.load in Phase 4)
-    async with httpx.AsyncClient(base_url=live_server) as ac:
-        await ac.put(
-            "/api/admin/cubes/1/0/0/boundary",
-            json=TEST_BOUNDARY,
-            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
-        )
-
-    try:
-        await asyncio.wait_for(received.wait(), timeout=0.5)
-    except TimeoutError:
-        sse_task.cancel()
-        # Attempt restore before failing
-        async with httpx.AsyncClient(base_url=live_server) as ac:
-            await ac.put(
+    # Client setup is outside the request-to-event budget. Readiness is observed
+    # over TCP, and the end timestamp is frame arrival, not PUT response teardown.
+    async with httpx.AsyncClient(base_url=live_server) as writer:
+        sse_task = asyncio.create_task(read_sse())
+        wrote = False
+        try:
+            await asyncio.wait_for(ready.wait(), timeout=2.0)
+            t0 = time.perf_counter()
+            wrote = True
+            response = await writer.put(
                 "/api/admin/cubes/1/0/0/boundary",
-                json=ORIGINAL_BOUNDARY,
+                json=TEST_BOUNDARY,
                 headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
             )
-        pytest.fail("boundary_changed not received within 500ms — ADMN-11 gate FAILED")
-
-    latency = time.perf_counter() - t0
-    sse_task.cancel()
-
-    # Restore original fixture boundary so other tests (e.g. test_locate.py) are unaffected
-    async with httpx.AsyncClient(base_url=live_server) as ac:
-        await ac.put(
-            "/api/admin/cubes/1/0/0/boundary",
-            json=ORIGINAL_BOUNDARY,
-            headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
-        )
-
-    assert latency < 0.5, f"boundary_changed latency {latency:.3f}s exceeded 500ms budget"
+            assert response.status_code == 200, response.text
+            arrival = await asyncio.wait_for(received, timeout=0.5)
+            latency = arrival - t0
+            record_property("request_to_boundary_changed_ms", latency * 1000)
+            assert latency < 0.5, f"boundary_changed latency {latency:.3f}s exceeded 500ms budget"
+        finally:
+            sse_task.cancel()
+            await asyncio.gather(sse_task, return_exceptions=True)
+            if wrote:
+                restored = await writer.put(
+                    "/api/admin/cubes/1/0/0/boundary",
+                    json=ORIGINAL_BOUNDARY,
+                    headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
+                )
+                assert restored.status_code == 200, restored.text
 
 
 @pytest.mark.asyncio(loop_scope="session")

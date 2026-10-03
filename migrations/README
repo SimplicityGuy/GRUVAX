@@ -1,1 +1,15 @@
-Generic single-database configuration with an async dbapi.
+GRUVAX uses Alembic with the async psycopg driver.
+
+Each requested migration chain is one PostgreSQL transaction. A downgrade that
+crosses revision 0010 or drops revision 0009 first locks the GRUVAX profile tables
+and checks for non-default profile data, before any migration SQL runs. The same
+guard is the first operation in both downgrade functions for direct/emitted SQL.
+It refuses rather than deleting or deduplicating user metadata, PATs, collections,
+settings, boundaries, overrides or statistics. A profile with no boundaries is
+still protected. Transaction-owned locks prevent a concurrent profile writer
+from racing the check and are released by commit or rollback.
+
+Back up/export non-default profiles before planning a destructive rollback; the
+migration never removes them automatically. Default-only upgrade/downgrade
+round-trips remain supported. A refusal or later failure leaves the entire
+requested chain's revision, schema, constraints and data unchanged.

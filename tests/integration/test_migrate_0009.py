@@ -27,6 +27,7 @@ pytest in a single connection.
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 import subprocess
 from typing import TYPE_CHECKING
@@ -35,11 +36,24 @@ import psycopg
 import pytest
 import pytest_asyncio
 
-from gruvax.settings import settings
+from tests.fixtures.migration_databases import (
+    migration_db as migration_db,
+    migration_pool as migration_pool,
+)
 
 
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def db_pool(migration_pool, migration_db):  # type: ignore[no-untyped-def]
+    """Register the owned pool locally and verify its actual database before use."""
+    expected = psycopg.conninfo.conninfo_to_dict(migration_db[0])["dbname"]
+    async with migration_pool.connection() as conn:
+        actual = await (await conn.execute("SELECT current_database()")).fetchone()
+    assert actual == (expected,)
+    yield migration_pool
 
 
 # ── shared helpers ──────────────────────────────────────────────────────────
@@ -51,11 +65,7 @@ LEGACY_SEED_PATH = (
 )
 
 
-def _conninfo() -> str:
-    return settings.DATABASE_URL.replace("postgresql+psycopg://", "postgresql://", 1)
-
-
-async def _alembic(action: str, target: str) -> None:
+async def _alembic(action: str, target: str, database_url: str) -> None:
     """Run ``alembic <action> <target>`` via subprocess inside the test process.
 
     Closes Gap #2 from 01-VERIFICATION.md: the previous programmatic
@@ -81,6 +91,7 @@ async def _alembic(action: str, target: str) -> None:
         subprocess.run,
         cmd,
         cwd=str(cwd),
+        env={**os.environ, "DATABASE_URL": database_url},
         capture_output=True,
         text=True,
         timeout=120,
@@ -96,8 +107,8 @@ async def _alembic(action: str, target: str) -> None:
         )
 
 
-@pytest_asyncio.fixture
-async def fresh_head(db_pool) -> AsyncIterator[None]:  # type: ignore[no-untyped-def]
+@pytest_asyncio.fixture(loop_scope="session")
+async def fresh_head(db_pool, migration_db) -> AsyncIterator[None]:  # type: ignore[no-untyped-def]
     """Ensure the schema is at HEAD before each test, with the legacy seed loaded.
 
     The legacy seed creates ``gruvax_dev.{artists,releases,collection_items}``
@@ -108,20 +119,21 @@ async def fresh_head(db_pool) -> AsyncIterator[None]:  # type: ignore[no-untyped
     #    TRUNCATE inside the .sql file).
     assert LEGACY_SEED_PATH.is_file(), f"legacy seed missing at {LEGACY_SEED_PATH}"
     seed_sql = LEGACY_SEED_PATH.read_text()
-    async with await psycopg.AsyncConnection.connect(_conninfo(), autocommit=True) as boot:
+    async with await psycopg.AsyncConnection.connect(migration_db[0], autocommit=True) as boot:
         # ``execute`` runs each top-level statement; the legacy file is one
         # multi-statement script.
         await boot.execute(seed_sql)
 
     # 2. Make sure we're at HEAD.
-    await _alembic("upgrade", "head")
+    await _alembic("upgrade", "head", migration_db[1])
     yield
-    # No teardown — leave HEAD in place for the next test.
+    # The owned pool/database fixtures close and drop this test database.
 
 
 # ── Behaviour tests 1-6 + 9: post-upgrade state ─────────────────────────────
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_profiles_table_exists_with_check_constraints(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
@@ -172,6 +184,7 @@ async def test_profiles_table_exists_with_check_constraints(
     assert "pat_rejected" in text
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_default_profile_seeded(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
@@ -194,6 +207,7 @@ async def test_default_profile_seeded(
     assert bytes(ciphertext) == b""
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_partial_unique_indexes_and_no_column_unique(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
@@ -251,6 +265,7 @@ async def test_partial_unique_indexes_and_no_column_unique(
         await conn.commit()
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_profile_collection_pk_is_composite(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
@@ -370,6 +385,7 @@ async def test_v1_tables_have_nullable_profile_id_backfilled(
             )
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_v_collection_is_dropped(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
@@ -385,9 +401,11 @@ async def test_v_collection_is_dropped(
 # ── Behaviour 7: round-trip ─────────────────────────────────────────────────
 
 
+@pytest.mark.asyncio(loop_scope="session")
 async def test_alembic_round_trip_is_clean(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
+    migration_db,
 ) -> None:
     """Behaviour 7 + 8: upgrade head → downgrade base → upgrade head completes clean.
 
@@ -397,8 +415,8 @@ async def test_alembic_round_trip_is_clean(
     ``fresh_head`` fixture loaded the legacy seed before this test runs.
     """
     # We're already at HEAD (fresh_head). Walk it down + back up.
-    await _alembic("downgrade", "base")
-    await _alembic("upgrade", "head")
+    await _alembic("downgrade", "base", migration_db[1])
+    await _alembic("upgrade", "head", migration_db[1])
 
     # Re-verify the post-HEAD invariants survive the round-trip.
     async with db_pool.connection() as conn, conn.cursor() as cur:

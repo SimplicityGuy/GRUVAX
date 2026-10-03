@@ -67,6 +67,8 @@ from __future__ import annotations
 
 from alembic import op
 
+from gruvax.db.migration_safety import PROFILE_DOWNGRADE_GUARD
+
 
 # revision identifiers, used by Alembic.
 revision: str = "0009"
@@ -287,6 +289,8 @@ def upgrade() -> None:
 
 
 def downgrade() -> None:
+    # Direct downgrade from 0009 must also preserve metadata/PAT/collection.
+    op.execute(PROFILE_DOWNGRADE_GUARD)
     # Pitfall 5: re-broaden the search_path so v_collection's unqualified
     # body resolves against the legacy gruvax_dev / discogsography schema.
     # The runtime pool (D-12) only carries `gruvax, public`; the legacy
