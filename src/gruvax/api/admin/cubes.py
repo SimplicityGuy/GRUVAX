@@ -664,10 +664,11 @@ async def suggest_cube_midpoint(
     _admin: dict[str, Any] = Depends(require_admin),
     ctx: WriteContext = Depends(get_write_context),
 ) -> dict[str, Any]:
-    """Suggest an index-space midpoint between this cube and the next populated cube.
+    """Suggest a real split inside this cube, anchored by the next populated cube.
 
-    Phase 5 (05-04): Derives the last record of the current bin from SegmentCache
-    instead of reading current.last_label / last_catalog (which no longer exist).
+    Uses the current bin's FIRST record and the next bin's FIRST record as
+    anchors. Last-to-first anchors are adjacent and cannot have a midpoint.
+    Same-label anchors and a next populated cube are required by the v1 contract.
 
     Walks collection-INDEX space (Pitfall 22, D-08) — never catalog-string space.
     Returns a real owned record from the snapshot or null if no midpoint exists.
@@ -685,22 +686,21 @@ async def suggest_cube_midpoint(
     if current_bin is None or not current_bin.segments:
         return {"suggestion": None}
 
-    # Derive the "last record" of this bin using SegmentCache rank info.
-    # The last record is the one at the highest rank in the bin's last segment
-    # (by label casefold order, the last segment's last_rank_in_label).
-    last_seg = current_bin.segments[-1]
-    last_label = last_seg.label
+    # Split the current bin rather than the zero-record gap AFTER its last
+    # record. Derive its first owned record from the first segment's rank.
+    current_seg = current_bin.segments[0]
+    current_label = current_seg.label
 
-    # Retrieve the last record in this segment from the snapshot
+    # Retrieve the first record of the current bin from the snapshot
     label_records = sorted(
-        snapshot.get_label_records(last_label),
+        snapshot.get_label_records(current_label),
         key=lambda r: parse_key(r.catalog_number),
     )
-    if last_seg.last_rank_in_label >= len(label_records):
+    if current_seg.first_rank_in_label >= len(label_records):
         return {"suggestion": None}
 
-    last_record = label_records[last_seg.last_rank_in_label]
-    first_anchor_id = last_record.release_id
+    first_record = label_records[current_seg.first_rank_in_label]
+    first_anchor_id = first_record.release_id
 
     # Find the next non-empty cube in shelf order
     boundary_index: dict[tuple[int, int, int], Any] = {
@@ -719,7 +719,7 @@ async def suggest_cube_midpoint(
     next_label = first_seg.label
 
     # Both anchors must be in the same label for index-space midpoint (D-08)
-    if last_label.casefold() != next_label.casefold():
+    if current_label.casefold() != next_label.casefold():
         # Cross-label boundary — suggest from the next cube's label via adjacent index
         # For now, return None (cross-label midpoint is out of scope for v1)
         return {"suggestion": None}
@@ -736,7 +736,7 @@ async def suggest_cube_midpoint(
     last_anchor_id = last_anchor_record.release_id
 
     mid_record = suggest_midpoint(
-        label=last_label,
+        label=current_label,
         first_anchor_release_id=first_anchor_id,
         last_anchor_release_id=last_anchor_id,
         snapshot=snapshot,
