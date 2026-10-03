@@ -82,7 +82,7 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request,
 from fastapi.responses import JSONResponse
 
 from gruvax.api.deps import require_admin
-from gruvax.sync.profile_sync import sync_profile
+from gruvax.sync.profile_sync import ProfileDeletedDuringSync, sync_profile
 
 
 logger = logging.getLogger(__name__)
@@ -166,13 +166,16 @@ async def _run_sync_background(profile_id: str, app_state: Any) -> None:
     (fastapi/fastapi#3589). Must catch + log here directly.
 
     ``sync_profile`` handles: commit → per-profile cache reload → bus.publish
-    (Pitfall A ordering preserved inside sync_profile). On failure, sync_profile's
-    _record_failure chain already sets last_sync_status='failed' and
-    last_sync_error=<tag> — no double-write needed here.
+    (Pitfall A ordering preserved inside sync_profile). Fetch/swap failures record
+    failed status, but post-commit refresh errors preserve the durable ok status.
+    Deleted-profile cancellation does not update the retired profile. This wrapper
+    never performs a second status write.
     """
     try:
         await sync_profile(profile_id, app_state)
+    except ProfileDeletedDuringSync:
+        logger.info("background sync cancelled for deleted profile=%s", profile_id)
     except Exception as exc:
         logger.exception("background sync failed for profile=%s: %s", profile_id, exc)
-        # last_sync_status is already 'failed' via _record_failure inside
-        # sync_profile's except chain — no double-write needed here.
+        # sync_profile owns status: fetch/swap errors are failed, whereas a
+        # post-commit cache error leaves the committed ok state. No double-write.

@@ -192,7 +192,7 @@ async def _record_failure(
                 "    last_sync_status = 'failed', "
                 "    last_sync_error = %s, "
                 "    app_token_revoked = TRUE "
-                "WHERE id = %s::uuid",
+                "WHERE id = %s::uuid AND deleted_at IS NULL",
                 (error_tag, profile_id),
             )
         else:
@@ -200,39 +200,10 @@ async def _record_failure(
                 "UPDATE gruvax.profiles SET "
                 "    last_sync_status = 'failed', "
                 "    last_sync_error = %s "
-                "WHERE id = %s::uuid",
+                "WHERE id = %s::uuid AND deleted_at IS NULL",
                 (error_tag, profile_id),
             )
         await conn.commit()
-    finally:
-        await conn.close()
-
-
-# ── stale-lock detection (Pitfall 1) ─────────────────────────────────────────
-
-
-async def _detect_stale_in_progress(profile_id: str) -> tuple[bool, Any]:
-    """Return (is_stale, last_sync_at) for the profile.
-
-    A profile is "stale" when ``last_sync_status='in_progress'`` AND
-    ``last_sync_at IS NULL OR last_sync_at < now() - INTERVAL '5 minutes'``.
-    Used by ``sync_profile`` to produce an operator-actionable error
-    message instead of an opaque SyncInProgress.
-    """
-    conn = await psycopg.AsyncConnection.connect(_conninfo())
-    try:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "SELECT last_sync_status, last_sync_at, "
-                "       (last_sync_at IS NULL OR last_sync_at < now() - INTERVAL '5 minutes') "
-                "FROM gruvax.profiles WHERE id = %s::uuid",
-                (profile_id,),
-            )
-            row = await cur.fetchone()
-        if not row:
-            return (False, None)
-        status, ts, is_stale_window = row
-        return (status == "in_progress" and bool(is_stale_window), ts)
     finally:
         await conn.close()
 
@@ -304,6 +275,24 @@ async def _ingest_into_staging(
 _SHRINK_GUARD_RATIO = 0.98
 
 
+class ProfileDeletedDuringSync(RuntimeError):
+    """The profile was deleted while its upstream collection was being fetched."""
+
+
+async def _lock_profile_for_swap(conn: AsyncConnection[Any], profile_id: str) -> bool:
+    """Lock an active profile until swap commit; return whether this is its first sync."""
+    async with conn.cursor() as cur:
+        await cur.execute(
+            "SELECT last_sync_at IS NULL FROM gruvax.profiles "
+            "WHERE id = %s::uuid AND deleted_at IS NULL FOR UPDATE",
+            (profile_id,),
+        )
+        row = await cur.fetchone()
+    if row is None:
+        raise ProfileDeletedDuringSync("Profile deleted during sync; collection swap cancelled")
+    return bool(row[0])
+
+
 class ShrinkGuardTripped(Exception):
     """Raised when a sync would shrink the cached collection beyond tolerance.
 
@@ -362,15 +351,10 @@ async def _swap_inside_tx(
             cached one by more than the configured tolerance and
             ``allow_shrink`` is False (gruvax-envc).
     """
-    # Pitfall 4: capture is_initial_import BEFORE the UPDATE that sets last_sync_at.
-    # READ last_sync_at IS NULL here — after the UPDATE it will always be non-NULL.
-    async with conn.cursor() as cur:
-        await cur.execute(
-            "SELECT last_sync_at IS NULL AS is_initial FROM gruvax.profiles WHERE id = %s::uuid",
-            (profile_id,),
-        )
-        initial_row = await cur.fetchone()
-    is_initial_import: bool = bool(initial_row[0]) if initial_row else True
+    # The row lock serializes with soft-delete's UPDATE: a preceding delete
+    # cancels this swap, and a later delete waits for commit before purging.
+    # Capture initial-import state before the success UPDATE (Pitfall 4).
+    is_initial_import = await _lock_profile_for_swap(conn, profile_id)
 
     # gruvax-envc: total rows currently cached for this profile, captured
     # BEFORE the DELETE — the shrink-guard baseline.
@@ -476,6 +460,22 @@ async def _swap_inside_tx(
 # ── cache refresh (D-14, Plan 02-02 — per-profile registry refresh) ──────────
 
 
+_REFRESH_REGISTRIES = (
+    "boundary_cache_registry",
+    "snapshot_registry",
+    "segment_cache_registry",
+    "event_bus_registry",
+)
+
+
+def _profile_caches_current(profile_id: str, app_state: Any, entries: tuple[Any, ...]) -> bool:
+    """Eviction or replacement during a cache read invalidates this refresh."""
+    return all(
+        getattr(app_state, name).get(profile_id) is entry
+        for name, entry in zip(_REFRESH_REGISTRIES, entries, strict=True)
+    )
+
+
 async def _refresh_profile_caches(
     profile_id: str,
     app_state: Any,
@@ -502,24 +502,28 @@ async def _refresh_profile_caches(
         new_record_count: number of new releases in this sync (>= 0, D-06).
         is_initial_import: True iff this is the first-ever sync for this profile (D-07).
     """
+    entries = tuple(getattr(app_state, name).get(profile_id) for name in _REFRESH_REGISTRIES)
+    if any(entry is None for entry in entries):
+        return  # Profile evicted after swap commit; never recreate its registries.
+    cache, snapshot, seg, bus = entries
     pool = app_state.db_pool
 
     # Reload BoundaryCache for this profile (invalidate first — SEG-04 seam).
-    cache = app_state.boundary_cache_registry[profile_id]
     cache.invalidate()
     await cache.load(pool, profile_id=profile_id)
+    if not _profile_caches_current(profile_id, app_state, entries):
+        return
 
     # Reload CollectionSnapshot for this profile.
-    snapshot = app_state.snapshot_registry[profile_id]
     await snapshot.load(pool, profile_id=profile_id)
+    if not _profile_caches_current(profile_id, app_state, entries):
+        return
 
     # Re-derive SegmentCache (CPU-only, no DB call).
-    seg = app_state.segment_cache_registry[profile_id]
     seg.derive(cache, snapshot, cache.overrides)
 
     # Publish collection_changed AFTER all caches are fresh (Pitfall A ordering).
     # Extended payload (API-04): includes new_record_count + is_initial_import.
-    bus = app_state.event_bus_registry[profile_id]
     await bus.publish(
         "collection_changed",
         {
@@ -599,9 +603,8 @@ async def sync_profile(
       ``{"status": "ok", "item_count": int, "took_ms": float, "user_id": str}``
 
     Raises:
-      - SyncInProgress  — pg_try_advisory_lock returned FALSE
-                          (with an operator-actionable message when the
-                          existing state is a stale in_progress lock).
+      - SyncInProgress  — pg_try_advisory_lock returned FALSE; a live
+                          connection already holds this profile's sync lock.
       - PATRejected     — 401/403 or decrypt failure; sets
                           app_token_revoked=TRUE + last_sync_error='pat_rejected'.
       - RateLimitExhausted — sets last_sync_error='rate_limited'.
@@ -649,25 +652,20 @@ async def sync_profile(
             acquired = bool(row[0])
 
         if not acquired:
-            # Pitfall 1 — if the lock isn't held because a stale in_progress
-            # state exists, surface an operator-actionable error.
-            is_stale, ts = await _detect_stale_in_progress(profile_id)
-            if is_stale:
-                raise SyncInProgress(
-                    f"Stale 'in_progress' state detected for profile {profile_id} "
-                    f"(last_sync_at={ts}). Restart the API to clear the advisory lock."
-                )
+            # Session locks disappear with their connection: contention means a
+            # live holder exists. last_sync_at records a previous completion,
+            # so it cannot establish the current holder's age or hung state.
             raise SyncInProgress("Another sync for this profile is already running")
 
         client: Any = None
         try:
-            # Set 'in_progress' early so the stale-lock heuristic above can
-            # detect a hung sync after a crash.
+            # Set 'in_progress' early for the admin status surface. The
+            # advisory lock, not this status timestamp, excludes other syncs.
             await conn.execute(
                 "UPDATE gruvax.profiles SET "
                 "    last_sync_status = 'in_progress', "
                 "    last_sync_error = NULL "
-                "WHERE id = %s::uuid",
+                "WHERE id = %s::uuid AND deleted_at IS NULL",
                 (profile_id,),
             )
             await conn.commit()
@@ -720,6 +718,10 @@ async def sync_profile(
                 "took_ms": took_ms,
                 "user_id": user_id,
             }
+        except ProfileDeletedDuringSync:
+            # The swap TX rolled back. Do not stamp failed/ok metadata on a
+            # deleted profile or refresh/publish its evicted caches.
+            raise
         except _CacheRefreshFailed as wrapper:
             # Post-commit cache refresh failure: swap is durable, status='ok'.
             # Unwrap and re-raise the original exception so the caller sees

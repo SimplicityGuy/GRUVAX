@@ -30,7 +30,7 @@ from datetime import datetime, timedelta
 import logging
 from typing import Any
 
-from gruvax.sync.profile_sync import sync_profile
+from gruvax.sync.profile_sync import ProfileDeletedDuringSync, sync_profile
 
 
 logger = logging.getLogger(__name__)
@@ -193,6 +193,8 @@ async def _sync_loop(pool: Any, app_state: Any) -> None:
                 try:
                     await sync_profile(pid, app_state)
                     logger.info("nightly_sync: profile=%s OK", pid)
+                except ProfileDeletedDuringSync:
+                    logger.info("nightly_sync: profile=%s cancelled after deletion", pid)
                 except Exception as exc:
                     # Per-profile isolation: log + continue (never abort the loop).
                     logger.warning("nightly_sync: profile=%s FAILED: %s", pid, exc)
@@ -252,6 +254,8 @@ async def _startup_catchup_sweep(pool: Any, app_state: Any, cadence: str) -> Non
         try:
             await sync_profile(pid, app_state)
             logger.info("startup_catchup: profile=%s OK", pid)
+        except ProfileDeletedDuringSync:
+            logger.info("startup_catchup: profile=%s cancelled after deletion", pid)
         except Exception as exc:
             logger.warning("startup_catchup: profile=%s FAILED: %s", pid, exc)
 
