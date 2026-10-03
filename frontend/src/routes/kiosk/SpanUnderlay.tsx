@@ -59,35 +59,9 @@ function groupIntoSegments(labelSpan: CubeRef[]): BandSegment[] {
 }
 
 /**
- * Compute the pixel offset of a unit within the shelf-area parent.
- *
- * Units are laid out left-to-right in DOM order by unit_id. Each unit
- * occupies a shelf-grid of 4 columns × (cellSize + cellGap) − cellGap wide.
- * Units are separated by var(--gruvax-space-6) = 32px gap (flex gap on .shelf-area).
- *
- * For now we derive the unit x-offset from its index in the sorted units.
- * SpanUnderlay receives the sorted unit list implicitly via the labelSpan data,
- * which is already sorted by (unit_id, row, col). We compute the x-offset
- * from the unit_id assuming unit ordering follows unit_id (the backend sorts by
- * unit ordering which maps 1:1 with unit_id for typical Kallax setups).
- *
- * The grid width for one unit = 4 × cellSize + 3 × cellGap (4 cols, 3 gaps).
- * The shelf-area flex gap between units = 32px (--gruvax-space-6).
- */
-const SHELF_FLEX_GAP = 32 // --gruvax-space-6 in px; shelf-area gap between units
-const GRID_COLS = 4
-
-function unitColumnOffset(unitId: number, cellSize: number, cellGap: number): number {
-  // unit_id is 1-based; convert to 0-based index
-  const unitIndex = unitId - 1
-  const gridWidth = GRID_COLS * cellSize + (GRID_COLS - 1) * cellGap
-  return unitIndex * (gridWidth + SHELF_FLEX_GAP)
-}
-
-/**
  * SpanUnderlay renders absolutely-positioned pill bands connecting spanned cubes.
- * It must be placed inside a position:relative container (the .shelf-area or
- * per-unit shelf-section wrapper).
+ * It lives beside one unit grid in that unit's position:relative wrapper;
+ * both horizontal and vertical offsets use only local row/column coordinates.
  *
  * No GSAP here — KioskView owns the timeline (opacity 0 → 0.60 animation).
  */
@@ -99,10 +73,8 @@ export function SpanUnderlay({ labelSpan, cellSize, cellGap }: SpanUnderlayProps
   return (
     <>
       {segments.map((seg) => {
-        const xOffset = unitColumnOffset(seg.unitId, cellSize, cellGap)
-
         // left: start at the left edge of colMin
-        const left = xOffset + seg.colMin * (cellSize + cellGap)
+        const left = seg.colMin * (cellSize + cellGap)
         // width: from colMin left edge to colMax right edge
         const width = (seg.colMax - seg.colMin) * (cellSize + cellGap) + cellSize
         // top: vertically centered in the bottom 30% of the cube row
