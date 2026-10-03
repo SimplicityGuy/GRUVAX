@@ -37,7 +37,7 @@ BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
 COVERED_RELEASE_ID = 1
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan.
 
@@ -56,7 +56,7 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
         yield ac
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def no_cookie_client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client WITHOUT the browse-binding cookie.
 
