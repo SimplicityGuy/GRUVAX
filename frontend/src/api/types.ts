@@ -34,7 +34,7 @@ export interface SearchResult {
   primary_artist: string
   label: string
   catalog_number: string
-  format: string
+  format: string | null
   year: number | null
   rank: number
 }

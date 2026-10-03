@@ -39,7 +39,7 @@ const SEARCH_ITEM = {
   primary_artist: 'Miles Davis',
   label: 'Columbia',
   catalog_number: 'CS 8163',
-  format: 'Vinyl',
+  format: null,
   year: 1959,
   rank: 1,
 }
