@@ -73,7 +73,7 @@ def test_is_initial_import_detection(last_sync_at: str | None, expected_is_initi
 
 
 @pytest.mark.asyncio
-async def test_collection_changed_payload() -> None:
+async def test_collection_changed_payload(monkeypatch: pytest.MonkeyPatch) -> None:
     """The published collection_changed payload contains profile_id, new_record_count,
     is_initial_import.
 
@@ -106,6 +106,9 @@ async def test_collection_changed_payload() -> None:
     mock_seg = MagicMock()
     mock_seg.derive = MagicMock()
 
+    monkeypatch.setattr(profile_sync, "BoundaryCache", lambda: mock_cache)
+    monkeypatch.setattr(profile_sync, "CollectionSnapshot", lambda: mock_snapshot)
+    monkeypatch.setattr(profile_sync, "SegmentCache", lambda: mock_seg)
     mock_app_state = MagicMock()
     mock_app_state.db_pool = MagicMock()
     mock_app_state.boundary_cache_registry = {profile_id: mock_cache}
@@ -148,7 +151,7 @@ async def test_collection_changed_payload() -> None:
 
 
 @pytest.mark.asyncio
-async def test_collection_changed_payload_subsequent_sync() -> None:
+async def test_collection_changed_payload_subsequent_sync(monkeypatch: pytest.MonkeyPatch) -> None:
     """is_initial_import=False on a subsequent sync, new_record_count can be 0."""
     from gruvax.sync import profile_sync
 
@@ -169,6 +172,9 @@ async def test_collection_changed_payload_subsequent_sync() -> None:
     mock_seg = MagicMock()
     mock_seg.derive = MagicMock()
 
+    monkeypatch.setattr(profile_sync, "BoundaryCache", lambda: mock_cache)
+    monkeypatch.setattr(profile_sync, "CollectionSnapshot", lambda: mock_snapshot)
+    monkeypatch.setattr(profile_sync, "SegmentCache", lambda: mock_seg)
     mock_app_state = MagicMock()
     mock_app_state.db_pool = MagicMock()
     mock_app_state.boundary_cache_registry = {profile_id: mock_cache}

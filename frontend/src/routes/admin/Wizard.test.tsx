@@ -87,6 +87,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.unstubAllGlobals()
   cleanup()
   vi.restoreAllMocks()
   useAdminStore.setState({ reshuffleDraft: null })
@@ -239,5 +240,58 @@ describe('Wizard local bin and global step numbers (gruvax-ybid)', () => {
     expect(screen.getByRole('progressbar', { name: 'Step 17 of 32' })).toBeVisible()
     expect(document.querySelector('.locator-header-shelf')).toHaveTextContent('SHELF B')
     expect(document.querySelector('[data-row="0"][data-col="0"]')).not.toBeNull()
+  })
+})
+
+describe('Wizard validation response contracts (gruvax-s35)', () => {
+  it.each(['flat', 'nested'])(
+    'shows the structured %s contiguity reason from actual fetch',
+    async (shape) => {
+      const message = 'This cut would split Verve across non-adjacent bins. Keep its bins together.'
+      const body = { type: 'contiguity_violation', message }
+      vi.stubGlobal(
+        'fetch',
+        vi.fn(
+          async () =>
+            new Response(JSON.stringify(shape === 'nested' ? { detail: body } : body), {
+              status: 400,
+            }),
+        ),
+      )
+      useAdminStore.getState().setReshuffleDraft({
+        mode: 'reshuffle',
+        completedSteps: 1,
+        cuts: { '1/0/0': { first_label: 'AAA', first_catalog: '001', is_empty: false } },
+        idempotencyKey: 'validate-contract',
+        startedAt: new Date().toISOString(),
+      })
+      await act(async () => {
+        await renderWizard()
+      })
+      fireEvent.click(await screen.findByRole('button', { name: 'THIS BIN IS EMPTY / SKIP' }))
+      fireEvent.click(screen.getByRole('button', { name: 'VALIDATE CHANGES' }))
+      expect(await screen.findByRole('alert')).toHaveTextContent(message)
+      expect(screen.queryByText(/Check your connection/)).toBeNull()
+      expect(screen.getByRole('button', { name: 'COMMIT ALL CHANGES' })).toBeDisabled()
+    },
+  )
+
+  it('keeps the connection guidance for a genuine transport failure', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new TypeError('Failed to fetch')))
+    useAdminStore.getState().setReshuffleDraft({
+      mode: 'reshuffle',
+      completedSteps: 1,
+      cuts: {},
+      idempotencyKey: 'network-failure',
+      startedAt: new Date().toISOString(),
+    })
+    await act(async () => {
+      await renderWizard()
+    })
+    fireEvent.click(await screen.findByRole('button', { name: 'THIS BIN IS EMPTY / SKIP' }))
+    fireEvent.click(screen.getByRole('button', { name: 'VALIDATE CHANGES' }))
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'Check your connection and try again.',
+    )
   })
 })

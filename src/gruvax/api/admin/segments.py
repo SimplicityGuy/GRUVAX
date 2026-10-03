@@ -60,6 +60,7 @@ from pydantic import BaseModel, Field, model_validator
 from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
 from gruvax.api.admin.validation import (
     build_proposed_cuts,
+    validate_cascade_contiguity,
     validate_contiguity,
     validate_no_empty_bin,
     validate_shelf_overflow,
@@ -831,8 +832,7 @@ async def insert_cut(
     # accept a scattering one.  The cache is expected to be reloaded on every
     # mutating write and on boundary_changed SSE; guaranteeing freshness here is
     # deferred.
-    proposed_insert = build_proposed_cuts(cache, cascade=cascade_cubes)
-    insert_contiguity_error = validate_contiguity(proposed_insert, segment_cache)
+    insert_contiguity_error = validate_cascade_contiguity(cache, segment_cache, cascade_cubes)
     if insert_contiguity_error is not None:
         return JSONResponse(
             status_code=status.HTTP_400_BAD_REQUEST,

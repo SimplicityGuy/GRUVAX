@@ -35,11 +35,13 @@ from __future__ import annotations
 
 import os
 import types
-from unittest.mock import AsyncMock
 
 from httpx import ASGITransport, AsyncClient
 import pytest
 
+from gruvax.estimator.boundary_cache import BoundaryCache
+from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.estimator.segment_cache import SegmentCache
 from gruvax.settings import settings
 from gruvax.sync.pat_crypto import encrypt_pat
 from tests.cookies import cookie_header
@@ -143,13 +145,9 @@ def _make_app_state(db_pool) -> types.SimpleNamespace:
     """
     from gruvax.events.bus import EventBus
 
-    snapshot = AsyncMock()
-    snapshot.invalidate = lambda: None
-    boundary = AsyncMock()
-    boundary.invalidate = lambda: None
-    segment = AsyncMock()
-    segment.derive = lambda *a, **kw: None
-    boundary.overrides = {}
+    snapshot = CollectionSnapshot()
+    boundary = BoundaryCache()
+    segment = SegmentCache()
     bus = EventBus()
     return types.SimpleNamespace(
         db_pool=db_pool,

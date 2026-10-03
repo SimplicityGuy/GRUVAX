@@ -25,7 +25,6 @@ import os
 import time
 import types
 from typing import TYPE_CHECKING
-from unittest.mock import AsyncMock
 
 from fastapi import FastAPI, Header, HTTPException, Query
 from httpx import ASGITransport, AsyncClient
@@ -34,6 +33,9 @@ import pytest
 import pytest_asyncio
 
 from gruvax.discogsography.client import DiscogsographyClient
+from gruvax.estimator.boundary_cache import BoundaryCache
+from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.estimator.segment_cache import SegmentCache
 from gruvax.settings import settings
 from gruvax.sync import profile_sync
 from gruvax.sync.pat_crypto import encrypt_pat
@@ -180,13 +182,9 @@ async def test_concurrent_pool_checkouts_unblocked_during_sync(  # type: ignore[
 
     from gruvax.events.bus import EventBus
 
-    snapshot = AsyncMock()
-    snapshot.invalidate = lambda: None
-    boundary = AsyncMock()
-    boundary.invalidate = lambda: None
-    boundary.overrides = {}
-    segment = AsyncMock()
-    segment.derive = lambda *a, **kw: None
+    snapshot = CollectionSnapshot()
+    boundary = BoundaryCache()
+    segment = SegmentCache()
     app_state = types.SimpleNamespace(
         db_pool=tiny_pool,
         boundary_cache_registry={DEFAULT_UUID: boundary},

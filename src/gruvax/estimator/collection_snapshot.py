@@ -108,6 +108,10 @@ class CollectionSnapshot:
 
         self._by_label = by_label
 
+    def publish_from(self, prepared: CollectionSnapshot) -> None:
+        """Rebind a complete prepared snapshot, preserving the cache's identity."""
+        self._by_label = prepared._by_label
+
     def _load_snapshot(self, by_label: dict[str, list[RecordRow]]) -> None:
         """Internal seam for testing: bypass DB and load groups directly.
 

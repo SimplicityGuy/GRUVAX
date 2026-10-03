@@ -603,6 +603,11 @@ class SegmentCache:
         self._bins = result_bins
         self._by_coord = {(b.unit_id, b.row, b.col): b for b in result_bins}
 
+    def publish_from(self, prepared: SegmentCache) -> None:
+        """Publish a derived generation without mutating previously returned bins."""
+        self._bins = prepared._bins
+        self._by_coord = prepared._by_coord
+
     # ── Test seam ─────────────────────────────────────────────────────────────
 
     def _load_bins(self, bins: list[SegmentBin]) -> None:

@@ -1,17 +1,16 @@
 """Integration tests for sync_profile inline cache refresh — Plan 01-03 Task 2.
 
 Behaviours under test (4 tests, mirrors PLAN.md Task 2):
-  1. CollectionSnapshot reloaded after sync (snapshot.size grows from 0 to N).
+  1. CollectionSnapshot reloaded after sync (snapshot record count grows from 0 to N).
   2. SegmentCache derived after snapshot reload (bins non-empty when boundaries
      match labels in the seed).
   3. BoundaryCache.load is awaited as part of the refresh sequence.
   4. Cache refresh failure does NOT undo the committed swap (DB has the new
      rows even though refresh raised; sync_profile re-raises).
 
-D-14: the inline refresh replays src/gruvax/app.py:142-172's lifespan
-sequence verbatim:
-  snapshot.invalidate() → await snapshot.load(pool) →
-  await boundary_cache.load(pool) → segment_cache.derive(...).
+D-14 / gruvax-58b: load fresh boundary and snapshot objects, derive a fresh
+segment generation, then publish their values into stable instances without an await seam.
+
 """
 
 from __future__ import annotations
@@ -127,9 +126,8 @@ async def test_snapshot_reloaded_after_sync(  # type: ignore[no-untyped-def]
 ) -> None:
     """Test 1: CollectionSnapshot reloads from profile_collection post-sync.
 
-    NB: snapshot.load currently still queries v_collection (Plan 06 rewires
-    it to profile_collection). For Task 2 we assert the snapshot.load AWAIT
-    happens — concrete row counts are covered after the Plan 06 rewire.
+    The actual scoped SQL snapshot read sees the committed collection. The
+    previously returned record lists stay unchanged for captured readers.
     """
     snapshot = CollectionSnapshot()
     boundary = BoundaryCache()
@@ -137,14 +135,13 @@ async def test_snapshot_reloaded_after_sync(  # type: ignore[no-untyped-def]
 
     # Track that .load is called by wrapping the real method.
     load_calls: list[int] = []
-    real_load = snapshot.load
+    real_load = CollectionSnapshot.load
 
-    async def _instrumented_load(pool, **kwargs):  # type: ignore[no-untyped-def]
+    async def _instrumented_load(self, pool, **kwargs):  # type: ignore[no-untyped-def]
         load_calls.append(1)
-        # Don't run the real load; just record the call.
-        _ = real_load
+        await real_load(self, pool, **kwargs)
 
-    snapshot.load = _instrumented_load  # type: ignore[method-assign]
+    monkeypatch.setattr(CollectionSnapshot, "load", _instrumented_load)
 
     seed = [_make_release(i) for i in range(1, 11)]
     app = create_fake_app(seed=seed)
@@ -164,6 +161,10 @@ async def test_snapshot_reloaded_after_sync(  # type: ignore[no-untyped-def]
     result = await sync_profile(DEFAULT_UUID, app_state)
     assert result["status"] == "ok"
     assert load_calls == [1], "snapshot.load was not awaited during cache refresh"
+    refreshed = app_state.snapshot_registry[DEFAULT_UUID]
+    assert refreshed is snapshot
+    assert len(refreshed.get_label_records("Blue Note")) == 10
+    assert len(snapshot.get_label_records("Blue Note")) == 10
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -175,23 +176,14 @@ async def test_segment_cache_derive_called_with_fresh_snapshot(  # type: ignore[
     boundary = BoundaryCache()
     segment = SegmentCache()
 
-    # snapshot.load currently still targets v_collection (dropped in 0009).
-    # Plan 06 will rewire it to profile_collection. For Task 2 we sidestep
-    # the rewire and just stub load — derive's call-site is what we assert.
-    async def _stub_load(pool, **kwargs):  # type: ignore[no-untyped-def]
-        return None
-
-    snapshot.load = _stub_load  # type: ignore[method-assign]
-
     derive_calls: list[tuple] = []
-    real_derive = segment.derive
+    real_derive = SegmentCache.derive
 
-    def _instrumented_derive(cache, snap, overrides):  # type: ignore[no-untyped-def]
-        derive_calls.append((id(cache), id(snap), id(overrides)))
-        # Don't run the real derive (would need real boundaries + snapshot data).
+    def _instrumented_derive(self, cache, snap, overrides):  # type: ignore[no-untyped-def]
+        derive_calls.append((id(cache), id(snap), len(snap.get_label_records("Blue Note"))))
+        real_derive(self, cache, snap, overrides)
 
-    segment.derive = _instrumented_derive  # type: ignore[method-assign]
-    _ = real_derive
+    monkeypatch.setattr(SegmentCache, "derive", _instrumented_derive)
 
     seed = [_make_release(1)]
     app = create_fake_app(seed=seed)
@@ -209,9 +201,11 @@ async def test_segment_cache_derive_called_with_fresh_snapshot(  # type: ignore[
 
     await sync_profile(DEFAULT_UUID, app_state)
     assert len(derive_calls) == 1
-    cache_id, snap_id, _ov_id = derive_calls[0]
-    assert cache_id == id(boundary), "derive was passed an unexpected cache instance"
-    assert snap_id == id(snapshot), "derive was passed an unexpected snapshot instance"
+    cache_id, snap_id, size = derive_calls[0]
+    assert cache_id != id(app_state.boundary_cache_registry[DEFAULT_UUID]) == id(boundary)
+    assert snap_id != id(app_state.snapshot_registry[DEFAULT_UUID]) == id(snapshot)
+    assert size == 1
+    assert app_state.segment_cache_registry[DEFAULT_UUID] is segment
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -221,14 +215,18 @@ async def test_boundary_cache_load_called(  # type: ignore[no-untyped-def]
     """Test 3: boundary_cache.load is awaited during _refresh_profile_caches."""
     from gruvax.events.bus import EventBus
 
-    snapshot = AsyncMock()
-    snapshot.invalidate = lambda: None
-    boundary = AsyncMock()
-    boundary.invalidate = lambda: None
-    boundary.load = AsyncMock(return_value=None)
-    boundary.overrides = {}
-    segment = AsyncMock()
-    segment.derive = lambda *a, **kw: None
+    snapshot = CollectionSnapshot()
+    boundary = BoundaryCache()
+    segment = SegmentCache()
+
+    loads = []
+    real_load = BoundaryCache.load
+
+    async def tracked_load(self, pool, **kwargs):  # type: ignore[no-untyped-def]
+        loads.append(kwargs["profile_id"])
+        await real_load(self, pool, **kwargs)
+
+    monkeypatch.setattr(BoundaryCache, "load", tracked_load)
 
     seed = [_make_release(1)]
     app = create_fake_app(seed=seed)
@@ -243,8 +241,8 @@ async def test_boundary_cache_load_called(  # type: ignore[no-untyped-def]
     )
 
     await sync_profile(DEFAULT_UUID, app_state)
-    # _refresh_profile_caches calls cache.load(pool, profile_id=profile_id)
-    boundary.load.assert_awaited_once()
+    assert loads == [DEFAULT_UUID]
+    assert app_state.boundary_cache_registry[DEFAULT_UUID] is boundary
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -257,6 +255,9 @@ async def test_cache_refresh_failure_preserves_committed_swap(  # type: ignore[n
     boundary = AsyncMock()
     boundary.invalidate = lambda: None
     boundary.load = AsyncMock(side_effect=RuntimeError("cache refresh blew up"))
+    monkeypatch.setattr(
+        BoundaryCache, "load", AsyncMock(side_effect=RuntimeError("cache refresh blew up"))
+    )
     boundary.overrides = {}
     snapshot = AsyncMock()
     snapshot.invalidate = lambda: None

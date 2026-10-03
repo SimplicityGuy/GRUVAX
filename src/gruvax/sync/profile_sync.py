@@ -55,7 +55,10 @@ from gruvax.discogsography.errors import (
     ServerError,
     SyncInProgress,
 )
+from gruvax.estimator.boundary_cache import BoundaryCache
+from gruvax.estimator.collection_snapshot import CollectionSnapshot
 from gruvax.estimator.normalize import normalize_catalog_storage
+from gruvax.estimator.segment_cache import SegmentCache
 from gruvax.settings import settings
 from gruvax.sync.pat_crypto import decrypt_pat
 
@@ -506,8 +509,9 @@ async def _refresh_profile_caches(
     """Reload the registry caches for one profile and publish collection_changed.
 
     Called from ``sync_profile`` AFTER the swap transaction commits (D-14).
-    Order MUST be: invalidate → load cache → load snapshot → derive segment →
-    publish (Pitfall A: never publish before all caches are fresh).
+    Build boundary/snapshot/segment caches off-registry, then publish the complete
+    generation without awaiting. Readers retain consistent old objects while
+    database reads suspend; a failed or cancelled rebuild changes nothing live.
 
     Pool checkout here is brief — these are cache-rebuild reads, not the
     multi-second collection sync. Pool isolation (Pitfall 6) is preserved
@@ -525,22 +529,33 @@ async def _refresh_profile_caches(
     entries = tuple(getattr(app_state, name).get(profile_id) for name in _REFRESH_REGISTRIES)
     if any(entry is None for entry in entries):
         return  # Profile evicted after swap commit; never recreate its registries.
-    cache, snapshot, seg, bus = entries
+    bus = entries[3]
     pool = app_state.db_pool
 
-    # Reload BoundaryCache for this profile (invalidate first — SEG-04 seam).
-    cache.invalidate()
-    await cache.load(pool, profile_id=profile_id)
-    if not _profile_caches_current(profile_id, app_state, entries):
-        return
+    # Admin writers preserve instance identity, but may publish new CONTENTS
+    # while these reads suspend. Retry preparation rather than overwrite a
+    # committed newer boundary generation with our earlier database read.
+    while True:
+        generation = entries[0].generation
+        # Never clear or mutate shared caches while either database read suspends.
+        cache = BoundaryCache()
+        await cache.load(pool, profile_id=profile_id)
+        if not _profile_caches_current(profile_id, app_state, entries):
+            return
 
-    # Reload CollectionSnapshot for this profile.
-    await snapshot.load(pool, profile_id=profile_id)
-    if not _profile_caches_current(profile_id, app_state, entries):
-        return
+        # Build a matching snapshot without publishing it to live readers yet.
+        snapshot = CollectionSnapshot()
+        await snapshot.load(pool, profile_id=profile_id)
+        if not _profile_caches_current(profile_id, app_state, entries):
+            return
 
-    # Re-derive SegmentCache (CPU-only, no DB call).
+        if entries[0].generation == generation:
+            break
+
+    # Derive and publish are CPU-only: no reader can interleave in this turn.
+    seg = SegmentCache()
     seg.derive(cache, snapshot, cache.overrides)
+    _publish_profile_caches(entries, (cache, snapshot, seg))
 
     # Publish collection_changed AFTER all caches are fresh (Pitfall A ordering).
     # Extended payload (API-04): includes new_record_count + is_initial_import.
@@ -552,6 +567,22 @@ async def _refresh_profile_caches(
             "is_initial_import": is_initial_import,
         },
     )
+
+
+def _publish_profile_caches(
+    previous: tuple[Any, ...],
+    fresh: tuple[BoundaryCache, CollectionSnapshot, SegmentCache],
+) -> None:
+    """Publish prepared backing values into stable instances with no await seam.
+
+    Identity checks after both reads prevent resurrecting evicted profiles or
+    overwriting a replacement generation. Stable instances preserve P1 aliases
+    and pending WriteContexts: a writer completing after this publication must
+    refresh the live caches, rather than a retired set of registry objects.
+    Previously returned row/record/bin values remain complete and unchanged.
+    """
+    for live, prepared in zip(previous[:3], fresh, strict=True):
+        live.publish_from(prepared)
 
 
 # ── PAT load + sentinel detection (Pitfall 8) ────────────────────────────────

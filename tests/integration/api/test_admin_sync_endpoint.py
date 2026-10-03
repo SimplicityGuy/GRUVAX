@@ -42,6 +42,9 @@ import pytest_asyncio
 from gruvax._internal.fake_discogsography import create_fake_app
 from gruvax.app import create_app
 from gruvax.discogsography.client import DiscogsographyClient
+from gruvax.estimator.boundary_cache import BoundaryCache
+from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.estimator.segment_cache import SegmentCache
 from gruvax.settings import settings
 from gruvax.sync import profile_sync
 from gruvax.sync.pat_crypto import encrypt_pat
@@ -450,12 +453,10 @@ async def test_caches_refreshed_inline(  # type: ignore[no-untyped-def]
 
     D2-13: the endpoint returns 202 immediately and runs sync in the background.
     After the background task completes, _refresh_profile_caches must have loaded
-    the per-profile registry entries. We verify via the per-profile registry mocks
-    on app.state: after the DB shows last_sync_status='ok', the registry caches
-    for the default profile must have been called at least once.
+    the per-profile registry entries. After the DB shows last_sync_status='ok',
+    initially empty real caches must contain the committed collection generation.
     """
     import asyncio as _asyncio
-    from unittest.mock import AsyncMock
 
     client, app = app_client
     await _seed_default_profile(db_pool)
@@ -464,17 +465,14 @@ async def test_caches_refreshed_inline(  # type: ignore[no-untyped-def]
     fake = create_fake_app(seed=seed)
     monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(fake))
 
-    # Replace the per-profile registry entries with AsyncMocks so we can
-    # track calls to load/derive after the background sync runs.
-    mock_cache = AsyncMock()
-    mock_cache.invalidate = lambda: None
-    mock_cache.overrides = {}
-    mock_snapshot = AsyncMock()
-    mock_segment = AsyncMock()
-    mock_segment.derive = lambda *a, **kw: None
+    # Empty real caches must receive the prepared generation after the sync.
+    mock_cache = BoundaryCache()
+    mock_snapshot = CollectionSnapshot()
+    mock_segment = SegmentCache()
     from gruvax.events.bus import EventBus
 
     mock_bus = EventBus()  # real bus so publish works
+    events = mock_bus.subscribe()
     app.state.boundary_cache_registry[DEFAULT_UUID] = mock_cache
     app.state.snapshot_registry[DEFAULT_UUID] = mock_snapshot
     app.state.segment_cache_registry[DEFAULT_UUID] = mock_segment
@@ -502,9 +500,15 @@ async def test_caches_refreshed_inline(  # type: ignore[no-untyped-def]
         await _asyncio.sleep(0.1)
     assert row is not None and row[0] == "ok", f"sync did not complete: {row}"
 
-    # Per-profile cache refresh (D-14): both boundary and snapshot must have been reloaded.
-    assert mock_cache.load.call_count >= 1, "boundary_cache.load was not invoked after sync"
-    assert mock_snapshot.load.call_count >= 1, "snapshot.load was not invoked after sync"
+    # The SQL success marker commits BEFORE the cache reads. Wait for the
+    # actual publication event instead of racing their awaited preparation.
+    event = await _asyncio.wait_for(events.get(), 5)
+    while event.name != "collection_changed":
+        event = await _asyncio.wait_for(events.get(), 5)
+    # Per-profile cache refresh (D-14): prepared data is now visible.
+    assert len(mock_snapshot.get_label_records("Blue Note")) == 25
+    assert mock_cache.generation > 0
+    assert app.state.segment_cache_registry[DEFAULT_UUID] is mock_segment
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -536,16 +540,11 @@ async def test_pitfall_6_handler_does_not_hold_pool_during_sync(  # type: ignore
     slow_app = _make_slow_fake_app(seed_pages=4, page_size=200, page_sleep_s=0.4)
     monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(slow_app))
 
-    from unittest.mock import AsyncMock
-
     from gruvax.events.bus import EventBus
 
-    mock_cache = AsyncMock()
-    mock_cache.invalidate = lambda: None
-    mock_cache.overrides = {}
-    mock_snapshot = AsyncMock()
-    mock_segment = AsyncMock()
-    mock_segment.derive = lambda *a, **kw: None
+    mock_cache = BoundaryCache()
+    mock_snapshot = CollectionSnapshot()
+    mock_segment = SegmentCache()
     mock_bus = EventBus()
     app_state = types.SimpleNamespace(
         db_pool=db_pool,
