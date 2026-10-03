@@ -144,10 +144,10 @@ async def did_you_mean_query(
     q: str,
     profile_id: str,
 ) -> str | None:
-    """Return the top trigram-similarity match for *q* over label/artist terms.
+    """Return the top trigram-similarity match for *q* over label/artist/title terms.
 
     Runs only when FTS returned no results (D-11 — conservative).  Queries
-    DISTINCT label and artist values from ``gruvax.profile_collection`` for the
+    DISTINCT label, artist and title values from ``gruvax.profile_collection`` for the
     given profile via ``pg_trgm similarity()``.
 
     Graceful degradation (Pitfall E): if ``similarity()`` is undefined (pg_trgm
@@ -175,14 +175,21 @@ FROM (
     SELECT DISTINCT artist AS term
     FROM gruvax.profile_collection
     WHERE profile_id = %s::uuid AND artist IS NOT NULL
+    UNION
+    SELECT DISTINCT title AS term
+    FROM gruvax.profile_collection
+    WHERE profile_id = %s::uuid AND title IS NOT NULL
 ) AS terms
 WHERE similarity(term, %s) > %s
+  AND lower(term) <> lower(%s)
 ORDER BY sim DESC
 LIMIT 1
 """
     try:
         async with pool.connection() as conn, conn.cursor() as cur:
-            await cur.execute(sql, (q, profile_id, profile_id, q, DID_YOU_MEAN_THRESHOLD))
+            await cur.execute(
+                sql, (q, profile_id, profile_id, profile_id, q, DID_YOU_MEAN_THRESHOLD, q)
+            )
             row = await cur.fetchone()
         if row is None:
             return None
@@ -204,7 +211,8 @@ async def search_collection(
 
     Path A — FTS (with optional catalog boost):
         ``fts_vector @@ websearch_to_tsquery('gruvax.gruvax_fts', %s)``
-        Scored by ``ts_rank_cd(fts_vector, query, 4)``.  The ``gruvax.gruvax_fts``
+        Scored by ``0.8 * ts_rank_cd(fts_vector, query, 36)`` (rank /
+        (rank + 1), below every catalog prefix even with repetitive text).  The ``gruvax.gruvax_fts``
         config folds accents (unaccent → english_stem, migration 0013) so an
         ASCII query like ``Bjork`` matches the stored ``Björk`` (gruvax-w4a7).
         When ``is_catalog_query(q)`` is True (SRCH-08/D-12), catalog_number
@@ -214,7 +222,7 @@ async def search_collection(
     Path B — Catalog prefix:
         ``lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
           LIKE %s ESCAPE '\\'``
-        Fixed score 0.9 (reliably hits ``BLP 4195`` from ``blp4195``). The
+        Exact normalized match scores 1.0; prefixes score 0.9 (reliably hits ``BLP 4195`` from ``blp4195``). The
         LIKE pattern is built by ``_catalog_like_pattern`` (Python-side),
         which collapses separators the same way as the column-side
         ``regexp_replace`` and backslash-escapes ``%``/``_``/``\\`` so a
@@ -255,6 +263,10 @@ async def search_collection(
         time for the DB round-trip in milliseconds, and ``did_you_mean`` is a
         suggestion string (or None) returned only when ``rows`` is empty.
     """
+    # A separator-only prefix would become LIKE '%' and match every catalog.
+    if not _SEP_COLLAPSE.sub("", q):
+        return [], 0.0, None
+
     # SRCH-08: catalog-like queries boost catalog_number field weight.
     # setweight(to_tsvector('gruvax.gruvax_fts', catalog_number), 'A') promotes catalog
     # tokens to the highest weight tier so ts_rank_cd scores them above body
@@ -277,8 +289,8 @@ WITH fts AS (
             setweight(to_tsvector('gruvax.gruvax_fts', coalesce(v.catalog_number, '')), 'A')
             || setweight(v.fts_vector, 'C'),
             tsq.query,
-            4
-        ) AS score
+            36
+        ) * 0.8 AS score
     FROM gruvax.profile_collection v
     CROSS JOIN websearch_to_tsquery('gruvax.gruvax_fts', %s) AS tsq(query)
     WHERE v.profile_id = %s::uuid
@@ -299,7 +311,8 @@ cat AS (
         catalog_number,
         NULL::text    AS format,
         year,
-        0.9::float AS score
+        CASE WHEN lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g')) = %s
+             THEN 1.0 ELSE 0.9 END::float AS score
     FROM gruvax.profile_collection
     WHERE profile_id = %s::uuid
       AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
@@ -349,6 +362,7 @@ LIMIT %s
         params: tuple[Any, ...] = (
             q,
             profile_id,
+            _SEP_COLLAPSE.sub("", q).lower(),
             profile_id,
             _catalog_like_pattern(q),
             limit,
@@ -372,11 +386,15 @@ WITH fts AS (
         v.catalog_number,
         NULL::text   AS format,
         v.year,
-        ts_rank_cd(v.fts_vector, tsq.query, 4) AS score
+        CASE WHEN numnode(tsq.query) = 0 THEN 0.2
+             ELSE ts_rank_cd(v.fts_vector, tsq.query, 36) * 0.8 END AS score
     FROM gruvax.profile_collection v
     CROSS JOIN websearch_to_tsquery('gruvax.gruvax_fts', %s) AS tsq(query)
     WHERE v.profile_id = %s::uuid
-      AND v.fts_vector @@ tsq.query
+      AND (v.fts_vector @@ tsq.query
+           OR (numnode(tsq.query) = 0
+               AND (lower(v.artist) LIKE %s ESCAPE '\\'
+                    OR lower(v.label) LIKE %s ESCAPE '\\')))
     ORDER BY score DESC
     LIMIT 40
 ),
@@ -390,7 +408,8 @@ cat AS (
         catalog_number,
         NULL::text    AS format,
         year,
-        0.9::float AS score
+        CASE WHEN lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g')) = %s
+             THEN 1.0 ELSE 0.9 END::float AS score
     FROM gruvax.profile_collection
     WHERE profile_id = %s::uuid
       AND lower(regexp_replace(catalog_number, '[\\s\\-_./]+', '', 'g'))
@@ -439,7 +458,19 @@ FROM (
 ORDER BY rank DESC
 LIMIT %s
 """
-        params = (q, profile_id, profile_id, _catalog_like_pattern(q), limit)
+        # Empty FTS queries get a literal artist/label prefix only; preserve
+        # spaces and punctuation, and escape user LIKE metacharacters.
+        term_prefix = _LIKE_METACHAR.sub(lambda m: "\\" + m.group(0), q.strip().lower()) + "%"
+        params = (
+            q,
+            profile_id,
+            term_prefix,
+            term_prefix,
+            _SEP_COLLAPSE.sub("", q).lower(),
+            profile_id,
+            _catalog_like_pattern(q),
+            limit,
+        )
 
     t0 = time.perf_counter()
     async with pool.connection() as conn, conn.cursor() as cur:
