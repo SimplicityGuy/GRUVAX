@@ -236,7 +236,7 @@ function locatedAt(col: number, interval: LocateResult['sub_cube_interval'] = nu
   }
 }
 
-describe('KioskView — real GSAP interruption and companion bars (gruvax-csxz)', () => {
+describe('KioskView — real GSAP interruption and primary bands (gruvax-csxz)', () => {
   it.each(['select another cube', 'clear', 'unmount'])(
     'restores the interrupted cube inline transform on %s',
     async (action) => {
@@ -271,36 +271,49 @@ describe('KioskView — real GSAP interruption and companion bars (gruvax-csxz)'
     },
   )
 
-  it('animates primary and companion bars together and restores initial set styles on unmount', async () => {
+  it('animates the primary edge band and span underlay and restores initial styles on unmount', async () => {
     let view: ReturnType<typeof renderKiosk>
     await act(async () => {
       view = renderKiosk()
     })
     const timeline = vi.spyOn(gsap, 'timeline')
     act(() =>
-      useGruvaxStore.getState().setLocateResult(
-        locatedAt(0, {
-          start: 0.4,
-          end: 0.7,
+      useGruvaxStore.getState().setLocateResult({
+        ...locatedAt(0, {
+          start: 0.95,
+          end: 1,
           crosses_boundary: true,
           next_cube: { unit_id: 1, row: 0, col: 1 },
         }),
-      ),
+        label_span: [
+          { unit_id: 1, row: 0, col: 0 },
+          { unit_id: 1, row: 0, col: 1 },
+        ],
+      }),
     )
     const bars = Array.from(document.querySelectorAll<HTMLElement>('.sub-cube-bar'))
-    expect(bars).toHaveLength(2)
+    expect(bars).toHaveLength(1)
+    expect(bars[0].style.left).toBe('95%')
+    expect(parseFloat(bars[0].style.width)).toBeCloseTo(5)
+    expect(bars[0]).not.toHaveClass('sub-cube-bar--singleton')
+    expect(document.querySelector('.cube[data-col="1"] .sub-cube-bar')).toBeNull()
+    const span = document.querySelector<HTMLElement>('.span-underlay__band')!
+    expect(span).not.toBeNull()
     const active = timeline.mock.results.at(-1)!.value as gsap.core.Timeline
     act(() => {
-      active.pause().time(0.15)
+      active.pause().time(0.3)
     })
     const scales = bars.map((bar) => Number(gsap.getProperty(bar, 'scaleX')))
     scales.forEach((scale) => {
       expect(scale).toBeGreaterThan(0)
       expect(scale).toBeLessThan(1)
     })
-    expect(scales[0]).toBeCloseTo(scales[1])
+    expect(Number(gsap.getProperty(span, 'opacity'))).toBeCloseTo(0.6)
+    expect(span).toHaveClass('is-animating')
     bars.forEach((bar) => expect(bar).toHaveClass('is-animating'))
     act(() => view!.unmount())
+    expect(span.style.opacity).toBe('')
+    expect(span).not.toHaveClass('is-animating')
     bars.forEach((bar) => {
       expect(bar.style.transform).toBe('')
       expect(bar.style.transformOrigin).toBe('')

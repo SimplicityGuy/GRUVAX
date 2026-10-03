@@ -177,7 +177,7 @@ is enough to locate any record. As of v2.0, every cache feeding the estimator
 held in `app.state.*_registry` dicts keyed by `str(profile_id)` and eager-loaded at
 startup for every non-deleted profile.
 
-### Two-level segment-aware interpolation (Phase 5, unchanged since v1.0)
+### Two-level segment-aware interpolation (Phase 5)
 
 ```mermaid
 flowchart TD
@@ -191,6 +191,10 @@ flowchart TD
     RANK --> RESULT["LocateResult\nestimator_version=segment-v1"]
     FALLBACK --> RESULT
 ```
+
+The kiosk draws the returned position band only inside the primary cube. The label-span
+underlay links neighboring cubes; crossing metadata does not encode a second position
+interval, so no companion band is synthesized from its clamped endpoint.
 
 **Estimation steps:**
 

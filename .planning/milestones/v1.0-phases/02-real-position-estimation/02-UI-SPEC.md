@@ -164,7 +164,7 @@ interface SubCubeBarProps {
 | 0.82 | 0.88 | Crisp |
 | 0.85 | 0.90 | Full-bright (visual cap) |
 
-**Crosses-boundary rendering:** When `interval.crosses_boundary === true`, the bar extends from `start × cubeWidth` to the right edge of the primary cube. The `next_cube` cube receives a companion bar from 0 to `end × cubeWidth` on its left edge. This companion bar is rendered as a separate `SubCubeBar` instance by `Cube.tsx` when it detects it is `next_cube` for the active interval. Confidence and opacity are identical to the primary bar.
+**Crosses-boundary rendering:** When `interval.crosses_boundary === true`, render the clamped position band only in the primary cube. Keep the CUBE-03 label-span underlay connecting the continuing cubes. The frozen interval contains primary-cube coordinates clamped to `[0, 1]`; it does not encode the amount of overflow into `next_cube`. Do not synthesize a companion position bar from `end`: that would turn a narrow edge band into a misleading full-cube neighbor wash. `next_cube` remains crossing metadata, not a second position interval.
 
 **Low-confidence text cue (D-03):** When `confidence ≤ 0.50`, render a `<span>` with content `"~"` (tilde, not "approx.") positioned absolutely above the bar. Spec:
 - Font: Space Grotesk 11px, weight 400 (`--gruvax-text-label`)

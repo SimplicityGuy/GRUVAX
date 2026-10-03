@@ -12,17 +12,10 @@ interface CubeProps {
   /**
    * Sub-cube position interval from /api/locate.
    * When provided and this cube is the primary lit cube, renders a SubCubeBar.
-   * When provided and this cube is the next_cube (crosses_boundary companion),
-   * also renders a companion SubCubeBar. (CUBE-04 / D-01)
    */
   subInterval?: SubInterval | null
   /** Position confidence — passed through to SubCubeBar for opacity (D-01) */
   confidence?: number
-  /**
-   * When true, this cube is the next_cube companion for a crosses_boundary interval.
-   * Renders a SubCubeBar from 0 to interval.end × 100% on the left edge. (CUBE-04)
-   */
-  isCompanionBar?: boolean
   /**
    * Fill level 0.0–1.0+ from the collection snapshot (CUBE-07, D-13).
    * When provided and > 0, renders a FillBar at the bottom edge of the cell.
@@ -53,8 +46,8 @@ interface CubeProps {
  * data-state ∈ { dim | lit | empty | hover }
  * See kiosk.css for the state-driven transition rules.
  *
- * Phase 2: When subInterval is present and this is the primary (lit) cube or
- * the companion cube for a crosses_boundary interval, renders SubCubeBar inside.
+ * Phase 2: Only the primary (lit) cube renders the supplied position band.
+ * The label-span underlay links neighboring cubes without inventing a position.
  */
 export function Cube({
   unitId,
@@ -64,28 +57,12 @@ export function Cube({
   address,
   subInterval,
   confidence = 0,
-  isCompanionBar = false,
   fillLevel,
   onTap,
   shimmerActive = false,
 }: CubeProps) {
-  // Determine whether to render a SubCubeBar in this cube
-  const isPrimary = state === 'lit' && subInterval != null
-  const isCompanion = isCompanionBar && subInterval != null && subInterval.crosses_boundary
-
-  const shouldRenderBar = isPrimary || isCompanion
-
-  let barInterval = subInterval
-  if (isCompanion && subInterval != null && subInterval.crosses_boundary) {
-    // Companion bar: from 0 to subInterval.end (left edge of this cube)
-    barInterval = {
-      start: 0,
-      end: subInterval.end,
-      crosses_boundary: false,
-    }
-  }
-
-  const isSingleton = barInterval != null && barInterval.start === 0 && barInterval.end === 1
+  const shouldRenderBar = state === 'lit' && subInterval != null
+  const isSingleton = subInterval != null && subInterval.start === 0 && subInterval.end === 1
 
   const handleClick = onTap ? () => onTap({ unit_id: unitId, row, col }) : undefined
 
@@ -101,8 +78,8 @@ export function Cube({
       style={onTap ? { cursor: 'pointer' } : undefined}
     >
       <span className="cube__address">{address}</span>
-      {shouldRenderBar && barInterval != null && (
-        <SubCubeBar interval={barInterval} confidence={confidence} isSingleton={isSingleton} />
+      {shouldRenderBar && subInterval != null && (
+        <SubCubeBar interval={subInterval} confidence={confidence} isSingleton={isSingleton} />
       )}
       {/* Fill-level bar at the bottom edge (CUBE-07, D-13) — only when fill > 0 */}
       {fillLevel != null && fillLevel > 0 && <FillBar fillLevel={fillLevel} heightPx={4} />}
