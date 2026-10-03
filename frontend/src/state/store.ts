@@ -134,11 +134,12 @@ interface GruvaxStore {
 export const useGruvaxStore = create<GruvaxStore>((set, get) => ({
   query: '',
   searchSession: 0,
-  setQuery: (q) =>
-    set((s) => ({
-      query: q,
-      searchSession: s.searchSession + (q.trim() === '' && s.query.trim() !== '' ? 1 : 0),
-    })),
+  setQuery: (q) => {
+    // Keyboard deletion is the same clear operation as the clear-X button.
+    // Invalidate pending locates synchronously, before a response can land.
+    if (q === '') get().clearSearch()
+    else set({ query: q })
+  },
 
   selectedReleaseId: null,
   setSelectedReleaseId: (id) =>

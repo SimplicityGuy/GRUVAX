@@ -55,6 +55,7 @@ export function KioskView() {
     setQuery,
     shelfLayoutUnavailable,
     selectedReleaseId,
+    query,
     searchSession,
   } = useGruvaxStore()
   // Phase 4 / D-01/D-03/RTM-04: reactive shimmer state from Zustand
@@ -525,6 +526,7 @@ export function KioskView() {
   // dismissed by selecting a row. A new query (different string) reopens it
   // automatically; an explicit selection records the query as dismissed.
   const resultsOpen =
+    query.trim().length > 0 &&
     debouncedQuery.trim().length > 0 &&
     (dismissedQuery?.query !== debouncedQuery || dismissedQuery.session !== searchSession)
 
@@ -702,7 +704,9 @@ export function KioskView() {
             <EmptyCollectionState />
           ) : (
             <ResultsList
-              items={debouncedQuery.trim().length > 0 ? searchResults : []}
+              items={
+                query.trim().length > 0 && debouncedQuery.trim().length > 0 ? searchResults : []
+              }
               showNoResults={showNoResults}
               didYouMean={searchData?.did_you_mean ?? null}
               open={resultsOpen}

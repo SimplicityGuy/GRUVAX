@@ -13,7 +13,7 @@
  * Test 2: explicit row select calls locateRelease(id, boundProfileId)
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, render, screen } from '@testing-library/react'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 
 // ── Module mock (must be top-level for vitest hoisting) ──────────────────────
 vi.mock('../../api/client', async (importOriginal) => {
@@ -129,5 +129,54 @@ describe('ResultsList pending locate cleanup (gruvax-d5p6)', () => {
     })
     expect(useGruvaxStore.getState().highlight.primaryCube).toBeNull()
     expect(illuminateRecord).not.toHaveBeenCalled()
+  })
+})
+
+describe('explicit selection dismissal preserves pending locate (gruvax-d5p6)', () => {
+  it('still applies the selected row locate when the dropdown closes', async () => {
+    useGruvaxStore.getState().clearSearch()
+    let resolve!: (result: LocateResult) => void
+    vi.mocked(locateRelease)
+      .mockResolvedValueOnce({
+        release_id: ITEMS[0].release_id,
+        primary_cube: null,
+        label_span: [],
+        sub_cube_interval: null,
+        confidence: 0,
+        generated_at: '2026-10-03T00:00:00Z',
+        estimator_version: 'test',
+      })
+      .mockReturnValueOnce(
+        new Promise((yes) => {
+          resolve = yes
+        }),
+      )
+    const onSelect = vi.fn()
+    const view = render(
+      <ResultsList items={ITEMS} showNoResults={false} open onResultSelect={onSelect} />,
+    )
+    await act(async () => {
+      await Promise.resolve()
+    })
+    vi.mocked(illuminateRecord).mockClear()
+    fireEvent.click(screen.getByText(/Verve Title 7/))
+    expect(onSelect).toHaveBeenCalledOnce()
+    view.rerender(
+      <ResultsList items={ITEMS} showNoResults={false} open={false} onResultSelect={onSelect} />,
+    )
+    const located: LocateResult = {
+      release_id: ITEMS[1].release_id,
+      primary_cube: { unit_id: 1, row: 0, col: 1 },
+      label_span: [],
+      sub_cube_interval: null,
+      confidence: 0.8,
+      generated_at: '2026-10-03T00:00:00Z',
+      estimator_version: 'test',
+    }
+    await act(async () => {
+      resolve(located)
+    })
+    expect(useGruvaxStore.getState().highlight.primaryCube).toEqual(located.primary_cube)
+    expect(illuminateRecord).toHaveBeenCalledExactlyOnceWith(located)
   })
 })

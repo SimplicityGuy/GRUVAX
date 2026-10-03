@@ -81,7 +81,7 @@ vi.mock('../../api/session', async (importOriginal) => {
 })
 
 import { getSession } from '../../api/session'
-import { searchCollection } from '../../api/client'
+import { illuminateRecord, locateRelease, searchCollection } from '../../api/client'
 
 class MockEventSource {
   static instances: MockEventSource[] = []
@@ -290,5 +290,37 @@ describe('DidYouMean debounce race (gruvax-sit7)', () => {
     expect(screen.getByRole('searchbox')).toHaveValue('beatles')
     expect(searchCollection).toHaveBeenCalledWith('beatles', 10, TEST_PROFILE_ID)
     expect(searchCollection).not.toHaveBeenCalledWith('beatlsx', 10, TEST_PROFILE_ID)
+  })
+})
+
+describe('keyboard clear invalidates locate immediately (gruvax-d5p6)', () => {
+  it('does not relight an empty input before the debounce fires', async () => {
+    let resolve!: (result: Awaited<ReturnType<typeof locateRelease>>) => void
+    vi.mocked(locateRelease).mockReturnValueOnce(
+      new Promise((yes) => {
+        resolve = yes
+      }),
+    )
+    await act(async () => {
+      renderKiosk()
+    })
+    await typeQuery('miles')
+    await waitFor(() => expect(screen.getByRole('option')).toBeInTheDocument())
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } })
+    await act(async () => {
+      resolve({
+        release_id: 42,
+        primary_cube: { unit_id: 1, row: 0, col: 0 },
+        label_span: [],
+        sub_cube_interval: null,
+        confidence: 0.8,
+        generated_at: '2026-10-03T00:00:00Z',
+        estimator_version: 'test',
+      })
+    })
+    expect(screen.getByRole('searchbox')).toHaveValue('')
+    expect(useGruvaxStore.getState().selectedReleaseId).toBeNull()
+    expect(useGruvaxStore.getState().highlight.primaryCube).toBeNull()
+    expect(illuminateRecord).not.toHaveBeenCalled()
   })
 })
