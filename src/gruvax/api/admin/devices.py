@@ -20,8 +20,9 @@ Security:
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -32,6 +33,10 @@ from pydantic import BaseModel, field_validator
 from gruvax.api.admin.limiter import _BIND_RATE, _rate_limiter
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.db.queries import DEFAULT_PROFILE_UUID
+
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 logger = logging.getLogger(__name__)
@@ -228,6 +233,36 @@ def _row_to_device(row: tuple[Any, ...]) -> dict[str, Any]:
     }
 
 
+@asynccontextmanager
+async def _device_transaction(pool: Any) -> AsyncIterator[tuple[Any, Any]]:
+    """Roll back profile constraint failures before returning actionable errors."""
+    try:
+        async with pool.connection() as conn, conn.cursor() as cur:
+            yield conn, cur
+    except psycopg.errors.ForeignKeyViolation as exc:
+        if exc.diag.constraint_name != "devices_profile_id_fkey":
+            raise
+        raise HTTPException(status_code=404, detail={"type": "profile_not_found"}) from None
+    except psycopg.errors.UniqueViolation as exc:
+        if exc.diag.constraint_name != "idx_devices_profile_active":
+            raise
+        raise HTTPException(status_code=409, detail={"type": "profile_already_bound"}) from None
+
+
+async def _require_active_profile(cur: Any, profile_id: str) -> None:
+    """Keep an active profile valid until device assignment commits.
+
+    FOR SHARE also serializes logical deletion (a non-key UPDATE), unlike
+    the foreign key's key-share lock, which only guards physical deletion.
+    """
+    await cur.execute(
+        "SELECT id FROM gruvax.profiles WHERE id = %s::uuid AND deleted_at IS NULL FOR SHARE",
+        (profile_id,),
+    )
+    if await cur.fetchone() is None:
+        raise HTTPException(status_code=404, detail={"type": "profile_not_found"})
+
+
 async def _publish_device_event(
     request: Request,
     event_name: str,
@@ -305,53 +340,45 @@ async def bind_device(
     #   4. Else INSERT a new row (first pair for this fingerprint).
     # fingerprint is only ever a query parameter — never returned (T-03-08).
     device_row: tuple[Any, ...] | None = None
-    try:
-        async with pool.connection() as conn, conn.cursor() as cur:
-            await cur.execute(_BIND_CODE, (body.code,))
-            row = await cur.fetchone()
-            if row is None:
-                await conn.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail={"type": "code_not_found"},
-                )
+    async with _device_transaction(pool) as (conn, cur):
+        await _require_active_profile(cur, profile_id_str)
+        await cur.execute(_BIND_CODE, (body.code,))
+        row = await cur.fetchone()
+        if row is None:
+            await conn.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"type": "code_not_found"},
+            )
 
-            fingerprint: str = row[0]
-            # fingerprint is NOT logged (Pitfall 7) and NOT returned to client.
+        fingerprint: str = row[0]
+        # fingerprint is NOT logged (Pitfall 7) and NOT returned to client.
 
+        await cur.execute(
+            _UPDATE_DEVICE_BY_FINGERPRINT, (profile_id_str, display_name, fingerprint)
+        )
+        device_row = await cur.fetchone()
+
+        if device_row is None:
+            # gruvax-gqe: reactivate a revoked row for this exact fingerprint
+            # before ever considering an INSERT — prevents the duplicate-row bug.
             await cur.execute(
-                _UPDATE_DEVICE_BY_FINGERPRINT, (profile_id_str, display_name, fingerprint)
+                _REACTIVATE_DEVICE_BY_FINGERPRINT,
+                (profile_id_str, display_name, fingerprint),
             )
             device_row = await cur.fetchone()
 
-            if device_row is None:
-                # gruvax-gqe: reactivate a revoked row for this exact fingerprint
-                # before ever considering an INSERT — prevents the duplicate-row bug.
-                await cur.execute(
-                    _REACTIVATE_DEVICE_BY_FINGERPRINT,
-                    (profile_id_str, display_name, fingerprint),
-                )
-                device_row = await cur.fetchone()
+        if device_row is None and profile_id_str:
+            await cur.execute(
+                _UPDATE_DEVICE_BY_PROFILE, (fingerprint, display_name, profile_id_str)
+            )
+            device_row = await cur.fetchone()
 
-            if device_row is None and profile_id_str:
-                await cur.execute(
-                    _UPDATE_DEVICE_BY_PROFILE, (fingerprint, display_name, profile_id_str)
-                )
-                device_row = await cur.fetchone()
+        if device_row is None:
+            await cur.execute(_INSERT_DEVICE, (fingerprint, profile_id_str, display_name))
+            device_row = await cur.fetchone()
 
-            if device_row is None:
-                await cur.execute(_INSERT_DEVICE, (fingerprint, profile_id_str, display_name))
-                device_row = await cur.fetchone()
-
-            await conn.commit()
-    except psycopg.errors.UniqueViolation:
-        # Partial-unique index collision (e.g. the profile already has a different
-        # active device). The transaction rolls back automatically, so the code is
-        # NOT consumed and the kiosk can retry. Report a clean 409 instead of a 500.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"type": "profile_already_bound"},
-        ) from None
+        await conn.commit()
 
     if device_row is None:
         logger.error("bind_device: UPSERT returned no row (unexpected)")
@@ -439,7 +466,7 @@ async def patch_device(
     old_profile_id: str | None = None
     changed_profile = False
 
-    async with pool.connection() as conn, conn.cursor() as cur:
+    async with _device_transaction(pool) as (conn, cur):
         # Fetch current state to detect profile changes.
         await cur.execute(_SELECT_DEVICE_BY_ID, (str(uid),))
         current_row = await cur.fetchone()
@@ -472,6 +499,7 @@ async def patch_device(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail={"type": "invalid_uuid", "message": "profile_id must be a UUID"},
                     ) from None
+                await _require_active_profile(cur, str(new_profile_uuid))
                 await cur.execute(_CHANGE_PROFILE, (str(new_profile_uuid), str(uid)))
 
         # Fetch updated row (no fingerprint — T-03-08).
