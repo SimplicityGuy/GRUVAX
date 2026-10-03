@@ -192,4 +192,4 @@ jobs:
           uv run pytest \
             tests/unit/test_algorithm.py::test_locate_benchmark \
             --benchmark-only --benchmark-json=benchmark.json -q
-          uv run python scripts/check_benchmark.py benchmark.json
+          uv run python scripts/check_benchmark.py benchmark.json --require test_locate_benchmark

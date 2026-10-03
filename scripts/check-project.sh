@@ -62,4 +62,4 @@ uv run pytest tests/ -ra --cov=gruvax --cov-report=term-missing
 just slo
 uv run pytest tests/unit/test_algorithm.py::test_locate_benchmark \
   --benchmark-only --benchmark-json="$benchmark"
-uv run python scripts/check_benchmark.py "$benchmark"
+uv run python scripts/check_benchmark.py "$benchmark" --require test_locate_benchmark

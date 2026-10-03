@@ -98,7 +98,12 @@ seed-synth:
 # Runs pytest-benchmark over the search benchmark; CI invokes the same recipe.
 # Requires a populated profile_collection (run `just seed-synth` first if needed).
 slo:
-    uv run pytest tests/integration/test_search_benchmark.py --benchmark-only --benchmark-min-rounds=5
+    #!/usr/bin/env bash
+    set -euo pipefail
+    benchmark=$(mktemp "${TMPDIR:-/tmp}/gruvax-slo.XXXXXX")
+    trap 'rm -f "$benchmark"' EXIT
+    uv run pytest tests/integration/test_search_benchmark.py --benchmark-only --benchmark-min-rounds=5 --benchmark-json="$benchmark"
+    uv run python scripts/check_benchmark.py "$benchmark" --require test_search_slo_benchmark test_locate_slo_benchmark
 
 # ── provisioning ─────────────────────────────────────────────────────────────
 
