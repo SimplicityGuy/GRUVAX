@@ -80,6 +80,15 @@ class BindRequest(BaseModel):
     profile_id: str
 
 
+def _validate_browse_binding(
+    cookie_profile_id: str | None, active_profile_ids: set[str]
+) -> tuple[str | None, bool]:
+    """Return an authoritative browse binding and whether its cookie needs clearing."""
+    if cookie_profile_id and cookie_profile_id not in active_profile_ids:
+        return None, True
+    return cookie_profile_id, False
+
+
 @router.get("/session")
 async def get_session(
     request: Request,
@@ -119,7 +128,11 @@ async def get_session(
         for row in rows
     ]
 
-    bound_profile_id: str | None = request.cookies.get(BROWSE_BINDING_COOKIE)
+    # Validate before auto-bind: a deleted or forged cookie must not suppress recovery.
+    active_profile_ids: set[str] = {str(row[0]) for row in rows}
+    bound_profile_id, stale_browse_binding = _validate_browse_binding(
+        request.cookies.get(BROWSE_BINDING_COOKIE), active_profile_ids
+    )
 
     # Device-binding extension (D3-04): check fingerprint cookie before constructing
     # the response.  If the fingerprint maps to a paired device, override
@@ -185,6 +198,8 @@ async def get_session(
     response = JSONResponse(content=content)
     if response_cookies is not None:
         set_browse_binding_cookie(response, response_cookies["profile_id"])
+    elif stale_browse_binding:
+        clear_browse_binding_cookie(response)
 
     return response
 
