@@ -65,21 +65,23 @@ function makeQueryClient() {
   })
 }
 
-async function renderWizard() {
+async function renderWizard(path = '/admin/wizard') {
   const qc = makeQueryClient()
-  render(
+  const view = render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/admin/wizard']}>
+      <MemoryRouter initialEntries={[path]}>
         <Wizard />
       </MemoryRouter>
     </QueryClientProvider>,
   )
   await Promise.resolve()
+  return view
 }
 
 // ── Setup / Teardown ─────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  useAdminStore.getState().setReshuffleDraft(null)
   vi.mocked(adminGetCubes).mockReset()
   vi.mocked(adminGetCubes).mockResolvedValue(TWO_CUBES)
 })
@@ -142,5 +144,46 @@ describe('Wizard re-entry with a poisoned reshuffle draft (gruvax-cw8)', () => {
     )
 
     expect(screen.getByText('2 / 2')).toBeTruthy()
+  })
+})
+
+describe('Wizard initial draft persistence (gruvax-ofh)', () => {
+  it('reloads every preloaded cut before the first interaction and keeps the idempotency key', async () => {
+    let view: Awaited<ReturnType<typeof renderWizard>>
+    await act(async () => {
+      view = await renderWizard('/admin/wizard?mode=reshuffle')
+    })
+    await screen.findByText('AAA')
+    const saved = localStorage.getItem('gruvax-admin')!
+    const draft = JSON.parse(saved).state.reshuffleDraft
+    expect(draft.cuts).toEqual({
+      '1/0/0': { first_label: 'AAA', first_catalog: '001', is_empty: false },
+      '1/0/1': { first_label: 'BBB', first_catalog: '002', is_empty: false },
+    })
+    expect(draft.idempotencyKey).toBeTruthy()
+    view!.unmount()
+    useAdminStore.getState().setReshuffleDraft(null)
+    localStorage.setItem('gruvax-admin', saved)
+    await useAdminStore.persist.rehydrate()
+    await act(async () => {
+      await renderWizard()
+    })
+    expect(await screen.findByText('AAA')).toBeVisible()
+    expect(useAdminStore.getState().reshuffleDraft!.idempotencyKey).toBe(draft.idempotencyKey)
+  })
+
+  it('preserves an explicitly empty resumed draft instead of refilling cleared cuts', async () => {
+    useAdminStore.getState().setReshuffleDraft({
+      mode: 'reshuffle',
+      completedSteps: 0,
+      cuts: {},
+      idempotencyKey: 'intentional-empty',
+      startedAt: new Date().toISOString(),
+    })
+    await act(async () => {
+      await renderWizard()
+    })
+    expect(await screen.findByRole('button', { name: 'PICK A RECORD' })).toBeVisible()
+    expect(useAdminStore.getState().reshuffleDraft!.cuts).toEqual({})
   })
 })
