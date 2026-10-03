@@ -28,6 +28,7 @@ services:
       - path: .env
         required: false
     environment:
+      TZ: "${TZ:-America/Los_Angeles}"
       # gruvax-95qp: DATABASE_URL is env-first — a `DATABASE_URL` set in `.env`
       # (or the shell) wins outright and is used verbatim; only when it is
       # ABSENT does compose assemble the fallback from the GRUVAX_DB_* pieces
@@ -288,6 +289,7 @@ services:
         echo "running initial sync"
         echo "$$GRUVAX_ADMIN_PIN" | gruvax-sync --profile default
     environment:
+      TZ: "${TZ:-America/Los_Angeles}"
       GRUVAX_BASE_URL: "http://api:8000"
       # SQLAlchemy form, used by the in-venv psycopg precheck above AND by any
       # in-process app code path the init image imports. gruvax-95qp: mirror
