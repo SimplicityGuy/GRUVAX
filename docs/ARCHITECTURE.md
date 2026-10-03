@@ -324,9 +324,20 @@ A known unavailable connection returns both fields as false.
 ### HighlightRegistry
 
 An in-process `HighlightRegistry` (app-scoped) tracks active highlight tasks. Each
-illuminate request schedules a TTL revert: after the configured `idle_ttl_seconds`, the
-registry publishes an all-off payload for that cube to prevent stale highlights after the
-kiosk idles.
+illuminate request uses `led_highlight.retain_mode` to choose its lifecycle:
+
+- Default mode (`false`) cancels prior highlights and restores their affected cubes
+  to ambient before publishing the new highlight. Its revert timer reads
+  `led_highlight.active_ttl_seconds` (default 180 seconds).
+- Retain mode (`true`) keeps prior highlights and gives each new highlight an
+  independent revert timer using `led_highlight.retain_ttl_seconds` (default
+  900 seconds).
+
+On expiry, `publish_ambient` restores the configured ambient color and brightness
+on only that highlight's affected cubes via retained `state/*` messages. It does
+not publish `all/off` or clear every cube. These LED TTLs are separate from the
+admin session's `session.idle_ttl_seconds`. The implementation is
+[`mqtt/lifecycle.py`](../src/gruvax/mqtt/lifecycle.py).
 
 ---
 
