@@ -1109,6 +1109,7 @@ WHERE created_at < now() - INTERVAL '24 hours'
 async def list_change_sets(
     pool: AsyncConnectionPool,
     profile_id: str,
+    change_set_id: str | None = None,
 ) -> list[dict[str, Any]]:
     """Return change-sets from boundary_history grouped by change_set_id.
 
@@ -1120,6 +1121,7 @@ async def list_change_sets(
     Args:
         pool:       Open psycopg AsyncConnectionPool.
         profile_id: UUID of the profile to scope the query to (WR-02, DATA-01).
+        change_set_id: Optional exact UUID filter, scoped before grouping and the latest-100 limit.
 
     Returns:
         List of dicts with keys change_set_id, source, changed_at, cube_count.
@@ -1132,12 +1134,13 @@ SELECT
     COUNT(*) AS cube_count
 FROM gruvax.boundary_history
 WHERE profile_id = %s::uuid
+  AND (%s::uuid IS NULL OR change_set_id = %s::uuid)
 GROUP BY change_set_id, source
 ORDER BY MAX(changed_at) DESC
 LIMIT 100
 """
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(sql, (profile_id,))
+        await cur.execute(sql, (profile_id, change_set_id, change_set_id))
         rows_raw = await cur.fetchall()
         cols_meta = [desc[0] for desc in (cur.description or [])]
     result: list[dict[str, Any]] = []

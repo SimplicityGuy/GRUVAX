@@ -62,11 +62,12 @@ router = APIRouter(tags=["admin-history"])
 @router.get("/history")
 async def get_history(
     request: Request,
+    change_set_id: _uuid.UUID | None = None,
     pool: Any = Depends(get_pool),
     _admin: dict[str, Any] = Depends(require_admin),
     _write_target: tuple[str, Any] = Depends(get_write_target),
 ) -> dict[str, Any]:
-    """Return all change-sets from boundary_history, newest-first.
+    """Return latest 100 change-sets, or one exact authorized change-set, newest-first.
 
     Groups rows by change_set_id and returns one entry per change-set with
     source, MAX(changed_at), and cube_count.
@@ -77,7 +78,9 @@ async def get_history(
     Response: ``{history: [{change_set_id, source, changed_at, cube_count}, ...]}``
     """
     profile_id, _ = _write_target
-    change_sets = await list_change_sets(pool, profile_id=profile_id)
+    change_sets = await list_change_sets(
+        pool, profile_id=profile_id, change_set_id=str(change_set_id) if change_set_id else None
+    )
     return {"history": change_sets}
 
 

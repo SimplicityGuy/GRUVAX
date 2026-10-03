@@ -284,9 +284,10 @@ export async function adminBulkSave(
   return res.json() as Promise<CommitResponse>
 }
 
-/** GET /api/admin/history — returns change-sets newest-first. */
-export async function getHistory(): Promise<HistoryResponse> {
-  const res = await adminFetch('/api/admin/history')
+/** GET /api/admin/history — latest 100, or one exact profile-owned change-set. */
+export async function getHistory(changeSetId?: string): Promise<HistoryResponse> {
+  const query = changeSetId ? `?change_set_id=${encodeURIComponent(changeSetId)}` : ''
+  const res = await adminFetch(`/api/admin/history${query}`)
   if (!res.ok) {
     throw new Error(`History fetch failed: ${res.status}`)
   }
