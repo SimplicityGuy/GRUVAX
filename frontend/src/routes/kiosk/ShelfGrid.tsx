@@ -94,14 +94,6 @@ export function ShelfGrid({
       if (isLit) state = 'lit'
       else if (isEmpty) state = 'empty'
 
-      // Determine if this cube is the companion bar (crosses_boundary next_cube)
-      const isCompanion =
-        subCubeInterval?.crosses_boundary === true &&
-        subCubeInterval.next_cube != null &&
-        subCubeInterval.next_cube.unit_id === unit.id &&
-        subCubeInterval.next_cube.row === r &&
-        subCubeInterval.next_cube.col === c
-
       const cubeKey = `${unit.id}-${r}-${c}`
       const cubeFillLevel = fillLevels?.get(cubeKey)
 
@@ -113,9 +105,8 @@ export function ShelfGrid({
           col={c}
           state={state}
           address={address}
-          subInterval={isLit || isCompanion ? subCubeInterval : null}
-          confidence={isLit || isCompanion ? confidence : 0}
-          isCompanionBar={isCompanion}
+          subInterval={isLit ? subCubeInterval : null}
+          confidence={isLit ? confidence : 0}
           fillLevel={cubeFillLevel}
           onTap={onCubeTap}
           shimmerActive={shimmerCubes.has(`${unit.id}-${r}-${c}`)}

@@ -57,7 +57,7 @@ from gruvax.estimator.normalize import parse_key
 
 if TYPE_CHECKING:
     from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
-    from gruvax.estimator.segment_cache import SegmentCache
+    from gruvax.estimator.segment_cache import LabelSegment, SegmentBin, SegmentCache
 
 
 # Re-export constants so tests can import them from algorithm.py
@@ -172,6 +172,23 @@ def locate_cube_only(
     )
 
 
+def _record_band(
+    bin_: SegmentBin, seg: LabelSegment, rank: int, label_count: int
+) -> tuple[float, float]:
+    """Apply the global-singleton, shared-bin midpoint, and legacy spacing contracts."""
+    if label_count == 1:
+        return 0.0, 1.0
+    rank_in_segment = rank - seg.first_rank_in_label
+    if len(bin_.segments) > 1:
+        fraction = (rank_in_segment + 0.5) / seg.segment_count
+    elif seg.segment_count <= 1:
+        fraction = 0.5
+    else:
+        fraction = rank_in_segment / (seg.segment_count - 1)
+    position = seg.offset_in_bin + fraction * seg.applied_fraction
+    return max(0.0, position - POSITION_HALF_WIDTH), min(1.0, position + POSITION_HALF_WIDTH)
+
+
 def locate_by_segment(
     release_id: int,
     label: str,
@@ -183,7 +200,7 @@ def locate_by_segment(
 
     Single-segment bin degeneracy (D-02 regression invariant):
       When a bin has exactly one LabelSegment, the formula reduces to:
-        offset=0, fraction=1.0 → f = rank / (k-1) (or 0.5 midpoint for singleton)
+        offset=0, fraction=1.0 → f = rank / (k-1), with a full-cube band for a global singleton
       which is exactly the retired §4.1 formula. Verified by test_single_segment_bin_reproduces_v1_index.
 
     Algorithm:
@@ -193,13 +210,16 @@ def locate_by_segment(
          If None → fall back to locate_cube_only result.
       4. offset = seg.offset_in_bin
       5. rank_in_segment = rank - seg.first_rank_in_label
-      6. if seg.segment_count <= 1:
+      6. if len(bin.segments) > 1:
+             f = offset + ((rank_in_segment + 0.5) / seg.segment_count) * seg.applied_fraction
+         elif seg.segment_count <= 1:
              f = offset + seg.applied_fraction * 0.5  # midpoint for singletons (D-02)
          else:
              f = offset + (rank_in_segment / (seg.segment_count - 1)) * seg.applied_fraction
-      7. start = max(0.0, f - POSITION_HALF_WIDTH)
-         end   = min(1.0, f + POSITION_HALF_WIDTH)
-      8. Set crosses_boundary / next_cube on SubInterval when seg.continues is True (straddle).
+      7. For a global singleton (k=1), start=0.0 and end=1.0 (D-02).
+         Otherwise start = max(0.0, f - POSITION_HALF_WIDTH),
+         end = min(1.0, f + POSITION_HALF_WIDTH).
+      8. Set crosses_boundary / next_cube only when this band reaches a continuing bin edge.
       9. confidence = compute_confidence(len(sorted_recs))
          estimator_version = SEGMENT_ESTIMATOR_VERSION = "segment-v1"
 
@@ -257,26 +277,14 @@ def locate_by_segment(
         key=lambda c: (c.unit_id, c.row, c.col),
     )
 
-    # Step 4+5: Compute two-level interpolation.
-    offset = seg.offset_in_bin
-    rank_in_segment = rank - seg.first_rank_in_label
+    # Steps 4-7: The record-band policy owns global singleton and bin-spacing rules.
+    start, end = _record_band(bin_, seg, rank, k)
 
-    # Step 6: Two-level formula (D-02 singleton midpoint / Pitfall 21 never zero-width).
-    if seg.segment_count <= 1:
-        # Singleton within segment: use midpoint of the segment's applied_fraction span.
-        f: float = offset + seg.applied_fraction * 0.5
-    else:
-        f = offset + (rank_in_segment / (seg.segment_count - 1)) * seg.applied_fraction
-
-    # Step 7: Apply band formula (Pitfall 21 — never zero-width).
-    start = max(0.0, f - POSITION_HALF_WIDTH)
-    end = min(1.0, f + POSITION_HALF_WIDTH)
-
-    # Step 8: Set crosses_boundary / next_cube when seg.continues is True.
+    # Step 8: Crossing describes the record band, not every record in a continuing segment.
     crosses_boundary = False
     next_cube: CubeRef | None = None
 
-    if seg.continues:
+    if seg.continues and end >= 1.0:
         # Find the next bin in the label_span that comes after primary_cube.
         primary_idx = next(
             (
@@ -470,7 +478,9 @@ def locate(
     Routes to locate_by_segment when the snapshot has records for the label, and
     falls back to locate_cube_only when:
       - The snapshot has no records for the label (stale snapshot or unknown label)
-      - locate_by_segment produces confidence <= CUBE_ONLY_CONFIDENCE (edge case)
+      - The release is missing from the snapshot or has no covering segment
+
+    A known global singleton retains its D-02 full-cube band at confidence 0.30.
 
     The fallback path always sets estimator_version = "cube-only-v1" and
     sub_cube_interval = None for a clean §4.8 response.
@@ -506,15 +516,6 @@ def locate(
         snapshot=snapshot,
     )
 
-    # If confidence is at or below the cube-only threshold, strip sub_cube_interval.
-    if result.confidence <= CUBE_ONLY_CONFIDENCE:
-        return LocateResult(
-            release_id=release_id,
-            primary_cube=result.primary_cube,
-            label_span=result.label_span,
-            sub_cube_interval=None,
-            confidence=result.confidence,
-            estimator_version="cube-only-v1",
-        )
-
+    # Coverage, rather than confidence alone, determines whether a band exists.
+    # A global singleton has a valid full-cube band at the cube-only confidence floor.
     return result

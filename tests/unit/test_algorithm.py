@@ -519,7 +519,7 @@ def test_locate_by_segment_multi_record() -> None:
 
 
 def test_singleton_full_cube_band() -> None:
-    """k=1 → SubInterval(start≤0.5≤end) — midpoint band for singleton."""
+    """k=1 → exact full-cube band, per the D-02 singleton contract."""
     records = [
         {"release_id": 1, "label": "SingleLabel", "catalog_number": "SL 001"},
     ]
@@ -534,14 +534,11 @@ def test_singleton_full_cube_band() -> None:
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
-    # For singleton: segment_count==1 → f = 0 + 1.0 * 0.5 = 0.5 (midpoint)
-    # start = max(0, 0.5 - HALF_WIDTH), end = min(1, 0.5 + HALF_WIDTH)
     assert result.sub_cube_interval is not None, "Singleton must have a SubInterval (not None)"
     si = result.sub_cube_interval
-    assert si.start <= 0.5 <= si.end, (
-        f"Singleton midpoint band must include 0.5: start={si.start} end={si.end}"
-    )
-    assert 0.0 <= si.start <= si.end <= 1.0, "SubInterval out of [0,1]"
+    assert (si.start, si.end) == (0.0, 1.0)
+    assert si.crosses_boundary is False
+    assert si.next_cube is None
 
 
 def test_singleton_confidence() -> None:

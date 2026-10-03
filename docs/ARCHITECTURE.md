@@ -177,7 +177,7 @@ is enough to locate any record. As of v2.0, every cache feeding the estimator
 held in `app.state.*_registry` dicts keyed by `str(profile_id)` and eager-loaded at
 startup for every non-deleted profile.
 
-### Two-level segment-aware interpolation (Phase 5, unchanged since v1.0)
+### Two-level segment-aware interpolation (Phase 5)
 
 ```mermaid
 flowchart TD
@@ -192,6 +192,10 @@ flowchart TD
     FALLBACK --> RESULT
 ```
 
+The kiosk draws the returned position band only inside the primary cube. The label-span
+underlay links neighboring cubes; crossing metadata does not encode a second position
+interval, so no companion band is synthesized from its clamped endpoint.
+
 **Estimation steps:**
 
 1. Resolve the authoritative `profile_id` (cookie/device binding) and look up the
@@ -204,6 +208,17 @@ flowchart TD
 4. Interpolation within the label uses the record's rank among same-label records by
    catalog sort key (Strategy C token-stream parser — zero external dependency, fully
    deterministic; `gruvax.estimator.normalize.parse_key`).
+
+**Spacing:** bins shared by multiple labels use record midpoints within each applied
+label width: `offset + ((rank_in_segment + 0.5) / segment_count) * applied_fraction`.
+This separates adjacent labels' edge records. Single-segment bins retain the legacy
+endpoint formula `rank_in_segment / (segment_count - 1)` (or a local midpoint for
+a one-record segment belonging to a larger label). Crossing metadata is set only
+when the actual record band reaches the edge of a continuing bin.
+
+**Singleton:** a known label containing exactly one record receives a faint full-cube
+position band `[0, 1]` at confidence 0.30 (`segment-v1`), as required by D-02. A lone
+record within one segment of a larger label uses that segment's midpoint instead.
 
 **Fallback:** if the profile's `CollectionSnapshot` is empty or the label has no segment
 data, the estimator falls back to the cube-only result: `primary_cube` is set,
