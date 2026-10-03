@@ -108,6 +108,20 @@
   color: var(--gruvax-text-faint);
 }
 
+.search-box--offline {
+  border-color: var(--gruvax-border-light);
+}
+
+.search-box--offline .search-box__icon {
+  color: var(--gruvax-text-faint);
+}
+
+.search-box__input:disabled {
+  color: var(--gruvax-text-faint);
+  -webkit-text-fill-color: var(--gruvax-text-faint);
+  cursor: not-allowed;
+}
+
 /* Hide the browser's native type=search clear button — the app renders its own
    blue clear-X (.search-box__action) and we don't want a duplicate gray one. */
 .search-box__input::-webkit-search-cancel-button,
