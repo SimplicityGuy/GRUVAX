@@ -155,6 +155,15 @@ export const useGruvaxStore = create<GruvaxStore>((set, get) => ({
     set((s) => ({
       highlight: { primaryCube: cube },
       animationToken: s.animationToken + 1,
+      ...(cube === null
+        ? {
+            labelSpan: [],
+            subCubeInterval: null,
+            confidence: 0,
+            shelfLayoutUnavailable: false,
+            locateRequestToken: s.locateRequestToken + 1,
+          }
+        : {}),
     })),
 
   labelSpan: [],

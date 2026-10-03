@@ -50,6 +50,37 @@ beforeEach(() => {
 })
 
 describe('shared locate generation', () => {
+  it.each([false, true])(
+    'fully clears locate state after the current selection fails (unavailable=%s)',
+    async (unavailable) => {
+      const prior: LocateResult = {
+        ...located(1),
+        primary_cube: unavailable ? null : located(1).primary_cube,
+        confidence: unavailable ? 0 : 0.8,
+        label_span: [{ unit_id: 1, row: 0, col: 1 }],
+        sub_cube_interval: {
+          start: 0.8,
+          end: 1,
+          crosses_boundary: true,
+          next_cube: { unit_id: 1, row: 0, col: 2 },
+        },
+      }
+      useGruvaxStore.getState().setLocateResult(prior)
+      vi.mocked(locateRelease).mockRejectedValueOnce(new Error('network failure'))
+      select(2)
+      await settle()
+      expect(useGruvaxStore.getState()).toMatchObject({
+        selectedReleaseId: 2,
+        highlight: { primaryCube: null },
+        labelSpan: [],
+        subCubeInterval: null,
+        confidence: 0,
+        shelfLayoutUnavailable: false,
+      })
+      expect(illuminateRecord).not.toHaveBeenCalled()
+    },
+  )
+
   it('lights and illuminates only the latest selection when responses arrive backwards', async () => {
     const first = deferred()
     const second = deferred()
