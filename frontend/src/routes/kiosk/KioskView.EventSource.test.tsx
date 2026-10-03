@@ -17,7 +17,7 @@
  * Test D-08-a: device_reassigned SSE event calls getSession + setSession + setReassignBanner
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { KioskView } from './KioskView'
 import { useGruvaxStore } from '../../state/store'
@@ -710,4 +710,19 @@ describe('SSE locate races (gruvax-82q)', () => {
       expect(useGruvaxStore.getState().highlight.primaryCube).toBeNull()
     },
   )
+})
+
+it('distinguishes lost profile binding from a genuine network outage', async () => {
+  const qc = makeQueryClient()
+  const es = await renderKioskAndFlush(qc)
+  await act(async () => {
+    es.onopen?.()
+    useGruvaxStore.getState().setSseConnected(false)
+  })
+  expect(screen.getByText(/trying to reconnect/)).toBeInTheDocument()
+  await act(async () => {
+    useSessionStore.getState().clearBoundProfile()
+  })
+  expect(useGruvaxStore.getState().connectivity.bannerVisible).toBe(true)
+  expect(screen.queryByText(/trying to reconnect/)).not.toBeInTheDocument()
 })
