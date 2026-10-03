@@ -2457,9 +2457,48 @@
 
 .settings-range-input {
   flex: 1;
-  height: 6px;
+  min-width: 0;
+  height: 44px; /* full touch target; the visual track remains 6px */
+  appearance: none;
+  background: transparent;
   accent-color: var(--gruvax-blue);
   cursor: pointer;
+}
+
+.settings-range-input::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: var(--gruvax-radius-pill);
+  background: var(--gruvax-blue-light);
+}
+
+.settings-range-input::-webkit-slider-thumb {
+  appearance: none;
+  width: 24px;
+  height: 24px;
+  margin-top: -9px;
+  border: 2px solid var(--gruvax-white);
+  border-radius: 50%;
+  background: var(--gruvax-blue);
+}
+
+.settings-range-input::-moz-range-track {
+  height: 6px;
+  border-radius: var(--gruvax-radius-pill);
+  background: var(--gruvax-blue-light);
+}
+
+.settings-range-input::-moz-range-thumb {
+  width: 24px;
+  height: 24px;
+  border: 2px solid var(--gruvax-white);
+  border-radius: 50%;
+  background: var(--gruvax-blue);
+}
+
+.settings-range-input:focus-visible,
+.settings-toggle:focus-visible {
+  outline: 2px solid var(--gruvax-blue);
+  outline-offset: 2px;
 }
 
 /* Numeric value badge next to range input */
@@ -2480,8 +2519,8 @@
 }
 
 .settings-toggle {
-  width: 20px;
-  height: 20px;
+  width: 44px;
+  height: 44px;
   accent-color: var(--gruvax-blue);
   cursor: pointer;
   margin-top: var(--gruvax-space-1);
