@@ -54,6 +54,10 @@ const queryClient = new QueryClient({
  * Design tokens are imported in main.tsx (single entry point).
  */
 
+function isBootstrapExemptRoute(pathname: string): boolean {
+  return pathname === '/pair' || ['/admin', '/redeem'].some((prefix) => pathname.startsWith(prefix))
+}
+
 function shouldRecoverBinding(
   wasBound: boolean,
   boundProfileId: string | null,
@@ -100,9 +104,9 @@ function AppInner() {
 
         // D3-03: if the device fingerprint is already paired (03-03 session extension),
         // stay on '/' — the paired device should go straight to the bound-profile search UI.
-        // Never redirect /pair or /admin to '/' — those are intentional destinations.
+        // Pairing, admin, and invite redemption are intentional destinations.
         if (data.is_device_paired && data.bound_profile_id) {
-          if (currentPath !== '/' && !currentPath.startsWith('/admin')) {
+          if (currentPath !== '/' && !isBootstrapExemptRoute(currentPath)) {
             void navigate('/', { replace: true })
           }
           return
@@ -113,12 +117,7 @@ function AppInner() {
         // returns bound_profile_id in the same response, so we only redirect here
         // when the response genuinely has no binding.
         // Exemption: /pair and /redeem/* are always allowed (pairing + invite redemption flows).
-        if (
-          !data.bound_profile_id &&
-          currentPath !== '/pair' &&
-          !currentPath.startsWith('/admin') &&
-          !currentPath.startsWith('/redeem')
-        ) {
+        if (!data.bound_profile_id && !isBootstrapExemptRoute(currentPath)) {
           void navigate('/select', { replace: true })
         }
       })

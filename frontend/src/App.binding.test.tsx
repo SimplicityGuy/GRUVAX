@@ -27,7 +27,7 @@ beforeEach(() => {
     isDevicePaired: false,
     revokePending: false,
   })
-  vi.mocked(getSession).mockResolvedValue(boundSession)
+  vi.mocked(getSession).mockClear().mockResolvedValue(boundSession)
 })
 afterEach(() => {
   cleanup()
@@ -49,6 +49,36 @@ function pollUnbound(profileCount: number) {
     })
   })
 }
+
+describe('initial session routing', () => {
+  it.each([
+    [true, '/', '/', 'Kiosk route'],
+    [true, '/select', '/', 'Kiosk route'],
+    [true, '/pair', '/pair', 'Pair route'],
+    [true, '/redeem/invite', '/redeem/invite', 'Redeem route'],
+    [true, '/admin/profiles', '/admin/profiles', 'Admin route'],
+    [false, '/', '/select', 'Picker route'],
+    [false, '/select', '/select', 'Picker route'],
+    [false, '/pair', '/pair', 'Pair route'],
+    [false, '/redeem/invite', '/redeem/invite', 'Redeem route'],
+    [false, '/admin/profiles', '/admin/profiles', 'Admin route'],
+  ])(
+    'paired=%s initial %s resolves to %s',
+    async (paired, initialPath, expectedPath, expectedRoute) => {
+      window.history.replaceState({}, '', initialPath)
+      vi.mocked(getSession).mockResolvedValue({
+        ...boundSession,
+        bound_profile_id: paired ? 'profile-a' : null,
+        is_device_paired: paired,
+      })
+      render(<App />)
+      await act(async () => {})
+      expect(getSession).toHaveBeenCalledOnce()
+      expect(window.location.pathname).toBe(expectedPath)
+      expect(screen.getByText(expectedRoute)).toBeInTheDocument()
+    },
+  )
+})
 
 describe('runtime binding recovery', () => {
   it.each([0, 2])(
