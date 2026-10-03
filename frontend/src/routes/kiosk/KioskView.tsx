@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import gsap from 'gsap'
 import { RotateCcw } from 'lucide-react'
-import { fetchCubesWithFill, fetchUnits, locateRelease, searchCollection } from '../../api/client'
+import { fetchCubesWithFill, fetchUnits, searchCollection } from '../../api/client'
 import type { CubeRef } from '../../api/types'
 import { useGruvaxStore, type ShimmerCube } from '../../state/store'
 import { useSessionStore } from '../../state/sessionStore'
@@ -18,6 +18,7 @@ import { ReauthBanner } from './ReauthBanner'
 import { RecentlyPulledStrip } from './RecentlyPulledStrip'
 import { ResetConfirmDialog } from './ResetConfirmDialog'
 import { ResultsList } from './ResultsList'
+import { locateAndIlluminate } from './locateAndIlluminate'
 import { ShelfLayoutNotConfigured } from './ShelfLayoutNotConfigured'
 import { SearchBox } from './SearchBox'
 import { ShelfGrid } from './ShelfGrid'
@@ -54,6 +55,8 @@ export function KioskView() {
     setQuery,
     shelfLayoutUnavailable,
     selectedReleaseId,
+    query,
+    searchSession,
   } = useGruvaxStore()
   // Phase 4 / D-01/D-03/RTM-04: reactive shimmer state from Zustand
   const shimmerCubes = useGruvaxStore((s) => s.shimmerCubes)
@@ -89,7 +92,16 @@ export function KioskView() {
   // The dropdown is derived as open when there is a query that hasn't been
   // dismissed — so it reopens automatically on the next keystroke (new query)
   // and collapses after a pick, without a set-state-in-effect.
-  const [dismissedQuery, setDismissedQuery] = useState<string | null>(null)
+  const [dismissedQuery, setDismissedQuery] = useState<{
+    query: string
+    session: number
+  } | null>(null)
+
+  useEffect(() => {
+    return () => {
+      useGruvaxStore.getState().invalidateLocateRequests()
+    }
+  }, [])
 
   // Phase 8 / SRCH-09 / D-05: read selectedResult for chip strip — only added on successful locate
   const selectedResult = useGruvaxStore((s) => s.selectedResult)
@@ -319,12 +331,9 @@ export function KioskView() {
     const relocateActiveSelection = () => {
       const { selectedReleaseId } = useGruvaxStore.getState()
       if (selectedReleaseId != null) {
-        // Read boundProfileId from session store at call-time (stale-closure safe)
-        const pid = useSessionStore.getState().boundProfileId
-        void locateRelease(selectedReleaseId, pid ?? undefined).then((result) => {
-          // Re-read setLocateResult via getState to ensure it's current (Pitfall 5)
-          useGruvaxStore.getState().setLocateResult(result)
-        })
+        // Share selection sequencing and reset guards, while preserving the
+        // resync contract: no hardware illumination, keep last highlight on error.
+        locateAndIlluminate(selectedReleaseId, { illuminate: false })
       }
     }
 
@@ -516,7 +525,10 @@ export function KioskView() {
   // Derived: the dropdown is open when there is a query that the user has not
   // dismissed by selecting a row. A new query (different string) reopens it
   // automatically; an explicit selection records the query as dismissed.
-  const resultsOpen = debouncedQuery.trim().length > 0 && dismissedQuery !== debouncedQuery
+  const resultsOpen =
+    query.trim().length > 0 &&
+    debouncedQuery.trim().length > 0 &&
+    (dismissedQuery?.query !== debouncedQuery || dismissedQuery.session !== searchSession)
 
   // "Did you mean" tap (D-10): set the query the user sees AND trigger the
   // search immediately. setQuery drives the (controlled) SearchBox input;
@@ -692,11 +704,15 @@ export function KioskView() {
             <EmptyCollectionState />
           ) : (
             <ResultsList
-              items={debouncedQuery.trim().length > 0 ? searchResults : []}
+              items={
+                query.trim().length > 0 && debouncedQuery.trim().length > 0 ? searchResults : []
+              }
               showNoResults={showNoResults}
               didYouMean={searchData?.did_you_mean ?? null}
               open={resultsOpen}
-              onResultSelect={() => setDismissedQuery(debouncedQuery)}
+              onResultSelect={() =>
+                setDismissedQuery({ query: debouncedQuery, session: searchSession })
+              }
               onDidYouMean={handleDidYouMean}
             />
           )}

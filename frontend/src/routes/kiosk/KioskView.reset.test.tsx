@@ -20,7 +20,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { KioskView } from './KioskView'
 import { useGruvaxStore } from '../../state/store'
 import { useRecentlyPulledStore } from '../../state/recentlyPulledStore'
+import { useIdleTimer } from '../../hooks/useIdleTimer'
 import { useSessionStore } from '../../state/sessionStore'
+
+vi.mock('../../hooks/useIdleTimer', () => ({ useIdleTimer: vi.fn() }))
 
 const mockAdminState = { isLoggedIn: false }
 
@@ -78,6 +81,7 @@ vi.mock('../../api/session', async (importOriginal) => {
 })
 
 import { getSession } from '../../api/session'
+import { illuminateRecord, locateRelease, searchCollection } from '../../api/client'
 
 class MockEventSource {
   static instances: MockEventSource[] = []
@@ -232,5 +236,91 @@ describe('KioskView — Reset kiosk clears the results dropdown (gruvax-b76z)', 
     await waitFor(() => {
       expect(screen.getByRole('listbox', { name: /search results/i })).toBeInTheDocument()
     })
+  })
+})
+
+describe('query dismissal belongs to one search session (gruvax-6s4)', () => {
+  it.each(['clear', 'reset', 'idle', 'empty input'] as const)(
+    'reopens a previously selected query after %s',
+    async (action) => {
+      await act(async () => {
+        renderKiosk()
+      })
+      await typeQuery('miles')
+      await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('option'))
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+      if (action === 'clear') fireEvent.click(screen.getByRole('button', { name: /clear search/i }))
+      if (action === 'reset') {
+        fireEvent.click(screen.getByRole('button', { name: /reset kiosk/i }))
+        fireEvent.click(screen.getByRole('button', { name: /clear and reset/i }))
+      }
+      if (action === 'idle') {
+        act(() => {
+          vi.mocked(useIdleTimer).mock.calls.at(-1)![1]()
+        })
+      }
+      if (action === 'empty input') {
+        // No debounce wait: clearing and retyping the same query is a new session too.
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } })
+      }
+      await typeQuery('miles')
+      await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument())
+    },
+  )
+})
+
+describe('DidYouMean debounce race (gruvax-sit7)', () => {
+  it('keeps the tapped correction after a pending extra keystroke', async () => {
+    vi.mocked(searchCollection).mockResolvedValueOnce({
+      items: [],
+      took_ms: 1,
+      did_you_mean: 'beatles',
+    })
+    await act(async () => {
+      renderKiosk()
+    })
+    await typeQuery('beatls')
+    const suggestion = await screen.findByRole('button', { name: 'Search for beatles' })
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'beatlsx' } })
+    fireEvent.click(suggestion)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+    expect(screen.getByRole('searchbox')).toHaveValue('beatles')
+    expect(searchCollection).toHaveBeenCalledWith('beatles', 10, TEST_PROFILE_ID)
+    expect(searchCollection).not.toHaveBeenCalledWith('beatlsx', 10, TEST_PROFILE_ID)
+  })
+})
+
+describe('keyboard clear invalidates locate immediately (gruvax-d5p6)', () => {
+  it('does not relight an empty input before the debounce fires', async () => {
+    let resolve!: (result: Awaited<ReturnType<typeof locateRelease>>) => void
+    vi.mocked(locateRelease).mockReturnValueOnce(
+      new Promise((yes) => {
+        resolve = yes
+      }),
+    )
+    await act(async () => {
+      renderKiosk()
+    })
+    await typeQuery('miles')
+    await waitFor(() => expect(screen.getByRole('option')).toBeInTheDocument())
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } })
+    await act(async () => {
+      resolve({
+        release_id: 42,
+        primary_cube: { unit_id: 1, row: 0, col: 0 },
+        label_span: [],
+        sub_cube_interval: null,
+        confidence: 0.8,
+        generated_at: '2026-10-03T00:00:00Z',
+        estimator_version: 'test',
+      })
+    })
+    expect(screen.getByRole('searchbox')).toHaveValue('')
+    expect(useGruvaxStore.getState().selectedReleaseId).toBeNull()
+    expect(useGruvaxStore.getState().highlight.primaryCube).toBeNull()
+    expect(illuminateRecord).not.toHaveBeenCalled()
   })
 })

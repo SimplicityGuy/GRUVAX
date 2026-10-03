@@ -19,20 +19,34 @@ import { illuminateRecord, locateRelease } from '../../api/client'
 import { useSessionStore } from '../../state/sessionStore'
 import { useGruvaxStore } from '../../state/store'
 
-export function locateAndIlluminate(releaseId: number): void {
-  const { setLocateResult, setHighlightCube } = useGruvaxStore.getState()
+export function locateAndIlluminate(releaseId: number, { illuminate = true } = {}): void {
+  const token = useGruvaxStore.getState().invalidateLocateRequests()
   // D2-04: locate's profile_id query param is required — read at call-time via
   // getState() to stay stale-closure-safe (matches the prior inline callers).
-  const profileId = useSessionStore.getState().boundProfileId
+  const { boundProfileId: profileId, profileBindingVersion } = useSessionStore.getState()
+  const isCurrent = () => {
+    const state = useGruvaxStore.getState()
+    return (
+      state.locateRequestToken === token &&
+      state.selectedReleaseId === releaseId &&
+      useSessionStore.getState().boundProfileId === profileId &&
+      useSessionStore.getState().profileBindingVersion === profileBindingVersion
+    )
+  }
   void locateRelease(releaseId, profileId ?? undefined)
     .then((located) => {
-      setLocateResult(located)
+      if (!isCurrent()) return
+      useGruvaxStore.getState().setLocateResult(located)
       // Fire-and-forget illuminate — never block locate path (D-01)
-      void illuminateRecord(located).catch(() => {
-        // Swallow — broker may be in degraded mode
-      })
+      if (illuminate) {
+        void illuminateRecord(located).catch(() => {
+          // Swallow — broker may be in degraded mode
+        })
+      }
     })
     .catch(() => {
-      setHighlightCube(null)
+      // A failed background resync keeps the last known highlight; selection
+      // failures clear it. Both paths consume the rejection and reject stale writes.
+      if (illuminate && isCurrent()) useGruvaxStore.getState().setHighlightCube(null)
     })
 }

@@ -41,6 +41,8 @@ interface ConnectivityState {
 interface GruvaxStore {
   /** Current search query string */
   query: string
+  /** Search session changes on clear so a prior dropdown dismissal cannot survive it. */
+  searchSession: number
   setQuery: (q: string) => void
 
   /** The selected search result's release_id (drives locate call) */
@@ -50,6 +52,11 @@ interface GruvaxStore {
   /** The selected result object (for UI display) */
   selectedResult: SearchResult | null
   setSelectedResult: (result: SearchResult | null) => void
+
+  /** Monotonic generation shared by selection and SSE locate requests. */
+  locateRequestToken: number
+  /** Invalidate pending locate responses; returns the generation for a new request. */
+  invalidateLocateRequests: () => number
 
   /** Primary cube highlight state — set after /api/locate resolves */
   highlight: HighlightState
@@ -124,21 +131,43 @@ interface GruvaxStore {
   clearShimmerCubes: (cubes: ShimmerCube[]) => void
 }
 
-export const useGruvaxStore = create<GruvaxStore>((set) => ({
+export const useGruvaxStore = create<GruvaxStore>((set, get) => ({
   query: '',
-  setQuery: (q) => set({ query: q }),
+  searchSession: 0,
+  setQuery: (q) => {
+    // Keyboard deletion is the same clear operation as the clear-X button.
+    // Invalidate pending locates synchronously, before a response can land.
+    if (q === '') get().clearSearch()
+    else set({ query: q })
+  },
 
   selectedReleaseId: null,
-  setSelectedReleaseId: (id) => set({ selectedReleaseId: id }),
+  setSelectedReleaseId: (id) =>
+    set((s) => ({ selectedReleaseId: id, locateRequestToken: s.locateRequestToken + 1 })),
 
   selectedResult: null,
   setSelectedResult: (result) => set({ selectedResult: result }),
+
+  locateRequestToken: 0,
+  invalidateLocateRequests: () => {
+    set((s) => ({ locateRequestToken: s.locateRequestToken + 1 }))
+    return get().locateRequestToken
+  },
 
   highlight: { primaryCube: null },
   setHighlightCube: (cube) =>
     set((s) => ({
       highlight: { primaryCube: cube },
       animationToken: s.animationToken + 1,
+      ...(cube === null
+        ? {
+            labelSpan: [],
+            subCubeInterval: null,
+            confidence: 0,
+            shelfLayoutUnavailable: false,
+            locateRequestToken: s.locateRequestToken + 1,
+          }
+        : {}),
     })),
 
   labelSpan: [],
@@ -164,7 +193,9 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
   shelfLayoutUnavailable: false,
 
   clearSearch: () =>
-    set({
+    set((s) => ({
+      locateRequestToken: s.locateRequestToken + 1,
+      searchSession: s.searchSession + 1,
       query: '',
       selectedReleaseId: null,
       selectedResult: null,
@@ -174,7 +205,7 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
       confidence: 0,
       animationToken: 0,
       shelfLayoutUnavailable: false,
-    }),
+    })),
 
   // ── Phase 4: SSE connectivity + shimmer ─────────────────────────────────
 
