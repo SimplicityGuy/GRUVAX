@@ -161,3 +161,61 @@ async def test_identity_stays_profile_scoped(db_pool: Any, profile: str) -> None
     # This pair exists in the default profile, but must not authorize this one.
     assert await cube_exact_match(db_pool, "Blue Note", "BLP 1000", profile) is False
     assert await get_phantom_boundary_count(db_pool, profile) == 1
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize(
+    ("stored", "proposed", "matches"),
+    [
+        ("BLP 4195", "blp-4195", True),
+        ("\uff22\uff2c\uff30 \uff14\uff11\uff19\uff15", "BLP/4195", True),
+        ("CAT 001", "cat1", True),
+        ("CAT 1, EXTRA 2", "CAT.1", True),
+        (None, "None", True),
+        ("N/A", "?", True),
+        ("Straße 1", "STRASSE 1", True),
+        ("CAT 9999999999999", "CAT 10000000000000", True),
+        ("CAT 10", "CAT 1", False),
+        ("CAT 1", "OTHER 1", False),
+    ],
+)
+async def test_catalog_identity_agrees_at_db_http_save_and_estimator(
+    db_pool: Any,
+    profile: str,
+    client: AsyncClient,
+    admin_session: dict[str, Any],
+    stored: str | None,
+    proposed: str,
+    matches: bool,
+) -> None:
+    await clear_profile(db_pool, profile)
+    await seed_pair(db_pool, profile, "Straße Records", stored)
+    await seed_boundary(db_pool, profile, "STRASSE RECORDS", proposed)
+    assert await cube_exact_match(db_pool, "STRASSE RECORDS", proposed, profile) is matches
+    assert await get_phantom_boundary_count(db_pool, profile) == (0 if matches else 1)
+    cookies = dict(admin_session["cookies"])
+    cookies["gruvax_browse_binding"] = profile
+    headers = {"X-CSRF-Token": admin_session["csrf_token"], **cookie_header(cookies)}
+    edit = {
+        "unit_id": 1,
+        "row": 0,
+        "col": 0,
+        "first_label": "STRASSE RECORDS",
+        "first_catalog": proposed,
+    }
+    response = await client.post(
+        "/api/admin/cubes/validate", headers=headers, json={"updates": [edit]}
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["valid"] is matches
+    assert response.json()["results"][0]["valid"] is matches
+    if matches:
+        saved = await client.put(
+            "/api/admin/cubes/1/0/0/boundary",
+            headers=headers,
+            json={"first_label": "STRASSE RECORDS", "first_catalog": proposed},
+        )
+        assert saved.status_code == 200, saved.text
+        # Equality must not rewrite stored spelling: import G3's raw contract survives.
+        assert saved.json()["first_catalog"] == proposed
+        await assert_estimator_resolves(db_pool, profile, "Straße Records", stored or "")

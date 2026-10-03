@@ -58,6 +58,7 @@ from gruvax.api.deps import (
     require_admin,
 )
 from gruvax.db.queries import (
+    BoundaryIdentityLookup,
     check_idempotency,
     cleanup_idempotency,
     cube_exact_match,
@@ -509,6 +510,7 @@ async def validate_boundary(
 
     results: list[dict[str, Any]] = []
 
+    identity_lookup = BoundaryIdentityLookup(pool, profile_id)
     for edit in body.updates:
         # is_empty short-circuit: no validation needed for is_empty cubes
         if edit.is_empty:
@@ -533,9 +535,7 @@ async def validate_boundary(
         # ── Step 1: Phantom check (skipped when force=True) ──────────────────
         # WR-01: pass resolved profile_id so preview and commit share one scope.
         if not edit.force:
-            first_exists = await cube_exact_match(
-                pool, first_label, first_catalog, profile_id=profile_id
-            )
+            first_exists = await identity_lookup.exists(first_label, first_catalog)
 
             if not first_exists:
                 near_misses = await find_boundary_near_misses(
@@ -830,6 +830,7 @@ async def bulk_write_cubes(
             return JSONResponse(content=cached)
 
     # ── Validate ALL cubes before any write (Pitfall 11 / T-03-19) ──────────
+    identity_lookup = BoundaryIdentityLookup(pool, profile_id)
     for edit in body.updates:
         if edit.is_empty:
             continue
@@ -840,9 +841,7 @@ async def bulk_write_cubes(
         # CR-01: pass resolved profile_id so validation targets the same profile
         # as the write, not the default profile.
         if not edit.force:
-            first_exists = await cube_exact_match(
-                pool, first_label, first_catalog, profile_id=profile_id
-            )
+            first_exists = await identity_lookup.exists(first_label, first_catalog)
 
             if not first_exists:
                 near_misses = await find_boundary_near_misses(

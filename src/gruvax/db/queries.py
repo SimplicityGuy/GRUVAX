@@ -1203,9 +1203,45 @@ LIMIT 1
     return row_raw is not None
 
 
-def _boundary_identity(label: str | None, catalog: str | None) -> tuple[str, str]:
-    """Pitfall C: labels use Python casefold, never database locale casing."""
-    return ((label or "").casefold(), catalog or "")
+type BoundaryIdentity = tuple[str, tuple[tuple[int, int | str], ...]]
+
+
+def _boundary_identity(
+    label: str | None,
+    catalog: str | None,
+) -> BoundaryIdentity:
+    """Estimator identity: casefold labels, parse catalogs through POS-01/D-13."""
+    return ((label or "").casefold(), parse_key(catalog))
+
+
+async def load_boundary_identities(
+    pool: AsyncConnectionPool,
+    profile_id: str,
+) -> frozenset[BoundaryIdentity]:
+    """Read one profile's estimator identities for a single validation request."""
+    sql = """
+SELECT label, catalog_number
+FROM gruvax.profile_collection
+WHERE profile_id = %s::uuid
+"""
+    async with pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute(sql, (profile_id,))
+        rows = cast("list[tuple[str | None, str | None]]", await cur.fetchall())
+    return frozenset(_boundary_identity(*row) for row in rows)
+
+
+class BoundaryIdentityLookup:
+    """Lazy request-owned lookup; never shares collection state across requests."""
+
+    def __init__(self, pool: AsyncConnectionPool, profile_id: str) -> None:
+        self._pool = pool
+        self._profile_id = profile_id
+        self._identities: frozenset[BoundaryIdentity] | None = None
+
+    async def exists(self, label: str, catalog: str) -> bool:
+        if self._identities is None:
+            self._identities = await load_boundary_identities(self._pool, self._profile_id)
+        return _boundary_identity(label, catalog) in self._identities
 
 
 async def cube_exact_match(
@@ -1216,7 +1252,7 @@ async def cube_exact_match(
 ) -> bool:
     """Return True if an exact (label, catalog_number) pair exists in profile_collection.
 
-    Label identity uses Python casefold; catalog_number is matched exactly.
+    Label identity uses Python casefold; catalog identity uses POS-01 parse_key.
     Used by the admin validate endpoint to detect phantom boundary values (D-07).
 
     Source is exclusively profile_collection for the active profile (Pitfall 5).
