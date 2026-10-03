@@ -255,6 +255,10 @@ async def search_collection(
         time for the DB round-trip in milliseconds, and ``did_you_mean`` is a
         suggestion string (or None) returned only when ``rows`` is empty.
     """
+    # A separator-only prefix would become LIKE '%' and match every catalog.
+    if not _SEP_COLLAPSE.sub("", q):
+        return [], 0.0, None
+
     # SRCH-08: catalog-like queries boost catalog_number field weight.
     # setweight(to_tsvector('gruvax.gruvax_fts', catalog_number), 'A') promotes catalog
     # tokens to the highest weight tier so ts_rank_cd scores them above body
