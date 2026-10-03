@@ -222,3 +222,75 @@ async def test_actual_profile_names_follow_device_responses(device_api, device_r
     assert listing.status_code == 200, listing.text
     pending = next(row for row in listing.json()["pending"] if row["id"] == devices[0])
     assert pending["profile_name"] is None
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("state", ["unknown", "consumed", "expired_consumed"])
+async def test_pairing_invalid_codes_stay_not_found(device_api, db_pool, state):  # type: ignore[no-untyped-def]
+    client, headers = device_api
+    generated = await client.post("/api/devices/pairing-codes")
+    assert generated.status_code == 200, generated.text
+    code = generated.json()["code"]
+    async with db_pool.connection() as conn:
+        if state == "unknown":
+            await conn.execute("DELETE FROM gruvax.pairing_codes WHERE code = %s", (code,))
+        else:
+            await conn.execute(
+                "UPDATE gruvax.pairing_codes SET consumed_at = NOW(), expires_at = CASE WHEN %s THEN NOW() - INTERVAL '1 minute' ELSE expires_at END WHERE code = %s",
+                (state == "expired_consumed", code),
+            )
+        await conn.commit()
+    result = await client.post("/api/admin/devices/bind", json={"code": code}, headers=headers)
+    assert result.status_code == 404, result.text
+    assert result.json()["detail"]["type"] == "code_not_found"
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_bind_fingerprint_constraint_keeps_conflict_and_code(
+    device_api, device_rows, db_pool, monkeypatch
+):  # type: ignore[no-untyped-def]
+    from gruvax.api.admin import devices as module
+
+    client, headers = device_api
+    profiles, devices = device_rows
+    async with db_pool.connection() as conn:
+        fingerprint = await (
+            await conn.execute(
+                "SELECT fingerprint FROM gruvax.devices WHERE id = %s::uuid", (devices[0],)
+            )
+        ).fetchone()
+    assert fingerprint is not None
+    client.cookies.set("gruvax_device_fp", fingerprint[0])
+    generated = await client.post("/api/devices/pairing-codes")
+    assert generated.status_code == 200, generated.text
+    code = generated.json()["code"]
+    # Simulate the initial active-fingerprint lookup missing a concurrently
+    # inserted row. The later profile UPDATE must exercise the actual unique
+    # index, not a mocked exception, and roll back the consumed code.
+    monkeypatch.setattr(
+        module,
+        "_UPDATE_DEVICE_BY_FINGERPRINT",
+        "SELECT id FROM gruvax.devices WHERE FALSE AND profile_id = %s::uuid AND display_name = %s AND fingerprint = %s",
+    )
+    response = await client.post(
+        "/api/admin/devices/bind", json={"code": code, "profile_id": profiles[1]}, headers=headers
+    )
+    assert response.status_code == 409, response.text
+    assert response.json()["detail"]["type"] == "profile_already_bound"
+    async with db_pool.connection() as conn:
+        consumed = await (
+            await conn.execute(
+                "SELECT consumed_at FROM gruvax.pairing_codes WHERE code = %s", (code,)
+            )
+        ).fetchone()
+        rows = await (
+            await conn.execute(
+                "SELECT id::text, profile_id::text, display_name FROM gruvax.devices WHERE id = ANY(%s::uuid[]) ORDER BY id::text",
+                (devices,),
+            )
+        ).fetchall()
+    assert consumed == (None,)
+    assert sorted(rows) == sorted(
+        (device, profile, "Original name")
+        for device, profile in zip(devices, profiles, strict=False)
+    )

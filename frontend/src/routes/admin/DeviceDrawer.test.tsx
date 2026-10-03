@@ -477,14 +477,22 @@ describe('DeviceDrawer', () => {
   })
 })
 
-it('explains how to resolve an already bound profile instead of retrying', async () => {
+it.each([
+  [
+    'profile_already_bound',
+    409,
+    'That profile already has an active device. Unbind or revoke it first.',
+  ],
+  ['code_expired', 404, 'That code has expired. Ask the kiosk to generate a new one.'],
+  ['code_not_found', 404, "That code wasn't found. Check the kiosk screen and try again."],
+])('shows actionable copy for %s', async (type, status, message) => {
   vi.useRealTimers()
   const fetchMock = vi.fn(async (url: string) => {
     if (url.includes('/api/admin/devices/bind')) {
       return {
         ok: false,
-        status: 409,
-        json: async () => ({ detail: { type: 'profile_already_bound' } }),
+        status,
+        json: async () => ({ detail: { type } }),
       } as Response
     }
     return { ok: true, json: async () => PROFILES_RESPONSE } as Response
@@ -500,11 +508,7 @@ it('explains how to resolve an already bound profile instead of retrying', async
       screen.getByRole('button', { name: digit }).click()
     })
   }
-  expect(
-    await screen.findByText(
-      'That profile already has an active device. Unbind or revoke it first.',
-    ),
-  ).toBeVisible()
+  expect(await screen.findByText(message)).toBeVisible()
   expect(screen.queryByText('Something went wrong. Try again in a moment.')).not.toBeInTheDocument()
   expect(
     fetchMock.mock.calls.filter(([url]) => url.includes('/api/admin/devices/bind')),

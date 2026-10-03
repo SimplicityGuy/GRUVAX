@@ -249,7 +249,10 @@ async def _device_transaction(pool: Any) -> AsyncIterator[tuple[Any, Any]]:
             raise
         raise HTTPException(status_code=404, detail={"type": "profile_not_found"}) from None
     except psycopg.errors.UniqueViolation as exc:
-        if exc.diag.constraint_name != "idx_devices_profile_active":
+        if exc.diag.constraint_name not in {
+            "idx_devices_profile_active",
+            "idx_devices_fingerprint_active",
+        }:
             raise
         raise HTTPException(status_code=409, detail={"type": "profile_already_bound"}) from None
 
@@ -308,7 +311,8 @@ async def bind_device(
        error never burns the code).
     3. In a SINGLE transaction: atomic UPDATE pairing_codes SET consumed_at=NOW()
        WHERE code=%s AND consumed_at IS NULL AND expires_at > NOW() RETURNING
-       fingerprint (→ 404 code_not_found if no row), then UPSERT the devices row.
+       fingerprint (→ 404 code_expired for an unconsumed expired row, otherwise
+       code_not_found), then UPSERT the devices row.
        Code consumption and the device upsert commit together — if the upsert
        fails, the consumed_at write rolls back and the code stays reusable (CR-02).
     4. Return 200 with device summary (NO fingerprint in response — T-03-08).
@@ -350,10 +354,19 @@ async def bind_device(
         await cur.execute(_BIND_CODE, (body.code,))
         row = await cur.fetchone()
         if row is None:
+            # Authenticated pairing reports expiry only for an unconsumed row.
+            # Unknown and already-consumed codes retain code_not_found, including
+            # a code consumed by a concurrent first-wins binder.
+            await cur.execute(
+                "SELECT 1 FROM gruvax.pairing_codes WHERE code = %s"
+                " AND consumed_at IS NULL AND expires_at <= NOW()",
+                (body.code,),
+            )
+            expired = await cur.fetchone() is not None
             await conn.rollback()
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail={"type": "code_not_found"},
+                detail={"type": "code_expired" if expired else "code_not_found"},
             )
 
         fingerprint: str = row[0]

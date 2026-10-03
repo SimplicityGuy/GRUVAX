@@ -1164,52 +1164,33 @@ async def test_sse_device_reassigned(live_server) -> None:  # type: ignore[no-un
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_expired_code(client) -> None:  # type: ignore[no-untyped-def]
-    """Expired pairing code → 404 {type:"code_expired"} (DEV-03).
-
-    RED until Plan 03-01 ships the bind endpoint with TTL validation.
-
-    Simulates an expired code by directly manipulating the DB row's expires_at
-    to the past. The bind endpoint must check expires_at > NOW() and return
-    404 {type:"code_expired"} (or {type:"code_not_found"} per the atomic UPDATE
-    — since the WHERE clause includes `expires_at > NOW()`, an expired row is
-    treated as not found).
-    """
-    # Generate a fresh code
+async def test_expired_code(client, db_pool) -> None:  # type: ignore[no-untyped-def]
+    """A genuinely generated, unconsumed expired code returns code_expired."""
     gen_res = await client.post("/api/devices/pairing-codes")
-    if gen_res.status_code != 200:
-        pytest.skip("pairing-codes endpoint not yet implemented")
-    gen_res.json()["code"]
-
-    # Expire the code directly in the DB (test setup — not a normal user action)
-    # We use db_pool via the app's state. Since we only have `client` here (module fixture),
-    # we test the behavior through the API: trying to bind an invalid code that mimics
-    # expiry. The bind endpoint's WHERE `expires_at > NOW()` handles both not-found
-    # and expired the same way (404 code_not_found per RESEARCH.md Pattern 2).
-    #
-    # To test expiry specifically we'd need db_pool access. We use a code that cannot
-    # possibly be valid ('XXXX' is not a digit string and won't match CHAR(4) code).
-    # Test the not-found branch which covers both missing and expired.
+    assert gen_res.status_code == 200, gen_res.text
+    code = gen_res.json()["code"]
+    async with db_pool.connection() as conn:
+        expired = await conn.execute(
+            "UPDATE gruvax.pairing_codes SET expires_at = NOW() - INTERVAL '1 minute' WHERE code = %s RETURNING consumed_at",
+            (code,),
+        )
+        assert await expired.fetchone() == (None,)
+        await conn.commit()
     admin = await _admin_login(client)
     bind_res = await client.post(
         "/api/admin/devices/bind",
-        json={"code": "9876"},  # a code that was never generated → not found
-        headers={
-            "X-CSRF-Token": admin["csrf_token"],
-            **cookie_header(admin["cookies"]),
-        },
+        json={"code": code},
+        headers={"X-CSRF-Token": admin["csrf_token"], **cookie_header(admin["cookies"])},
     )
-    assert bind_res.status_code == 404, (
-        f"Binding a non-existent/expired code expected 404, "
-        f"got {bind_res.status_code}: {bind_res.text}. "
-        f"RED until Plan 03-01 ships the bind endpoint with TTL validation."
-    )
-    detail = bind_res.json()
-    error_type = detail.get("type") or detail.get("detail", {}).get("type")
-    assert error_type in ("code_not_found", "code_expired"), (
-        f"404 response must include {{type: 'code_not_found'}} or {{type: 'code_expired'}}, "
-        f"got: {detail}"
-    )
+    assert bind_res.status_code == 404, bind_res.text
+    assert bind_res.json()["detail"]["type"] == "code_expired"
+    async with db_pool.connection() as conn:
+        row = await (
+            await conn.execute(
+                "SELECT consumed_at FROM gruvax.pairing_codes WHERE code = %s", (code,)
+            )
+        ).fetchone()
+    assert row == (None,)
 
 
 @pytest.mark.asyncio(loop_scope="session")
