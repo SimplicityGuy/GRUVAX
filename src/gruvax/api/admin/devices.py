@@ -58,18 +58,6 @@ class BindRequest(BaseModel):
         return v
 
 
-class RenameDeviceRequest(BaseModel):
-    """Request body for PATCH /devices/{id} — rename."""
-
-    display_name: str
-
-
-class ChangeProfileRequest(BaseModel):
-    """Request body for PATCH /devices/{id} — change profile or unbind."""
-
-    profile_id: str | None = None
-
-
 # ── SQL constants — parameterized %s, never f-strings (bandit B608) ──────────
 
 # Atomic "first wins" bind: conditional UPDATE consumed_at only when the code

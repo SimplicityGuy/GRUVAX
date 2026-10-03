@@ -118,35 +118,6 @@ def get_segment_cache(request: Request) -> SegmentCache:
     return cache
 
 
-def get_event_bus(request: Request) -> Any:
-    """FastAPI dependency: return the app-level EventBus.
-
-    Returns HTTP 503 if the bus is not yet on ``app.state`` — e.g. a request
-    that races lifespan startup or arrives during shutdown.
-
-    The SSE endpoint depends ONLY on this — never on ``get_pool`` (D-09, Pitfall 10).
-
-    .. deprecated::
-        P2 (Plan 02-02) replaces this with ``get_bus_for_profile``.
-        Plan 02-03 will update ``api/events.py`` to use the per-profile dep.
-        This dep will return 503 once ``app.state.event_bus`` is removed.
-
-    Usage::
-
-        @router.get("/api/events")
-        async def stream_events(bus: EventBus = Depends(get_event_bus)) -> ...:
-            ...
-    """
-
-    bus: EventBus | None = getattr(request.app.state, "event_bus", None)
-    if bus is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Event bus not ready",
-        )
-    return bus
-
-
 # ── Device-aware profile resolution helper (D3-04 / D3-05 / D3-07) ──────────
 #
 # resolve_profile_from_request is the single authoritative path for deriving a
@@ -355,101 +326,6 @@ def require_profile_match(resolved_profile_id: str, supplied_profile_id: str) ->
             status_code=status.HTTP_403_FORBIDDEN,
             detail={"type": "profile_mismatch"},
         )
-
-
-async def get_boundary_cache_for_profile(
-    profile_id: str,
-    request: Request,
-    pool: Any = Depends(get_pool),
-) -> BoundaryCache:
-    """Resolve boundary cache for the device/session-validated profile_id (D2-04, D3-04).
-
-    Derives the authoritative profile_id via resolve_profile_from_request
-    (device binding overrides browse cookie — D3-05); never trusts the path
-    param as authoritative (T-02-02-01, touchpoint #5).
-
-    Raises:
-        HTTP 400 (session_unbound)    — no fingerprint and no browse-binding cookie.
-        HTTP 403 (device_revoked)     — revoked device fingerprint (D3-07).
-        HTTP 403 (profile_mismatch)   — resolved profile_id != path profile_id.
-        HTTP 503 (registry not ready) — registry attr missing on app.state.
-        HTTP 404 (profile_not_found)  — profile_id key absent from registry.
-    """
-    resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    require_profile_match(resolved_profile_id, profile_id)
-    registry: dict[str, BoundaryCache] | None = getattr(
-        request.app.state, "boundary_cache_registry", None
-    )
-    if registry is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Cache registry not ready",
-        )
-    cache: BoundaryCache | None = registry.get(canonical_profile_id(profile_id))
-    if cache is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"type": "profile_not_found"},
-        )
-    return cache
-
-
-async def get_snapshot_for_profile(
-    profile_id: str,
-    request: Request,
-    pool: Any = Depends(get_pool),
-) -> CollectionSnapshot:
-    """Resolve collection snapshot for the device/session-validated profile_id (D2-04, D3-04).
-
-    Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
-    Device binding overrides browse cookie (D3-05).
-    """
-    resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    require_profile_match(resolved_profile_id, profile_id)
-    registry: dict[str, CollectionSnapshot] | None = getattr(
-        request.app.state, "snapshot_registry", None
-    )
-    if registry is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Snapshot registry not ready",
-        )
-    snapshot: CollectionSnapshot | None = registry.get(canonical_profile_id(profile_id))
-    if snapshot is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"type": "profile_not_found"},
-        )
-    return snapshot
-
-
-async def get_segment_cache_for_profile(
-    profile_id: str,
-    request: Request,
-    pool: Any = Depends(get_pool),
-) -> SegmentCache:
-    """Resolve segment cache for the device/session-validated profile_id (D2-04, D3-04).
-
-    Same 400/403/503/404 error taxonomy as ``get_boundary_cache_for_profile``.
-    Device binding overrides browse cookie (D3-05).
-    """
-    resolved_profile_id, _ = await resolve_profile_from_request(request, pool)
-    require_profile_match(resolved_profile_id, profile_id)
-    registry: dict[str, SegmentCache] | None = getattr(
-        request.app.state, "segment_cache_registry", None
-    )
-    if registry is None:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail="Segment cache registry not ready",
-        )
-    seg: SegmentCache | None = registry.get(canonical_profile_id(profile_id))
-    if seg is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail={"type": "profile_not_found"},
-        )
-    return seg
 
 
 async def get_bus_for_profile(
