@@ -113,7 +113,24 @@ services:
         - "CMD"
         - "python"
         - "-c"
-        - "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/health').read()"
+        - |
+          import json, urllib.request
+          with urllib.request.urlopen('http://127.0.0.1:8000/api/health', timeout=4) as response:
+              if response.headers.get_content_type() != 'application/json':
+                  raise SystemExit('Health endpoint must return JSON')
+              body = json.load(response)
+          valid = (
+              isinstance(body, dict)
+              and body.get('status') in ('ok', 'degraded')
+              and body.get('db') in ('ok', 'error')
+              and body.get('discogsography_api_check') in ('ok', 'failed', 'stale')
+              and body.get('mqtt') in ('ok', 'degraded')
+              and all(isinstance(body.get(key), str) and body[key] for key in ('version', 'started_at'))
+              and 'sync_age_seconds' in body
+              and (body['sync_age_seconds'] is None or type(body['sync_age_seconds']) in (int, float))
+          )
+          if not valid:
+              raise SystemExit('Unexpected health response')
       interval: 30s
       timeout: 5s
       retries: 5

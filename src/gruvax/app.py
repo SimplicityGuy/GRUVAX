@@ -37,7 +37,9 @@ from typing import TYPE_CHECKING, Any
 from fastapi import FastAPI
 from fastapi.staticfiles import StaticFiles
 from psycopg import Error as DatabaseError
+from starlette._utils import get_route_path
 from starlette.exceptions import HTTPException as StarletteHTTPException
+from starlette.routing import Match, Mount
 
 from gruvax.api.admin.router import create_admin_router
 from gruvax.api.devices import router as devices_router
@@ -85,6 +87,21 @@ logger = logging.getLogger(__name__)
 # Mirrors ``tests/conftest.py::default_profile_uuid`` and the constant baked
 # into migration 0009.
 DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
+
+
+class SpaMount(Mount):
+    """Leave the API namespace to the router, including its slash redirects.
+
+    Rejecting API paths only inside StaticFiles is too late: a FULL mount match
+    would already have bypassed native 404/405 and redirect_slashes handling.
+    """
+
+    def matches(self, scope: Scope) -> tuple[Match, Scope]:
+        if scope["type"] in ("http", "websocket"):
+            path = get_route_path(scope)
+            if path == "/api" or path.startswith("/api/"):
+                return Match.NONE, {}
+        return super().matches(scope)
 
 
 class SpaStaticFiles(StaticFiles):
@@ -532,7 +549,9 @@ def create_app() -> FastAPI:
     static_dir = Path("static")
     if static_dir.exists() and static_dir.is_dir():
         # SpaStaticFiles adds Cache-Control: no-store on index.html (T-01-13).
-        app.mount("/", SpaStaticFiles(directory=str(static_dir), html=True), name="spa")
+        app.router.routes.append(
+            SpaMount("/", app=SpaStaticFiles(directory=str(static_dir), html=True), name="spa")
+        )
         logger.info("StaticFiles SPA mounted from %s", static_dir.resolve())
     else:
         logger.info(
