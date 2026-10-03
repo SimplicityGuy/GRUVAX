@@ -17,7 +17,7 @@ INSERT INTO gruvax.profiles (id, display_name, app_token_encrypted, app_token_re
 VALUES ('00000000-0000-0000-0000-000000000001'::uuid, 'Default', '\x'::bytea, TRUE)
 ON CONFLICT (id) DO NOTHING;
 
-TRUNCATE gruvax.profile_collection RESTART IDENTITY CASCADE;
+DELETE FROM gruvax.profile_collection WHERE profile_id = '00000000-0000-0000-0000-000000000001'::uuid;
 
 -- BEGIN GENERATED INSERTS
 INSERT INTO gruvax.profile_collection (profile_id, release_id, folder_id, artist, title, label, catalog_number, year) VALUES ('00000000-0000-0000-0000-000000000001'::uuid, 1, 1, 'Artist 1', 'Blue Note Title 1', 'Blue Note', 'BLP 1000', 1960);

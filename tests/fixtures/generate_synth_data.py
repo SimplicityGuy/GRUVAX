@@ -29,6 +29,7 @@ import argparse
 from pathlib import Path
 import random
 from typing import Any
+from uuid import UUID
 
 import yaml
 
@@ -198,9 +199,11 @@ def emit_sql(
     Output structure:
       1. Header comment block (cites D-17 + shape-variety contract).
       2. ``INSERT INTO gruvax.profiles ... ON CONFLICT DO NOTHING`` — idempotent profile seed.
-      3. ``TRUNCATE gruvax.profile_collection RESTART IDENTITY CASCADE`` — clean slate.
+      3. Profile-scoped ``DELETE`` — replace only the seeded profile collection.
       4. Block of ``INSERT INTO gruvax.profile_collection ...`` rows, one per release.
     """
+    # Validate the identifier before rendering SQL; CLI input is not SQL syntax.
+    profile_uuid = str(UUID(profile_uuid))
     header_lines = [
         "-- Synthetic profile_collection seed (committed; PII-free).",
         "--",
@@ -221,7 +224,7 @@ def emit_sql(
         f"VALUES ('{profile_uuid}'::uuid, 'Default', '\\x'::bytea, TRUE)",
         "ON CONFLICT (id) DO NOTHING;",
         "",
-        "TRUNCATE gruvax.profile_collection RESTART IDENTITY CASCADE;",
+        f"DELETE FROM gruvax.profile_collection WHERE profile_id = '{profile_uuid}'::uuid;",  # noqa: S608 — UUID validated above
         "",
         "-- BEGIN GENERATED INSERTS",
     ]
