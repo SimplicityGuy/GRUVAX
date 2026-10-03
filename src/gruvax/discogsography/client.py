@@ -147,6 +147,7 @@ class DiscogsographyClient:
             async for outer_attempt in stamina.retry_context(
                 on=self._should_retry_network,
                 attempts=_NETWORK_MAX_ATTEMPTS,
+                timeout=None,  # Bound attempts, not elapsed Retry-After/request time.
                 wait_initial=0.05,
                 wait_max=0.1,
                 wait_jitter=0.01,
@@ -173,6 +174,7 @@ class DiscogsographyClient:
             async for inner_attempt in stamina.retry_context(
                 on=self._should_retry_http,
                 attempts=_HTTP_MAX_ATTEMPTS,
+                timeout=None,
                 wait_initial=0.05,
                 wait_max=2.0,  # cap so 429 Retry-After:1 still dominates wait
                 wait_jitter=0.01,
