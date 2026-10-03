@@ -42,6 +42,31 @@ function sumFractions(segs: Segment[], start: number, end: number): number {
 /** Minimum segment width as a fraction (5%). */
 const MIN = 0.05
 
+/** Document ownership survives the handle DOM being rebuilt during a drag. */
+function trackDrag(
+  pointerId: number,
+  onMove: (event: PointerEvent) => void,
+  onFinish: (cancelled: boolean) => void,
+): () => void {
+  const move = (event: PointerEvent) => {
+    if (event.pointerId === pointerId) onMove(event)
+  }
+  const finish = (event: PointerEvent) => {
+    if (event.pointerId !== pointerId) return
+    dispose()
+    onFinish(event.type === 'pointercancel')
+  }
+  const dispose = () => {
+    document.removeEventListener('pointermove', move)
+    document.removeEventListener('pointerup', finish)
+    document.removeEventListener('pointercancel', finish)
+  }
+  document.addEventListener('pointermove', move)
+  document.addEventListener('pointerup', finish)
+  document.addEventListener('pointercancel', finish)
+  return dispose
+}
+
 export function SegmentStrip({
   segments,
   onDragSetOverride,
@@ -57,6 +82,8 @@ export function SegmentStrip({
 
     // Keep a mutable reference for drag (avoids stale closure)
     draggingSegs.current = segments.map((s) => ({ ...s }))
+    let dragging = false
+    let stopDrag = () => {}
 
     function renderAll(segs: Segment[]) {
       if (!strip) return
@@ -119,7 +146,10 @@ export function SegmentStrip({
 
           const idx = i // closure capture
           handle.addEventListener('pointerdown', (ev: PointerEvent) => {
+            if (dragging) return
+            dragging = true
             ev.preventDefault()
+            const beforeDrag = draggingSegs.current.map((seg) => ({ ...seg }))
             handle.setPointerCapture(ev.pointerId)
             const rect = strip.getBoundingClientRect()
 
@@ -137,14 +167,15 @@ export function SegmentStrip({
               renderAll(draggingSegs.current)
             }
 
-            const onUp = () => {
-              handle.removeEventListener('pointermove', onMove)
-              handle.removeEventListener('pointerup', onUp)
-              onDragSetOverride(idx, draggingSegs.current[idx].fraction)
-            }
-
-            handle.addEventListener('pointermove', onMove)
-            handle.addEventListener('pointerup', onUp)
+            stopDrag = trackDrag(ev.pointerId, onMove, (cancelled) => {
+              dragging = false
+              if (cancelled) {
+                draggingSegs.current = beforeDrag
+                renderAll(beforeDrag)
+              } else {
+                onDragSetOverride(idx, draggingSegs.current[idx].fraction)
+              }
+            })
           })
 
           nodes.push(handle)
@@ -155,6 +186,7 @@ export function SegmentStrip({
     }
 
     renderAll(draggingSegs.current)
+    return () => stopDrag()
   }, [segments, isReadOnly, onDragSetOverride])
 
   const stripClass = isReadOnly ? 'seg-strip seg-strip--mini' : 'seg-strip seg-strip--full'
