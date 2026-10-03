@@ -226,4 +226,47 @@ describe('ShelfBinList SSE invalidation (useAdminCubesInvalidation)', () => {
     // Hook must return early — no EventSource should have been created
     expect(MockEventSource.instances.length).toBe(0)
   })
+  it('follows null → A → B → null and ignores callbacks from closed streams', async () => {
+    useSessionStore.setState({ boundProfileId: null })
+    const qc = makeQueryClient()
+    const invalidateSpy = vi.spyOn(qc, 'invalidateQueries')
+    const { unmount } = await renderShelfBinListAndFlush(qc)
+    expect(MockEventSource.instances).toHaveLength(0)
+
+    await act(async () => {
+      useSessionStore.setState({ boundProfileId: TEST_PROFILE_ID })
+    })
+    expect(MockEventSource.instances).toHaveLength(1)
+    const streamA = MockEventSource.instances[0]
+    expect(streamA.url).toBe(`/api/events/${TEST_PROFILE_ID}`)
+    await act(async () => streamA.dispatchEvent('server_hello', {}))
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['admin', 'cubes'] })
+    invalidateSpy.mockClear()
+
+    const profileB = '00000000-0000-0000-0000-000000000002'
+    await act(async () => {
+      useSessionStore.setState({ boundProfileId: profileB })
+      // A queued callback can run before React flushes the effect cleanup.
+      streamA.dispatchEvent('server_hello', {})
+    })
+    expect(invalidateSpy).not.toHaveBeenCalled()
+    expect(streamA.closeCalled).toBe(true)
+    expect(MockEventSource.instances).toHaveLength(2)
+    const streamB = MockEventSource.instances[1]
+    expect(streamB.url).toBe(`/api/events/${profileB}`)
+    await act(async () => streamA.dispatchEvent('boundary_changed', {}))
+    expect(invalidateSpy).not.toHaveBeenCalled()
+    await act(async () => streamB.dispatchEvent('collection_changed', {}))
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['admin', 'cubes'] })
+    invalidateSpy.mockClear()
+
+    await act(async () => useSessionStore.setState({ boundProfileId: null }))
+    expect(streamB.closeCalled).toBe(true)
+    expect(MockEventSource.instances).toHaveLength(2)
+    await act(async () => streamB.dispatchEvent('server_hello', {}))
+    expect(invalidateSpy).not.toHaveBeenCalled()
+    await act(async () => unmount())
+    await act(async () => streamB.dispatchEvent('boundary_changed', {}))
+    expect(invalidateSpy).not.toHaveBeenCalled()
+  })
 })

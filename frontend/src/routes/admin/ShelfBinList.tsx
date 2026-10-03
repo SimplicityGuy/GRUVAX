@@ -51,39 +51,39 @@ import type { Segment } from '../../api/cubeTypes'
 //   - Calls es.close() in useEffect cleanup: the admin listener is short-lived,
 //     scoped to ShelfBinList mount/unmount. KioskView deliberately never closes
 //     because it wants auto-reconnect; we do not.
-//   - Uses .getState() (call-time, not reactive) to read boundProfileId, which
-//     avoids stale-closure pitfall when the store updates after mount.
+//   - Follows the reactive boundProfileId and closes the old stream on changes.
+//     Callbacks also check current binding to ignore queued stale events.
 //
 function useAdminCubesInvalidation(): void {
   const queryClient = useQueryClient()
+  const profileId = useSessionStore((state) => state.boundProfileId)
 
   useEffect(() => {
-    // Read boundProfileId at call time (Pitfall 4 stale-closure avoidance).
-    // Matches KioskView.tsx:326 pattern.
-    const profileId = useSessionStore.getState().boundProfileId
     if (!profileId) return
 
     const es = new EventSource(`/api/events/${profileId}`)
-
-    es.addEventListener('collection_changed', () => {
+    let active = true
+    const invalidate = () => {
+      if (!active || useSessionStore.getState().boundProfileId !== profileId) return
       void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
-    })
+    }
 
-    es.addEventListener('boundary_changed', () => {
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
-    })
+    es.addEventListener('collection_changed', invalidate)
+
+    es.addEventListener('boundary_changed', invalidate)
 
     // WARNING-2 (v2.1 milestone audit): server (re)started → refresh fill shading so
     // admin ShelfBinList does not show stale per-cube occupancy after a server restart.
-    es.addEventListener('server_hello', () => {
-      void queryClient.invalidateQueries({ queryKey: ['admin', 'cubes'] })
-    })
+    es.addEventListener('server_hello', invalidate)
 
     // UNLIKE KioskView, the admin listener is intentionally short-lived —
     // close on unmount to prevent accumulating connections across admin navigation
     // (T-10-05 mitigation).
-    return () => es.close()
-  }, [queryClient])
+    return () => {
+      active = false
+      es.close()
+    }
+  }, [queryClient, profileId])
 }
 
 const ROWS = 4
