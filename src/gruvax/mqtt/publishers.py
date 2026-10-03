@@ -39,6 +39,7 @@ from paho.mqtt.packettypes import PacketTypes
 from paho.mqtt.properties import Properties
 
 from gruvax.mqtt import topics
+from gruvax.mqtt.client import diagnostic_messages
 from gruvax.mqtt.schemas import (
     IlluminatePayload,
     RGBColor,
@@ -777,7 +778,8 @@ async def run_diagnostic(
     # CR-03: ``client.messages`` is a SINGLE shared incoming-message iterator in
     # aiomqtt 2.5.x.  If two diagnostics ran concurrently they would BOTH iterate
     # it and race for inbound messages.  Guard with a flag on the client so only
-    # one diagnostic owns ``client.messages`` at a time; a second concurrent
+    # one diagnostic owns its status capture at a time; supervised clients forward
+    # from their sole native-stream consumer. A second concurrent
     # diagnostic skips the subscribe window entirely rather than fighting over the
     # shared queue.  The ``asyncio.timeout(5.0)`` bound already makes the window
     # finite and cancelable: at shutdown the surrounding task is cancelled, the
@@ -797,19 +799,28 @@ async def run_diagnostic(
         status_topic = topics.status_wildcard(prefix)
         # Mark the client as the sole status/# consumer for this window.
         client._gruvax_diag_active = True  # type: ignore[attr-defined]
-        await client.subscribe(status_topic, qos=1)
+        # Budget every cube's five state replies, plus equal headroom for
+        # duplicate/delayed reports. Larger layouts must not lose a full burst.
+        cube_count = sum(rows * cols for _, rows, cols in unit_rows)
+        status_capacity = max(64, cube_count * len(state_sequence) * 2)
         try:
-            async with asyncio.timeout(5.0):
-                async for msg in client.messages:
-                    logger.info(
-                        "LED status from firmware: topic=%s payload=%s",
-                        msg.topic,
-                        msg.payload,
-                    )
-        except TimeoutError:
-            pass  # expected — no hardware in v1
+            # Establish capture before subscribing so an immediate firmware
+            # reply cannot be stolen by the connection supervisor.
+            async with diagnostic_messages(client, prefix, status_capacity) as messages:
+                await client.subscribe(status_topic, qos=1)
+                try:
+                    async with asyncio.timeout(5.0):
+                        async for msg in messages:
+                            logger.info(
+                                "LED status from firmware: topic=%s payload=%s",
+                                msg.topic,
+                                msg.payload,
+                            )
+                except TimeoutError:
+                    pass  # expected — no hardware in v1
+                finally:
+                    await client.unsubscribe(status_topic)
         finally:
-            await client.unsubscribe(status_topic)
             client._gruvax_diag_active = False  # type: ignore[attr-defined]
 
     # ── Restore the idle ambient baseline (CR-04 / LED-11 / D-20) ──────────────

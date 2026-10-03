@@ -121,6 +121,10 @@ async def illuminate(
     profile settings when profile_id is absent or unknown.
     """
     client: aiomqtt.Client | None = getattr(request.app.state, "mqtt", None)
+    # WR-04: queue acceptance requires a currently healthy supervisor client.
+    # Delivery remains asynchronous; a later failure changes MQTT health.
+    if not getattr(request.app.state, "mqtt_ok", False):
+        client = None
 
     # Resolve per-profile settings_cache when profile_id is provided (D2-04).
     # Fall back to the legacy flat settings_cache (P1 / startup edge case).
