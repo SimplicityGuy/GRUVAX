@@ -148,7 +148,7 @@ export function BinWidthEditor() {
         last_label: '',
         last_catalog: '',
         segment_overrides: updatedSegs
-          .filter((s) => s.is_override)
+          .filter(isOverridden)
           .map((s) => ({ label: s.label, fraction: s.fraction })),
       }
       const existing = pendingChangeSet
@@ -182,7 +182,7 @@ export function BinWidthEditor() {
       const pal = PALETTE[i % PALETTE.length]
       const showName = seg.fraction >= 0.16
       const segDiv = el('div', {
-        className: `bwe-seg${seg.is_override ? ' bwe-seg--overridden' : ''}${seg.continues ? ' bwe-seg--continues' : ''}`,
+        className: `bwe-seg${isOverridden(seg) ? ' bwe-seg--overridden' : ''}${seg.continues ? ' bwe-seg--continues' : ''}`,
         style: {
           width: `${(seg.fraction * 100).toFixed(3)}%`,
           background: pal.bg,
@@ -413,7 +413,7 @@ export function BinWidthEditor() {
         {
           overrides: segments.map((s) => ({
             label: s.label,
-            fraction: s.is_override ? s.fraction : null,
+            fraction: isOverridden(s) ? s.fraction : null,
           })),
         },
         idempotencyKey,
