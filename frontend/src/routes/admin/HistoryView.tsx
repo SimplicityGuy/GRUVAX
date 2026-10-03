@@ -16,9 +16,10 @@
  */
 
 import { useState } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
-import { getHistory, revertChangeSet } from '../../api/adminClient'
-import type { ChangeSetHistoryItem, RevertedCube } from '../../api/types'
+import { useQueryClient } from '@tanstack/react-query'
+import { revertChangeSet } from '../../api/adminClient'
+import type { RevertedCube } from '../../api/types'
+import { useHistoryHighlight } from '../../hooks/useHistoryHighlight'
 
 /** Format ISO-8601 string to a human-readable local timestamp. */
 function formatTimestamp(iso: string): string {
@@ -63,11 +64,7 @@ export function HistoryView() {
     loadingId: null,
   })
 
-  const { data, isLoading, isError } = useQuery({
-    queryKey: ['admin', 'history'],
-    queryFn: () => getHistory().then((r) => r.history),
-    refetchOnWindowFocus: false,
-  })
+  const { items, isLoading, isError, highlight, matchCard, notice } = useHistoryHighlight()
 
   function openConfirm(changeSetId: string) {
     setRevertState((prev) => ({ ...prev, confirmingId: changeSetId, errorById: {} }))
@@ -123,11 +120,10 @@ export function HistoryView() {
     )
   }
 
-  const items: ChangeSetHistoryItem[] = data ?? []
-
   if (items.length === 0) {
     return (
       <div className="history-view">
+        {notice && <p role="status">{notice}</p>}
         <div className="history-empty">
           <h2 className="history-empty-heading">No changes yet</h2>
           <p className="history-empty-body">Save your first boundary edit to see it here.</p>
@@ -138,6 +134,7 @@ export function HistoryView() {
 
   return (
     <div className="history-view">
+      {notice && <p role="status">{notice}</p>}
       <header className="history-header">
         <h1 className="history-heading">CHANGE HISTORY</h1>
         <p className="history-subheading">
@@ -167,7 +164,12 @@ export function HistoryView() {
           const sourceLabel = SOURCE_BADGE_MAP[item.source] ?? item.source.toUpperCase()
 
           return (
-            <li key={item.change_set_id} className="history-card">
+            <li
+              key={item.change_set_id}
+              className="history-card"
+              data-change-set-id={item.change_set_id}
+              ref={item.change_set_id === highlight ? matchCard : null}
+            >
               <div className="history-card-header">
                 <div className="history-card-meta">
                   <span className="history-change-set-id">{item.change_set_id.slice(0, 8)}</span>

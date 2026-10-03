@@ -1348,6 +1348,11 @@
   gap: var(--gruvax-space-3);
 }
 
+.history-card--highlighted {
+  border-color: var(--gruvax-yellow);
+  box-shadow: var(--gruvax-shadow-led);
+}
+
 .history-card-header {
   display: flex;
   align-items: flex-start;

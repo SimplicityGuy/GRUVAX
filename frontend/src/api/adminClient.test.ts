@@ -13,6 +13,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   BulkSaveError,
+  getHistory,
   uploadImportBoundaries,
   uploadImportSettings,
   validateBoundary,
@@ -160,4 +161,21 @@ describe('validateBoundary status contracts (gruvax-s35)', () => {
       body: {},
     })
   })
+})
+
+describe('profile-authorized history request selection (gruvax-12x)', () => {
+  it.each([undefined, '12345678-1234-4234-8234-123456789012'])(
+    'requests the existing history route with optional exact target %s',
+    async (id) => {
+      const fetch = vi.fn(
+        async () => new Response(JSON.stringify({ history: [] }), { status: 200 }),
+      )
+      vi.stubGlobal('fetch', fetch)
+      expect(await getHistory(id)).toEqual({ history: [] })
+      expect(fetch).toHaveBeenCalledExactlyOnceWith(
+        id ? `/api/admin/history?change_set_id=${id}` : '/api/admin/history',
+        expect.objectContaining({ credentials: 'same-origin' }),
+      )
+    },
+  )
 })

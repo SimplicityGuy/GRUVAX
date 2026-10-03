@@ -18,6 +18,7 @@ it.each([undefined, 0, 0.99, 1, 1.01, 3])(
         subInterval={{
           start: 0.2,
           end: 0.4,
+          next_cube: null,
           crosses_boundary: false,
         }}
         confidence={0.8}

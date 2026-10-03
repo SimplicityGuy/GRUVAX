@@ -4,17 +4,21 @@
 
 /**
  * Format a unix-epoch timestamp (seconds) as a relative-time string.
- * e.g. "3s ago", "12 min ago", "4h ago"
+ * e.g. "3s ago", "12 min ago", "4h ago", "14d ago"
  */
 export function formatRelativeTime(ts: number): string {
-  const nowMs = Date.now()
-  const diffMs = nowMs - ts * 1000
-  const diffSec = Math.floor(diffMs / 1000)
+  return formatRelativeAge((Date.now() - ts * 1000) / 1000)
+}
+
+/** Format an already measured age without sampling the clock during render. */
+export function formatRelativeAge(seconds: number): string {
+  const diffSec = Math.floor(seconds)
   if (diffSec < 60) return `${diffSec}s ago`
   const diffMin = Math.floor(diffSec / 60)
   if (diffMin < 60) return `${diffMin} min ago`
   const diffHr = Math.floor(diffMin / 60)
-  return `${diffHr}h ago`
+  if (diffHr < 48) return `${diffHr}h ago`
+  return `${Math.floor(diffHr / 24)}d ago`
 }
 
 /**

@@ -225,6 +225,7 @@ async def list_profiles(
                 "display_name": display_name,
                 "last_sync_at": last_sync_at.isoformat() if last_sync_at else None,
                 "last_sync_status": last_sync_status,
+                "last_sync_error": last_sync_error,
                 "last_sync_item_count": item_count,
                 "app_token_revoked": bool(revoked),
                 "status": _profile_status(row_dict),

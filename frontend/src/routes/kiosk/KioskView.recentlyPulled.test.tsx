@@ -109,7 +109,7 @@ const TEST_RESULT = {
   primary_artist: 'Miles Davis',
   catalog_number: 'CS 8163',
   label: 'Columbia',
-  format: 'Vinyl',
+  format: null,
   year: 1959,
   rank: 1,
 }

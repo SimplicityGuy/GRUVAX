@@ -39,7 +39,7 @@ describe('record position bands', () => {
 
         litCube={primary}
         labelSpan={[primary]}
-        subCubeInterval={{ start: 0, end: 1, crosses_boundary: false }}
+        subCubeInterval={{ start: 0, end: 1, next_cube: null, crosses_boundary: false }}
         confidence={0.3}
       />,
     )
@@ -90,7 +90,12 @@ describe('record position bands', () => {
           col={0}
           address="A1"
           state="lit"
-          subInterval={{ start: position - 0.05, end: position + 0.05, crosses_boundary: false }}
+          subInterval={{
+            start: position - 0.05,
+            end: position + 0.05,
+            next_cube: null,
+            crosses_boundary: false,
+          }}
           confidence={0.4}
         />,
       )
