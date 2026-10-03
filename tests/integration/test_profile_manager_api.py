@@ -21,6 +21,7 @@ Uses fake-discogsography for PAT validation (D-15 single-module pattern).
 from __future__ import annotations
 
 import os
+from unittest.mock import AsyncMock
 
 from asgi_lifespan import LifespanManager
 from httpx import ASGITransport, AsyncClient
@@ -28,6 +29,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from gruvax.discogsography.errors import PATRejected
 from tests.cookies import cookie_header
 
 
@@ -169,7 +171,7 @@ async def test_connect_pat_flow(
         # Connect with a valid fake PAT — fake-discogsography accepts any dscg_* token
         connect_res = await client.post(
             f"/api/admin/profiles/{profile_id}/connect",
-            json={"pat": "dscg_test_valid_token_00000000"},
+            json={"pat": "dscg_test_valid_token_00000000".ljust(50, "x")},
             headers={
                 "X-CSRF-Token": admin_session["csrf_token"],
                 **cookie_header(admin_session["cookies"]),
@@ -334,7 +336,7 @@ async def test_user_id_collision(
         # Connect profile A — this should succeed
         connect_a = await client.post(
             f"/api/admin/profiles/{profile_id_a}/connect",
-            json={"pat": "dscg_test_valid_token_collision_a"},
+            json={"pat": "dscg_test_valid_token_collision_a".ljust(50, "x")},
             headers={
                 "X-CSRF-Token": admin_session["csrf_token"],
                 **cookie_header(admin_session["cookies"]),
@@ -348,7 +350,7 @@ async def test_user_id_collision(
         # The server must detect the already-used user_id and return 409.
         connect_b = await client.post(
             f"/api/admin/profiles/{profile_id_b}/connect",
-            json={"pat": "dscg_test_valid_token_collision_b"},
+            json={"pat": "dscg_test_valid_token_collision_b".ljust(50, "x")},
             headers={
                 "X-CSRF-Token": admin_session["csrf_token"],
                 **cookie_header(admin_session["cookies"]),
@@ -446,13 +448,12 @@ async def test_soft_delete_evicts(
 async def test_pat_rejected(
     client,  # type: ignore[no-untyped-def]
     admin_session,
+    monkeypatch,
 ) -> None:
-    """POST /api/admin/profiles/{id}/connect with rejected PAT → 401 {"type":"pat_rejected"}.
-
-    RED until Plan 02-05 lands. Uses the fake-discogsography's magic token
-    "dscg_force_401" (or any token that is 401'd) to simulate a rejected PAT.
-    The connect endpoint's test-sync leg must surface this as 401 pat_rejected.
-    """
+    """Shape-valid PAT rejection upstream returns 401, independently of local checks."""
+    monkeypatch.setattr(
+        "gruvax.api.admin.profiles._run_test_sync", AsyncMock(side_effect=PATRejected())
+    )
     create_res = await client.post(
         "/api/admin/profiles",
         json={"display_name": "PatRejectedTestProfile"},
@@ -466,13 +467,9 @@ async def test_pat_rejected(
     profile_id = create_res.json()["id"]
 
     try:
-        # Use a bad-prefix token — the fake app rejects tokens that don't start
-        # with "Bearer dscg_". Sending "Bearer invalid_token" should trigger 401.
         connect_res = await client.post(
             f"/api/admin/profiles/{profile_id}/connect",
-            # A token that the fake-discogsography's auth check will reject:
-            # doesn't start with "dscg_" prefix so the fake returns 401.
-            json={"pat": "invalid_token_no_dscg_prefix"},
+            json={"pat": "dscg_rejected_admin_token".ljust(50, "x")},
             headers={
                 "X-CSRF-Token": admin_session["csrf_token"],
                 **cookie_header(admin_session["cookies"]),

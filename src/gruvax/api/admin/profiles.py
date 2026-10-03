@@ -38,6 +38,7 @@ from pydantic import BaseModel
 
 from gruvax.api.admin.profile_sync import _run_sync_background
 from gruvax.api.deps import require_admin
+from gruvax.api.pat_validation import WebPAT  # noqa: TC001 — Pydantic needs this at runtime.
 from gruvax.db.queries import DEFAULT_PROFILE_UUID
 from gruvax.discogsography.errors import (
     NetworkError,
@@ -78,7 +79,7 @@ class RenameProfileRequest(BaseModel):
 class ConnectPatRequest(BaseModel):
     """Request body for POST /profiles/{id}/connect and /profiles/{id}/rotate."""
 
-    pat: str
+    pat: WebPAT
 
 
 # ── helpers ───────────────────────────────────────────────────────────────────
