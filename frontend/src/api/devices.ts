@@ -20,11 +20,6 @@ import { adminFetch } from './adminClient'
 
 export type DeviceState = 'unpaired' | 'pending' | 'paired' | 'revoked'
 
-export interface PairingCodeResponse {
-  code: string
-  expires_at: string
-}
-
 export interface DeviceMeResponse {
   state: DeviceState
   profile_id?: string | null

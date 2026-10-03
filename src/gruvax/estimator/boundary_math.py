@@ -1,11 +1,13 @@
 """Pure boundary-math helpers for fill-level, cube-contents, and midpoint suggestion.
 
 Phase 5 changes:
-  - ``count_records_in_bin`` replaces ``count_records_in_boundary`` and
-    ``get_records_in_boundary``. Uses pre-derived LabelSegment.segment_count totals
-    from SegmentCache — no snapshot or last_* needed.
-  - ``get_records_in_boundary`` and ``count_records_in_boundary`` are RETIRED
-    (used last_label/last_catalog which no longer exist in BoundaryRow, Phase 5).
+  - ``count_records_in_bin`` replaces the retired ``count_records_in_boundary`` and
+    ``get_records_in_boundary`` (used last_label/last_catalog, which no longer exist
+    on BoundaryRow post-Phase-5). Uses pre-derived LabelSegment.segment_count totals
+    from SegmentCache — no snapshot or last_* needed. The Wave-3 compatibility shim
+    (``count_records_in_boundary``, a 0-returning placeholder kept only to satisfy
+    mypy --strict until admin/cubes.py migrated) was removed once that migration
+    (05-04) landed — gruvax-zwa1.
   - ``sample_records`` and ``suggest_midpoint`` are unchanged — they operate on
     CollectionSnapshot records and do not reference BoundaryRow.last_*.
   - ``get_records_in_bin`` is provided as a snapshot-based record enumerator for
@@ -40,28 +42,8 @@ from gruvax.estimator.normalize import parse_key
 
 
 if TYPE_CHECKING:
-    from gruvax.estimator.boundary_cache import BoundaryRow
     from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
     from gruvax.estimator.segment_cache import SegmentBin
-
-
-def count_records_in_boundary(
-    _boundary: BoundaryRow,
-    _snapshot: CollectionSnapshot,
-) -> int:
-    """DEPRECATED — Phase 5 compatibility shim (used by admin/cubes.py until 05-04).
-
-    In Phase 5 BoundaryRow no longer has last_label/last_catalog, so this function
-    cannot implement the old semantics. Returns 0 (safe fallback) until the admin
-    write path is fully refactored in 05-04 to use SegmentCache/count_records_in_bin.
-
-    This shim exists ONLY to keep admin/cubes.py compiling under mypy --strict
-    during Wave 3 (05-03). It will be replaced in Wave 4 (05-04).
-    """
-    # BoundaryRow no longer has last_* fields (Phase 5 / SEG-01 migration 0005).
-    # The admin write path (05-04) will replace this with count_records_in_bin(SegmentBin).
-    # Return 0 as a safe fallback for now — admin movement counts will show 0 until 05-04.
-    return 0
 
 
 def count_records_in_bin(bin_: SegmentBin) -> int:
