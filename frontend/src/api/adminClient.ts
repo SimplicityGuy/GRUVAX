@@ -659,6 +659,12 @@ function flattenErrorBody(body: Record<string, unknown>): Record<string, unknown
  * write is performed.  ``diff_preview`` is empty when the file is byte-equal
  * to the committed state (W5 identity re-import).
  */
+export interface BoundaryPreviewCut {
+  first_label: string | null
+  first_catalog: string | null
+  is_empty: boolean
+}
+
 export interface BoundariesDryRunPreview {
   total_cubes: number
   file_cube_count: number
@@ -666,8 +672,11 @@ export interface BoundariesDryRunPreview {
     unit_id: number
     row: number
     col: number
+    /** Legacy field; use diff membership for changes, not record movement. */
     delta: number
     will_be_empty: boolean
+    before: BoundaryPreviewCut | null
+    after: BoundaryPreviewCut
   }>
 }
 

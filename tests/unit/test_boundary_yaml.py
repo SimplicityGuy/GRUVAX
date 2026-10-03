@@ -212,3 +212,37 @@ def test_safe_load_rejects_python_object_tag() -> None:
     # parse_yaml_boundaries propagates that error (does not catch it).
     with pytest.raises(yaml.constructor.ConstructorError):
         parse_yaml_boundaries(malicious)
+
+
+@pytest.mark.parametrize(
+    "cubes",
+    [
+        None,
+        "nope",
+        [42],
+        [[1, 2]],
+        [{"row": 0, "col": 0}],
+        [{"unit_id": 1, "row": 0, "col": 0, "overrides": 5}],
+    ],
+)
+def test_malformed_shapes_have_contextual_value_errors(cubes) -> None:  # type: ignore[no-untyped-def]
+    with pytest.raises(ValueError, match="cubes"):
+        parse_yaml_boundaries(yaml.safe_dump({"version": "1", "cubes": cubes}))
+
+
+@pytest.mark.parametrize(
+    "key,value",
+    [
+        ("row", None),
+        ("is_empty", "false"),
+        ("first_label", 5),
+        ("first_catalog", []),
+        ("overrides", {"Alpha": None}),
+        ("overrides", {"Alpha": float("nan")}),
+        ("overrides", {"Alpha": 1.5}),
+    ],
+)
+def test_malformed_cube_values_have_key_context(key, value) -> None:  # type: ignore[no-untyped-def]
+    cube = {"unit_id": 1, "row": 0, "col": 0, key: value}
+    with pytest.raises(ValueError, match=key):
+        parse_yaml_boundaries(yaml.safe_dump({"version": "1", "cubes": [cube]}))

@@ -121,7 +121,7 @@ resolved cookie/device profile returns `403 profile_mismatch`.
 | `GET` | `/api/admin/labels/{label}/catalogs` | List catalog numbers for a label |
 | `GET` | `/api/admin/export/boundaries.yaml` | Download current boundaries as YAML |
 | `GET` | `/api/admin/export/settings.yaml` | Download current settings as YAML |
-| `POST` | `/api/admin/import/boundaries` | Import boundaries from YAML (`?dry_run=true` for preview) |
+| `POST` | `/api/admin/import/boundaries` | Import boundaries from YAML or CSV (`?dry_run=true` for preview) |
 | `POST` | `/api/admin/import/settings` | Import settings from YAML |
 | `POST` | `/api/admin/leds/off` | Send all-LEDs-off to MQTT (clears retained state) |
 | `POST` | `/api/admin/leds/diagnostic` | Send diagnostic pattern over MQTT |
@@ -142,6 +142,18 @@ resolved cookie/device profile returns `403 profile_mismatch`.
 | `POST` | `/api/admin/devices/{device_id}/revoke` | Revoke a device (kiosk snaps back to the pairing screen live via SSE) |
 | `POST` | `/api/admin/devices/{device_id}/reinstate` | Un-revoke a device |
 | `DELETE` | `/api/admin/devices/{device_id}` | Delete a device row |
+
+Malformed YAML/CSV uploads return 422 `parse_error` with field or line context.
+Unknown cube addresses return 422 before filling or writing boundaries; valid
+imports into a new profile can bootstrap its configured shelving units. Preview
+entries identify changed cubes and carry `before`/`after` cut points; the UI shows
+those transitions rather than inferring record movement from the legacy delta.
+
+Boundary imports replace the profile's full address space: omitted cubes become
+empty. Width overrides for emptied cubes are deleted in the same transaction.
+Overrides on nonempty cubes are preserved when omitted from the file, including
+CSV imports, which cannot carry overrides. Reimporting an emptied cube without
+an override therefore uses the current collection's derived fractions.
 
 Device assignment requires an active profile: unknown or soft-deleted profiles
 return 404 `profile_not_found`; an occupied active profile returns 409

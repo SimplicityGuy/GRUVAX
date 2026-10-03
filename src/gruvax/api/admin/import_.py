@@ -38,7 +38,7 @@ dry_run preview contract (POST /api/admin/import/boundaries?dry_run=true):
         "total_cubes":    <int — count of all addresses in cube_boundaries>,
         "file_cube_count": <int — cubes present in the uploaded file>,
         "diff_preview":   [
-          {unit_id, row, col, delta, will_be_empty},
+          {unit_id, row, col, before, after, delta, will_be_empty},
           ...  (only cubes that DIFFER from committed state — empty list for identity re-import)
         ]
       }
@@ -63,8 +63,6 @@ import yaml
 from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
 from gruvax.api.admin.cubes import (
     BoundaryEdit,
-    _compute_movement_counts,
-    _get_nominal_capacity,
 )
 from gruvax.api.admin.settings import (
     _ALLOWED_SETTINGS_KEYS,
@@ -140,6 +138,51 @@ def _normalize_label_or_catalog(value: str | None) -> str:
     return value
 
 
+def _validate_file_addresses(
+    file_addresses: set[tuple[int, int, int]],
+    existing: list[tuple[Any, ...]],
+    units: dict[int, tuple[int, int]],
+) -> None:
+    """Reject discarded coordinates while allowing valid empty-profile bootstrap."""
+    if existing:
+        allowed = {(row[0], row[1], row[2]) for row in existing}
+        unknown = file_addresses - allowed
+    else:
+        unknown = {
+            (unit, row, col)
+            for unit, row, col in file_addresses
+            if unit not in units or not 0 <= row < units[unit][0] or not 0 <= col < units[unit][1]
+        }
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "unknown_cube_addresses",
+                "message": "These cubes are outside this profile's address space.",
+                "addresses": [
+                    {"unit_id": unit, "row": row, "col": col} for unit, row, col in sorted(unknown)
+                ],
+            },
+        )
+
+
+def _preview_change(edit: BoundaryEdit, committed: dict[str, Any] | None) -> dict[str, Any]:
+    """Describe an actual cut change without inventing record movement counts."""
+    return {
+        "unit_id": edit.unit_id,
+        "row": edit.row,
+        "col": edit.col,
+        "delta": 0,  # Legacy field; not a measured movement count.
+        "will_be_empty": bool(edit.is_empty),
+        "before": committed,
+        "after": {
+            "first_label": None if edit.is_empty else edit.first_label,
+            "first_catalog": None if edit.is_empty else edit.first_catalog,
+            "is_empty": bool(edit.is_empty),
+        },
+    }
+
+
 @router.post("/import/boundaries")
 async def import_boundaries(
     request: Request,
@@ -179,7 +222,7 @@ async def import_boundaries(
       Runs steps 1-6 identically (same parse + fill + validation), then:
       - Returns 400 on any validation error (same bodies as commit path).
       - On validation pass, returns 200 preview:
-          {total_cubes, file_cube_count, diff_preview: [{unit_id, row, col, delta, will_be_empty}]}
+          {total_cubes, file_cube_count, diff_preview: [{unit_id, row, col, before, after, delta, will_be_empty}]}
       - diff_preview contains ONLY cubes that differ from the current committed state
         (W5: equal cubes omitted entirely — identity re-import yields diff_preview==[]).
       - Performs NO INSERT/UPDATE/DELETE. Does NOT invalidate caches or publish on the bus.
@@ -252,6 +295,12 @@ async def import_boundaries(
             (profile_id,),
         )
         all_addresses_raw = await cur.fetchall()
+        units = {}
+        if not all_addresses_raw:
+            await cur.execute("SELECT id, rows, cols FROM gruvax.units")
+            units = {uid: (rows, cols) for uid, rows, cols in await cur.fetchall()}
+
+    _validate_file_addresses(set(file_index), all_addresses_raw, units)
 
     # Build the committed-state index: (unit_id, row, col) → {first_label, first_catalog, is_empty}
     current_index: dict[tuple[int, int, int], dict[str, Any]] = {}
@@ -431,16 +480,6 @@ async def import_boundaries(
 
     # ── dry_run: return preview, NO DB write (T-07-DRYRUN-WRITE) ─────────────
     if dry_run:
-        nominal_capacity = 95  # default; no request.app.state access needed here
-        try:
-            nominal_capacity = _get_nominal_capacity(request)
-        except Exception:  # nosec B110 - best-effort lookup; default is fine for preview delta
-            # Log at debug — this is a best-effort lookup with a sane default.
-            logger.debug(
-                "import: nominal_capacity lookup failed; using default 95",
-                exc_info=True,
-            )
-
         total_cubes = len(all_addresses_raw)
         file_cube_count = len(file_index)
 
@@ -466,21 +505,7 @@ async def import_boundaries(
                     # Equal to committed state — omit from diff_preview (W5)
                     continue
 
-            # Cube differs (or is new) — compute approximate delta
-            movement = _compute_movement_counts(edit, segment_cache, nominal_capacity)
-            delta = movement[0]["delta"] if movement else 0
-            will_be_empty = bool(edit.is_empty) and (
-                committed is None or not bool(committed.get("is_empty"))
-            )
-            diff_preview.append(
-                {
-                    "unit_id": edit.unit_id,
-                    "row": edit.row,
-                    "col": edit.col,
-                    "delta": delta,
-                    "will_be_empty": will_be_empty,
-                }
-            )
+            diff_preview.append(_preview_change(edit, committed))
 
         logger.info(
             "Admin boundaries dry_run preview: total_cubes=%d, file_cube_count=%d, diff=%d",
@@ -566,6 +591,17 @@ async def import_boundaries(
                 profile_id=profile_id,
             )
 
+        # D-09 empties absent cubes. Their width overrides must be removed in
+        # the same transaction so a later import/restart cannot revive them.
+        # Nonempty overrides are preserved when omitted (notably CSV, D-12).
+        await conn.execute(
+            "DELETE FROM gruvax.segment_overrides o USING gruvax.cube_boundaries b"
+            " WHERE o.profile_id = b.profile_id AND o.unit_id = b.unit_id"
+            " AND o.row = b.row AND o.col = b.col"
+            " AND b.profile_id = %s::uuid AND b.is_empty",
+            (profile_id,),
+        )
+
         # Upsert segment_overrides for entries with overrides (Pitfall 4 — inside txn).
         # CR-02: use the resolved profile_id so overrides land in the correct profile's
         # rows, not the hardcoded default profile.
@@ -573,8 +609,9 @@ async def import_boundaries(
         # imported YAML/CSV override normalizes to the same PK row a POST /overrides
         # write would use, and carry the original-case label separately in
         # label_display for the admin UI (never used in a WHERE/PK comparison).
-        for entry in entries:
-            if entry.overrides and not entry.is_empty:
+        for edit in all_edits:
+            entry = file_index.get((edit.unit_id, edit.row, edit.col))
+            if entry is not None and entry.overrides and not entry.is_empty:
                 for label, fraction in entry.overrides.items():
                     display = label.strip()
                     label_key = display.casefold()
