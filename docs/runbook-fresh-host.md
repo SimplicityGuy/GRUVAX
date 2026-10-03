@@ -20,13 +20,15 @@ healthcheck verification, and the expected bring-up sequence.
   - `GRUVAX_ADMIN_PIN` — the admin PIN used by the one-shot `init-sync` container to run
     the initial `gruvax-sync --profile default` sync against `DISCOGSOGRAPHY_BASE_URL`.
     Required — `init-sync` uses `${GRUVAX_ADMIN_PIN:?...}` and fails clearly if unset.
-  - `GRUVAX_DB_PASSWORD` — the Postgres password for the `gruvax` user (defaults to
-    `gruvax` if unset — set explicitly for anything beyond throwaway dev)
+  - `DATABASE_URL` — the provisioned external PostgreSQL connection URL for
+    production. Replace the development URL copied from `.env.example`.
+    `GRUVAX_DB_*` supplies the connection pieces only when `DATABASE_URL` is unset;
+    local development credentials are configurable through those variables.
   - `MQTT_PASSWORD` — the Mosquitto password for `gruvax-api` (optional in dev)
   - `DISCOGSOGRAPHY_BASE_URL` — HTTP base URL of the discogsography API (defaults to the
     bundled `fake-discogsography` sibling service, `http://fake-discogsography:8004`).
-    **Override to the real discogsography service in production** — see the
-    `fake-discogsography` pitfall under Bring-Up Sequence below.
+    **Override to the real discogsography service in production**; the development
+    service is excluded from the default production profile.
   - `GRUVAX_ENV` — **must be absent/unset on a production host.** `.env.example` ships it
     commented out (gruvax-b51h); if `.env` was ever created from an older copy, or a stray
     `export GRUVAX_ENV=development` is in the deploy shell's environment, **remove it**
@@ -75,17 +77,15 @@ grep -E '^\s*GRUVAX_ENV\s*=' .env && echo "REFUSE TO DEPLOY: unset GRUVAX_ENV in
 docker compose config | grep -q 'GRUVAX_ENV: development' && echo "REFUSE TO DEPLOY: GRUVAX_ENV=development is active in the resolved config" && exit 1
 echo "GRUVAX_ENV pre-flight check passed (unset -> production default)"
 
-# 3a. Production host (pull-based deploy — do NOT have compose.override.yaml present):
+# 3a. Production host (pull the published image):
 docker compose pull
 docker compose up -d
 # Note: the prod host pulls the published GHCR image (ghcr.io/simplicityguy/gruvax:latest).
-# Never copy compose.override.yaml to the prod host — if present, docker compose up
-# will auto-load it and try to build from source instead of pulling (Pitfall 3).
+# Keep operator overrides absent when following this stock deployment recipe.
 
-# 3b. Local dev (build from source via the override):
-#   cp compose.override.yaml.example compose.override.yaml
+# 3b. Local dev (build directly from source; no override file needed):
 just up-d
-# Equivalent to: docker compose up --build -d  (override auto-merges, builds locally)
+# Builds the api image and reuses that exact image for init-sync.
 
 # 4. Verify all services are healthy (may take 30–60 s on first boot)
 #    -a is required: plain `docker compose ps` hides exited containers, and the
@@ -93,19 +93,12 @@ just up-d
 docker compose ps -a
 ```
 
-`docker compose up` (dev or prod) starts every service **except** `mqtt-explorer`, which is
-gated behind `docker compose --profile debug up -d mqtt-explorer` and never starts otherwise.
-That includes `fake-discogsography` and the one-shot `init-sync` container — neither is
-profile-gated, so both start alongside `api` on a plain `docker compose up`, in dev **and**
-in production.
-
-> **Pitfall — `fake-discogsography` is not production-excluded.** `compose.yaml` documents
-> `fake-discogsography` as "dev only" and expects production deploys to override
-> `DISCOGSOGRAPHY_BASE_URL` to the real discogsography service, but `api`'s
-> `depends_on: fake-discogsography: condition: service_healthy` is unconditional — the
-> container still builds and starts even when `DISCOGSOGRAPHY_BASE_URL` points elsewhere. On
-> a fresh production host, expect to see `gruvax-fake-discogsography` running (harmlessly)
-> alongside the real stack until a profile gate lands for it.
+Plain `docker compose up -d` starts `api`, `mosquitto`, and the one-shot
+`init-sync`. Production must configure the real `DATABASE_URL` and
+`DISCOGSOGRAPHY_BASE_URL`. The bundled Postgres and fake API require the `dev`
+profile; `just up` / `just up-d` enables it and development seeding automatically.
+The local database publishes only on `127.0.0.1`, with configurable
+`GRUVAX_DB_PUBLISHED_PORT` (default 5432). MQTT Explorer requires the `debug` profile.
 
 > **Pitfall — `GRUVAX_ENV=development` makes `init-sync`'s "skip" output indistinguishable
 > from success (gruvax-b51h).** If `GRUVAX_ENV=development` is active (see the pre-flight
@@ -129,14 +122,11 @@ was unset — see the pitfall above):
 ```
 NAME                         IMAGE                                   STATUS                    PORTS
 gruvax-api-1                 ghcr.io/simplicityguy/gruvax:latest    Up (healthy)              0.0.0.0:8000->8000/tcp
-gruvax-dev-pg                postgres:18                             Up (healthy)              0.0.0.0:5432->5432/tcp
 gruvax-mosquitto-1           eclipse-mosquitto:2.1.2-alpine          Up (healthy)
-gruvax-fake-discogsography   gruvax/fake-discogsography:dev          Up (healthy)
 gruvax-init-sync             ghcr.io/simplicityguy/gruvax:latest    Exited (0)
 ```
 
-The four long-running non-debug services (`api`, `gruvax-dev-pg`, `mosquitto`,
-`fake-discogsography`) must show `(healthy)` before the kiosk can load. `init-sync` is a
+The two long-running production services (`api`, `mosquitto`) must show `(healthy)` before the kiosk can load. `init-sync` is a
 one-shot container (`restart: "no"`) — it should show `Exited (0)` once its idempotency
 precheck either runs the initial `gruvax-sync --profile default` or logs "profile_collection
 already populated for default profile; skipping initial sync" on subsequent boots.
@@ -279,3 +269,13 @@ empty for `init-sync`'s real sync to populate. Recovery: unset `GRUVAX_ENV`, the
 fresh install) or manually `DELETE FROM gruvax.profile_collection WHERE profile_id =
 '00000000-0000-0000-0000-000000000001'` on the shared Postgres so `init-sync`'s idempotency
 precheck sees an empty collection on the next `docker compose up -d` and runs the real sync.
+
+## Authenticated broker readiness
+
+When enabling `password_file` and `allow_anonymous false` in
+`mosquitto/mosquitto.conf`, mount the generated password file using the commented
+Compose volume entry and set matching `MQTT_USERNAME` / `MQTT_PASSWORD` in `.env`.
+The broker healthcheck uses these same credentials to subscribe to
+`$SYS/broker/uptime`. If custom ACLs are enabled, allow this account to read that
+topic. Missing or incorrect credentials fail readiness; the API continues to
+wait for a healthy broker. Anonymous development needs no password.

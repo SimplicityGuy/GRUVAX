@@ -122,12 +122,10 @@ The atomic unit of the UI is the Kallax cube: a 4×4 grid where each cell is a r
 ### Quickstart
 
 ```bash
-# 1. Copy the environment template, fill in the required secrets (see below),
-#    and uncomment `GRUVAX_ENV=development` for the local demo seed (it ships
-#    commented out by default — gruvax-b51h — so a stray copy to a production
-#    host can't silently enable it).
+# 1. Copy the environment template and fill in required secrets (see below).
+#    just up enables development mode without persisting it in .env.
 cp .env.example .env
-$EDITOR .env   # uncomment GRUVAX_ENV=development
+$EDITOR .env   # set required secrets
 
 # 2. Build and start the full stack: api, gruvax-dev-pg, mosquitto, and the
 #    fake-discogsography sibling used for local dev. The api container waits
@@ -172,7 +170,7 @@ docker run -d --name gruvax-dev-pg \
   -e POSTGRES_USER=gruvax \
   -e POSTGRES_PASSWORD=gruvax \
   -e POSTGRES_DB=gruvax \
-  -p 5432:5432 \
+  -p 127.0.0.1:5432:5432 \
   postgres:18
 ```
 
@@ -289,3 +287,9 @@ ______________________________________________________________________
 <div align="center">
 Made with ❤️ and too many records in the Pacific Northwest
 </div>
+
+Local `just up` / `just up-d` enables the `dev` Compose profile and development
+seeding. Plain `docker compose up -d` excludes the bundled Postgres and fake API;
+production must configure external `DATABASE_URL` and `DISCOGSOGRAPHY_BASE_URL`.
+The local Postgres port binds only to `127.0.0.1` (override with
+`GRUVAX_DB_PUBLISHED_PORT` when another local database occupies port 5432).

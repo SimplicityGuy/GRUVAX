@@ -439,9 +439,9 @@ flowchart LR
 | Service | Purpose | Notes |
 |---------|---------|-------|
 | `api` | GRUVAX FastAPI app + built SPA | Same `image:`/`build:` block serves both prod (pull) and dev (build); healthcheck hits `/api/health` |
-| `gruvax-dev-pg` | Postgres 18 | Starts on every plain `up` (no profile gate). Its role is dev-only: production must point `DATABASE_URL` at the shared discogsography Postgres host via env vars — the container still runs, it's just unused |
+| `gruvax-dev-pg` | Postgres 18 | Starts only with the `dev` profile enabled by `just up`; host access binds to loopback. Production configures an external `DATABASE_URL`. |
 | `mosquitto` | `eclipse-mosquitto:2.1.2-alpine` | No `ports:` mapping — internal-only in both dev and prod |
-| `fake-discogsography` | Synthetic discogsography API stand-in | Serves `/api/user/collection` from `services/fake-discogsography/seed.yaml`. **Not production-excluded**: `api` has an unconditional `depends_on: service_healthy` on it, so it runs on every `up`. Production must override `DISCOGSOGRAPHY_BASE_URL` to the real service or the kiosk serves synthetic data (see the runbook's fake-data pitfall) |
+| `fake-discogsography` | Synthetic discogsography API stand-in | Serves the synthetic seed only with the `dev` Compose profile. Production uses an explicitly configured external API. |
 | `init-sync` | One-shot idempotent bootstrap job | Runs `gruvax-sync --profile default` once, only if `profile_collection` is empty for the default profile; requires `GRUVAX_ADMIN_PIN` |
 | `mqtt-explorer` | MQTT broker inspector web UI | Gated behind `docker compose --profile debug up mqtt-explorer` — never starts on a plain `up` |
 

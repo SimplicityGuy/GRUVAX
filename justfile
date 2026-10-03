@@ -138,11 +138,11 @@ install-spa:
 
 # Start the full Docker Compose stack (builds if needed)
 up:
-    docker compose up --build
+    GRUVAX_ENV=development COMPOSE_PROFILES=dev docker compose up --build
 
 # Start in detached mode
 up-d:
-    docker compose up --build -d
+    GRUVAX_ENV=development COMPOSE_PROFILES=dev docker compose up --build -d
 
 # Stop and remove containers (NEVER use -v — that wipes mosquitto-data volume)
 down:
@@ -173,38 +173,15 @@ build-version:
 # Slow (~60-90s on a clean cache). Runs in CI; locally for verifying the
 # end-to-end first-boot path.
 compose-smoke:
-    #!/usr/bin/env bash
-    set -euo pipefail
-    # Dump api/dev-pg/init-sync logs on ANY exit so CI failures during
-    # `docker compose up` (api unhealthy or Error state) are debuggable.
-    trap 'echo "=== compose-smoke failed; dumping logs ===" >&2; docker compose logs api gruvax-dev-pg init-sync fake-discogsography 2>&1 | tail -200 >&2; docker compose down -v >/dev/null 2>&1 || true' ERR
-    docker compose up --build -d api fake-discogsography init-sync
-    # Wait up to 60s for init-sync to exit (it's a one-shot — restart: "no").
-    # Just brace-escape: 4 leading braces escape to a literal opening pair, but
-    # closing braces are not escaped (they are only treated as delimiters when
-    # following an unmatched opening pair). A Go template like .X in a justfile
-    # is written with 4 leading and 2 trailing braces — using 4 trailing braces
-    # produces 4 literal trailing braces, corrupting docker output.
-    timeout 60 bash -c 'until docker compose ps init-sync --status exited --format "{{{{.Name}}" 2>/dev/null | grep -q init-sync; do sleep 2; done' \
-        || { echo "init-sync did not exit within 60s"; docker compose logs init-sync; docker compose down -v; exit 1; }
-    EXIT_CODE=$(docker inspect gruvax-init-sync --format '{{{{.State.ExitCode}}')
-    if [ "$EXIT_CODE" != "0" ]; then
-        echo "init-sync exited non-zero: $EXIT_CODE"
-        docker compose logs init-sync
-        docker compose down -v
-        exit 1
-    fi
-    # Assert fake-discogsography serves rows.
-    docker compose exec -T fake-discogsography python -c \
-        "import urllib.request as u, json; req = u.Request('http://127.0.0.1:8004/api/user/collection?limit=1', headers={'Authorization': 'Bearer dscg_dev_seed'}); body = json.loads(u.urlopen(req).read()); assert len(body['releases']) > 0, body"
-    docker compose down -v
+    # Runs docker compose up/down on an isolated disposable dev project.
+    bash scripts/compose-smoke.sh
 
 # Core Value smoke test: docker compose up → search → locate → assert SLO (SC5)
 demo:
     #!/usr/bin/env bash
     set -euo pipefail
     echo "=== GRUVAX Core Value smoke test ==="
-    docker compose up --build -d
+    GRUVAX_ENV=development COMPOSE_PROFILES=dev docker compose up --build -d
     echo "Waiting for api to be healthy..."
     until curl -sf http://localhost:8000/api/health | python3 -c \
       "import sys,json; d=json.load(sys.stdin); sys.exit(0 if d['status']=='ok' else 1)"; do
