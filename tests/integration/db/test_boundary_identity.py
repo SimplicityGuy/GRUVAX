@@ -11,6 +11,7 @@ import pytest
 import pytest_asyncio
 
 from gruvax.app import create_app
+from gruvax.db.pool import create_pool
 from gruvax.db.queries import cube_exact_match, get_phantom_boundary_count
 from gruvax.estimator.algorithm import locate_by_segment
 from gruvax.estimator.boundary_cache import BoundaryCache
@@ -219,3 +220,73 @@ async def test_catalog_identity_agrees_at_db_http_save_and_estimator(
         # Equality must not rewrite stored spelling: import G3's raw contract survives.
         assert saved.json()["first_catalog"] == proposed
         await assert_estimator_resolves(db_pool, profile, "Straße Records", stored or "")
+
+
+async def replace_tied_records(pool: Any, profile: str, order: tuple[int, int]) -> None:
+    """Commit equal catalog keys in a caller-selected real heap insertion order."""
+    async with pool.connection() as conn:
+        await conn.execute(
+            "DELETE FROM gruvax.profile_collection WHERE profile_id = %s::uuid",
+            (profile,),
+        )
+        for release_id in order:
+            catalog = "CAT 01" if release_id == 501 else "cat-1"
+            await conn.execute(
+                "INSERT INTO gruvax.profile_collection"
+                " (profile_id, release_id, folder_id, label, catalog_number)"
+                " VALUES (%s::uuid, %s, 1, 'Tie Records', %s)",
+                (profile, release_id, catalog),
+            )
+        await conn.commit()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_equal_catalog_records_keep_positions_across_heap_reloads(
+    db_pool: Any,
+    profile: str,
+) -> None:
+    await clear_profile(db_pool, profile)
+    await seed_boundary(db_pool, profile, "Tie Records", "CAT 1")
+    # Force two different heap orders through a dedicated one-connection pool.
+    # The session planner settings cannot leak into the suite's shared pool.
+    pool = create_pool(min_size=1, max_size=1, open=False)
+    await pool.open()
+    snapshots: list[list[int]] = []
+    bands: list[dict[int, tuple[float, float]]] = []
+    try:
+        async with pool.connection() as conn:
+            await conn.execute("SET enable_indexscan = off")
+            await conn.execute("SET enable_bitmapscan = off")
+            await conn.commit()
+        snapshot, boundaries, segments = CollectionSnapshot(), BoundaryCache(), SegmentCache()
+        await boundaries.load(pool, profile)
+        for order in ((502, 501), (501, 502)):
+            await replace_tied_records(pool, profile, order)
+            snapshot.invalidate()
+            await snapshot.load(pool, profile)
+            records = snapshot.get_label_records("Tie Records")
+            snapshots.append([r.release_id for r in records])
+            segments.derive(boundaries, snapshot, boundaries.overrides)
+            positions: dict[int, tuple[float, float]] = {}
+            for record in records:
+                result = locate_by_segment(
+                    release_id=record.release_id,
+                    label=record.label,
+                    catalog_number=record.catalog_number,
+                    segment_cache=segments,
+                    snapshot=snapshot,
+                )
+                assert result.primary_cube is not None
+                assert result.primary_cube.unit_id == 1
+                assert result.sub_cube_interval is not None
+                positions[record.release_id] = (
+                    result.sub_cube_interval.start,
+                    result.sub_cube_interval.end,
+                )
+            bands.append(positions)
+        assert bands[0] == bands[1]
+        assert snapshots == [[501, 502], [501, 502]]
+        assert bands[0][501] == pytest.approx((0.0, 0.05))
+        assert bands[0][502] == pytest.approx((0.95, 1.0))
+    finally:
+        await pool.close()
