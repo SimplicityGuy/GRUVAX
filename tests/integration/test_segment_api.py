@@ -81,7 +81,7 @@ def reset_login_rate_limit() -> None:  # type: ignore[return]
     limiter.reset()
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(loop_scope="session")
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan.
 
@@ -93,6 +93,7 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
     from gruvax.db.seed_boundaries import load_boundaries
 
     await load_boundaries(_BOUNDARIES_YAML)
+    await _seed_test_pin(db_pool)
 
     app = create_app()
     async with (
@@ -112,8 +113,7 @@ async def _login(client) -> dict:  # type: ignore[no-untyped-def]
     write requests resolve the per-profile session required by get_write_target.
     """
     res = await client.post("/api/admin/login", json={"pin": "0000"})
-    if res.status_code != 200:
-        return {}
+    assert res.status_code == 200, f"Admin login failed: {res.status_code}: {res.text}"
     cookies = dict(res.cookies)
     # Bind the default profile so get_write_target resolves without session_unbound (D-02).
     cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
@@ -136,15 +136,11 @@ async def test_get_segments_returns_derived_data(client) -> None:  # type: ignor
     HTTP 200 for an existing bin.
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping GET segments test")
 
     response = await client.get(
         "/api/admin/cubes/1/0/0/segments",
         headers=cookie_header(auth["cookies"]),
     )
-    if response.status_code == 404:
-        pytest.skip("GET segments endpoint not yet implemented")
 
     assert response.status_code == 200, (
         f"Expected 200 from GET segments, got {response.status_code}: {response.text}"
@@ -152,6 +148,7 @@ async def test_get_segments_returns_derived_data(client) -> None:  # type: ignor
     body = response.json()
     assert "segments" in body, "Response must include 'segments' key"
     assert isinstance(body["segments"], list), "segments must be a list"
+    assert body["segments"], "Canonical bin must contain derived segments"
     # Each segment entry must have the required fields
     for seg in body["segments"]:
         assert "label" in seg, f"Segment entry missing 'label': {seg}"
@@ -167,21 +164,19 @@ async def test_get_segments_404_unknown_bin(client) -> None:  # type: ignore[no-
     Requirement: SEG-08 — endpoint returns 404 if no bin exists at given coordinates.
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping GET segments 404 test")
 
+    known = await client.get(
+        "/api/admin/cubes/1/0/0/segments", headers=cookie_header(auth["cookies"])
+    )
+    assert known.status_code == 200, known.text
+    assert known.json()["segments"], "Known fixture bin must have derived segments"
     # unit_id=99 does not exist in the synthetic fixture
     response = await client.get(
         "/api/admin/cubes/99/99/99/segments",
         headers=cookie_header(auth["cookies"]),
     )
-    if response.status_code == 404:
-        # This is the expected response — pass
-        return
 
     # If the endpoint doesn't exist, we skip; otherwise we require 404 for unknown bin
-    if response.status_code == 405:
-        pytest.skip("GET segments endpoint not yet implemented (405 Method Not Allowed)")
 
     assert response.status_code == 404, (
         f"Expected 404 for non-existent bin, got {response.status_code}: {response.text}"
@@ -198,8 +193,6 @@ async def test_put_cut_accepted(client) -> None:  # type: ignore[no-untyped-def]
     Uses force=True to bypass phantom check.
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping PUT cut test")
 
     response = await client.put(
         "/api/admin/cubes/1/0/0/cut",
@@ -210,10 +203,6 @@ async def test_put_cut_accepted(client) -> None:  # type: ignore[no-untyped-def]
         },
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if response.status_code == 404:
-        pytest.skip("PUT cut endpoint not yet implemented")
-    if response.status_code == 405:
-        pytest.skip("PUT cut endpoint not yet implemented (405 Method Not Allowed)")
 
     assert response.status_code == 200, (
         f"Expected 200 from PUT cut, got {response.status_code}: {response.text}"
@@ -229,8 +218,6 @@ async def test_put_cut_phantom_rejected(client) -> None:  # type: ignore[no-unty
     Phantom = not in gruvax.profile_collection (D-07).
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping PUT cut phantom test")
 
     response = await client.put(
         "/api/admin/cubes/1/0/0/cut",
@@ -241,8 +228,6 @@ async def test_put_cut_phantom_rejected(client) -> None:  # type: ignore[no-unty
         },
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if response.status_code in (404, 405):
-        pytest.skip("PUT cut endpoint not yet implemented")
 
     assert response.status_code == 400, (
         f"Expected 400 for phantom cut, got {response.status_code}: {response.text}"
@@ -262,20 +247,16 @@ async def test_set_override_accepted(client) -> None:  # type: ignore[no-untyped
     Valid fraction in (0.0, 1.0] with a label that IS in the bin must return 200.
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping POST overrides test")
 
     # First get the segments to find a valid label
     seg_res = await client.get(
         "/api/admin/cubes/1/0/0/segments",
         headers=cookie_header(auth["cookies"]),
     )
-    if seg_res.status_code in (404, 405):
-        pytest.skip("GET segments not implemented — cannot determine valid label")
 
-    segments = seg_res.json().get("segments", [])
-    if not segments:
-        pytest.skip("No segments found in bin 1/0/0 — cannot test override")
+    assert seg_res.status_code == 200, seg_res.text
+    segments = seg_res.json()["segments"]
+    assert segments, "Fresh canonical bin must contain segments"
 
     valid_label = segments[0]["label"]
     # Use fraction=1.0 — the only valid override for a single-label bin.
@@ -286,8 +267,6 @@ async def test_set_override_accepted(client) -> None:  # type: ignore[no-untyped
         json={"overrides": [{"label": valid_label, "fraction": 1.0}]},
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if response.status_code in (404, 405):
-        pytest.skip("POST overrides endpoint not yet implemented")
 
     assert response.status_code == 200, (
         f"Expected 200 from POST overrides, got {response.status_code}: {response.text}"
@@ -305,8 +284,6 @@ async def test_set_override_rejected_fraction_over_one(client) -> None:  # type:
     Requirement: SEG-08 — parser-validated; fraction=1.5 must return HTTP 422.
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping POST overrides fraction test")
 
     response = await client.post(
         "/api/admin/cubes/1/0/0/overrides",
@@ -317,8 +294,6 @@ async def test_set_override_rejected_fraction_over_one(client) -> None:  # type:
         },
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if response.status_code in (404, 405):
-        pytest.skip("POST overrides endpoint not yet implemented")
 
     assert response.status_code == 422, (
         f"Expected 422 for fraction > 1.0, got {response.status_code}: {response.text}"
@@ -333,16 +308,12 @@ async def test_set_override_rejects_phantom_label(client) -> None:  # type: igno
     absent from the bin's derived segments.
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping phantom label override test")
 
     response = await client.post(
         "/api/admin/cubes/1/0/0/overrides",
         json={"overrides": [{"label": "PHANTOM_NONEXISTENT_LABEL_XYZ", "fraction": 0.5}]},
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if response.status_code in (404, 405):
-        pytest.skip("POST overrides endpoint not yet implemented")
 
     assert response.status_code == 400, (
         f"Expected 400 for phantom label override, got {response.status_code}: {response.text}"
@@ -474,15 +445,11 @@ async def test_get_segments_label_is_original_case(client) -> None:  # type: ign
     into POST /overrides and get persisted (ADR-0001 item 4).
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping GET segments casing test")
 
     response = await client.get(
         "/api/admin/cubes/1/0/2/segments",
         headers=cookie_header(auth["cookies"]),
     )
-    if response.status_code in (404, 405):
-        pytest.skip("GET segments endpoint not yet implemented")
 
     assert response.status_code == 200, f"GET segments failed: {response.text}"
     segments = response.json().get("segments", [])
@@ -537,8 +504,6 @@ async def test_put_boundary_does_not_duplicate_existing_override(
         },
         headers=headers,
     )
-    if put_res.status_code == 405:
-        pytest.skip("PUT /boundary endpoint not yet implemented")
     assert put_res.status_code == 200, f"PUT boundary failed: {put_res.text}"
 
     async with db_pool.connection() as conn, conn.cursor() as cur:
@@ -601,8 +566,6 @@ async def test_bulk_write_does_not_duplicate_existing_override(
         },
         headers=headers,
     )
-    if bulk_res.status_code == 405:
-        pytest.skip("POST /bulk endpoint not yet implemented")
     assert bulk_res.status_code == 200, f"POST /bulk failed: {bulk_res.text}"
 
     async with db_pool.connection() as conn, conn.cursor() as cur:
@@ -628,8 +591,6 @@ async def test_insert_cut_shelf_overflow_rejected(client) -> None:  # type: igno
     plain-language shelf_overflow error message (T-05-04-04).
     """
     auth = await _login(client)
-    if not auth:
-        pytest.skip("Login not implemented — skipping insert-cut shelf_overflow test")
 
     # Try to insert after the LAST non-empty cube. If there's no free cube after it,
     # this should trigger the shelf_overflow guard.  The synthetic fixture has
@@ -649,8 +610,6 @@ async def test_insert_cut_shelf_overflow_rejected(client) -> None:  # type: igno
         },
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if response.status_code in (404, 405):
-        pytest.skip("POST insert-cut endpoint not yet implemented")
 
     # Either 400 (shelf_overflow or no cube after) or 404 (cube not found)
     if response.status_code == 404:
@@ -717,8 +676,6 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
         }
 
     before_res = await client.get("/api/admin/cubes", headers=cookie_header(auth["cookies"]))
-    if before_res.status_code in (404, 405):
-        pytest.skip("Admin cubes endpoint not yet implemented")
     assert before_res.status_code == 200, before_res.text
     before = unit1_cuts(before_res.json())
 
@@ -738,8 +695,6 @@ async def test_insert_cut_cascade_preserves_bin_after_empty(client, db_pool) -> 
         },
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if response.status_code in (404, 405):
-        pytest.skip("POST insert-cut endpoint not yet implemented")
     assert response.status_code == 200, (
         f"Expected 200 from a valid insert-cut, got {response.status_code}: {response.text}"
     )
@@ -822,8 +777,6 @@ async def _run_head_insert_assertions(client, db_pool) -> None:  # type: ignore[
         }
 
     before_res = await client.get("/api/admin/cubes", headers=cookie_header(auth["cookies"]))
-    if before_res.status_code in (404, 405):
-        pytest.skip("Admin cubes endpoint not yet implemented")
     before = unit1_cuts(before_res.json())
     first_catalog_before = before.get((0, 0))
     assert first_catalog_before is not None, "fixture must have a cut at (1,0,0)"
@@ -1001,8 +954,6 @@ async def test_put_cut_scatter_rejected_contiguity_error(client, db_pool) -> Non
         },
         headers={"X-CSRF-Token": auth["csrf_token"], **cookie_header(auth["cookies"])},
     )
-    if response.status_code in (404, 405):
-        pytest.skip("PUT cut endpoint not yet implemented")
 
     try:
         assert response.status_code == 400, (
@@ -1073,8 +1024,6 @@ async def test_get_segments_requires_admin_401() -> None:
     ):
         # No cookies on this fresh client — unauthenticated request
         response = await fresh_client.get("/api/admin/cubes/1/0/0/segments")
-        if response.status_code == 405:
-            pytest.skip("GET segments endpoint not yet implemented")
 
         assert response.status_code in (401, 403), (
             f"Expected 401/403 for unauthenticated GET segments, got {response.status_code}"
@@ -1103,8 +1052,6 @@ async def test_set_override_requires_admin_401() -> None:
             "/api/admin/cubes/1/0/0/overrides",
             json={"overrides": [{"label": "Blue Note", "fraction": 1.0}]},
         )
-        if response.status_code == 405:
-            pytest.skip("POST overrides endpoint not yet implemented")
 
         assert response.status_code in (401, 403), (
             f"Expected 401/403 for unauthenticated POST overrides, got {response.status_code}"
