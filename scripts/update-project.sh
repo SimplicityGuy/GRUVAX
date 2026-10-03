@@ -856,19 +856,9 @@ run_tests() {
 
   print_section "$EMOJI_TEST" "Running Tests"
 
-  print_info "Running linters..."
-  if just lint; then
-    print_success "Linting passed"
-  else
-    print_warning "Linting failed — review the changes"
-  fi
-
-  print_info "Running Python tests..."
-  if just test; then
-    print_success "Python tests passed"
-  else
-    print_warning "Python tests failed — review the changes"
-  fi
+  print_info "Running complete validation with an isolated synthetic database..."
+  just check
+  print_success "Project validation passed"
 }
 
 # Generate summary

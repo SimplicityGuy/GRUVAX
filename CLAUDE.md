@@ -311,3 +311,25 @@ and driven through `bh`, **not** raw `git` / `bd` / `gh`.
 - **Lifecycle, roles, conventions:** see `.beads/PRIME.md` and `docs/AGF.md`.
 - Drive beads with `bh work`; load the role skill for your seat (coordinator / developer / merger).
 <!-- bh:agf:end -->
+
+## Dependency and bead validation
+
+Run `just setup` to install the locked Python and frontend dependencies.
+`just check` is the GRUVAX validation command used by `bh work check` and
+`bh work submit`. It runs lint, strict whole-repository typing, frontend
+checks/tests/build, migration round-trip, the unit/property subset, the full
+Python/browser suite with coverage, and synthetic benchmark SLO checks. It
+requires Docker, uv, npm, and just; Playwright Chromium is installed as needed.
+Each invocation provisions a fresh PostgreSQL container on a Docker-selected
+loopback port and removes only that container on exit. It seeds only committed
+synthetic fixtures and overrides database/secret settings for the test process.
+MQTT uses validation-only port zero, which the client rejects before opening
+a socket, preventing startup messages or test LED state from reaching a broker.
+The unit subset runs before integration tests can seed shared authentication
+state. Full-suite validation does not stop at the first failure.
+
+`just test` and `just test-unit` require an explicitly prepared test database;
+use `just check` for unattended validation. The updater runs this same gate and
+returns nonzero on a validation failure. Pre-commit hooks and external security
+scans remain additional review checks; `check` is shared by bead submission and
+merge boundaries so the dependency update has the same test contract throughout.
