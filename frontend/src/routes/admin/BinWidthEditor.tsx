@@ -36,6 +36,63 @@ import type { Segment } from '../../api/cubeTypes'
 const ROWS = 4
 const COLS = 4
 const MIN = 0.05 // 5% minimum width per segment
+const HANDLE_SIZE = 44 // minimum touch target and spacing in pixels
+
+function validWidths(segs: Segment[]): boolean {
+  return (
+    segs.length > 0 &&
+    segs.every((s) => Number.isFinite(s.fraction) && s.fraction > 0 && s.fraction <= 1) &&
+    Math.abs(segs.reduce((sum, s) => sum + s.fraction, 0) - 1) <= 1e-6
+  )
+}
+
+function dragPosition(clientX: number, rect: DOMRect, left: number, right: number): number | null {
+  if (![clientX, rect.left, rect.width, left, right].every(Number.isFinite)) return null
+  if (rect.width <= 0 || right - left < 2 * MIN) return null
+  const position = (clientX - rect.left) / rect.width
+  return Math.max(left + MIN, Math.min(right - MIN, position))
+}
+
+function safeHandlePositions(
+  segs: Segment[],
+  stripWidth: number,
+): Array<{ index: number; fraction: number }> {
+  if (!validWidths(segs) || !Number.isFinite(stripWidth) || stripWidth <= 0) return []
+  const positions = []
+  let cumulative = 0
+  let previousX = -Infinity
+  for (let index = 0; index < segs.length - 1; index++) {
+    cumulative += segs[index].fraction
+    // Narrow adjacent labels cannot support the minimum on both sides.
+    if (segs[index].fraction < MIN || segs[index + 1].fraction < MIN) continue
+    const x = cumulative * stripWidth
+    // Omit crowded handles rather than painting one touch target over another.
+    if (x < HANDLE_SIZE / 2 || stripWidth - x < HANDLE_SIZE / 2) continue
+    if (x - previousX < HANDLE_SIZE) continue
+    previousX = x
+    positions.push({ index, fraction: cumulative })
+  }
+  return positions
+}
+
+function requireValidWidths(segs: Segment[]): void {
+  if (!validWidths(segs)) {
+    throw new Error(
+      'Widths must be positive and total 100%. Adjust widths or reload before saving.',
+    )
+  }
+}
+
+function observeEditorWidth(wrap: HTMLElement | null, redraw: () => void): () => void {
+  if (!wrap) return () => {}
+  const observer = typeof ResizeObserver === 'undefined' ? null : new ResizeObserver(redraw)
+  observer?.observe(wrap)
+  window.addEventListener('resize', redraw)
+  return () => {
+    observer?.disconnect()
+    window.removeEventListener('resize', redraw)
+  }
+}
 
 /** Graduated-blue palette cycled by segment index. */
 const PALETTE: Array<{ bg: string; fg: string }> = [
@@ -148,7 +205,7 @@ export function BinWidthEditor() {
         last_label: '',
         last_catalog: '',
         segment_overrides: updatedSegs
-          .filter((s) => s.is_override)
+          .filter(isOverridden)
           .map((s) => ({ label: s.label, fraction: s.fraction })),
       }
       const existing = pendingChangeSet
@@ -182,7 +239,7 @@ export function BinWidthEditor() {
       const pal = PALETTE[i % PALETTE.length]
       const showName = seg.fraction >= 0.16
       const segDiv = el('div', {
-        className: `bwe-seg${seg.is_override ? ' bwe-seg--overridden' : ''}${seg.continues ? ' bwe-seg--continues' : ''}`,
+        className: `bwe-seg${isOverridden(seg) ? ' bwe-seg--overridden' : ''}${seg.continues ? ' bwe-seg--continues' : ''}`,
         style: {
           width: `${(seg.fraction * 100).toFixed(3)}%`,
           background: pal.bg,
@@ -206,13 +263,13 @@ export function BinWidthEditor() {
 
     strip.replaceChildren(...segNodes)
 
-    // Build drag handles between adjacent segments
-    let cum = 0
-    for (let i = 0; i < segs.length - 1; i++) {
-      cum += segs[i].fraction
+    // Build only independently grabbable handles between adjacent segments.
+    const positions = safeHandlePositions(segs, strip.getBoundingClientRect().width)
+    for (const { index: i, fraction } of positions) {
       const handle = el('div', {
         className: 'bwe-handle',
-        style: { left: `${(cum * 100).toFixed(4)}%` },
+        dataset: { boundaryIndex: String(i) },
+        style: { left: `${(fraction * 100).toFixed(4)}%` },
       })
       handle.appendChild(el('div', { className: 'bwe-grip' }))
       // attachDragH is a hoisted function decl below; mutual recursion with renderStrip
@@ -235,8 +292,8 @@ export function BinWidthEditor() {
       const right = left + segs[idx].fraction + segs[idx + 1].fraction
 
       const onMove = (ev: PointerEvent) => {
-        let pos = (ev.clientX - rect.left) / rect.width
-        pos = Math.max(left + MIN, Math.min(right - MIN, pos))
+        const pos = dragPosition(ev.clientX, rect, left, right)
+        if (pos === null) return
         draggingSegs.current[idx].fraction = pos - left
         draggingSegs.current[idx + 1].fraction = right - pos
         // Mark both as override during drag
@@ -405,6 +462,7 @@ export function BinWidthEditor() {
     setSaveError(null)
     setSaveMsg(null)
     try {
+      requireValidWidths(segments)
       const idempotencyKey = crypto.randomUUID()
       await setOverrides(
         unitId,
@@ -413,7 +471,7 @@ export function BinWidthEditor() {
         {
           overrides: segments.map((s) => ({
             label: s.label,
-            fraction: s.is_override ? s.fraction : null,
+            fraction: isOverridden(s) ? s.fraction : null,
           })),
         },
         idempotencyKey,
@@ -442,6 +500,12 @@ export function BinWidthEditor() {
     updateCaption(segments)
     updateLegend(segments)
   }, [segments, renderStrip, updateLegend])
+
+  // Re-evaluate physical handle spacing when the editor changes width.
+  useEffect(
+    () => observeEditorWidth(stripWrapRef.current, () => renderStrip(draggingSegs.current)),
+    [isLoading, renderStrip],
+  )
 
   // ── Summary line ─────────────────────────────────────────────────────────────
   const labelCount = segments.length
@@ -497,7 +561,10 @@ export function BinWidthEditor() {
       <div className="bwe-continue-cap" ref={captionRef} />
 
       {/* Hint */}
-      <p className="bwe-hint">Drag a yellow handle to set a physical-width override</p>
+      <p className="bwe-hint">
+        Drag a yellow handle to set a physical-width override. Handles appear where both labels have
+        room to drag.
+      </p>
 
       {/* Membership vs. cosmetics: widths here are display-only; which labels
           live in this bin is determined by the cut points. */}

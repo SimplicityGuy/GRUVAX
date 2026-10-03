@@ -206,36 +206,36 @@ function WizardWalk() {
     }
   }, [totalSteps, currentStepIndex])
 
-  // ── Pre-load existing cut points in reshuffle mode ────────────────────────
+  // Preload and persist the initial draft together: a sibling effect would
+  // otherwise persist the previous render's empty cuts before setCuts lands.
   useEffect(() => {
-    if (mode === 'reshuffle' && cubesData && Object.keys(cuts).length === 0 && !reshuffleDraft) {
-      const preloaded: Record<string, CutEntry> = {}
-      for (const cube of cubesData.cubes) {
-        preloaded[stepKey(cube)] = {
-          first_label: cube.first_label,
-          first_catalog: cube.first_catalog,
-          is_empty: cube.is_empty,
-        }
-      }
-      // One-time initialisation guarded by cuts.length === 0; cannot cascade further.
+    if (mode !== 'reshuffle' || !cubesData || totalSteps === 0 || idempKeyPersisted.current) return
+    idempKeyPersisted.current = true
+    const initialCuts = reshuffleDraft
+      ? cuts
+      : Object.fromEntries(
+          cubesData.cubes.map((cube) => [
+            stepKey(cube),
+            {
+              first_label: cube.first_label,
+              first_catalog: cube.first_catalog,
+              is_empty: cube.is_empty,
+            },
+          ]),
+        )
+    if (!reshuffleDraft) {
+      // One initial state update, guarded by the persisted-key ref.
       // eslint-disable-next-line react-hooks/set-state-in-effect
-      setCuts(preloaded)
+      setCuts(initialCuts)
     }
-  }, [mode, cubesData, cuts, reshuffleDraft])
-
-  // Persist idempotency key into draft on first render in reshuffle mode (Pattern 4)
-  useEffect(() => {
-    if (mode === 'reshuffle' && !idempKeyPersisted.current && totalSteps > 0) {
-      idempKeyPersisted.current = true
-      setReshuffleDraft({
-        mode: 'reshuffle',
-        completedSteps: currentStepIndex,
-        cuts,
-        idempotencyKey: idempotencyKey.current,
-        startedAt: draftStartedAt.current,
-      })
-    }
-  }, [mode, totalSteps, currentStepIndex, cuts, setReshuffleDraft])
+    setReshuffleDraft({
+      mode: 'reshuffle',
+      completedSteps: currentStepIndex,
+      cuts: initialCuts,
+      idempotencyKey: idempotencyKey.current,
+      startedAt: draftStartedAt.current,
+    })
+  }, [mode, cubesData, totalSteps, currentStepIndex, cuts, reshuffleDraft, setReshuffleDraft])
 
   // ── Current step state ────────────────────────────────────────────────────
   const currentCut = currentStep ? (cuts[stepKey(currentStep)] ?? null) : null
@@ -426,7 +426,8 @@ function WizardWalk() {
   const step = currentStep
   const shelfLetter = String.fromCharCode(64 + (step?.unit_id ?? 1))
   const shelfName = `SHELF ${shelfLetter}`
-  const binNumber = currentStepIndex + 1
+  const stepNumber = currentStepIndex + 1
+  const binNumber = step.row * 4 + step.col + 1
   const progressPct = totalSteps > 0 ? (currentStepIndex / totalSteps) * 100 : 0
 
   return (
@@ -447,7 +448,7 @@ function WizardWalk() {
         />
         <span className="wizard-step-indicator">
           {`${shelfName} · STEP `}
-          <span className="wizard-step-mono">{`${binNumber} / ${totalSteps}`}</span>
+          <span className="wizard-step-mono">{`${stepNumber} / ${totalSteps}`}</span>
         </span>
       </div>
 
@@ -458,7 +459,7 @@ function WizardWalk() {
         aria-valuenow={currentStepIndex}
         aria-valuemin={0}
         aria-valuemax={totalSteps}
-        aria-label={`Step ${binNumber} of ${totalSteps}`}
+        aria-label={`Step ${stepNumber} of ${totalSteps}`}
       >
         <div className="wizard-progress-fill" style={{ width: `${progressPct}%` }} />
       </div>
@@ -572,6 +573,7 @@ function WizardWalk() {
                     const newCuts = { ...cuts }
                     delete newCuts[key]
                     setCuts(newCuts)
+                    persistDraft(newCuts, currentStepIndex)
                   }}
                 >
                   {/* Lucide X */}

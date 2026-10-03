@@ -14,7 +14,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -65,21 +65,23 @@ function makeQueryClient() {
   })
 }
 
-async function renderWizard() {
+async function renderWizard(path = '/admin/wizard') {
   const qc = makeQueryClient()
-  render(
+  const view = render(
     <QueryClientProvider client={qc}>
-      <MemoryRouter initialEntries={['/admin/wizard']}>
+      <MemoryRouter initialEntries={[path]}>
         <Wizard />
       </MemoryRouter>
     </QueryClientProvider>,
   )
   await Promise.resolve()
+  return view
 }
 
 // ── Setup / Teardown ─────────────────────────────────────────────────────────
 
 beforeEach(() => {
+  useAdminStore.getState().setReshuffleDraft(null)
   vi.mocked(adminGetCubes).mockReset()
   vi.mocked(adminGetCubes).mockResolvedValue(TWO_CUBES)
 })
@@ -142,5 +144,100 @@ describe('Wizard re-entry with a poisoned reshuffle draft (gruvax-cw8)', () => {
     )
 
     expect(screen.getByText('2 / 2')).toBeTruthy()
+  })
+})
+
+describe('Wizard initial draft persistence (gruvax-ofh)', () => {
+  it('reloads every preloaded cut before the first interaction and keeps the idempotency key', async () => {
+    let view: Awaited<ReturnType<typeof renderWizard>>
+    await act(async () => {
+      view = await renderWizard('/admin/wizard?mode=reshuffle')
+    })
+    await screen.findByText('AAA')
+    const saved = localStorage.getItem('gruvax-admin')!
+    const draft = JSON.parse(saved).state.reshuffleDraft
+    expect(draft.cuts).toEqual({
+      '1/0/0': { first_label: 'AAA', first_catalog: '001', is_empty: false },
+      '1/0/1': { first_label: 'BBB', first_catalog: '002', is_empty: false },
+    })
+    expect(draft.idempotencyKey).toBeTruthy()
+    view!.unmount()
+    useAdminStore.getState().setReshuffleDraft(null)
+    localStorage.setItem('gruvax-admin', saved)
+    await useAdminStore.persist.rehydrate()
+    await act(async () => {
+      await renderWizard()
+    })
+    expect(await screen.findByText('AAA')).toBeVisible()
+    expect(useAdminStore.getState().reshuffleDraft!.idempotencyKey).toBe(draft.idempotencyKey)
+  })
+
+  it('preserves an explicitly empty resumed draft instead of refilling cleared cuts', async () => {
+    useAdminStore.getState().setReshuffleDraft({
+      mode: 'reshuffle',
+      completedSteps: 0,
+      cuts: {},
+      idempotencyKey: 'intentional-empty',
+      startedAt: new Date().toISOString(),
+    })
+    await act(async () => {
+      await renderWizard()
+    })
+    expect(await screen.findByRole('button', { name: 'PICK A RECORD' })).toBeVisible()
+    expect(useAdminStore.getState().reshuffleDraft!.cuts).toEqual({})
+  })
+})
+
+describe('Wizard clear persistence (gruvax-0an4)', () => {
+  it('cannot rehydrate or commit a cleared record after reload', async () => {
+    let view: Awaited<ReturnType<typeof renderWizard>>
+    await act(async () => {
+      view = await renderWizard('/admin/wizard?mode=reshuffle')
+    })
+    await screen.findByText('AAA')
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selected record' }))
+    expect(screen.getByRole('button', { name: 'NEXT →' })).toBeDisabled()
+    const saved = localStorage.getItem('gruvax-admin')!
+    expect(JSON.parse(saved).state.reshuffleDraft.cuts['1/0/0']).toBeUndefined()
+    view!.unmount()
+    useAdminStore.getState().setReshuffleDraft(null)
+    localStorage.setItem('gruvax-admin', saved)
+    await useAdminStore.persist.rehydrate()
+    await act(async () => {
+      await renderWizard()
+    })
+    expect(await screen.findByRole('button', { name: 'PICK A RECORD' })).toBeVisible()
+    expect(screen.queryByText('AAA')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'NEXT →' })).toBeDisabled()
+    expect(useAdminStore.getState().reshuffleDraft!.cuts['1/0/1'].first_label).toBe('BBB')
+  })
+})
+
+describe('Wizard local bin and global step numbers (gruvax-ybid)', () => {
+  it('shows BIN 1 on shelf B while retaining STEP 17 of 32', async () => {
+    const cubes = [1, 2].flatMap((unit_id) =>
+      Array.from({ length: 16 }, (_, i) => ({
+        ...TWO_CUBES.cubes[0],
+        unit_id,
+        row: Math.floor(i / 4),
+        col: i % 4,
+      })),
+    )
+    vi.mocked(adminGetCubes).mockResolvedValue({ cubes })
+    useAdminStore.getState().setReshuffleDraft({
+      mode: 'reshuffle',
+      completedSteps: 16,
+      cuts: {},
+      idempotencyKey: 'shelf-boundary',
+      startedAt: new Date().toISOString(),
+    })
+    await act(async () => {
+      await renderWizard()
+    })
+    expect(await screen.findByText('BIN 1')).toBeVisible()
+    expect(screen.getByText('17 / 32')).toBeVisible()
+    expect(screen.getByRole('progressbar', { name: 'Step 17 of 32' })).toBeVisible()
+    expect(document.querySelector('.locator-header-shelf')).toHaveTextContent('SHELF B')
+    expect(document.querySelector('[data-row="0"][data-col="0"]')).not.toBeNull()
   })
 })
