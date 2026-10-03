@@ -50,6 +50,31 @@ beforeEach(() => {
 })
 
 describe('shared locate generation', () => {
+  it('rejects a response from an earlier binding after profile A to B to A', async () => {
+    const pending = deferred()
+    vi.mocked(locateRelease).mockReturnValueOnce(pending.promise)
+    select(1)
+    const setSession = useSessionStore.getState().setSession
+    setSession({ profile_count: 1, bound_profile_id: 'profile-b', profiles: [] })
+    setSession({ profile_count: 1, bound_profile_id: 'profile-a', profiles: [] })
+    pending.resolve(located(1))
+    await settle()
+    expect(useGruvaxStore.getState().highlight.primaryCube).toBeNull()
+    expect(illuminateRecord).not.toHaveBeenCalled()
+  })
+
+  it('allows the pending response after an unchanged session refresh', async () => {
+    const pending = deferred()
+    vi.mocked(locateRelease).mockReturnValueOnce(pending.promise)
+    select(1)
+    useSessionStore
+      .getState()
+      .setSession({ profile_count: 1, bound_profile_id: 'profile-a', profiles: [] })
+    pending.resolve(located(1))
+    await settle()
+    expect(useGruvaxStore.getState().highlight.primaryCube).toEqual(located(1).primary_cube)
+  })
+
   it('keeps the selected record locate pending while typing before new results arrive', async () => {
     const pending = deferred()
     vi.mocked(locateRelease).mockReturnValueOnce(pending.promise)

@@ -28,6 +28,8 @@ interface SessionStore {
    * Named to match backend JSON key (bound_profile_id).
    */
   boundProfileId: string | null
+  /** Monotonic binding generation rejects responses from an earlier visit to the same profile. */
+  profileBindingVersion: number
 
   /**
    * True when this browser's device fingerprint is bound to a profile in
@@ -106,6 +108,7 @@ interface SessionStore {
 export const useSessionStore = create<SessionStore>()((set, get) => ({
   profileCount: 0,
   boundProfileId: null,
+  profileBindingVersion: 0,
   isDevicePaired: false,
   deviceId: null,
   profiles: [],
@@ -113,21 +116,24 @@ export const useSessionStore = create<SessionStore>()((set, get) => ({
   reassignBanner: null,
 
   setSession: (data: SessionData) =>
-    set({
+    set((s) => ({
       profileCount: data.profile_count,
       boundProfileId: data.bound_profile_id,
+      profileBindingVersion:
+        s.profileBindingVersion + (s.boundProfileId !== data.bound_profile_id ? 1 : 0),
       // gruvax-ocrn: retain the device-pairing facts instead of dropping them.
       // Both fields are optional in SessionData (older/partial responses), so
       // coerce rather than assume.
       isDevicePaired: data.is_device_paired === true,
       deviceId: data.device_id ?? null,
       profiles: data.profiles,
-    }),
+    })),
 
   clearBoundProfile: () =>
-    set({
+    set((s) => ({
       boundProfileId: null,
-    }),
+      profileBindingVersion: s.profileBindingVersion + 1,
+    })),
 
   triggerRevoke: () => {
     // Idempotent: only flip when currently false (D-06 / T-06-06)

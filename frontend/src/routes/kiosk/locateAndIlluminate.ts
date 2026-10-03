@@ -23,13 +23,14 @@ export function locateAndIlluminate(releaseId: number, { illuminate = true } = {
   const token = useGruvaxStore.getState().invalidateLocateRequests()
   // D2-04: locate's profile_id query param is required — read at call-time via
   // getState() to stay stale-closure-safe (matches the prior inline callers).
-  const profileId = useSessionStore.getState().boundProfileId
+  const { boundProfileId: profileId, profileBindingVersion } = useSessionStore.getState()
   const isCurrent = () => {
     const state = useGruvaxStore.getState()
     return (
       state.locateRequestToken === token &&
       state.selectedReleaseId === releaseId &&
-      useSessionStore.getState().boundProfileId === profileId
+      useSessionStore.getState().boundProfileId === profileId &&
+      useSessionStore.getState().profileBindingVersion === profileBindingVersion
     )
   }
   void locateRelease(releaseId, profileId ?? undefined)
