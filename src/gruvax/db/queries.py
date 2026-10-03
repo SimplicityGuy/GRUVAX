@@ -260,7 +260,8 @@ async def search_collection(
     Returns:
         A ``(rows, took_ms, did_you_mean)`` tuple where ``rows`` is a list of
         dicts matching the ``SearchRow`` shape, ``took_ms`` is the wall-clock
-        time for the DB round-trip in milliseconds, and ``did_you_mean`` is a
+        time of the main and optional suggestion database phases in milliseconds,
+        excluding row conversion and sorting, and ``did_you_mean`` is a
         suggestion string (or None) returned only when ``rows`` is empty.
     """
     # A separator-only prefix would become LIKE '%' and match every catalog.
@@ -490,7 +491,9 @@ LIMIT %s
     # SRCH-07 / D-11: only trigger did-you-mean when FTS finds nothing strong.
     did_you_mean: str | None = None
     if not rows:
+        suggestion_t0 = time.perf_counter()
         did_you_mean = await did_you_mean_query(pool, q, profile_id)
+        took_ms += (time.perf_counter() - suggestion_t0) * 1000.0
 
     return rows, took_ms, did_you_mean
 
