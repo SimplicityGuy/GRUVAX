@@ -20,8 +20,9 @@ Security:
 
 from __future__ import annotations
 
+from contextlib import asynccontextmanager
 import logging
-from typing import Any
+from typing import TYPE_CHECKING, Any
 import uuid
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
@@ -32,6 +33,10 @@ from pydantic import BaseModel, field_validator
 from gruvax.api.admin.limiter import _BIND_RATE, _rate_limiter
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.db.queries import DEFAULT_PROFILE_UUID
+
+
+if TYPE_CHECKING:
+    from collections.abc import AsyncIterator
 
 
 logger = logging.getLogger(__name__)
@@ -133,15 +138,19 @@ _UPDATE_DEVICE_BY_PROFILE = (
 
 # List all devices — never select fingerprint (T-03-08).
 _LIST_DEVICES = (
-    "SELECT id, profile_id, display_name, revoked_at, last_seen_at, created_at"
-    " FROM gruvax.devices"
-    " ORDER BY created_at"
+    "SELECT d.id, d.profile_id, d.display_name, d.revoked_at, d.last_seen_at, d.created_at,"
+    " p.display_name"
+    " FROM gruvax.devices d LEFT JOIN gruvax.profiles p"
+    " ON p.id = d.profile_id AND p.deleted_at IS NULL"
+    " ORDER BY d.created_at"
 )
 
 # Fetch a single device by id — never select fingerprint (T-03-08).
 _SELECT_DEVICE_BY_ID = (
-    "SELECT id, profile_id, display_name, revoked_at, last_seen_at, created_at"
-    " FROM gruvax.devices WHERE id = %s::uuid"
+    "SELECT d.id, d.profile_id, d.display_name, d.revoked_at, d.last_seen_at, d.created_at,"
+    " p.display_name"
+    " FROM gruvax.devices d LEFT JOIN gruvax.profiles p"
+    " ON p.id = d.profile_id AND p.deleted_at IS NULL WHERE d.id = %s::uuid"
 )
 
 _REVOKE_DEVICE = (
@@ -216,16 +225,50 @@ def _device_state(profile_id: Any, revoked_at: Any) -> str:
 
 def _row_to_device(row: tuple[Any, ...]) -> dict[str, Any]:
     """Convert a DB row tuple to a device summary dict (no fingerprint — T-03-08)."""
-    device_id, profile_id, display_name, revoked_at, last_seen_at, created_at = row
+    device_id, profile_id, display_name, revoked_at, last_seen_at, created_at, profile_name = row
     return {
         "id": str(device_id),
         "profile_id": str(profile_id) if profile_id else None,
         "display_name": display_name,
+        "profile_name": profile_name,
         "state": _device_state(profile_id, revoked_at),
         "revoked_at": revoked_at.isoformat() if revoked_at else None,
         "last_seen_at": last_seen_at.isoformat() if last_seen_at else None,
         "created_at": created_at.isoformat() if created_at else None,
     }
+
+
+@asynccontextmanager
+async def _device_transaction(pool: Any) -> AsyncIterator[tuple[Any, Any]]:
+    """Roll back profile constraint failures before returning actionable errors."""
+    try:
+        async with pool.connection() as conn, conn.cursor() as cur:
+            yield conn, cur
+    except psycopg.errors.ForeignKeyViolation as exc:
+        if exc.diag.constraint_name != "devices_profile_id_fkey":
+            raise
+        raise HTTPException(status_code=404, detail={"type": "profile_not_found"}) from None
+    except psycopg.errors.UniqueViolation as exc:
+        if exc.diag.constraint_name not in {
+            "idx_devices_profile_active",
+            "idx_devices_fingerprint_active",
+        }:
+            raise
+        raise HTTPException(status_code=409, detail={"type": "profile_already_bound"}) from None
+
+
+async def _require_active_profile(cur: Any, profile_id: str) -> None:
+    """Keep an active profile valid until device assignment commits.
+
+    FOR SHARE also serializes logical deletion (a non-key UPDATE), unlike
+    the foreign key's key-share lock, which only guards physical deletion.
+    """
+    await cur.execute(
+        "SELECT id FROM gruvax.profiles WHERE id = %s::uuid AND deleted_at IS NULL FOR SHARE",
+        (profile_id,),
+    )
+    if await cur.fetchone() is None:
+        raise HTTPException(status_code=404, detail={"type": "profile_not_found"})
 
 
 async def _publish_device_event(
@@ -268,7 +311,8 @@ async def bind_device(
        error never burns the code).
     3. In a SINGLE transaction: atomic UPDATE pairing_codes SET consumed_at=NOW()
        WHERE code=%s AND consumed_at IS NULL AND expires_at > NOW() RETURNING
-       fingerprint (→ 404 code_not_found if no row), then UPSERT the devices row.
+       fingerprint (→ 404 code_expired for an unconsumed expired row, otherwise
+       code_not_found), then UPSERT the devices row.
        Code consumption and the device upsert commit together — if the upsert
        fails, the consumed_at write rolls back and the code stays reusable (CR-02).
     4. Return 200 with device summary (NO fingerprint in response — T-03-08).
@@ -305,53 +349,57 @@ async def bind_device(
     #   4. Else INSERT a new row (first pair for this fingerprint).
     # fingerprint is only ever a query parameter — never returned (T-03-08).
     device_row: tuple[Any, ...] | None = None
-    try:
-        async with pool.connection() as conn, conn.cursor() as cur:
-            await cur.execute(_BIND_CODE, (body.code,))
-            row = await cur.fetchone()
-            if row is None:
-                await conn.rollback()
-                raise HTTPException(
-                    status_code=status.HTTP_404_NOT_FOUND,
-                    detail={"type": "code_not_found"},
-                )
-
-            fingerprint: str = row[0]
-            # fingerprint is NOT logged (Pitfall 7) and NOT returned to client.
-
+    async with _device_transaction(pool) as (conn, cur):
+        await _require_active_profile(cur, profile_id_str)
+        await cur.execute(_BIND_CODE, (body.code,))
+        row = await cur.fetchone()
+        if row is None:
+            # Authenticated pairing reports expiry only for an unconsumed row.
+            # Unknown and already-consumed codes retain code_not_found, including
+            # a code consumed by a concurrent first-wins binder.
             await cur.execute(
-                _UPDATE_DEVICE_BY_FINGERPRINT, (profile_id_str, display_name, fingerprint)
+                "SELECT 1 FROM gruvax.pairing_codes WHERE code = %s"
+                " AND consumed_at IS NULL AND expires_at <= NOW()",
+                (body.code,),
+            )
+            expired = await cur.fetchone() is not None
+            await conn.rollback()
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail={"type": "code_expired" if expired else "code_not_found"},
+            )
+
+        fingerprint: str = row[0]
+        # fingerprint is NOT logged (Pitfall 7) and NOT returned to client.
+
+        await cur.execute(
+            _UPDATE_DEVICE_BY_FINGERPRINT, (profile_id_str, display_name, fingerprint)
+        )
+        device_row = await cur.fetchone()
+
+        if device_row is None:
+            # gruvax-gqe: reactivate a revoked row for this exact fingerprint
+            # before ever considering an INSERT — prevents the duplicate-row bug.
+            await cur.execute(
+                _REACTIVATE_DEVICE_BY_FINGERPRINT,
+                (profile_id_str, display_name, fingerprint),
             )
             device_row = await cur.fetchone()
 
-            if device_row is None:
-                # gruvax-gqe: reactivate a revoked row for this exact fingerprint
-                # before ever considering an INSERT — prevents the duplicate-row bug.
-                await cur.execute(
-                    _REACTIVATE_DEVICE_BY_FINGERPRINT,
-                    (profile_id_str, display_name, fingerprint),
-                )
-                device_row = await cur.fetchone()
+        if device_row is None and profile_id_str:
+            await cur.execute(
+                _UPDATE_DEVICE_BY_PROFILE, (fingerprint, display_name, profile_id_str)
+            )
+            device_row = await cur.fetchone()
 
-            if device_row is None and profile_id_str:
-                await cur.execute(
-                    _UPDATE_DEVICE_BY_PROFILE, (fingerprint, display_name, profile_id_str)
-                )
-                device_row = await cur.fetchone()
+        if device_row is None:
+            await cur.execute(_INSERT_DEVICE, (fingerprint, profile_id_str, display_name))
+            device_row = await cur.fetchone()
 
-            if device_row is None:
-                await cur.execute(_INSERT_DEVICE, (fingerprint, profile_id_str, display_name))
-                device_row = await cur.fetchone()
-
-            await conn.commit()
-    except psycopg.errors.UniqueViolation:
-        # Partial-unique index collision (e.g. the profile already has a different
-        # active device). The transaction rolls back automatically, so the code is
-        # NOT consumed and the kiosk can retry. Report a clean 409 instead of a 500.
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"type": "profile_already_bound"},
-        ) from None
+        if device_row is not None:
+            await cur.execute(_SELECT_DEVICE_BY_ID, (str(device_row[0]),))
+            device_row = await cur.fetchone()
+        await conn.commit()
 
     if device_row is None:
         logger.error("bind_device: UPSERT returned no row (unexpected)")
@@ -439,7 +487,7 @@ async def patch_device(
     old_profile_id: str | None = None
     changed_profile = False
 
-    async with pool.connection() as conn, conn.cursor() as cur:
+    async with _device_transaction(pool) as (conn, cur):
         # Fetch current state to detect profile changes.
         await cur.execute(_SELECT_DEVICE_BY_ID, (str(uid),))
         current_row = await cur.fetchone()
@@ -472,6 +520,7 @@ async def patch_device(
                         status_code=status.HTTP_400_BAD_REQUEST,
                         detail={"type": "invalid_uuid", "message": "profile_id must be a UUID"},
                     ) from None
+                await _require_active_profile(cur, str(new_profile_uuid))
                 await cur.execute(_CHANGE_PROFILE, (str(new_profile_uuid), str(uid)))
 
         # Fetch updated row (no fingerprint — T-03-08).

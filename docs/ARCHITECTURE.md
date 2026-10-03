@@ -137,11 +137,22 @@ resolved cookie/device profile returns `403 profile_mismatch`.
 | `POST` | `/api/admin/profiles/{profile_id}/sync` | Trigger an async "Sync now" (202 Accepted) |
 | `POST` | `/api/admin/profiles/{profile_id}/invite` | Mint a single-use, 1-hour member self-connect invite link (v2.1) |
 | `POST` | `/api/admin/devices/bind` | Redeem a kiosk's 4-digit pairing code, bind it to a profile, assign a label |
-| `GET` | `/api/admin/devices` | List devices grouped by pending / paired / revoked |
+| `GET` | `/api/admin/devices` | List devices grouped by pending / paired / revoked, including the current active `profile_name` (null when unbound) |
 | `PATCH` | `/api/admin/devices/{device_id}` | Rename / reassign a device's profile |
 | `POST` | `/api/admin/devices/{device_id}/revoke` | Revoke a device (kiosk snaps back to the pairing screen live via SSE) |
 | `POST` | `/api/admin/devices/{device_id}/reinstate` | Un-revoke a device |
 | `DELETE` | `/api/admin/devices/{device_id}` | Delete a device row |
+
+Device assignment requires an active profile: unknown or soft-deleted profiles
+return 404 `profile_not_found`; an occupied active profile returns 409
+`profile_already_bound`. A failed assignment rolls back the entire request,
+including any rename or pairing-code consumption.
+
+Authenticated pairing-code redemption distinguishes an unconsumed expired code
+(404 `code_expired`) so the admin can ask the kiosk to generate a new code.
+Unknown and consumed codes return 404 `code_not_found`. This implements the
+pairing UI contract; invite redemption retains its separate uniform-404 policy.
+
 
 ---
 

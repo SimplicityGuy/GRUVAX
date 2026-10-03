@@ -476,3 +476,41 @@ describe('DeviceDrawer', () => {
     expect(keypadBtn1).not.toBeNull()
   })
 })
+
+it.each([
+  [
+    'profile_already_bound',
+    409,
+    'That profile already has an active device. Unbind or revoke it first.',
+  ],
+  ['code_expired', 404, 'That code has expired. Ask the kiosk to generate a new one.'],
+  ['code_not_found', 404, "That code wasn't found. Check the kiosk screen and try again."],
+])('shows actionable copy for %s', async (type, status, message) => {
+  vi.useRealTimers()
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url.includes('/api/admin/devices/bind')) {
+      return {
+        ok: false,
+        status,
+        json: async () => ({ detail: { type } }),
+      } as Response
+    }
+    return { ok: true, json: async () => PROFILES_RESPONSE } as Response
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(
+    <QueryClientProvider client={makeQueryClient()}>
+      <DeviceDrawer mode="bind" onClose={vi.fn()} />
+    </QueryClientProvider>,
+  )
+  for (const digit of ['1', '2', '3', '4']) {
+    await act(async () => {
+      screen.getByRole('button', { name: digit }).click()
+    })
+  }
+  expect(await screen.findByText(message)).toBeVisible()
+  expect(screen.queryByText('Something went wrong. Try again in a moment.')).not.toBeInTheDocument()
+  expect(
+    fetchMock.mock.calls.filter(([url]) => url.includes('/api/admin/devices/bind')),
+  ).toHaveLength(1)
+})

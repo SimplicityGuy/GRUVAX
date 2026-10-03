@@ -48,7 +48,7 @@ export interface BindDeviceRequest {
 
 export interface BindDeviceError {
   detail: {
-    type: 'code_not_found' | 'code_expired' | 'rate_limited'
+    type: 'code_not_found' | 'code_expired' | 'rate_limited' | 'profile_already_bound'
     message?: string
   }
 }

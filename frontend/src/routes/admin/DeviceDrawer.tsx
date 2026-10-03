@@ -72,6 +72,8 @@ function mapBindError(type: string | undefined): string {
       return "That code wasn't found. Check the kiosk screen and try again."
     case 'code_expired':
       return 'That code has expired. Ask the kiosk to generate a new one.'
+    case 'profile_already_bound':
+      return 'That profile already has an active device. Unbind or revoke it first.'
     case 'rate_limited':
       return 'Too many attempts. Wait a moment and try again.'
     default:
