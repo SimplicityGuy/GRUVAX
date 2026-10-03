@@ -189,6 +189,7 @@ built-in fake dataset, so **always set it explicitly in production**:
 | `GRUVAX_SECRET_KEY` | _(required, no default)_ | Fernet key for PAT-at-rest encryption — boot-fail-if-missing or malformed |
 | `GRUVAX_ADMIN_PIN` | _(required by the `init-sync` container, no default)_ | Piped into `gruvax-sync` on first boot; **not** in `.env.example` — add it yourself (e.g. `1234` for local dev) |
 | `DISCOGSOGRAPHY_BASE_URL` | `http://fake-discogsography:8004` | HTTP base URL of the discogsography API — compose defaults to the **fake** service when unset; set explicitly in production |
+| `MQTT_TOPIC_PREFIX` | `gruvax/v1/dev/leds` | Retained LED topic namespace; production operators must set a distinct prefix, e.g. `gruvax/v1/leds`, matching firmware. Compose preserves custom `.env` values; no automatic switch based on `GRUVAX_ENV` |
 | `GRUVAX_ENV` | unset → `production` (ships **commented out** in `.env.example`, gruvax-b51h) | `development` enables dev-only migration stubs + synthetic seeding — uncomment for local dev only; **never set on a production host** (permanently short-circuits the real Discogs sync, see `docs/runbook-fresh-host.md`) |
 
 If you'd rather override the pieces than the full connection string, leave `DATABASE_URL`

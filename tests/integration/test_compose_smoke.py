@@ -33,6 +33,7 @@ import os
 from pathlib import Path
 import shutil
 import subprocess
+import sys
 from typing import Any
 
 import pytest
@@ -291,7 +292,7 @@ def _resolve_compose_config(env_overrides: dict[str, str]) -> dict[str, Any]:
     # `docker compose config` fails before we even get to assert on our vars.
     base_required = {
         "SESSION_SECRET": "test-session-secret",
-        "GRUVAX_SECRET_KEY": "test-fernet-key",
+        "GRUVAX_SECRET_KEY": "AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA=",
         "GRUVAX_ADMIN_PIN": "1234",
     }
     env_file.write_text(
@@ -304,7 +305,9 @@ def _resolve_compose_config(env_overrides: dict[str, str]) -> dict[str, Any]:
     # exercised, matching what a real operator's shell (without those already
     # set) would produce.
     subprocess_env = {
-        k: v for k, v in os.environ.items() if k not in {"DATABASE_URL", "MQTT_HOST", "MQTT_PORT"}
+        k: v
+        for k, v in os.environ.items()
+        if k not in {"DATABASE_URL", "MQTT_HOST", "MQTT_PORT", "MQTT_TOPIC_PREFIX"}
     }
     try:
         result = subprocess.run(  # noqa: S603
@@ -348,6 +351,29 @@ def test_compose_config_honors_env_mqtt_host_and_port() -> None:
         f"api.environment.MQTT_PORT must honor a .env override; "
         f"got {api_env['MQTT_PORT']!r} (gruvax-95qp regression)"
     )
+
+
+@pytest.mark.parametrize("prefix", [None, "gruvax/v1/leds", "gruvax/v1/custom/leds"])
+def test_compose_mqtt_prefix_reaches_runtime_settings(prefix: str | None) -> None:
+    """Scratch .env overrides and the default reach the actual application settings."""
+    config = _resolve_compose_config({} if prefix is None else {"MQTT_TOPIC_PREFIX": prefix})
+    api_env = config["services"]["api"]["environment"]
+    expected = prefix or "gruvax/v1/dev/leds"
+    assert api_env["MQTT_TOPIC_PREFIX"] == expected
+    result = subprocess.run(
+        [
+            sys.executable,
+            "-c",
+            "from gruvax.settings import Settings; print(Settings(_env_file=None).MQTT_TOPIC_PREFIX)",
+        ],
+        cwd=REPO_ROOT,
+        env={key: str(value) for key, value in api_env.items()},
+        capture_output=True,
+        text=True,
+        timeout=30,
+    )
+    assert result.returncode == 0, result.stderr
+    assert result.stdout.strip() == expected
 
 
 def test_compose_config_falls_back_when_env_unset() -> None:
