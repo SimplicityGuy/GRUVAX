@@ -144,10 +144,10 @@ async def did_you_mean_query(
     q: str,
     profile_id: str,
 ) -> str | None:
-    """Return the top trigram-similarity match for *q* over label/artist terms.
+    """Return the top trigram-similarity match for *q* over label/artist/title terms.
 
     Runs only when FTS returned no results (D-11 — conservative).  Queries
-    DISTINCT label and artist values from ``gruvax.profile_collection`` for the
+    DISTINCT label, artist and title values from ``gruvax.profile_collection`` for the
     given profile via ``pg_trgm similarity()``.
 
     Graceful degradation (Pitfall E): if ``similarity()`` is undefined (pg_trgm
@@ -175,6 +175,10 @@ FROM (
     SELECT DISTINCT artist AS term
     FROM gruvax.profile_collection
     WHERE profile_id = %s::uuid AND artist IS NOT NULL
+    UNION
+    SELECT DISTINCT title AS term
+    FROM gruvax.profile_collection
+    WHERE profile_id = %s::uuid AND title IS NOT NULL
 ) AS terms
 WHERE similarity(term, %s) > %s
   AND lower(term) <> lower(%s)
@@ -183,7 +187,9 @@ LIMIT 1
 """
     try:
         async with pool.connection() as conn, conn.cursor() as cur:
-            await cur.execute(sql, (q, profile_id, profile_id, q, DID_YOU_MEAN_THRESHOLD, q))
+            await cur.execute(
+                sql, (q, profile_id, profile_id, profile_id, q, DID_YOU_MEAN_THRESHOLD, q)
+            )
             row = await cur.fetchone()
         if row is None:
             return None
