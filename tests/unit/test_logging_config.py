@@ -224,3 +224,36 @@ def test_configure_logging_no_duplicate_ring_handlers() -> None:
         f"Expected exactly 1 ring entry for 'dedup-marker', got {len(dedup_entries)}.  "
         f"Duplicate LogRingHandler entries indicate WR-02 regression."
     )
+
+
+@pytest.mark.parametrize(
+    ("message", "args"),
+    [
+        ("Authorization: Bearer %s", ("dscg_synthetic_ring_probe",)),
+        ("Upstream failed: %s", (RuntimeError("token=dscg_synthetic_ring_probe"),)),
+        ({"event": "Using dscg_synthetic_ring_probe", "extra": {"keep": "original"}}, ()),
+    ],
+)
+def test_ring_redacts_final_message_without_mutating_record(
+    message: Any, args: tuple[Any, ...]
+) -> None:
+    """The diagnostics channel must redact interpolated text independently of stdout."""
+    from copy import deepcopy
+
+    from gruvax.logging_config import LogRingHandler
+
+    ring: deque[dict[str, Any]] = deque()
+    record = logging.LogRecord(
+        "gruvax.privacy_probe", logging.WARNING, __file__, 1, message, args, None
+    )
+    original = record.__dict__.copy()
+    original_message = deepcopy(message)
+    LogRingHandler(ring).handle(record)
+
+    assert len(ring) == 1
+    assert "dscg_synthetic_ring_probe" not in ring[0]["msg"]
+    assert "[REDACTED]" in ring[0]["msg"]
+    assert set(ring[0]) == {"ts", "level", "logger", "msg"}
+    assert record.__dict__ == original
+    assert record.msg == original_message
+    assert record.args is args

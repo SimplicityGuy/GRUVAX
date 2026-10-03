@@ -67,6 +67,7 @@ class LogRingHandler(logging.Handler):
     For stdlib foreign records (psycopg, uvicorn, etc.) ``record.msg`` is the format
     string and ``record.getMessage()`` returns the fully interpolated text, same as before.
 
+    The final message is redacted independently with the shared PAT processor.
     NEVER modify the record in this handler — ProcessorFormatter needs it intact for
     its own stdout rendering pass (anti-pattern documented in RESEARCH.md Pitfall 1).
 
@@ -91,6 +92,9 @@ class LogRingHandler(logging.Handler):
                 msg: str = record.msg.get("event", "")
             else:
                 msg = record.getMessage()
+            # Formatters run per handler; stdout redaction does not protect this ring.
+            # Redact a fresh mapping so the shared LogRecord stays intact.
+            msg = redact_dscg_tokens(None, record.levelname.lower(), {"msg": msg})["msg"]
             self._ring.append(
                 {
                     "ts": record.created,  # float — unchanged from pre-migration shape
