@@ -68,7 +68,7 @@ export function Cube({
 
   return (
     <div
-      className="cube"
+      className={`cube${fillLevel != null && fillLevel > 1 ? ' is-overstuffed' : ''}`}
       data-state={state}
       data-unit-id={unitId}
       data-row={row}
