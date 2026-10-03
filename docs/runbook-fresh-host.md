@@ -77,17 +77,15 @@ grep -E '^\s*GRUVAX_ENV\s*=' .env && echo "REFUSE TO DEPLOY: unset GRUVAX_ENV in
 docker compose config | grep -q 'GRUVAX_ENV: development' && echo "REFUSE TO DEPLOY: GRUVAX_ENV=development is active in the resolved config" && exit 1
 echo "GRUVAX_ENV pre-flight check passed (unset -> production default)"
 
-# 3a. Production host (pull-based deploy — do NOT have compose.override.yaml present):
+# 3a. Production host (pull the published image):
 docker compose pull
 docker compose up -d
 # Note: the prod host pulls the published GHCR image (ghcr.io/simplicityguy/gruvax:latest).
-# Never copy compose.override.yaml to the prod host — if present, docker compose up
-# will auto-load it and try to build from source instead of pulling (Pitfall 3).
+# Keep operator overrides absent when following this stock deployment recipe.
 
-# 3b. Local dev (build from source via the override):
-#   cp compose.override.yaml.example compose.override.yaml
+# 3b. Local dev (build directly from source; no override file needed):
 just up-d
-# Equivalent to: docker compose up --build -d  (override auto-merges, builds locally)
+# Builds the api image and reuses that exact image for init-sync.
 
 # 4. Verify all services are healthy (may take 30–60 s on first boot)
 #    -a is required: plain `docker compose ps` hides exited containers, and the
