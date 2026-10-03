@@ -34,6 +34,7 @@ from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from gruvax.api.admin.limiter import _LOGIN_RATE, _rate_limiter
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.auth.pin import verify_pin
+from gruvax.auth.session_policy import admin_session_policy
 from gruvax.auth.sessions import (
     clear_session_cookies,
     create_session,
@@ -143,13 +144,18 @@ async def login(
             detail={"type": "invalid_pin"},
         )
 
+    # Admin/PIN policy is global under the default profile, independent of browse binding.
+    idle_ttl, hard_cap = admin_session_policy(
+        getattr(request.app.state, "settings_cache", {}), settings.SESSION_TTL_SECONDS
+    )
     # Correct PIN — create server-side session row + set cookies
     async with pool.connection() as conn:
         csrf_token = await create_session(
             conn,
             response,
             settings.SESSION_SECRET,
-            settings.SESSION_TTL_SECONDS,
+            idle_ttl,
+            hard_cap,
         )
 
     # Return the CSRF token; let the client poll /session for expiry times.

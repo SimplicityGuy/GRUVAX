@@ -137,6 +137,7 @@ export interface AdminSession {
 export interface AdminSettings {
   cube_nominal_capacity: number
   session_idle_ttl_seconds: number
+  session_hard_cap_seconds?: number
   // Phase 6 — LED colors (one per system state, LED-05)
   led_color_position?: string // default "#FFD700" (gold)
   led_color_label_span?: string // default "#7C3AED" (purple)
@@ -166,6 +167,7 @@ export interface AdminSettings {
 export interface AdminSettingsPut {
   cube_nominal_capacity?: number
   session_idle_ttl_seconds?: number
+  session_hard_cap_seconds?: number
   // Phase 6 — LED colors
   led_color_position?: string
   led_color_label_span?: string

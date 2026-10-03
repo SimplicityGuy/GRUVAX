@@ -114,8 +114,8 @@ async def create_session(
     """
     session_id = str(uuid.uuid4())
     now = datetime.now(UTC)
-    expires_at = now + timedelta(seconds=idle_ttl_seconds)
     hard_expires_at = now + timedelta(seconds=hard_cap_seconds)
+    expires_at = min(now + timedelta(seconds=idle_ttl_seconds), hard_expires_at)
 
     await conn.execute(
         "INSERT INTO gruvax.admin_sessions"

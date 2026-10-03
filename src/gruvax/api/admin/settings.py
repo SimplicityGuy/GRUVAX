@@ -28,8 +28,10 @@ from fastapi import APIRouter, Depends, HTTPException, Request, status
 
 from gruvax.api.deps import get_pool, require_admin
 from gruvax.auth.pin import hash_pin, verify_pin
+from gruvax.auth.session_policy import admin_session_policy
 from gruvax.auth.sessions import revoke_all_sessions_except
 from gruvax.db.queries import load_settings_cache
+from gruvax.settings import settings as app_settings
 
 
 logger = logging.getLogger(__name__)
@@ -45,6 +47,7 @@ _ALLOWED_SETTINGS_KEYS = frozenset(
         # Phase 3 — capacity + session
         "cube.nominal_capacity",
         "session.idle_ttl_seconds",
+        "session.hard_cap_seconds",
         # Phase 4 — nightly sync cadence (SYN-01 / D4-06)
         "sync.cadence",
         # Phase 6 — LED colors (all six states)
@@ -86,6 +89,7 @@ _INT_KEYS = frozenset(
     {
         "cube.nominal_capacity",
         "session.idle_ttl_seconds",
+        "session.hard_cap_seconds",
         "led_brightness.span",
         "led_brightness.active",
         "led_brightness.ambient",
@@ -119,6 +123,18 @@ _BRIGHTNESS_KEYS = frozenset(
 )
 
 
+def _validate_session_duration(field: str, value: Any) -> None:
+    if not isinstance(value, int) or isinstance(value, bool) or value <= 0:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "invalid_session_duration",
+                "field": field,
+                "message": "Session duration must be a positive integer number of seconds.",
+            },
+        )
+
+
 @router.get("/settings")
 async def get_settings(
     request: Request,
@@ -143,6 +159,7 @@ async def get_settings(
         rows = await cur.fetchall()
 
     settings_map: dict[str, Any] = {str(row[0]): row[1] for row in rows}
+    idle_ttl, hard_cap = admin_session_policy(settings_map, app_settings.SESSION_TTL_SECONDS)
 
     def _get_color(key: str, default: str) -> str:
         """Get a color value, stripping JSON string quotes if present."""
@@ -171,7 +188,8 @@ async def get_settings(
     return {
         # Phase 3 keys
         "cube_nominal_capacity": _get_int("cube.nominal_capacity", 95),
-        "session_idle_ttl_seconds": _get_int("session.idle_ttl_seconds", 600),
+        "session_idle_ttl_seconds": idle_ttl,
+        "session_hard_cap_seconds": hard_cap,
         # Phase 4 — nightly sync cadence (SYN-01 / D4-06)
         "sync_cadence": _get_color("sync.cadence", "24h"),
         # Phase 6 — LED colors (LED-05)
@@ -216,6 +234,7 @@ async def update_settings(
         # Phase 3
         "cube_nominal_capacity": "cube.nominal_capacity",
         "session_idle_ttl_seconds": "session.idle_ttl_seconds",
+        "session_hard_cap_seconds": "session.hard_cap_seconds",
         # Phase 4 — nightly sync cadence (SYN-01 / D4-06)
         "sync_cadence": "sync.cadence",
         # Phase 6 — LED colors (LED-05)
@@ -239,7 +258,9 @@ async def update_settings(
     for body_key, db_key in key_map.items():
         if body_key not in body:
             continue
-        if db_key in _COLOR_KEYS:
+        if db_key.startswith("session."):
+            _validate_session_duration(body_key, body[body_key])
+        elif db_key in _COLOR_KEYS:
             value = body[body_key]
             if not isinstance(value, str) or not _HEX_COLOR_RE.match(value):
                 raise HTTPException(
