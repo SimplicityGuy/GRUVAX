@@ -66,7 +66,7 @@ WHERE table_schema = 'gruvax'
 async def _truncate_stats(db_pool) -> None:  # type: ignore[no-untyped-def]
     """Truncate gruvax.record_stats between tests for isolation."""
     async with db_pool.connection() as conn:
-        await conn.execute("TRUNCATE gruvax.record_stats")
+        await conn.execute("TRUNCATE gruvax.record_stats, gruvax.record_activity")
 
 
 # ── increment_search_count ─────────────────────────────────────────────────────
@@ -124,11 +124,15 @@ async def test_search_count_7d_resets_after_8_days(db_pool) -> None:  # type: ig
     # First call → search_count=1, search_count_7d=1
     await increment_search_count(db_pool, release_id)
 
-    # Simulate 8-day-old event by directly updating last_searched_at
+    # Age the actual event history as well as the last-event summary.
     async with db_pool.connection() as conn:
         await conn.execute(
             "UPDATE gruvax.record_stats SET last_searched_at = now() - INTERVAL '8 days' "
             "WHERE release_id = %s",
+            (release_id,),
+        )
+        await conn.execute(
+            "UPDATE gruvax.record_activity SET occurred_at = now() - INTERVAL '8 days' WHERE release_id = %s",
             (release_id,),
         )
 
@@ -184,6 +188,10 @@ async def test_selection_count_7d_resets_after_8_days(db_pool) -> None:  # type:
         await conn.execute(
             "UPDATE gruvax.record_stats SET last_selected_at = now() - INTERVAL '8 days' "
             "WHERE release_id = %s",
+            (release_id,),
+        )
+        await conn.execute(
+            "UPDATE gruvax.record_activity SET occurred_at = now() - INTERVAL '8 days' WHERE release_id = %s",
             (release_id,),
         )
 

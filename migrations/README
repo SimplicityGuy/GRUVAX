@@ -13,3 +13,23 @@ Back up/export non-default profiles before planning a destructive rollback; the
 migration never removes them automatically. Default-only upgrade/downgrade
 round-trips remain supported. A refusal or later failure leaves the entire
 requested chain's revision, schema, constraints and data unchanged.
+Revision 0018 adds profile-scoped, timestamped search/selection activity. Lifetime
+counts and current default/global callers are preserved; no historical events
+are fabricated from old aggregates. Exact seven-day tracking starts when 0018
+is installed. Until seven days have elapsed, the window contains only activity
+observed since that upgrade. The window is 168 elapsed hours and is recalculated
+on reads, so dormant records decay without another write. Event history stores
+only profile UUID, release ID, fixed event kind and time, never query text.
+
+Lifetime increments and event insertion share one transaction. Expired derived
+history is pruned on activity in that profile; active history and other profiles
+are preserved. The existing global Reset stats action clears both history and
+lifetime aggregates atomically. Compatibility _7d columns are refreshed on writes,
+but diagnostic window counts come from actual timestamps rather than those caches.
+
+A downgrade crossing 0018 refuses before any revision DDL if ANY event is still
+inside its active window, including the default profile. Its direct/emitted SQL
+also starts with that guard. Locks follow writer order (record_stats, then event
+history) and remain held through the entire transaction. Expired-only history can
+be discarded; 0018 -> 0017 -> head preserves lifetime totals and last-event times.
+An active-history refusal or later-chain failure keeps revision/schema/data intact.

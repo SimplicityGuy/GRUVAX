@@ -16,31 +16,52 @@ Tests:
     lower(label) after the migration.
   - test_0015_round_trip_down_up: downgrade to 0014 then upgrade to head (schema intact).
 
-All tests require a live DB at DATABASE_URL and run with @pytest.mark.asyncio(loop_scope="module").
+All tests require a live DB at DATABASE_URL and run with @pytest.mark.asyncio(loop_scope="session").
 """
 
 from __future__ import annotations
 
 from datetime import UTC, datetime, timedelta
 
+import psycopg
 import pytest
 import pytest_asyncio
 
-from gruvax.db.pool import create_pool
+from tests.fixtures.migration_databases import (
+    migrate,
+    migration_db as migration_db,
+    migration_pool as migration_pool,
+)
 
 
 _DEFAULT_PID = "00000000-0000-0000-0000-000000000001"
 
-# ── Session-scoped DB pool (mirrors pattern from test_migrate_0005.py) ───────
+# ── Function-owned migration pool ─────────────────────────────────────────
 
 
-@pytest_asyncio.fixture(scope="module")
-async def migrate_pool():  # type: ignore[no-untyped-def]
-    """Module-scoped async psycopg pool for migration tests."""
-    pool = create_pool(min_size=1, max_size=2, open=False)
-    await pool.open()
-    yield pool
-    await pool.close()
+@pytest.fixture(autouse=True)
+def _seeded_profile_collection(migration_db):  # type: ignore[no-untyped-def]
+    """Replace ambient module seeding with the already-provisioned owned child."""
+    expected = psycopg.conninfo.conninfo_to_dict(migration_db[0])["dbname"]
+    with psycopg.connect(migration_db[0]) as conn:
+        assert conn.execute("SELECT current_database()").fetchone() == (expected,)
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def migrate_pool(migration_pool, migration_db):  # type: ignore[no-untyped-def]
+    """Route this test to its own fresh database and verify actual ownership."""
+    expected = psycopg.conninfo.conninfo_to_dict(migration_db[0])["dbname"]
+    async with migration_pool.connection() as conn:
+        assert await (await conn.execute("SELECT current_database()")).fetchone() == (expected,)
+        await conn.execute(
+            "INSERT INTO gruvax.units(id,display_name,rows,cols,ordering) VALUES (9915,'Owned migration bins',1,2,9915)"
+        )
+        await conn.execute(
+            "INSERT INTO gruvax.cube_boundaries(profile_id,unit_id,row,col,is_empty,first_label,first_catalog) VALUES (%s,9915,0,0,FALSE,'Owned label','A'),(%s,9915,0,1,FALSE,'Owned label','B')",
+            (_DEFAULT_PID, _DEFAULT_PID),
+        )
+        await conn.commit()
+    yield migration_pool
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
@@ -59,7 +80,7 @@ async def _column_exists(pool, table_name: str, column_name: str) -> bool:  # ty
 
 
 async def _get_two_cubes(pool) -> tuple[tuple[int, int, int], tuple[int, int, int]]:  # type: ignore[no-untyped-def]
-    """Return two distinct (unit_id, row, col) non-empty cube coordinates, or skip."""
+    """Return two distinct (unit_id, row, col) non-empty cube coordinates from this fixture."""
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
             "SELECT unit_id, row, col FROM gruvax.cube_boundaries"
@@ -68,22 +89,14 @@ async def _get_two_cubes(pool) -> tuple[tuple[int, int, int], tuple[int, int, in
             (_DEFAULT_PID,),
         )
         rows = await cur.fetchall()
-    if len(rows) < 2:
-        pytest.skip("Fewer than 2 non-empty cubes in cube_boundaries — integration DB not seeded")
+    assert len(rows) == 2, "The owned migration fixture must seed two non-empty cubes"
     a, b = rows[0], rows[1]
     return (int(a[0]), int(a[1]), int(a[2])), (int(b[0]), int(b[1]), int(b[2]))
 
 
-def _run_alembic(action: str, target: str) -> None:
-    """Run ``python -m alembic <action> <target>`` as a subprocess (mirrors 0005/0009)."""
-    import subprocess
-    import sys
-
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, "-m", "alembic", action, target],
-        capture_output=True,
-        text=True,
-    )
+def _run_alembic(action: str, target: str, database_url: str) -> None:
+    """Run the validated migration command against this test's owned database."""
+    result = migrate(database_url, action, target)
     assert result.returncode == 0, (
         f"alembic {action} {target} failed:\n{result.stdout}\n{result.stderr}"
     )
@@ -92,8 +105,8 @@ def _run_alembic(action: str, target: str) -> None:
 # ── Schema presence test ──────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
-async def test_label_display_column_exists(migrate_pool) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.asyncio(loop_scope="session")
+async def test_label_display_column_exists(migrate_pool, migration_db) -> None:  # type: ignore[no-untyped-def]
     """Migration 0015 adds gruvax.segment_overrides.label_display."""
     exists = await _column_exists(migrate_pool, "segment_overrides", "label_display")
     assert exists, "segment_overrides.label_display should exist after migration 0015"
@@ -102,9 +115,10 @@ async def test_label_display_column_exists(migrate_pool) -> None:  # type: ignor
 # ── Dedupe determinism (order-independence) ───────────────────────────────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
+@pytest.mark.asyncio(loop_scope="session")
 async def test_dedupe_and_casefold_deterministic_across_insertion_order(
     migrate_pool,  # type: ignore[no-untyped-def]
+    migration_db,  # type: ignore[no-untyped-def]
 ) -> None:
     """0015's dedupe picks the most-recently-updated row, NEVER by insertion/heap order.
 
@@ -132,7 +146,7 @@ async def test_dedupe_and_casefold_deterministic_across_insertion_order(
 
     # Downgrade to 0014 so raw duplicate case-variant rows can be seeded exactly
     # as they could have existed pre-fix (label was case-sensitive, no dedupe).
-    _run_alembic("downgrade", "0014")
+    _run_alembic("downgrade", "0014", migration_db[1])
 
     async with migrate_pool.connection() as conn:
         # Clean slate for both test coordinates (idempotent re-run safety).
@@ -178,7 +192,7 @@ async def test_dedupe_and_casefold_deterministic_across_insertion_order(
         await conn.commit()
 
     # Upgrade back to head — runs migration 0015's dedupe + casefold.
-    _run_alembic("upgrade", "head")
+    _run_alembic("upgrade", "head", migration_db[1])
 
     async with migrate_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
@@ -235,15 +249,25 @@ async def test_dedupe_and_casefold_deterministic_across_insertion_order(
 # ── Casefold-key invariant ─────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
-async def test_label_key_is_casefolded_for_all_rows(migrate_pool) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.asyncio(loop_scope="session")
+async def test_label_key_is_casefolded_for_all_rows(migrate_pool, migration_db) -> None:  # type: ignore[no-untyped-def]
     """After migration 0015, every segment_overrides.label equals lower(label).
 
     This is a coarse sanity check that the one-shot casefold in upgrade() left
     no case-variant PK values behind for any profile/bin — not just the rows
     this test file seeded.
     """
+    _run_alembic("downgrade", "0014", migration_db[1])
+    async with migrate_pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.segment_overrides(profile_id,unit_id,row,col,label,fraction) VALUES (%s,9915,0,0,'MiXeD Case Label',0.5)",
+            (_DEFAULT_PID,),
+        )
+        await conn.commit()
+    _run_alembic("upgrade", "head", migration_db[1])
     async with migrate_pool.connection() as conn, conn.cursor() as cur:
+        await cur.execute("SELECT label FROM gruvax.segment_overrides")
+        assert await cur.fetchall() == [("mixed case label",)]
         await cur.execute("SELECT label FROM gruvax.segment_overrides WHERE label <> lower(label)")
         offenders = await cur.fetchall()
     assert offenders == [], (
@@ -254,21 +278,21 @@ async def test_label_key_is_casefolded_for_all_rows(migrate_pool) -> None:  # ty
 # ── Round-trip test: downgrade to 0014 → upgrade head ─────────────────────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
-async def test_0015_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.asyncio(loop_scope="session")
+async def test_0015_round_trip_down_up(migrate_pool, migration_db) -> None:  # type: ignore[no-untyped-def]
     """Migration 0015 round-trips clean: downgrade to 0014 then upgrade to head.
 
     Mirrors test_migrate_0005.py::test_0005_round_trip_down_up. Targets the
     absolute revision 0014 (not a relative ``-1``) so the test stays correct
     when later migrations land on top of 0015.
     """
-    _run_alembic("downgrade", "0014")
+    _run_alembic("downgrade", "0014", migration_db[1])
     exists_after_down = await _column_exists(migrate_pool, "segment_overrides", "label_display")
     assert not exists_after_down, (
         "segment_overrides.label_display should NOT exist after downgrading from 0015 to 0014"
     )
 
-    _run_alembic("upgrade", "head")
+    _run_alembic("upgrade", "head", migration_db[1])
     exists_after_up = await _column_exists(migrate_pool, "segment_overrides", "label_display")
     assert exists_after_up, (
         "segment_overrides.label_display should exist after re-upgrading to head"

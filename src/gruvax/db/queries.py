@@ -1358,76 +1358,84 @@ WHERE profile_id = %s::uuid
     return float(row[0])
 
 
+_UPSERT_RECORD_LIFETIME = """
+INSERT INTO gruvax.record_stats
+    (profile_id, release_id, search_count, selection_count, last_searched_at, last_selected_at)
+VALUES (%(profile_id)s::uuid, %(release_id)s,
+    (%(kind)s = 'search')::int, (%(kind)s = 'selection')::int,
+    CASE WHEN %(kind)s = 'search' THEN now() END,
+    CASE WHEN %(kind)s = 'selection' THEN now() END)
+ON CONFLICT (profile_id, release_id) DO UPDATE SET
+    search_count = gruvax.record_stats.search_count + (%(kind)s = 'search')::int,
+    selection_count = gruvax.record_stats.selection_count + (%(kind)s = 'selection')::int,
+    last_searched_at = CASE WHEN %(kind)s = 'search' THEN now() ELSE gruvax.record_stats.last_searched_at END,
+    last_selected_at = CASE WHEN %(kind)s = 'selection' THEN now() ELSE gruvax.record_stats.last_selected_at END,
+    updated_at = now()
+"""
+
+_REFRESH_RECORD_WINDOW_CACHE = """
+UPDATE gruvax.record_stats SET
+    search_count_7d = (SELECT count(*) FROM gruvax.record_activity WHERE profile_id = %(profile_id)s::uuid AND release_id = %(release_id)s AND event_kind = 'search' AND occurred_at > now() - INTERVAL '168 hours'),
+    selection_count_7d = (SELECT count(*) FROM gruvax.record_activity WHERE profile_id = %(profile_id)s::uuid AND release_id = %(release_id)s AND event_kind = 'selection' AND occurred_at > now() - INTERVAL '168 hours')
+WHERE profile_id = %(profile_id)s::uuid AND release_id = %(release_id)s
+"""
+
+
+async def _increment_record_activity(
+    pool: AsyncConnectionPool,
+    release_id: int,
+    event_kind: str,
+    profile_id: str,
+) -> None:
+    """Keep lifetime increments and actual event history in one transaction."""
+    parameters = {"profile_id": profile_id, "release_id": release_id, "kind": event_kind}
+    async with pool.connection() as conn, conn.transaction():
+        await conn.execute(
+            _UPSERT_RECORD_LIFETIME,
+            parameters,
+        )
+        # Opportunistic retention on profile activity only removes expired derived
+        # events; dormant records still decay at read time without any new writes.
+        await conn.execute(
+            "DELETE FROM gruvax.record_activity WHERE profile_id = %s::uuid AND occurred_at <= now() - INTERVAL '168 hours'",
+            (profile_id,),
+        )
+        await conn.execute(
+            "INSERT INTO gruvax.record_activity (profile_id, release_id, event_kind) VALUES (%(profile_id)s::uuid, %(release_id)s, %(kind)s)",
+            parameters,
+        )
+        await conn.execute(
+            _REFRESH_RECORD_WINDOW_CACHE,
+            parameters,
+        )
+
+
 async def increment_search_count(
     pool: AsyncConnectionPool,
     release_id: int,
+    *,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> None:
-    """Upsert search counters for the given release_id (D-04, D-05, D-06).
+    """Increment lifetime searches and append a timestamp atomically (OBS-07).
 
-    Counters are release_id-keyed aggregates; no query text is ever stored (OBS-07, T-08-05).
-    Rolling 7-day bucket: search_count_7d resets to 1 when last_searched_at is older
-    than 7 days; otherwise it increments (D-05).
-
-    All SQL uses %s placeholders — never f-string interpolation (T-08-06).
-
-    Args:
-        pool:       Open psycopg ``AsyncConnectionPool``.
-        release_id: Discogs release ID (integer, server-side — no user text stored).
+    No query text is stored. Default profile preserves existing global callers.
+    Exact seven-day history starts at migration 0018; old totals stay lifetime-only.
     """
-    # record_stats PK is (profile_id, release_id) after migration 0010.
-    # Counters are tracked under the default profile (global stats for v1).
-    sql = """
-INSERT INTO gruvax.record_stats
-    (profile_id, release_id, search_count, search_count_7d, last_searched_at, updated_at)
-VALUES ('00000000-0000-0000-0000-000000000001'::uuid, %s, 1, 1, now(), now())
-ON CONFLICT (profile_id, release_id) DO UPDATE SET
-    search_count     = gruvax.record_stats.search_count + 1,
-    search_count_7d  = CASE
-        WHEN gruvax.record_stats.last_searched_at > now() - INTERVAL '7 days'
-        THEN gruvax.record_stats.search_count_7d + 1
-        ELSE 1
-    END,
-    last_searched_at = now(),
-    updated_at       = now()
-"""
-    async with pool.connection() as conn:
-        await conn.execute(sql, (release_id,))
+    await _increment_record_activity(pool, release_id, "search", profile_id)
 
 
 async def increment_selection_count(
     pool: AsyncConnectionPool,
     release_id: int,
+    *,
+    profile_id: str = DEFAULT_PROFILE_UUID,
 ) -> None:
-    """Upsert selection counters for the given release_id (D-04, D-05, D-06).
+    """Increment lifetime selections and append a timestamp atomically (OBS-07).
 
-    Counters are release_id-keyed aggregates; no query text is ever stored (OBS-07, T-08-05).
-    Rolling 7-day bucket: selection_count_7d resets to 1 when last_selected_at is older
-    than 7 days; otherwise it increments (D-05).
-
-    All SQL uses %s placeholders — never f-string interpolation (T-08-06).
-
-    Args:
-        pool:       Open psycopg ``AsyncConnectionPool``.
-        release_id: Discogs release ID (integer, server-side — no user text stored).
+    No query text is stored. Default profile preserves existing global callers.
+    Expired events are pruned on profile activity, and windows decay on every read.
     """
-    # record_stats PK is (profile_id, release_id) after migration 0010.
-    # Counters are tracked under the default profile (global stats for v1).
-    sql = """
-INSERT INTO gruvax.record_stats
-    (profile_id, release_id, selection_count, selection_count_7d, last_selected_at, updated_at)
-VALUES ('00000000-0000-0000-0000-000000000001'::uuid, %s, 1, 1, now(), now())
-ON CONFLICT (profile_id, release_id) DO UPDATE SET
-    selection_count     = gruvax.record_stats.selection_count + 1,
-    selection_count_7d  = CASE
-        WHEN gruvax.record_stats.last_selected_at > now() - INTERVAL '7 days'
-        THEN gruvax.record_stats.selection_count_7d + 1
-        ELSE 1
-    END,
-    last_selected_at = now(),
-    updated_at       = now()
-"""
-    async with pool.connection() as conn:
-        await conn.execute(sql, (release_id,))
+    await _increment_record_activity(pool, release_id, "selection", profile_id)
 
 
 async def get_top_searched(
@@ -1437,10 +1445,13 @@ async def get_top_searched(
 ) -> list[dict[str, Any]]:
     """Return top-N records by all-time search count, joined to profile_collection.
 
-    Reads record_stats and gruvax.profile_collection exclusively — no direct
+    Reads record_stats, record_activity and profile_collection — no direct
     discogsography table access (Pitfall 5).  Plan 01-06: rewired from
     v_collection.  The dict key ``primary_artist`` is preserved (alias over the
     new ``artist`` column) so frontend / contract tests are unchanged.
+
+    Seven-day counts are read from actual timestamps, including dormant expiry.
+    Tracking starts at migration 0018; historical lifetime counts are preserved.
 
     DISTINCT ON (rs.release_id) ensures the JOIN to profile_collection (which
     can return multiple rows per release_id when the same release lives in
@@ -1466,12 +1477,20 @@ SELECT DISTINCT ON (rs.release_id)
     v.title,
     v.artist AS primary_artist,
     rs.search_count,
-    rs.search_count_7d,
+    activity.search_count_7d,
     rs.selection_count,
-    rs.selection_count_7d
+    activity.selection_count_7d
 FROM gruvax.record_stats rs
 JOIN gruvax.profile_collection v
-  ON v.release_id = rs.release_id AND v.profile_id = %s::uuid
+  ON v.release_id = rs.release_id AND v.profile_id = rs.profile_id
+JOIN LATERAL (
+    SELECT count(*) FILTER (WHERE event_kind = 'search') AS search_count_7d,
+           count(*) FILTER (WHERE event_kind = 'selection') AS selection_count_7d
+    FROM gruvax.record_activity
+    WHERE profile_id = rs.profile_id AND release_id = rs.release_id
+      AND occurred_at > now() - INTERVAL '168 hours'
+) activity ON TRUE
+WHERE rs.profile_id = %s::uuid
 ORDER BY rs.release_id, rs.search_count DESC
 LIMIT %s
 """
@@ -1536,9 +1555,9 @@ WHERE profile_id = %s::uuid AND is_empty = FALSE
 async def reset_record_stats(
     pool: AsyncConnectionPool,
 ) -> None:
-    """TRUNCATE gruvax.record_stats — backs the PIN-gated Reset stats admin action (D-06).
+    """Clear lifetime counters and event history together (PIN-gated Reset stats, D-06).
 
-    Clears all rows from the stats table. The caller (admin reset endpoint, Plan 04)
+    Clears all profiles under the existing global reset contract. The caller (admin reset endpoint, Plan 04)
     is responsible for PIN/session gate enforcement before calling this function.
 
     All SQL uses %s placeholders (T-08-06); no parameters needed for TRUNCATE.
@@ -1547,4 +1566,4 @@ async def reset_record_stats(
         pool: Open psycopg ``AsyncConnectionPool``.
     """
     async with pool.connection() as conn:
-        await conn.execute("TRUNCATE gruvax.record_stats")
+        await conn.execute("TRUNCATE gruvax.record_stats, gruvax.record_activity")
