@@ -15,6 +15,7 @@
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter } from 'react-router'
 
 vi.mock('../../api/adminClient', async (importOriginal) => {
@@ -27,6 +28,14 @@ vi.mock('../../api/adminClient', async (importOriginal) => {
 
 import { uploadImportBoundaries, BulkSaveError } from '../../api/adminClient'
 import Import from './Import'
+
+function makeQueryClient() {
+  const query = new QueryClient({ defaultOptions: { queries: { retry: false } } })
+  query.setQueryData(['units'], {
+    units: [1, 2].map((id) => ({ id, display_name: '', rows: 4, cols: 4, ordering: id })),
+  })
+  return query
+}
 
 function makeFile(name: string): File {
   return new File(['irrelevant'], name, { type: 'text/plain' })
@@ -51,9 +60,11 @@ describe('Import — ErrorCard renders the backend fix string for non-phantom er
     )
 
     render(
-      <MemoryRouter>
-        <Import />
-      </MemoryRouter>,
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter>
+          <Import />
+        </MemoryRouter>
+      </QueryClientProvider>,
     )
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -77,9 +88,11 @@ describe('Import — ErrorCard renders the backend fix string for non-phantom er
     )
 
     render(
-      <MemoryRouter>
-        <Import />
-      </MemoryRouter>,
+      <QueryClientProvider client={makeQueryClient()}>
+        <MemoryRouter>
+          <Import />
+        </MemoryRouter>
+      </QueryClientProvider>,
     )
 
     const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
@@ -121,9 +134,11 @@ it('counts diff membership and shows actual old/new cuts even when delta is zero
     ],
   })
   render(
-    <MemoryRouter>
-      <Import />
-    </MemoryRouter>,
+    <QueryClientProvider client={makeQueryClient()}>
+      <MemoryRouter>
+        <Import />
+      </MemoryRouter>
+    </QueryClientProvider>,
   )
   fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
     target: { files: [makeFile('boundaries.yaml')] },

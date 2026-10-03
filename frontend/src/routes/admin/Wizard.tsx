@@ -34,7 +34,7 @@ import {
 import type { CubeBoundaryEdit } from '../../api/types'
 import { useAdminStore } from '../../state/adminStore'
 import { LocatorHeader } from './LocatorHeader'
-import { orderedUnits, shelfName } from '../../lib/shelf'
+import { orderedUnits, shelfName, unitDimensions, binNumber } from '../../lib/shelf'
 import { useUnits } from '../../hooks/useUnits'
 import { RecordPickerSheet } from './RecordPickerSheet'
 import './admin.css'
@@ -458,7 +458,8 @@ function WizardWalk() {
   const step = currentStep
   const shelfDisplayName = shelfName(step.unit_id, unitsData?.units ?? [])
   const stepNumber = currentStepIndex + 1
-  const binNumber = step.row * 4 + step.col + 1
+  const { rows, cols } = unitDimensions(step.unit_id, unitsData?.units ?? [])
+  const binDisplay = binNumber(step, cols)
   const progressPct = totalSteps > 0 ? (currentStepIndex / totalSteps) * 100 : 0
 
   return (
@@ -476,7 +477,9 @@ function WizardWalk() {
           col={step.col}
           shelfName={shelfDisplayName}
           units={unitsData?.units ?? []}
-          binNumber={binNumber}
+          binNumber={binDisplay}
+          rows={rows}
+          cols={cols}
         />
         <span className="wizard-step-indicator">
           {`${shelfDisplayName} · STEP `}

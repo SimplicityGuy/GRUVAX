@@ -36,3 +36,17 @@ export function shelfName(unitId: number, units: readonly Unit[]): string {
   if (index < 0) return 'SHELF'
   return ordered[index].display_name.trim() || `SHELF ${rowLetter(index)}`
 }
+
+/** Configured geometry; absent metadata retains the established 4×4 default. */
+export function unitDimensions(
+  unitId: number,
+  units: readonly Unit[],
+): Pick<Unit, 'rows' | 'cols'> {
+  const unit = units.find((candidate) => candidate.id === unitId)
+  return { rows: unit?.rows ?? 4, cols: unit?.cols ?? 4 }
+}
+
+/** Display-only row-major bin number, using this unit's actual column count. */
+export function binNumber(cube: Pick<CubeRef, 'row' | 'col'>, cols: number): number {
+  return cube.row * cols + cube.col + 1
+}

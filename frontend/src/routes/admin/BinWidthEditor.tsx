@@ -28,14 +28,12 @@ import { useParams, useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LocatorHeader } from './LocatorHeader'
 import { getUnitSegments, setOverrides } from '../../api/adminClient'
-import { shelfName } from '../../lib/shelf'
+import { shelfName, unitDimensions, binNumber } from '../../lib/shelf'
 import { useUnits } from '../../hooks/useUnits'
 import { useAdminStore } from '../../state/adminStore'
 import { el } from '../../lib/dom'
 import type { Segment } from '../../api/cubeTypes'
 
-const ROWS = 4
-const COLS = 4
 const MIN = 0.05 // 5% minimum width per segment
 const HANDLE_SIZE = 44 // minimum touch target and spacing in pixels
 
@@ -164,7 +162,8 @@ export function BinWidthEditor() {
   const colNum = Number(col)
 
   // 1-based bin display number (row-major)
-  const binDisplay = rowNum * COLS + colNum + 1
+  const { rows, cols } = unitDimensions(unitId, units)
+  const binDisplay = binNumber({ row: rowNum, col: colNum }, cols)
   const shelfDisplayName = shelfName(unitId, units)
 
   // ── Server data ──────────────────────────────────────────────────────────────
@@ -546,8 +545,8 @@ export function BinWidthEditor() {
         shelfName={shelfDisplayName}
         units={units}
         binNumber={binDisplay}
-        rows={ROWS}
-        cols={COLS}
+        rows={rows}
+        cols={cols}
       />
 
       {/* Sum note */}

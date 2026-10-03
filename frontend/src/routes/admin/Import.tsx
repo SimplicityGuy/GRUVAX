@@ -34,6 +34,9 @@ import {
   BulkSaveError,
   type BoundaryPreviewCut,
 } from '../../api/adminClient'
+import { useUnits } from '../../hooks/useUnits'
+import { unitDimensions } from '../../lib/shelf'
+import type { Unit } from '../../api/types'
 import './admin.css'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -201,12 +204,64 @@ function parseDiff(body: Record<string, unknown>): {
 // ── Diff mini-grid component ──────────────────────────────────────────────────
 
 interface DiffGridProps {
+  units: Unit[]
   diff: DiffCube[]
   fileCubeCount: number
   totalCubes: number
 }
 
-function DiffGrid({ diff, fileCubeCount, totalCubes }: DiffGridProps) {
+/** Render one configured unit; durable cube coordinates select changed cells. */
+function UnitDiffGrid({
+  unitId,
+  cubes,
+  units,
+}: {
+  unitId: number
+  cubes: DiffCube[]
+  units: Unit[]
+}) {
+  const { rows, cols } = unitDimensions(unitId, units)
+  return (
+    <div className="import-diff-unit">
+      <div
+        className="import-diff-grid"
+        style={{
+          gridTemplateColumns: `repeat(${cols}, var(--gruvax-cell-size-md))`,
+          gridTemplateRows: `repeat(${rows}, var(--gruvax-cell-size-md))`,
+        }}
+      >
+        {Array.from({ length: rows }, (_, r) =>
+          Array.from({ length: cols }, (_, c) => {
+            const cube = cubes.find((d) => d.row === r && d.col === c)
+            let cellClass = 'import-diff-cell'
+            if (cube) {
+              if (cube.willBeEmpty) {
+                cellClass += ' import-diff-cell--empty'
+              } else {
+                cellClass += ' import-diff-cell--changing'
+              }
+            }
+            return (
+              <div
+                key={`${r}-${c}`}
+                className={cellClass}
+                title={cube ? describeChange(cube) : undefined}
+              >
+                {cube && (
+                  <span className="import-diff-count">
+                    {r + 1}/{c + 1}
+                  </span>
+                )}
+              </div>
+            )
+          }),
+        )}
+      </div>
+    </div>
+  )
+}
+
+function DiffGrid({ diff, fileCubeCount, totalCubes, units }: DiffGridProps) {
   if (diff.length === 0) return null
 
   // Group by unit_id
@@ -230,36 +285,7 @@ function DiffGrid({ diff, fileCubeCount, totalCubes }: DiffGridProps) {
       </p>
 
       {Array.from(byUnit.entries()).map(([unitId, cubes]) => (
-        <div key={unitId} className="import-diff-unit">
-          <div className="import-diff-grid">
-            {Array.from({ length: 4 }, (_, r) =>
-              Array.from({ length: 4 }, (_, c) => {
-                const cube = cubes.find((d) => d.row === r && d.col === c)
-                let cellClass = 'import-diff-cell'
-                if (cube) {
-                  if (cube.willBeEmpty) {
-                    cellClass += ' import-diff-cell--empty'
-                  } else {
-                    cellClass += ' import-diff-cell--changing'
-                  }
-                }
-                return (
-                  <div
-                    key={`${r}-${c}`}
-                    className={cellClass}
-                    title={cube ? describeChange(cube) : undefined}
-                  >
-                    {cube && (
-                      <span className="import-diff-count">
-                        {r + 1}/{c + 1}
-                      </span>
-                    )}
-                  </div>
-                )
-              }),
-            )}
-          </div>
-        </div>
+        <UnitDiffGrid key={unitId} unitId={unitId} cubes={cubes} units={units} />
       ))}
 
       {diff.map((cube) => (
@@ -292,6 +318,46 @@ function DiffGrid({ diff, fileCubeCount, totalCubes }: DiffGridProps) {
           {`This file defines ${fileCubeCount} cubes. The remaining ${totalCubes - fileCubeCount} cubes will be set to empty after import.`}
         </div>
       )}
+    </div>
+  )
+}
+
+/** Every changed coordinate must be visible inside its matched, positive unit geometry. */
+function cubeFitsUnit(cube: DiffCube, unit: Unit | undefined): boolean {
+  if (!unit) return false
+  return cube.row >= 0 && cube.row < unit.rows && cube.col >= 0 && cube.col < unit.cols
+}
+
+/** An import preview is authoritative only when all changed cubes can actually be reviewed. */
+function hasPreviewLayout(layout: ReturnType<typeof useUnits>, diff: DiffCube[]): boolean {
+  const units = layout.data?.units ?? []
+  return (
+    layout.isSuccess &&
+    units.length > 0 &&
+    diff.every((cube) =>
+      cubeFitsUnit(
+        cube,
+        units.find((unit) => unit.id === cube.unit_id),
+      ),
+    )
+  )
+}
+
+/** Preserve the dry-run while layout loading or retrying prevents an incomplete review. */
+function ImportPreview({
+  layout,
+  ...preview
+}: Omit<DiffGridProps, 'units'> & { layout: ReturnType<typeof useUnits> }) {
+  if (hasPreviewLayout(layout, preview.diff)) {
+    return <DiffGrid {...preview} units={layout.data!.units} />
+  }
+  if (layout.isPending) return <p role="status">Loading shelf layout…</p>
+  return (
+    <div role="alert">
+      <p>Shelf layout unavailable. Retry before reviewing and committing the import.</p>
+      <button type="button" disabled={layout.isFetching} onClick={() => void layout.refetch()}>
+        Retry shelf layout
+      </button>
     </div>
   )
 }
@@ -368,6 +434,7 @@ function ErrorCard({ error, index, onApplySuggestion }: ErrorCardProps) {
 
 export default function Import() {
   const navigate = useNavigate()
+  const layout = useUnits()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
 
@@ -391,7 +458,8 @@ export default function Import() {
 
   const activeErrors = state.errors.filter((e) => !e.fixed)
   const hasErrors = activeErrors.length > 0
-  const canCommit = state.phase === 'validated' && !hasErrors && state.file !== null
+  const layoutReady = hasPreviewLayout(layout, state.diff)
+  const canCommit = state.phase === 'validated' && !hasErrors && state.file !== null && layoutReady
 
   // ── File handling ───────────────────────────────────────────────────────────
 
@@ -756,7 +824,8 @@ export default function Import() {
 
       {/* Diff preview */}
       {(state.phase === 'validated' || state.phase === 'committing') && (
-        <DiffGrid
+        <ImportPreview
+          layout={layout}
           diff={state.diff}
           fileCubeCount={state.fileCubeCount}
           totalCubes={state.totalCubes}
