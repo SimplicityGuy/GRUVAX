@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import time
 from typing import Any
 from uuid import UUID
 
@@ -73,6 +74,9 @@ async def search(
         ``did_you_mean`` is non-null only when items is empty and pg_trgm
         finds a high-similarity candidate (SRCH-07/D-11).
     """
+    # Measure from handler entry, including authoritative profile resolution.
+    t0 = time.perf_counter()
+
     # B-02: resolve the authoritative profile from the request (cookie/device wins).
     # resolve_profile_from_request raises 400 session_unbound or 403 device_revoked
     # automatically — these propagate as HTTP errors.
@@ -118,11 +122,7 @@ async def search(
             detail={"type": "profile_not_found"},
         )
 
-    rows, took_ms, did_you_mean = await search_collection(pool, q, limit, effective_profile_id)
-
-    # OBS-05: record in slow-query ring when request exceeds the /api/search SLO (200 ms).
-    # For search, took_ms is both request-total and DB time (Pitfall 3 — inline approach).
-    record_slow_query(request.app, "/api/search", took_ms, took_ms)
+    rows, db_ms, did_you_mean = await search_collection(pool, q, limit, effective_profile_id)
 
     # OBS-07/D-04: fire-and-forget counter increment for the top result only.
     # PRIVACY: only the int release_id is passed — never q, did_you_mean, or label text.
@@ -151,8 +151,13 @@ async def search(
 
         task.add_done_callback(_log_exc)
 
+    # OBS-05: include profile resolution and the completed suggestion path in
+    # request-total, retaining the separately measured database phases.
+    total_ms = (time.perf_counter() - t0) * 1000.0
+    record_slow_query(request.app, "/api/search", total_ms, db_ms)
+
     return {
         "items": rows,
-        "took_ms": round(took_ms, 2),
+        "took_ms": round(total_ms, 2),
         "did_you_mean": did_you_mean,
     }
