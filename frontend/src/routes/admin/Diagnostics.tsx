@@ -27,22 +27,12 @@ import type {
 } from '../../api/adminClient'
 import { getDiagnostics, resetStats } from '../../api/adminClient'
 import { ProfileDiagnosticsCard } from './ProfileDiagnosticsCard'
-import { formatRelativeTime, stalenessStatus } from '../../lib/time'
+import { formatRelativeTime, formatRelativeAge, stalenessStatus } from '../../lib/time'
 import './Diagnostics.css'
 
 // ── Time formatting helpers ────────────────────────────────────────────────────
 
 // formatRelativeTime + stalenessStatus imported from lib/time (shared with ProfileDiagnosticsCard)
-
-function formatSyncAge(seconds: number | null): string {
-  if (seconds === null || seconds === undefined) return '—'
-  if (seconds < 3600) return '< 1h ago'
-  const days = Math.floor(seconds / 86400)
-  const hours = Math.floor((seconds % 86400) / 3600)
-  if (days === 0) return `${hours}h ago`
-  if (hours === 0) return `${days}d ago`
-  return `${days}d ${hours}h ago`
-}
 
 function formatLastRefreshed(ts: Date | null): string {
   if (!ts) return '—'
@@ -79,7 +69,9 @@ function StalenessSection({ syncAgeSec, loading }: StalenessSectionProps): React
       ) : (
         <div className={`diag-staleness-row diag-staleness-row--${status}`}>
           <span className="diag-row-label">DISCOGSOGRAPHY LAST SYNC</span>
-          <span className="diag-row-value">{formatSyncAge(syncAgeSec)}</span>
+          <span className="diag-row-value">
+            {syncAgeSec == null ? '—' : formatRelativeAge(syncAgeSec)}
+          </span>
           <span
             className={`diag-badge diag-badge--${status}`}
             aria-label={`Sync status: ${status}`}
