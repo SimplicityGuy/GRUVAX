@@ -14,6 +14,9 @@ Invariants (INTERPOLATION §7.3):
 
 Session-scoped fixtures build the synthetic shapes without DB (using the
 _load_snapshot / _load_rows seams from synth_collection.py).
+Covered synthetic records must actually locate: a missing cube or interval
+fails before an invariant can become vacuous. Singleton public results may be
+cube-only; their coverage census still requires the cube and label span.
 """
 
 from __future__ import annotations
@@ -55,6 +58,45 @@ def _derive(cache, snapshot):  # type: ignore[no-untyped-def]
     return sc
 
 
+@pytest.mark.parametrize("estimator_name", ["locate", "locate_by_segment"])
+@pytest.mark.parametrize(
+    ("fixture_name", "label", "expected_count"),
+    [
+        ("uniform_dense_fixtures", "UniformDense", 20),
+        ("multi_prefix_fixtures", "MultiPrefix", 6),
+        ("singleton_fixtures", "Singleton", 1),
+    ],
+)
+def test_covered_shape_census(request, fixture_name, label, expected_count, estimator_name):  # type: ignore[no-untyped-def]
+    """Both estimator entry points must cover every planted record in each shape."""
+    cache, snapshot, truth = request.getfixturevalue(fixture_name)
+    records = snapshot.get_label_records(label)
+    assert len(records) == len(truth) == expected_count, f"{label}: empty/incomplete fixture"
+    segment_cache = _derive(cache, snapshot)
+    estimator = locate if estimator_name == "locate" else locate_by_segment
+    results = [
+        estimator(
+            release_id=record.release_id,
+            label=label,
+            catalog_number=record.catalog_number,
+            segment_cache=segment_cache,
+            snapshot=snapshot,
+        )
+        for record in records
+    ]
+    covered = sum(result.primary_cube is not None for result in results)
+    assert covered == expected_count, f"{label}/{estimator_name}: only {covered} cubes located"
+    for result in results:
+        assert result.primary_cube in result.label_span
+    # The public singleton path can legitimately return cube-only today. Do not
+    # settle gruvax-wz2's separate singleton-band contract decision in this test.
+    if label != "Singleton" or estimator_name == "locate_by_segment":
+        intervals = sum(result.sub_cube_interval is not None for result in results)
+        assert intervals == expected_count, (
+            f"{label}/{estimator_name}: only {intervals} intervals located"
+        )
+
+
 # ── Invariant 1: primary_cube ∈ label_span ───────────────────────────────────
 
 
@@ -63,6 +105,7 @@ def test_primary_cube_in_label_span(uniform_dense_fixtures) -> None:  # type: ig
     cache, snapshot, truth = uniform_dense_fixtures
     label = "UniformDense"
     segment_cache = _derive(cache, snapshot)
+    assert len(truth) == 20, "UniformDense: expected 20 covered records"
 
     for release_id in truth:
         catalog_number = f"UD {release_id:03d}"
@@ -73,11 +116,11 @@ def test_primary_cube_in_label_span(uniform_dense_fixtures) -> None:  # type: ig
             segment_cache=segment_cache,
             snapshot=snapshot,
         )
-        if result.primary_cube is not None:
-            assert result.primary_cube in result.label_span, (
-                f"primary_cube {result.primary_cube} not in label_span {result.label_span}"
-                f" for release_id={release_id}"
-            )
+        assert result.primary_cube is not None, f"No cube for covered release_id={release_id}"
+        assert result.primary_cube in result.label_span, (
+            f"primary_cube {result.primary_cube} not in label_span {result.label_span}"
+            f" for release_id={release_id}"
+        )
 
 
 # ── Invariant 2: 0 ≤ start ≤ end ≤ 1 ────────────────────────────────────────
@@ -88,6 +131,7 @@ def test_sub_cube_interval_bounds(uniform_dense_fixtures) -> None:  # type: igno
     cache, snapshot, truth = uniform_dense_fixtures
     label = "UniformDense"
     segment_cache = _derive(cache, snapshot)
+    assert len(truth) == 20, "UniformDense: expected 20 interval-bearing records"
 
     for release_id in truth:
         catalog_number = f"UD {release_id:03d}"
@@ -98,13 +142,11 @@ def test_sub_cube_interval_bounds(uniform_dense_fixtures) -> None:  # type: igno
             segment_cache=segment_cache,
             snapshot=snapshot,
         )
-        if result.sub_cube_interval is not None:
-            si = result.sub_cube_interval
-            assert si.start >= 0.0, f"start={si.start} < 0 for release_id={release_id}"
-            assert si.start <= si.end, (
-                f"start={si.start} > end={si.end} for release_id={release_id}"
-            )
-            assert si.end <= 1.0, f"end={si.end} > 1 for release_id={release_id}"
+        assert result.sub_cube_interval is not None, f"No interval for release_id={release_id}"
+        si = result.sub_cube_interval
+        assert si.start >= 0.0, f"start={si.start} < 0 for release_id={release_id}"
+        assert si.start <= si.end, f"start={si.start} > end={si.end} for release_id={release_id}"
+        assert si.end <= 1.0, f"end={si.end} > 1 for release_id={release_id}"
 
 
 # ── Invariant 3: monotone position within label ───────────────────────────────
@@ -131,9 +173,10 @@ def test_monotone_position_within_label(uniform_dense_fixtures) -> None:  # type
             segment_cache=segment_cache,
             snapshot=snapshot,
         )
-        if result.sub_cube_interval is not None:
-            starts.append((catalog_number, result.sub_cube_interval.start))
+        assert result.sub_cube_interval is not None, f"No interval for release_id={release_id}"
+        starts.append((catalog_number, result.sub_cube_interval.start))
 
+    assert len(starts) == len(records_ordered) == 20, "Monotone comparison must cover all records"
     for i in range(len(starts) - 1):
         cat_a, s_a = starts[i]
         cat_b, s_b = starts[i + 1]
@@ -175,14 +218,13 @@ def test_cosmetic_stability_multi_prefix(multi_prefix_fixtures) -> None:  # type
     )
 
     # All three should be covered (same parse_key) and return equivalent positions
+    assert result_space.sub_cube_interval is not None, "No interval for BLP 100"
     for result, variant in [(result_dash, "BLP-100"), (result_upper, "blp 100")]:
-        if result_space.sub_cube_interval is not None and result.sub_cube_interval is not None:
-            assert (
-                abs(result_space.sub_cube_interval.start - result.sub_cube_interval.start) < 1e-9
-            ), (
-                f"Cosmetic stability violated: BLP 100 start={result_space.sub_cube_interval.start:.4f}"
-                f" != {variant!r} start={result.sub_cube_interval.start:.4f}"
-            )
+        assert result.sub_cube_interval is not None, f"No interval for {variant}"
+        assert abs(result_space.sub_cube_interval.start - result.sub_cube_interval.start) < 1e-9, (
+            f"Cosmetic stability violated: BLP 100 start={result_space.sub_cube_interval.start:.4f}"
+            f" != {variant!r} start={result.sub_cube_interval.start:.4f}"
+        )
 
 
 # ── Hypothesis-driven: bounds invariant across all synth records ──────────────
@@ -204,8 +246,8 @@ def test_hypothesis_bounds_uniform_dense(release_id: int) -> None:
         segment_cache=segment_cache,
         snapshot=snapshot,
     )
-    if result.sub_cube_interval is not None:
-        si = result.sub_cube_interval
-        assert 0.0 <= si.start <= si.end <= 1.0, (
-            f"Bounds violated for release_id={release_id}: start={si.start} end={si.end}"
-        )
+    assert result.sub_cube_interval is not None, f"No interval for release_id={release_id}"
+    si = result.sub_cube_interval
+    assert 0.0 <= si.start <= si.end <= 1.0, (
+        f"Bounds violated for release_id={release_id}: start={si.start} end={si.end}"
+    )
