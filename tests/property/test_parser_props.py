@@ -9,7 +9,7 @@ Properties (per RESEARCH.md §Pattern 2 and INTERPOLATION.md §3.4):
 
 from __future__ import annotations
 
-from hypothesis import given, settings, strategies as st
+from hypothesis import example, given, settings, strategies as st
 
 from gruvax.estimator.normalize import (
     catalog_in_range,
@@ -265,9 +265,15 @@ def test_label_sort_key_deterministic(s: str) -> None:
 
 
 @given(a=st.text(), b=st.text())
+@example(a="BLP 9", b="BLP 10")
+@example(a="BLP 10", b="blp-9")
 @settings(max_examples=300)
 def test_catalog_in_range_self_contained(a: str, b: str) -> None:
-    """catalog_in_range(a, a, b): always true when first==last==catalog."""
-    assert catalog_in_range(a, a, a) is True, (
-        f"catalog_in_range({a!r}, {a!r}, {a!r}) should be True"
+    """Both generated endpoints belong to their inclusive normalized range."""
+    first, last = sorted((a, b), key=parse_key)
+    assert catalog_in_range(first, first, last) is True, (
+        f"Lower endpoint {first!r} must belong to [{first!r}, {last!r}]"
+    )
+    assert catalog_in_range(last, first, last) is True, (
+        f"Upper endpoint {last!r} must belong to [{first!r}, {last!r}]"
     )

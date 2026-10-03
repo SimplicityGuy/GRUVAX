@@ -76,9 +76,10 @@ addopts = "-q --tb=short --benchmark-skip"
 # `from scripts.run_all_algorithms import ...` resolve in pytest (Plan 02-01 §Task 2b)
 pythonpath = ["."]
 
-[tool.hypothesis]
-# use deterministic mode in CI (set explicitly to avoid state leaks)
-deriving_xfail = true
+# Hypothesis does not read a [tool.hypothesis] table. The installed 6.168+ version
+# automatically selects its built-in "ci" profile when CI is detected (our GitHub
+# workflows set CI: true): deterministic generation and no default deadline.
+# Local runs use "default"; each property's explicit @settings still takes priority.
 
 # ── ruff ────────────────────────────────────────────────────────────────────
 # Aligned with discogsography's rule set (line-length / target stay
