@@ -169,6 +169,8 @@ async def test_delete_waits_for_protected_swap_then_purges(
         tasks = [sync_task] + ([delete_task] if delete_task is not None else [])
         results = await asyncio.wait_for(asyncio.gather(*tasks, return_exceptions=True), timeout=5)
     assert len(results) == 2
+    assert not isinstance(results[0], BaseException), results[0]
+    assert results[0]["status"] == "ok"
     assert results[1].status_code == 200, results[1].text
     async with db_pool.connection() as conn:
         count = await (

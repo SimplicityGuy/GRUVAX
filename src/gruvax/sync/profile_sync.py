@@ -489,6 +489,22 @@ async def _swap_inside_tx(
 # ── cache refresh (D-14, Plan 02-02 — per-profile registry refresh) ──────────
 
 
+_REFRESH_REGISTRIES = (
+    "boundary_cache_registry",
+    "snapshot_registry",
+    "segment_cache_registry",
+    "event_bus_registry",
+)
+
+
+def _profile_caches_current(profile_id: str, app_state: Any, entries: tuple[Any, ...]) -> bool:
+    """Eviction or replacement during a cache read invalidates this refresh."""
+    return all(
+        getattr(app_state, name).get(profile_id) is entry
+        for name, entry in zip(_REFRESH_REGISTRIES, entries, strict=True)
+    )
+
+
 async def _refresh_profile_caches(
     profile_id: str,
     app_state: Any,
@@ -515,24 +531,28 @@ async def _refresh_profile_caches(
         new_record_count: number of new releases in this sync (>= 0, D-06).
         is_initial_import: True iff this is the first-ever sync for this profile (D-07).
     """
+    entries = tuple(getattr(app_state, name).get(profile_id) for name in _REFRESH_REGISTRIES)
+    if any(entry is None for entry in entries):
+        return  # Profile evicted after swap commit; never recreate its registries.
+    cache, snapshot, seg, bus = entries
     pool = app_state.db_pool
 
     # Reload BoundaryCache for this profile (invalidate first — SEG-04 seam).
-    cache = app_state.boundary_cache_registry[profile_id]
     cache.invalidate()
     await cache.load(pool, profile_id=profile_id)
+    if not _profile_caches_current(profile_id, app_state, entries):
+        return
 
     # Reload CollectionSnapshot for this profile.
-    snapshot = app_state.snapshot_registry[profile_id]
     await snapshot.load(pool, profile_id=profile_id)
+    if not _profile_caches_current(profile_id, app_state, entries):
+        return
 
     # Re-derive SegmentCache (CPU-only, no DB call).
-    seg = app_state.segment_cache_registry[profile_id]
     seg.derive(cache, snapshot, cache.overrides)
 
     # Publish collection_changed AFTER all caches are fresh (Pitfall A ordering).
     # Extended payload (API-04): includes new_record_count + is_initial_import.
-    bus = app_state.event_bus_registry[profile_id]
     await bus.publish(
         "collection_changed",
         {
