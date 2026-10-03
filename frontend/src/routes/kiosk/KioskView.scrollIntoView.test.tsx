@@ -7,6 +7,8 @@
  * the GSAP selection-lands effect calls scrollIntoView on the newly-lit
  * `[data-state="lit"]` element every time a locate result lands.
  */
+import gsap from 'gsap'
+import type { LocateResult } from '../../api/types'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { act, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
@@ -179,6 +181,7 @@ beforeEach(() => {
     reassignBanner: null,
   })
 
+  useGruvaxStore.getState().clearSearch()
   useGruvaxStore.setState({
     selectedReleaseId: null,
     selectedResult: null,
@@ -197,6 +200,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
+  vi.restoreAllMocks()
   vi.clearAllMocks()
 })
 
@@ -217,5 +221,120 @@ describe('KioskView — lit cube scrolls into view (gruvax-k0zj)', () => {
     expect(litEl).not.toBeNull()
     expect(scrollIntoViewSpy.mock.instances[scrollIntoViewSpy.mock.calls.length - 1]).toBe(litEl)
     expect(scrollIntoViewSpy).toHaveBeenLastCalledWith(expect.objectContaining({ block: 'center' }))
+  })
+})
+
+function locatedAt(col: number, interval: LocateResult['sub_cube_interval'] = null): LocateResult {
+  return {
+    release_id: 42,
+    primary_cube: { unit_id: 1, row: 0, col },
+    label_span: [],
+    sub_cube_interval: interval,
+    confidence: 0.8,
+    generated_at: new Date().toISOString(),
+    estimator_version: 'v1',
+  }
+}
+
+describe('KioskView — real GSAP interruption and companion bars (gruvax-csxz)', () => {
+  it.each(['select another cube', 'clear', 'unmount'])(
+    'restores the interrupted cube inline transform on %s',
+    async (action) => {
+      let view: ReturnType<typeof renderKiosk>
+      await act(async () => {
+        view = renderKiosk()
+      })
+      const cube = document.querySelector<HTMLElement>('.cube[data-col="0"]')!
+      // Revert must preserve an existing inline style, not indiscriminately clear it.
+      cube.style.transform = 'matrix(0.97, 0, 0, 0.97, 0, 0)'
+      const originalTransform = cube.style.transform
+      const timeline = vi.spyOn(gsap, 'timeline')
+      act(() => useGruvaxStore.getState().setLocateResult(locatedAt(0)))
+      const active = timeline.mock.results.at(-1)!.value as gsap.core.Timeline
+      act(() => {
+        active.pause().time(0.05)
+      })
+      expect(Number(gsap.getProperty(cube, 'scaleX'))).toBeGreaterThan(1)
+      expect(cube.style.transform).not.toBe(originalTransform)
+      expect(cube.style.transform).not.toContain('NaN')
+      expect(cube).toHaveClass('is-animating')
+
+      act(() => {
+        if (action === 'select another cube')
+          useGruvaxStore.getState().setLocateResult(locatedAt(1))
+        else if (action === 'clear') useGruvaxStore.getState().clearSearch()
+        else view!.unmount()
+      })
+      expect(cube.style.transform).toBe(originalTransform)
+      expect(cube).not.toHaveClass('is-animating')
+      expect(active.parent).toBeNull()
+    },
+  )
+
+  it('animates primary and companion bars together and restores initial set styles on unmount', async () => {
+    let view: ReturnType<typeof renderKiosk>
+    await act(async () => {
+      view = renderKiosk()
+    })
+    const timeline = vi.spyOn(gsap, 'timeline')
+    act(() =>
+      useGruvaxStore.getState().setLocateResult(
+        locatedAt(0, {
+          start: 0.4,
+          end: 0.7,
+          crosses_boundary: true,
+          next_cube: { unit_id: 1, row: 0, col: 1 },
+        }),
+      ),
+    )
+    const bars = Array.from(document.querySelectorAll<HTMLElement>('.sub-cube-bar'))
+    expect(bars).toHaveLength(2)
+    const active = timeline.mock.results.at(-1)!.value as gsap.core.Timeline
+    act(() => {
+      active.pause().time(0.15)
+    })
+    const scales = bars.map((bar) => Number(gsap.getProperty(bar, 'scaleX')))
+    scales.forEach((scale) => {
+      expect(scale).toBeGreaterThan(0)
+      expect(scale).toBeLessThan(1)
+    })
+    expect(scales[0]).toBeCloseTo(scales[1])
+    bars.forEach((bar) => expect(bar).toHaveClass('is-animating'))
+    act(() => view!.unmount())
+    bars.forEach((bar) => {
+      expect(bar.style.transform).toBe('')
+      expect(bar.style.transformOrigin).toBe('')
+      expect(bar).not.toHaveClass('is-animating')
+      expect(bar.style.width).not.toBe('')
+    })
+  })
+
+  it('keeps singleton bars fading without scale and releases will-change on completion', async () => {
+    await act(async () => {
+      renderKiosk()
+    })
+    const timeline = vi.spyOn(gsap, 'timeline')
+    act(() =>
+      useGruvaxStore.getState().setLocateResult(
+        locatedAt(0, {
+          start: 0,
+          end: 1,
+          crosses_boundary: false,
+        }),
+      ),
+    )
+    const bar = document.querySelector<HTMLElement>('.sub-cube-bar')!
+    const active = timeline.mock.results.at(-1)!.value as gsap.core.Timeline
+    act(() => {
+      active.pause().time(0.15)
+    })
+    expect(Number(gsap.getProperty(bar, 'opacity'))).toBeGreaterThan(0)
+    expect(Number(gsap.getProperty(bar, 'opacity'))).toBeLessThan(0.18)
+    expect(bar.style.transform).toBe('')
+    act(() => {
+      active.progress(1)
+    })
+    expect(Number(gsap.getProperty(bar, 'opacity'))).toBeCloseTo(0.18)
+    expect(bar).not.toHaveClass('is-animating')
   })
 })
