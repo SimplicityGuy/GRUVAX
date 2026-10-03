@@ -167,3 +167,26 @@ async def test_catchup_network_failure_keeps_loaded_database_available(startup, 
         assert app.state.db_pool is pool
         assert app.state.db_ok is True
         assert app.state.profile_collection_ready is True
+
+
+@pytest.mark.asyncio
+async def test_profile_bus_ready_for_subscribers_without_startup_replay(startup, monkeypatch):  # type: ignore[no-untyped-def]
+    _pool, cursor, _disconnect = startup
+    profile_id = "00000000-0000-0000-0000-000000000001"
+    cursor.fetchall.return_value = [(profile_id,)]
+    monkeypatch.setattr(app_module.BoundaryCache, "load", AsyncMock())
+    monkeypatch.setattr(app_module.CollectionSnapshot, "load", AsyncMock())
+    monkeypatch.setattr(app_module, "load_settings_cache", AsyncMock(return_value={}))
+    app = app_module.create_app()
+    async with app_module.lifespan(app):
+        bus = app.state.event_bus_registry[profile_id]
+        assert app.state.event_bus is bus
+        queue = bus.subscribe()
+        try:
+            assert queue.empty()
+            await bus.publish("boundary_changed", {"probe": "ready"})
+            event = queue.get_nowait()
+            assert event.name == "boundary_changed"
+            assert event.data == {"probe": "ready"}
+        finally:
+            bus.unsubscribe(queue)

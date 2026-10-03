@@ -19,10 +19,12 @@ import json
 import logging
 import random
 from typing import TYPE_CHECKING
+from uuid import UUID
 
 from fastapi import APIRouter, Depends, Request
 from sse_starlette import EventSourceResponse, ServerSentEvent
 
+from gruvax.api import version as build_version
 from gruvax.api.deps import get_bus_for_profile
 
 
@@ -65,6 +67,14 @@ async def stream_events(
             # retry: field spreads reconnects over 2-8s window (PITFALLS 36 prevention).
             retry_ms = random.randint(2000, 8000)  # noqa: S311  # nosec B311 — jitter, not crypto
             yield ServerSentEvent(comment="connected", retry=retry_ms)
+            # A fresh subscriber has no startup replay. Send its connection hello
+            # directly, with the same build source as GET /api/version.
+            yield ServerSentEvent(
+                event="server_hello",
+                data=json.dumps(
+                    {"version": build_version.GIT_SHA, "profile_id": str(UUID(profile_id))}
+                ),
+            )
             while True:
                 if await request.is_disconnected():
                     break
