@@ -15,8 +15,9 @@ import { useMemo } from 'react'
 import { useNavigate } from 'react-router'
 import { useQuery } from '@tanstack/react-query'
 import { adminGetCubes, downloadBoundariesYaml } from '../../api/adminClient'
-import { shelfName } from '../../lib/shelf'
-import type { AdminCube } from '../../api/types'
+import { orderedUnits, shelfName } from '../../lib/shelf'
+import { useUnits } from '../../hooks/useUnits'
+import type { AdminCube, Unit } from '../../api/types'
 
 const ROWS = 4
 const COLS = 4
@@ -29,18 +30,19 @@ interface ShelfSummary {
   cubes: AdminCube[]
 }
 
-function groupByUnit(cubes: AdminCube[]): ShelfSummary[] {
+function groupByUnit(cubes: AdminCube[], units: readonly Unit[]): ShelfSummary[] {
   const map = new Map<number, AdminCube[]>()
   for (const cube of cubes) {
     const arr = map.get(cube.unit_id) ?? []
     arr.push(cube)
     map.set(cube.unit_id, arr)
   }
+  const position = new Map(orderedUnits(units).map((unit, index) => [unit.id, index]))
   return Array.from(map.entries())
-    .sort(([a], [b]) => a - b)
+    .sort(([a], [b]) => (position.get(a) ?? Infinity) - (position.get(b) ?? Infinity) || a - b)
     .map(([unitId, unitCubes]) => ({
       unitId,
-      displayName: shelfName(unitId),
+      displayName: shelfName(unitId, units),
       configuredCount: unitCubes.filter((c) => !c.is_empty).length,
       cubes: unitCubes,
     }))
@@ -48,6 +50,7 @@ function groupByUnit(cubes: AdminCube[]): ShelfSummary[] {
 
 export function CubesGrid() {
   const navigate = useNavigate()
+  const { data: unitsData } = useUnits()
 
   const { data, isLoading, isError } = useQuery({
     queryKey: ['admin', 'cubes'],
@@ -55,7 +58,10 @@ export function CubesGrid() {
     staleTime: 60_000,
   })
 
-  const shelves = useMemo(() => (data ? groupByUnit(data.cubes) : []), [data])
+  const shelves = useMemo(
+    () => (data ? groupByUnit(data.cubes, unitsData?.units ?? []) : []),
+    [data, unitsData],
+  )
 
   if (isLoading) {
     return (

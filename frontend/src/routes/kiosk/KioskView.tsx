@@ -2,13 +2,15 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import gsap from 'gsap'
 import { RotateCcw } from 'lucide-react'
-import { fetchCubesWithFill, fetchUnits, searchCollection } from '../../api/client'
-import type { CubeRef } from '../../api/types'
+import { fetchCubesWithFill, searchCollection } from '../../api/client'
+import type { CubeRef, Unit } from '../../api/types'
 import { useGruvaxStore, type ShimmerCube } from '../../state/store'
 import { useSessionStore } from '../../state/sessionStore'
 import { useAdminStore } from '../../state/adminStore'
 import { useRecentlyPulledStore } from '../../state/recentlyPulledStore'
 import { useIdleTimer } from '../../hooks/useIdleTimer'
+import { useUnits } from '../../hooks/useUnits'
+import { orderedUnits, shelfName } from '../../lib/shelf'
 import { getSession } from '../../api/session'
 import { CubeContentsPanel } from './CubeContentsPanel'
 import { ReassignBanner } from './DeviceLifecycle'
@@ -32,7 +34,13 @@ import './ReauthBanner.css'
 import './StalenessBar.css'
 import './kiosk.css'
 
-const SHELF_NAMES = ['SHELF A', 'SHELF B', 'SHELF C', 'SHELF D']
+const FALLBACK_UNITS: Unit[] = [1, 2].map((id) => ({
+  id,
+  display_name: '',
+  rows: 4,
+  cols: 4,
+  ordering: id,
+}))
 
 /**
  * Full-page kiosk view: header + search + results + shelf grid.
@@ -162,11 +170,7 @@ export function KioskView() {
   const shelfAreaRef = useRef<HTMLDivElement | null>(null)
 
   // Fetch units from API (drives grid)
-  const { data: unitsData } = useQuery({
-    queryKey: ['units'],
-    queryFn: fetchUnits,
-    staleTime: Infinity,
-  })
+  const { data: unitsData } = useUnits()
 
   // Fetch all cube boundaries once — used to render empty state (CUBE-05) + fill bars (CUBE-07)
   const { data: cubesData } = useQuery({
@@ -677,7 +681,8 @@ export function KioskView() {
 
   const units = unitsData?.units ?? []
   // Sort units by ordering field
-  const sortedUnits = [...units].sort((a, b) => a.ordering - b.ordering)
+  const sortedUnits = orderedUnits(units)
+  const displayedUnits = sortedUnits.length > 0 ? sortedUnits : FALLBACK_UNITS
 
   return (
     <div className="kiosk-page">
@@ -772,14 +777,14 @@ export function KioskView() {
             Returns null when empty (no reserved space in layout). */}
         <RecentlyPulledStrip />
 
-        {/* Shelf area — N×(4×4) grid — shelfAreaRef for GSAP selector scope */}
+        {/* Shelf area — configured unit grids — shelfAreaRef for GSAP selector scope */}
         <div className="shelf-area" ref={shelfAreaRef}>
-          {sortedUnits.map((unit, idx) => (
+          {displayedUnits.map((unit) => (
             <div key={unit.id} className="shelf-section">
-              <ShelfLabel name={SHELF_NAMES[idx] ?? `SHELF ${idx + 1}`} />
+              <ShelfLabel name={shelfName(unit.id, displayedUnits)} />
               <ShelfGrid
                 unit={unit}
-                units={sortedUnits}
+                units={displayedUnits}
                 litCube={highlight.primaryCube}
                 emptyCubes={emptyCubes}
                 labelSpan={labelSpan}
@@ -791,36 +796,13 @@ export function KioskView() {
               />
             </div>
           ))}
-
-          {/* Fallback: show placeholder grid if units not loaded yet */}
-          {sortedUnits.length === 0 && (
-            <>
-              {[0, 1].map((idx) => (
-                <div key={idx} className="shelf-section">
-                  <ShelfLabel name={SHELF_NAMES[idx] ?? `SHELF ${idx + 1}`} />
-                  <ShelfGrid
-                    unit={{ id: idx + 1, display_name: '', rows: 4, cols: 4, ordering: idx + 1 }}
-                    units={sortedUnits}
-                    litCube={highlight.primaryCube}
-                    emptyCubes={emptyCubes}
-                    labelSpan={labelSpan}
-                    subCubeInterval={subCubeInterval}
-                    confidence={confidence}
-                    fillLevels={fillLevels}
-                    onCubeTap={!bannerVisible ? setTappedCube : undefined}
-                    shimmerCubes={shimmerSet}
-                  />
-                </div>
-              ))}
-            </>
-          )}
         </div>
       </main>
 
       {/* Cube-contents panel (CUBE-09, D-14) — bottom sheet, slides up on cube tap */}
       <CubeContentsPanel
         cube={tappedCube}
-        units={sortedUnits}
+        units={displayedUnits}
         onDismiss={() => setTappedCube(null)}
       />
 

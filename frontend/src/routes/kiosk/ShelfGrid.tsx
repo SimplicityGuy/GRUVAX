@@ -45,7 +45,7 @@ interface ShelfGridProps {
 }
 
 /**
- * 4×4 CSS Grid for one Kallax unit.
+ * CSS Grid using the configured dimensions of one Kallax unit.
  *
  * Column/row sizing driven by var(--gruvax-cell-size-xl) and gap by
  * var(--gruvax-cell-gap-xl) — never hardcoded px values.

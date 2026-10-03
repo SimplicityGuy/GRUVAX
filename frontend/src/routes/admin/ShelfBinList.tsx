@@ -30,7 +30,8 @@ import { LocatorHeader } from './LocatorHeader'
 import { SegmentStrip } from './SegmentStrip'
 import { RecordPickerSheet } from './RecordPickerSheet'
 import { adminGetCubes, getUnitSegments } from '../../api/adminClient'
-import { shelfName, shelfLetter } from '../../lib/shelf'
+import { shelfName } from '../../lib/shelf'
+import { useUnits } from '../../hooks/useUnits'
 import { useSessionStore } from '../../state/sessionStore'
 import type { AdminCube, AdminCubesResponse } from '../../api/types'
 import type { Segment } from '../../api/cubeTypes'
@@ -112,6 +113,9 @@ export function ShelfBinList() {
   const { unit } = useParams<{ unit: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
+
+  const { data: unitsData } = useUnits()
+  const units = unitsData?.units ?? []
 
   const unitId = Number(unit)
 
@@ -229,8 +233,7 @@ export function ShelfBinList() {
     )
   }
 
-  const shelfLtr = shelfLetter(unitId)
-  const shelfDisplayName = shelfName(unitId)
+  const shelfDisplayName = shelfName(unitId, units)
   const totalBins = ROWS * COLS
   const unconfiguredCount = totalBins - configuredBins.length
 
@@ -246,7 +249,7 @@ export function ShelfBinList() {
         >
           ← CUBES
         </button>
-        <h1 className="sbl-title">EDIT SHELF {shelfLtr}</h1>
+        <h1 className="sbl-title">EDIT {shelfDisplayName}</h1>
       </header>
 
       {/* Locator header — mini Kallax, no specific bin lit.
@@ -258,6 +261,7 @@ export function ShelfBinList() {
           row={-1}
           col={-1}
           shelfName={shelfDisplayName}
+          units={units}
           rows={ROWS}
           cols={COLS}
           cubes={cubesData?.cubes ?? []}

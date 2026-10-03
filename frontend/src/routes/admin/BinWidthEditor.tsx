@@ -28,7 +28,8 @@ import { useParams, useNavigate } from 'react-router'
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import { LocatorHeader } from './LocatorHeader'
 import { getUnitSegments, setOverrides } from '../../api/adminClient'
-import { shelfName, shelfLetter } from '../../lib/shelf'
+import { shelfName } from '../../lib/shelf'
+import { useUnits } from '../../hooks/useUnits'
 import { useAdminStore } from '../../state/adminStore'
 import { el } from '../../lib/dom'
 import type { Segment } from '../../api/cubeTypes'
@@ -155,14 +156,16 @@ export function BinWidthEditor() {
   const queryClient = useQueryClient()
   const { pendingChangeSet, setPendingChangeSet } = useAdminStore()
 
+  const { data: unitsData } = useUnits()
+  const units = unitsData?.units ?? []
+
   const unitId = Number(unit)
   const rowNum = Number(row)
   const colNum = Number(col)
 
   // 1-based bin display number (row-major)
   const binDisplay = rowNum * COLS + colNum + 1
-  const shelfLtr = shelfLetter(unitId)
-  const shelfDisplayName = shelfName(unitId)
+  const shelfDisplayName = shelfName(unitId, units)
 
   // ── Server data ──────────────────────────────────────────────────────────────
   const { data: segsData, isLoading } = useQuery({
@@ -528,10 +531,10 @@ export function BinWidthEditor() {
           onClick={() => void navigate(`/admin/cubes/${unitId}`)}
           aria-label={`Back to ${shelfDisplayName} bin list`}
         >
-          ← SHELF {shelfLtr}
+          ← {shelfDisplayName}
         </button>
         <h1 className="bwe-title">
-          SHELF {shelfLtr} · BIN {binDisplay}
+          {shelfDisplayName} · BIN {binDisplay}
         </h1>
       </header>
 
@@ -541,6 +544,7 @@ export function BinWidthEditor() {
         row={rowNum}
         col={colNum}
         shelfName={shelfDisplayName}
+        units={units}
         binNumber={binDisplay}
         rows={ROWS}
         cols={COLS}
