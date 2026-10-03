@@ -27,7 +27,7 @@
  *   it to parseServerErrors + parseDiff without re-parsing a stringified message.
  */
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
 import {
   uploadImportBoundaries,
@@ -83,6 +83,21 @@ interface ImportState {
   /** Cleared on each new file selection. Only set inside handleCommit (non-dry-run).
    *  Never set from runValidation (B1: dry_run mints no change_set_id). */
   idempotencyKey: string | null
+}
+
+function emptyImportState(): ImportState {
+  return {
+    phase: 'idle',
+    file: null,
+    filename: '',
+    fileSize: 0,
+    errors: [],
+    diff: [],
+    totalCubes: 0,
+    fileCubeCount: 0,
+    commitError: '',
+    idempotencyKey: null,
+  }
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
@@ -437,22 +452,16 @@ export default function Import() {
   const layout = useUnits()
   const fileInputRef = useRef<HTMLInputElement>(null)
   const dropZoneRef = useRef<HTMLDivElement>(null)
+  // A dry-run result belongs only to the current selection, even for the same filename.
+  const validationGeneration = useRef(0)
+  const [state, setState] = useState<ImportState>(emptyImportState)
 
-  const [state, setState] = useState<ImportState>({
-    phase: 'idle',
-    file: null,
-    filename: '',
-    fileSize: 0,
-    errors: [],
-    diff: [],
-    totalCubes: 0,
-    fileCubeCount: 0,
-    commitError: '',
-    idempotencyKey: null,
-    // Note: commitResult is intentionally absent from ImportState (B1).
-    // The dry_run preview mints no change_set_id; storing a pre-committed result
-    // was the no-op bug (T-0708-NOOP-COMMIT). handleCommit always posts for real.
-  })
+  useEffect(
+    () => () => {
+      validationGeneration.current += 1
+    },
+    [],
+  )
 
   const [isDragging, setIsDragging] = useState(false)
 
@@ -463,48 +472,36 @@ export default function Import() {
 
   // ── File handling ───────────────────────────────────────────────────────────
 
+  function rejectFile(commitError: string) {
+    setState({ ...emptyImportState(), phase: 'error', commitError })
+    if (fileInputRef.current) fileInputRef.current.value = ''
+  }
+
   function handleFileSelect(file: File) {
+    const generation = ++validationGeneration.current
     if (file.size > 100_000) {
-      setState((prev) => ({
-        ...prev,
-        phase: 'error',
-        commitError: 'File is too large. Maximum upload size is 100 KB.',
-        file: null,
-        filename: '',
-        fileSize: 0,
-      }))
+      rejectFile('File is too large. Maximum upload size is 100 KB.')
       return
     }
     const ext = file.name.split('.').pop()?.toLowerCase()
     if (ext !== 'csv' && ext !== 'yaml' && ext !== 'yml') {
-      setState((prev) => ({
-        ...prev,
-        phase: 'error',
-        commitError: 'Unsupported file format. Please upload a .csv or .yaml file.',
-        file: null,
-        filename: '',
-        fileSize: 0,
-      }))
+      rejectFile('Unsupported file format. Please upload a .csv or .yaml file.')
       return
     }
 
-    setState((prev) => ({
-      ...prev,
+    setState({
+      ...emptyImportState(),
       file,
       filename: file.name,
       fileSize: file.size,
       phase: 'validating',
-      errors: [],
-      diff: [],
-      commitError: '',
-      idempotencyKey: null,
-    }))
+    })
 
     // Run the dry_run preview — server validates + computes diff with NO write.
-    void runValidation(file)
+    void runValidation(file, generation)
   }
 
-  async function runValidation(file: File) {
+  async function runValidation(file: File, generation: number) {
     // Call the dry_run preview endpoint: POST /api/admin/import/boundaries?dry_run=true
     // This runs the full parse + validation pipeline server-side with NO DB write.
     // On 200: diff preview body {total_cubes, file_cube_count, diff_preview}.
@@ -516,6 +513,7 @@ export default function Import() {
     // The ONLY idempotencyKey assignment is inside handleCommit (non-dry-run path).
     try {
       const previewResult = await uploadImportBoundaries(file, null, /*dryRun*/ true)
+      if (generation !== validationGeneration.current) return
       // 200 preview body — feed through parseDiff (same shape parseDiff already reads).
       // Cast via unknown first since BoundariesDryRunPreview is a typed interface.
       const previewBody = previewResult as unknown as Record<string, unknown>
@@ -531,6 +529,7 @@ export default function Import() {
         // B1: do NOT assign idempotencyKey here. The commit will generate a fresh one.
       }))
     } catch (err) {
+      if (generation !== validationGeneration.current) return
       if (err instanceof BulkSaveError) {
         if (err.status === 400 || err.status === 422) {
           // W6: read err.body (the full parsed JSON from BulkSaveError) — no re-parsing.
@@ -590,18 +589,8 @@ export default function Import() {
   }
 
   function handleClearFile() {
-    setState({
-      phase: 'idle',
-      file: null,
-      filename: '',
-      fileSize: 0,
-      errors: [],
-      diff: [],
-      totalCubes: 0,
-      fileCubeCount: 0,
-      commitError: '',
-      idempotencyKey: null,
-    })
+    validationGeneration.current += 1
+    setState(emptyImportState())
     if (fileInputRef.current) fileInputRef.current.value = ''
   }
 
