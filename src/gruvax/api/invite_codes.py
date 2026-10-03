@@ -97,13 +97,17 @@ _CONSUME_INVITE = (
     " WHERE code = %s::uuid AND profile_id = %s::uuid"
     "   AND consumed_at IS NULL"
     "   AND expires_at > NOW()"
+    "   AND EXISTS (SELECT 1 FROM gruvax.profiles p"
+    "     WHERE p.id = profile_invite_codes.profile_id AND p.deleted_at IS NULL)"
     " RETURNING profile_id"
 )
 
 # Preflight before upstream validation; final consumption rechecks validity.
 _SELECT_REDEEM_PROFILE = (
-    "SELECT profile_id FROM gruvax.profile_invite_codes"
-    " WHERE code = %s::uuid AND consumed_at IS NULL AND expires_at > NOW()"
+    "SELECT pic.profile_id FROM gruvax.profile_invite_codes pic"
+    " JOIN gruvax.profiles p ON p.id = pic.profile_id"
+    " WHERE pic.code = %s::uuid AND pic.consumed_at IS NULL AND pic.expires_at > NOW()"
+    " AND p.deleted_at IS NULL"
 )
 
 # Public GET: validate a code without consuming it.
@@ -311,6 +315,10 @@ async def _commit_redemption(
                 " WHERE id = %s::uuid AND deleted_at IS NULL",
                 (ciphertext, user_id, profile_id),
             )
+            # Deletion can commit after the consume's active-profile check.
+            # A zero-row token write must roll back the invite too, never report success.
+            if cur.rowcount != 1:
+                raise HTTPException(status_code=404, detail={"type": "invite_not_found"})
             await conn.commit()
     except psycopg.errors.UniqueViolation as exc:
         # Another redemption/connect can acquire the same user ID after our SELECT.
@@ -339,7 +347,7 @@ async def redeem_invite(
       4. Add background sync task only after successful commit.
 
     Error taxonomy (all negative invite cases → uniform 404, no oracle — T-07-10):
-      404 invite_not_found  — expired, consumed, non-existent, or invalid UUID
+      404 invite_not_found  — expired, consumed, non-existent, deleted profile, or invalid UUID
       401 pat_rejected      — discogsography returned 401/403
       409 user_id_collision — user_id already on another active profile
       503 upstream_unavailable — discogsography rate-limited or server error

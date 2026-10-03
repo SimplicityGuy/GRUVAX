@@ -16,6 +16,8 @@ import pytest_asyncio
 
 from gruvax.api import invite_codes
 from gruvax.api.admin.limiter import limiter
+from gruvax.api.admin.profiles import router as profiles_router
+from gruvax.api.deps import require_admin
 from gruvax.discogsography.errors import NetworkError, PATRejected, RateLimitExhausted, ServerError
 from gruvax.sync.pat_crypto import decrypt_pat
 
@@ -51,6 +53,10 @@ class TrackedCursor:
         row = await self.raw.fetchone()
         if self.tracker.collision_barrier and "SELECT id::text" in self.query:
             await asyncio.wait_for(self.tracker.collision_barrier.wait(), 5)
+        if self.tracker.collision_callback and "SELECT id::text" in self.query:
+            callback = self.tracker.collision_callback
+            self.tracker.collision_callback = None
+            await callback()
         return row
 
     def __getattr__(self, name: str) -> Any:
@@ -75,6 +81,7 @@ class TrackedPool:
         self.held: dict[Any, int] = {}
         self.collision_barrier: asyncio.Barrier | None = None
         self.unique_violations = 0
+        self.collision_callback: Any = None
 
     @property
     def in_use(self) -> int:
@@ -115,6 +122,8 @@ async def redemption(db_pool: Any, monkeypatch: Any) -> AsyncIterator[Any]:
     app = FastAPI()
     app.state.db_pool = pool
     app.include_router(invite_codes.public_router, prefix="/api")
+    app.include_router(profiles_router, prefix="/api/admin")
+    app.dependency_overrides[require_admin] = lambda: {}
     try:
         async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as client:
             yield client, pool, ids, codes, queued
@@ -223,3 +232,38 @@ async def test_raced_unique_collision_returns_409_and_keeps_losing_invite(
     queued.assert_awaited_once()
     loser = next(i for i, r in enumerate(results) if r.status_code == 409)
     assert await state(pool.raw, codes[loser], ids[loser]) == (None, b"", True, None)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("timing", ["before", "during_http", "after_consume"])
+async def test_deleted_profile_never_consumes_or_connects(
+    redemption: Any, monkeypatch: Any, timing: str
+) -> None:
+    client, pool, ids, codes, queued = redemption
+    uid = str(uuid4())
+
+    async def delete_profile() -> None:
+        assert (await client.delete(f"/api/admin/profiles/{ids[0]}")).status_code == 200
+
+    async def accepted(pat: str) -> str:
+        assert pool.in_use == 0
+        if timing == "during_http":
+            await delete_profile()
+        return uid
+
+    upstream = AsyncMock(side_effect=accepted)
+    monkeypatch.setattr(invite_codes, "_run_test_sync", upstream)
+    if timing == "before":
+        await delete_profile()
+    elif timing == "after_consume":
+        # Real deletion commits after the final consume, before the token UPDATE.
+        pool.collision_callback = delete_profile
+    result = await post(client, codes[0])
+    assert result.status_code == 404
+    assert result.json() == {"detail": {"type": "invite_not_found"}}
+    assert await state(pool.raw, codes[0], ids[0]) == (None, b"", True, None)
+    queued.assert_not_awaited()
+    if timing == "before":
+        upstream.assert_not_awaited()
+    else:
+        upstream.assert_awaited_once()
