@@ -32,11 +32,11 @@ vi.mock('../../api/client', async (importOriginal) => {
 })
 
 // Import after vi.mock so we get the mocked versions
-import { locateRelease } from '../../api/client'
+import { illuminateRecord, locateRelease } from '../../api/client'
 import { ResultsList } from './ResultsList'
 import { useGruvaxStore } from '../../state/store'
 import { useSessionStore } from '../../state/sessionStore'
-import type { SearchResult } from '../../api/types'
+import type { LocateResult, SearchResult } from '../../api/types'
 
 const TEST_PROFILE_ID = '00000000-0000-0000-0000-000000000001'
 
@@ -102,5 +102,32 @@ describe('ResultsList locate profile scoping (02-09 regression)', () => {
     })
 
     expect(locateRelease).toHaveBeenCalledWith(1157, TEST_PROFILE_ID)
+  })
+})
+
+describe('ResultsList pending locate cleanup (gruvax-d5p6)', () => {
+  it('does not light or illuminate a result after the list unmounts', async () => {
+    useGruvaxStore.getState().clearSearch()
+    let resolve!: (result: LocateResult) => void
+    vi.mocked(locateRelease).mockReturnValueOnce(
+      new Promise<LocateResult>((yes) => {
+        resolve = yes
+      }),
+    )
+    const view = render(<ResultsList items={ITEMS} showNoResults={false} open />)
+    view.unmount()
+    await act(async () => {
+      resolve({
+        release_id: ITEMS[0].release_id,
+        primary_cube: { unit_id: 1, row: 0, col: 0 },
+        label_span: [],
+        sub_cube_interval: null,
+        confidence: 0.8,
+        generated_at: '2026-10-03T00:00:00Z',
+        estimator_version: 'test',
+      })
+    })
+    expect(useGruvaxStore.getState().highlight.primaryCube).toBeNull()
+    expect(illuminateRecord).not.toHaveBeenCalled()
   })
 })

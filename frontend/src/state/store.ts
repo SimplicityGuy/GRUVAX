@@ -51,6 +51,11 @@ interface GruvaxStore {
   selectedResult: SearchResult | null
   setSelectedResult: (result: SearchResult | null) => void
 
+  /** Monotonic generation shared by selection and SSE locate requests. */
+  locateRequestToken: number
+  /** Invalidate pending locate responses; returns the generation for a new request. */
+  invalidateLocateRequests: () => number
+
   /** Primary cube highlight state — set after /api/locate resolves */
   highlight: HighlightState
   setHighlightCube: (cube: CubeRef | null) => void
@@ -124,15 +129,26 @@ interface GruvaxStore {
   clearShimmerCubes: (cubes: ShimmerCube[]) => void
 }
 
-export const useGruvaxStore = create<GruvaxStore>((set) => ({
+export const useGruvaxStore = create<GruvaxStore>((set, get) => ({
   query: '',
-  setQuery: (q) => set({ query: q }),
+  setQuery: (q) =>
+    set((s) => ({
+      query: q,
+      locateRequestToken: s.locateRequestToken + (q !== s.query ? 1 : 0),
+    })),
 
   selectedReleaseId: null,
-  setSelectedReleaseId: (id) => set({ selectedReleaseId: id }),
+  setSelectedReleaseId: (id) =>
+    set((s) => ({ selectedReleaseId: id, locateRequestToken: s.locateRequestToken + 1 })),
 
   selectedResult: null,
   setSelectedResult: (result) => set({ selectedResult: result }),
+
+  locateRequestToken: 0,
+  invalidateLocateRequests: () => {
+    set((s) => ({ locateRequestToken: s.locateRequestToken + 1 }))
+    return get().locateRequestToken
+  },
 
   highlight: { primaryCube: null },
   setHighlightCube: (cube) =>
@@ -164,7 +180,8 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
   shelfLayoutUnavailable: false,
 
   clearSearch: () =>
-    set({
+    set((s) => ({
+      locateRequestToken: s.locateRequestToken + 1,
       query: '',
       selectedReleaseId: null,
       selectedResult: null,
@@ -174,7 +191,7 @@ export const useGruvaxStore = create<GruvaxStore>((set) => ({
       confidence: 0,
       animationToken: 0,
       shelfLayoutUnavailable: false,
-    }),
+    })),
 
   // ── Phase 4: SSE connectivity + shimmer ─────────────────────────────────
 

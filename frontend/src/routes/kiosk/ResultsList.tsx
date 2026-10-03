@@ -68,6 +68,10 @@ export function ResultsList({
     setSelectedReleaseId(top.release_id)
     // Fire locate for top result — feed full result into store (CUBE-04/Phase 2).
     locateAndIlluminate(top.release_id)
+    // A new top result or unmount makes any outstanding response obsolete.
+    return () => {
+      useGruvaxStore.getState().invalidateLocateRequests()
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [topReleaseId])
 
