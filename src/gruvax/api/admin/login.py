@@ -150,7 +150,7 @@ async def login(
     )
     # Correct PIN — create server-side session row + set cookies
     async with pool.connection() as conn:
-        csrf_token = await create_session(
+        session = await create_session(
             conn,
             response,
             settings.SESSION_SECRET,
@@ -158,12 +158,8 @@ async def login(
             hard_cap,
         )
 
-    # Return the CSRF token; let the client poll /session for expiry times.
-    # session_id would be None here — cookie is on the RESPONSE not the request.
-    return {
-        "csrf_token": csrf_token,
-        "message": "Login successful",
-    }
+    # Metadata is minted from the same server times persisted with the cookies.
+    return {**session, "message": "Login successful"}
 
 
 @router.post("/logout")
@@ -212,7 +208,8 @@ async def get_session(
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
             "SELECT expires_at, hard_expires_at,"
-            " EXTRACT(EPOCH FROM (expires_at - NOW()))::int AS expires_in_seconds"
+            " EXTRACT(EPOCH FROM (expires_at - NOW()))::int AS expires_in_seconds,"
+            " EXTRACT(EPOCH FROM (hard_expires_at - NOW()))::int AS hard_cap_in_seconds"
             " FROM gruvax.admin_sessions WHERE id = %s",
             (session_id,),
         )
@@ -224,8 +221,9 @@ async def get_session(
             detail="Session not found",
         )
 
-    expires_at, hard_expires_at, expires_in_seconds = row
+    expires_at, hard_expires_at, expires_in_seconds, hard_cap_in_seconds = row
     return {
+        "hard_cap_in_seconds": max(0, int(hard_cap_in_seconds)),
         "expires_at": expires_at.isoformat()
         if hasattr(expires_at, "isoformat")
         else str(expires_at),

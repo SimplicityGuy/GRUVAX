@@ -166,3 +166,32 @@ async def test_invalid_policy_write_rejected(policy_client: Any, field: str, val
     assert result.json()["detail"]["type"] == "invalid_session_duration"
     current = await policy_client[0].get("/api/admin/settings")
     assert current.json()[field] == (600 if field == "session_idle_ttl_seconds" else 1800)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_login_and_poll_metadata_matches_authoritative_row(policy_client: Any) -> None:
+    client, _, _, ids = policy_client
+    _, csrf = await login(policy_client)
+    assert (
+        await put(policy_client, csrf, session_idle_ttl_seconds=60, session_hard_cap_seconds=120)
+    ).status_code == 200
+    result = await client.post("/api/admin/login", json={"pin": "0000"})
+    assert result.status_code == 200
+    sid = URLSafeSerializer(settings.SESSION_SECRET, salt="session").loads(
+        client.cookies["gruvax_session"]
+    )
+    ids.append(sid)
+    _, _, expires, hard = await row(policy_client, sid)
+    body = result.json()
+    assert body["expires_at"] == expires.isoformat()
+    assert body["hard_cap_at"] == hard.isoformat()
+    assert body["expires_in_seconds"] == 60
+    assert body["hard_cap_in_seconds"] == 120
+    session = await client.get("/api/admin/session")
+    assert session.status_code == 200
+    _, _, expires, hard = await row(policy_client, sid)
+    body = session.json()
+    assert body["expires_at"] == expires.isoformat()
+    assert body["hard_cap_at"] == hard.isoformat()
+    assert 0 < body["expires_in_seconds"] <= 60
+    assert 0 < body["hard_cap_in_seconds"] <= 120

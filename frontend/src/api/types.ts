@@ -108,7 +108,7 @@ export type CubeState = 'dim' | 'lit' | 'empty'
 // ── Admin API types ────────────────────────────────────────────────────────
 
 /** Response from POST /api/admin/login — includes CSRF token for double-submit. */
-export interface LoginResponse {
+export interface LoginResponse extends AdminSession {
   csrf_token: string
   message: string
 }
@@ -125,6 +125,8 @@ export interface AdminSession {
    * actual sliding-window session state.
    */
   expires_in_seconds: number
+  /** Server-computed hard-cap duration; anchor to the browser clock like idle expiry. */
+  hard_cap_in_seconds: number
 }
 
 /** Response from GET /api/admin/settings — nominal capacity, idle TTL, and LED knobs.
