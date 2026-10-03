@@ -50,6 +50,17 @@ beforeEach(() => {
 })
 
 describe('shared locate generation', () => {
+  it('keeps the selected record locate pending while typing before new results arrive', async () => {
+    const pending = deferred()
+    vi.mocked(locateRelease).mockReturnValueOnce(pending.promise)
+    select(1)
+    useGruvaxStore.getState().setQuery('record extended')
+    pending.resolve(located(1))
+    await settle()
+    expect(useGruvaxStore.getState().highlight.primaryCube).toEqual(located(1).primary_cube)
+    expect(illuminateRecord).toHaveBeenCalledExactlyOnceWith(located(1))
+  })
+
   it.each([false, true])(
     'fully clears locate state after the current selection fails (unavailable=%s)',
     async (unavailable) => {
@@ -123,13 +134,12 @@ describe('shared locate generation', () => {
     expect(useGruvaxStore.getState().animationToken).toBe(1)
   })
 
-  it.each(['query', 'profile', 'clear', 'cancel'] as const)(
+  it.each(['profile', 'clear', 'cancel'] as const)(
     'ignores pending success after %s changes',
     async (change) => {
       const pending = deferred()
       vi.mocked(locateRelease).mockReturnValueOnce(pending.promise)
       select(1)
-      if (change === 'query') useGruvaxStore.getState().setQuery('different record')
       if (change === 'profile') useSessionStore.setState({ boundProfileId: 'profile-b' })
       if (change === 'clear') useGruvaxStore.getState().clearSearch()
       if (change === 'cancel') useGruvaxStore.getState().invalidateLocateRequests()

@@ -138,7 +138,6 @@ export const useGruvaxStore = create<GruvaxStore>((set, get) => ({
     set((s) => ({
       query: q,
       searchSession: s.searchSession + (q.trim() === '' && s.query.trim() !== '' ? 1 : 0),
-      locateRequestToken: s.locateRequestToken + (q !== s.query ? 1 : 0),
     })),
 
   selectedReleaseId: null,
