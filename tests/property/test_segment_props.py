@@ -13,6 +13,8 @@ Per-Requirement coverage:
 
 from __future__ import annotations
 
+from itertools import pairwise
+
 from hypothesis import given, settings, strategies as st
 import pytest
 
@@ -555,3 +557,51 @@ def test_picker_order_equals_estimator_cut_key_order(labels: list[str]) -> None:
         assert [(b.unit_id, b.row, b.col) for b in bins] == [(1, 0, col)], (
             f"{label!r} (picker pos {col}) lit the wrong cube: {bins}"
         )
+
+
+@given(
+    count_a=st.integers(min_value=2, max_value=8),
+    count_b=st.integers(min_value=2, max_value=8),
+    width_a=st.sampled_from([None, 0.2, 0.5, 0.8]),
+)
+@settings(max_examples=40)
+def test_shared_bin_record_spacing_is_exact(
+    count_a: int, count_b: int, width_a: float | None
+) -> None:
+    """Planted rank midpoints remain distinct across labels and physical-width overrides."""
+    from gruvax.estimator.algorithm import locate
+    from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
+    from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
+    from gruvax.estimator.segment_cache import SegmentCache
+
+    boundary = BoundaryCache()
+    boundary._load_rows([BoundaryRow(1, 0, 0, "LabelA", "A 001", False)])
+    records_a = [RecordRow(i + 1, "LabelA", f"A {i + 1:03d}") for i in range(count_a)]
+    records_b = [RecordRow(count_a + i + 1, "LabelB", f"B {i + 1:03d}") for i in range(count_b)]
+    snapshot = CollectionSnapshot()
+    snapshot._load_snapshot({"labela": records_a, "labelb": records_b})
+    fraction_a = count_a / (count_a + count_b) if width_a is None else width_a
+    overrides = {} if width_a is None else {(1, 0, 0, "labela"): width_a}
+    segments = SegmentCache()
+    segments.derive(boundary, snapshot, overrides)
+    bin_ = segments.get_bin(1, 0, 0)
+    assert bin_ is not None and len(bin_.segments) == 2
+    intervals = []
+    for records, offset, width in (
+        (records_a, 0.0, fraction_a),
+        (records_b, fraction_a, 1 - fraction_a),
+    ):
+        for rank, record in enumerate(records):
+            planted_position = offset + width * (rank + 0.5) / len(records)
+            result = locate(
+                record.release_id, record.label, record.catalog_number, segments, snapshot
+            )
+            interval = result.sub_cube_interval
+            assert interval is not None, "Every planted record requires an actual band"
+            assert interval.start == pytest.approx(max(0, planted_position - 0.05))
+            assert interval.end == pytest.approx(min(1, planted_position + 0.05))
+            assert not interval.crosses_boundary
+            assert interval.next_cube is None
+            intervals.append((interval.start, interval.end))
+    assert len(intervals) == count_a + count_b
+    assert all(left < right for left, right in pairwise(intervals))

@@ -80,4 +80,25 @@ describe('record position bands', () => {
     )
     expect(container.querySelector('.sub-cube-bar')).toBeNull()
   })
+  it.each([0.125, 0.375, 0.625, 0.875])(
+    'renders the exact shared-bin midpoint %s in the primary Cube',
+    (position) => {
+      const { container } = render(
+        <Cube
+          unitId={1}
+          row={0}
+          col={0}
+          address="A1"
+          state="lit"
+          subInterval={{ start: position - 0.05, end: position + 0.05, crosses_boundary: false }}
+          confidence={0.4}
+        />,
+      )
+      const band = container.querySelector<HTMLElement>('.sub-cube-bar')!
+      expect(parseFloat(band.style.left)).toBeCloseTo((position - 0.05) * 100)
+      expect(parseFloat(band.style.width)).toBeCloseTo(10)
+      expect(band).not.toHaveClass('sub-cube-bar--singleton')
+      expect(band).toHaveAttribute('aria-label', 'approximate position')
+    },
+  )
 })

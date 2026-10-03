@@ -209,6 +209,13 @@ interval, so no companion band is synthesized from its clamped endpoint.
    catalog sort key (Strategy C token-stream parser — zero external dependency, fully
    deterministic; `gruvax.estimator.normalize.parse_key`).
 
+**Spacing:** bins shared by multiple labels use record midpoints within each applied
+label width: `offset + ((rank_in_segment + 0.5) / segment_count) * applied_fraction`.
+This separates adjacent labels' edge records. Single-segment bins retain the legacy
+endpoint formula `rank_in_segment / (segment_count - 1)` (or a local midpoint for
+a one-record segment belonging to a larger label). Crossing metadata is set only
+when the actual record band reaches the edge of a continuing bin.
+
 **Singleton:** a known label containing exactly one record receives a faint full-cube
 position band `[0, 1]` at confidence 0.30 (`segment-v1`), as required by D-02. A lone
 record within one segment of a larger label uses that segment's midpoint instead.

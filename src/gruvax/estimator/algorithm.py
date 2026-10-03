@@ -57,7 +57,7 @@ from gruvax.estimator.normalize import parse_key
 
 if TYPE_CHECKING:
     from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
-    from gruvax.estimator.segment_cache import SegmentCache
+    from gruvax.estimator.segment_cache import LabelSegment, SegmentBin, SegmentCache
 
 
 # Re-export constants so tests can import them from algorithm.py
@@ -172,6 +172,23 @@ def locate_cube_only(
     )
 
 
+def _record_band(
+    bin_: SegmentBin, seg: LabelSegment, rank: int, label_count: int
+) -> tuple[float, float]:
+    """Apply the global-singleton, shared-bin midpoint, and legacy spacing contracts."""
+    if label_count == 1:
+        return 0.0, 1.0
+    rank_in_segment = rank - seg.first_rank_in_label
+    if len(bin_.segments) > 1:
+        fraction = (rank_in_segment + 0.5) / seg.segment_count
+    elif seg.segment_count <= 1:
+        fraction = 0.5
+    else:
+        fraction = rank_in_segment / (seg.segment_count - 1)
+    position = seg.offset_in_bin + fraction * seg.applied_fraction
+    return max(0.0, position - POSITION_HALF_WIDTH), min(1.0, position + POSITION_HALF_WIDTH)
+
+
 def locate_by_segment(
     release_id: int,
     label: str,
@@ -193,7 +210,9 @@ def locate_by_segment(
          If None → fall back to locate_cube_only result.
       4. offset = seg.offset_in_bin
       5. rank_in_segment = rank - seg.first_rank_in_label
-      6. if seg.segment_count <= 1:
+      6. if len(bin.segments) > 1:
+             f = offset + ((rank_in_segment + 0.5) / seg.segment_count) * seg.applied_fraction
+         elif seg.segment_count <= 1:
              f = offset + seg.applied_fraction * 0.5  # midpoint for singletons (D-02)
          else:
              f = offset + (rank_in_segment / (seg.segment_count - 1)) * seg.applied_fraction
@@ -258,20 +277,8 @@ def locate_by_segment(
         key=lambda c: (c.unit_id, c.row, c.col),
     )
 
-    # Step 4+5: Compute two-level interpolation.
-    offset = seg.offset_in_bin
-    rank_in_segment = rank - seg.first_rank_in_label
-
-    # Step 6: Two-level formula (D-02 singleton midpoint / Pitfall 21 never zero-width).
-    if seg.segment_count <= 1:
-        # Singleton within segment: use midpoint of the segment's applied_fraction span.
-        f: float = offset + seg.applied_fraction * 0.5
-    else:
-        f = offset + (rank_in_segment / (seg.segment_count - 1)) * seg.applied_fraction
-
-    # Step 7: Apply band formula (Pitfall 21 — never zero-width).
-    start = 0.0 if k == 1 else max(0.0, f - POSITION_HALF_WIDTH)
-    end = 1.0 if k == 1 else min(1.0, f + POSITION_HALF_WIDTH)
+    # Steps 4-7: The record-band policy owns global singleton and bin-spacing rules.
+    start, end = _record_band(bin_, seg, rank, k)
 
     # Step 8: Crossing describes the record band, not every record in a continuing segment.
     crosses_boundary = False

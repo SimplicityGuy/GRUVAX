@@ -110,7 +110,7 @@ def test_locate_by_segment_two_level_formula(multi_label_estimator_fixture) -> N
     rank_in_seg = rank - label_a_seg.first_rank_in_label
     expected_f = (
         label_a_seg.offset_in_bin
-        + (rank_in_seg / (label_a_seg.segment_count - 1)) * label_a_seg.applied_fraction
+        + ((rank_in_seg + 0.5) / label_a_seg.segment_count) * label_a_seg.applied_fraction
     )
     expected_start = max(0.0, expected_f - POSITION_HALF_WIDTH)
     expected_end = min(1.0, expected_f + POSITION_HALF_WIDTH)
