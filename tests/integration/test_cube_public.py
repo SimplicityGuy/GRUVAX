@@ -90,16 +90,27 @@ async def test_cube_contents_shape(client) -> None:  # type: ignore[no-untyped-d
     """GET /api/cubes/{u}/{r}/{c} returns total_count, fill_level, sample_records (CUBE-09).
 
     Uses unit_id=1, row=0, col=0 which is expected to exist in the seeded test DB.
-    If the cube doesn't exist (404), the test skips gracefully.
+    The owned seeded DB must provide this cube; a missing fixture is a failure.
     """
     response = await client.get("/api/cubes/1/0/0")
-    if response.status_code == 404:
-        pytest.skip("Cube (1,0,0) not in test DB — skipping shape test")
 
     assert response.status_code == 200, (
         f"Expected 200 for cube contents, got {response.status_code}: {response.text}"
     )
     body = response.json()
+
+    # Phase 5 D05/D07: persisted first cut points supersede last endpoints.
+    assert set(body) == {
+        "unit_id",
+        "row",
+        "col",
+        "first_label",
+        "first_catalog",
+        "is_empty",
+        "total_count",
+        "fill_level",
+        "sample_records",
+    }
 
     # Required fields per D-14 and Pattern 9
     assert "total_count" in body, "Response must include total_count"

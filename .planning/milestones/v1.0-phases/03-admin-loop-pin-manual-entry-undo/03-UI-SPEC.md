@@ -337,7 +337,7 @@ Triggered by any cube tap on the public kiosk view (no admin session required, D
 | Panel heading                 | Cube address "CUBE B2" — Barlow Condensed 900 36px `--gruvax-blue` ALL CAPS                  |
 | Fill-level row                | "94 RECORDS · 99% FULL" — DM Mono 400 14px `--gruvax-text-secondary`; fill bar (same as admin grid, height 6px) |
 | First record                  | "FIRST: [label] [catalog#]" — label "FIRST" Barlow 700 16px `--gruvax-text-muted` ALL CAPS; value DM Mono 14px `--gruvax-text-secondary` |
-| Last record                   | Same pattern as first record                                                                  |
+| Last record (superseded)      | Removed by Phase 5 D05/D07: bins store a first cut point, not a persisted last endpoint. The panel retains FIRST and sampled records. |
 | Sample records                | List of ~7 evenly-sampled records (D-14); each row: DM Mono 14px catalog# + Space Grotesk 14px title; min 44px row height; alternating `--gruvax-white` / `--gruvax-off-white` |
 | Empty cube state              | "No records assigned to this cube yet." — Space Grotesk 400 16px `--gruvax-text-muted`, centered; if admin is logged in: "EDIT THIS CUBE" link-button (Barlow 700 14px `--gruvax-blue`) navigates to editor (D-16) |
 | Dismiss                       | Tap outside panel or swipe down; closes in 250ms                                             |

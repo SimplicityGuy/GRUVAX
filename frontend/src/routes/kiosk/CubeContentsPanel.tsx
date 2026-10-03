@@ -5,7 +5,7 @@
  * Fetches GET /api/cubes/{u}/{r}/{c} via TanStack Query and renders:
  *   - Cube address heading "CUBE B2"
  *   - Fill level row "94 RECORDS · 99% FULL"
- *   - First / last boundary records
+ *   - First cut point and sampled records
  *   - ~7 evenly-sampled records
  *   - Empty-state copy (D-16)
  *   - D-16: "EDIT THIS CUBE" link-button when admin is logged in
@@ -134,20 +134,12 @@ export function CubeContentsPanel({ cube, units = [], onDismiss }: CubeContentsP
                     />
                   </div>
 
-                  {/* First / Last boundary records */}
+                  {/* First cut point — Phase 5 stores no last boundary */}
                   {(data.first_label || data.first_catalog) && (
                     <div className="cube-panel__boundary-row">
                       <span className="cube-panel__boundary-label">FIRST</span>
                       <span className="cube-panel__boundary-value">
                         {data.first_label} {data.first_catalog}
-                      </span>
-                    </div>
-                  )}
-                  {(data.last_label || data.last_catalog) && (
-                    <div className="cube-panel__boundary-row">
-                      <span className="cube-panel__boundary-label">LAST</span>
-                      <span className="cube-panel__boundary-value">
-                        {data.last_label} {data.last_catalog}
                       </span>
                     </div>
                   )}
