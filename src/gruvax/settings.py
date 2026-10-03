@@ -4,6 +4,8 @@ All configuration is validated at startup via pydantic-settings; a missing or
 malformed value crashes boot rather than surfacing at request time.
 """
 
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
@@ -56,6 +58,18 @@ class Settings(BaseSettings):
     # ``SecretStr`` hides the value from ``repr``/``str`` so it never lands in
     # logs by accident (T-01-secret-leak-via-repr mitigation).
     GRUVAX_SECRET_KEY: SecretStr
+
+    # IANA timezone for wall-clock sync schedules; keep transition rules year-round.
+    TZ: str = "America/Los_Angeles"
+
+    @field_validator("TZ")
+    @classmethod
+    def _validate_timezone(cls, value: str) -> str:
+        try:
+            ZoneInfo(value)
+        except ZoneInfoNotFoundError as exc:
+            raise ValueError("TZ must name an available IANA timezone") from exc
+        return value
 
     # ── Logging ───────────────────────────────────────────────────────────────
     LOG_LEVEL: str = "INFO"

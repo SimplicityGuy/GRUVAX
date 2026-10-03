@@ -27,10 +27,12 @@ Security invariants:
 from __future__ import annotations
 
 import asyncio
-from datetime import datetime, timedelta
+from datetime import UTC, date, datetime, timedelta, tzinfo
 import logging
 from typing import Any
+from zoneinfo import ZoneInfo
 
+from gruvax.settings import settings
 from gruvax.sync.profile_sync import ProfileDeletedDuringSync, sync_profile
 
 
@@ -52,41 +54,33 @@ _CADENCE_FIRE_HOURS: dict[str, list[int]] = {
 
 
 def now_local() -> datetime:
-    """Server-local TZ-aware datetime (respects OS/container TZ env).
+    """Configured IANA local time, retaining future DST transition rules."""
+    return datetime.now(ZoneInfo(settings.TZ))
 
-    Uses datetime.now().astimezone() which returns the OS local timezone
-    including any DST offset in effect at call time.
-    """
-    return datetime.now().astimezone()
+
+def _wall_fire(day: date, tz: tzinfo, hour: int) -> datetime:
+    candidate = datetime(day.year, day.month, day.day, hour, tzinfo=tz, fold=1)
+    normalized = candidate.astimezone(UTC).astimezone(tz)
+    if normalized.replace(tzinfo=None) != candidate.replace(tzinfo=None):
+        # A spring-forward gap has no such local hour. Use the valid instant
+        # after the gap, rather than returning an imaginary wall-clock time.
+        candidate = candidate.replace(fold=0).astimezone(UTC).astimezone(tz)
+    return candidate
 
 
 def next_fire_after(now_aware: datetime, hour: int = 3) -> datetime:
-    """DST-correct next occurrence of server-local ``hour``:00:00.
+    """Next local fire instant; second fold on ambiguity, forward across gaps.
 
-    Always returns a time strictly after ``now_aware``.  Uses ``fold=1`` to
-    resolve any wall-clock ambiguity introduced by DST fall-back transitions
-    (selects the post-transition offset).
-
-    Invariants verified across 40 daily firings through US/Eastern DST transitions:
-      - result > now_aware  (always strictly future)
-      - Successive 03:00 firings are 22-26 wall-clock hours apart (D4-01)
-
-    Args:
-        now_aware: A TZ-aware datetime (e.g. from now_local()).
-        hour: The target wall-clock hour (0-23).  Default 3 (03:00 local).
-
-    Returns:
-        The next occurrence of ``hour``:00:00 in the server's local TZ,
-        strictly after ``now_aware``.
+    Compare UTC instants because same-zone datetime comparisons/subtraction use
+    wall time and ignore fold. Daily 03:00 firings can be 23/25 elapsed hours
+    apart (or 23.5/24.5 in zones with half-hour transitions).
     """
-    tz = now_aware.tzinfo
+    if now_aware.tzinfo is None:
+        raise ValueError("next_fire_after requires a timezone-aware datetime")
     today = now_aware.date()
-    candidate_naive = datetime(today.year, today.month, today.day, hour, 0, 0)
-    candidate = candidate_naive.replace(tzinfo=tz, fold=1)
-    if candidate <= now_aware:
-        tomorrow = today + timedelta(days=1)
-        candidate_naive = datetime(tomorrow.year, tomorrow.month, tomorrow.day, hour, 0, 0)
-        candidate = candidate_naive.replace(tzinfo=tz, fold=1)
+    candidate = _wall_fire(today, now_aware.tzinfo, hour)
+    if candidate.astimezone(UTC) <= now_aware.astimezone(UTC):
+        candidate = _wall_fire(today + timedelta(days=1), now_aware.tzinfo, hour)
     return candidate
 
 
@@ -166,8 +160,11 @@ async def _sync_loop(pool: Any, app_state: Any) -> None:
             # cadence's hour list (D4-03).
             fire_hours = _CADENCE_FIRE_HOURS.get(cadence, [3])
             now = now_local()
-            next_fire = min(next_fire_after(now, h) for h in fire_hours)
-            sleep_secs = (next_fire - now).total_seconds()
+            next_fire = min(
+                (next_fire_after(now, h) for h in fire_hours),
+                key=lambda fire: fire.astimezone(UTC),
+            )
+            sleep_secs = (next_fire.astimezone(UTC) - now.astimezone(UTC)).total_seconds()
 
             logger.info(
                 "nightly_sync: cadence=%s next_fire=%s sleep_secs=%.0f",
