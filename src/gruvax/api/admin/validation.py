@@ -280,6 +280,26 @@ def validate_contiguity(
     return None
 
 
+def validate_cascade_contiguity(
+    cache: BoundaryCache,
+    segment_cache: SegmentCache,
+    cascade: list[tuple[int, int, int, str | None, str | None, bool]],
+) -> str | None:
+    """Check the complete proposed state of EVERY unit an insert cascade touches.
+
+    The trailing empty cube can be in another unit. Contiguity remains a
+    per-unit rule, so each group is merged with that unit's untouched cuts.
+    """
+    by_unit: dict[int, list[tuple[int, int, int, str | None, str | None, bool]]] = {}
+    for edit in cascade:
+        by_unit.setdefault(edit[0], []).append(edit)
+    for edits in by_unit.values():
+        error = validate_contiguity(build_proposed_cuts(cache, cascade=edits), segment_cache)
+        if error is not None:
+            return error
+    return None
+
+
 def validate_no_empty_bin(
     proposed_first_label: str,
     proposed_first_catalog: str,
