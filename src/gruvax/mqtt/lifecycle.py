@@ -100,6 +100,7 @@ class HighlightRegistry:
 
     def __init__(self) -> None:
         self._entries: dict[str, _RegistryEntry] = {}
+        self.lock = asyncio.Lock()
 
     def add(
         self,
@@ -161,7 +162,12 @@ async def schedule_revert(
             return
         # Re-publish ambient state/* for the specific affected cubes (no pool needed;
         # cubes are passed explicitly to avoid a DB round-trip during the revert).
-        await publish_ambient(client, None, settings_cache, cubes=cubes)
+        async with registry.lock:
+            # A reset/new selection may have cancelled this highlight while
+            # its timer waited for the lock. Only registered highlights revert.
+            if not any(hid == highlight_id for hid, _ in registry.items()):
+                return
+            await publish_ambient(client, None, settings_cache, cubes=cubes)
         logger.info(
             "Revert complete for highlight_id=%s (%d cubes reverted to ambient)",
             highlight_id,
@@ -214,125 +220,133 @@ async def illuminate_with_lifecycle(
         )
         return
 
-    # ── Resolve retain mode ───────────────────────────────────────────────────
-    retain_mode_raw = settings_cache.get("led_highlight.retain_mode", "false")
-    # Settings values are stored as JSON-encoded strings; "false"/"true" (no quotes).
-    if isinstance(retain_mode_raw, str):
-        retain_mode = retain_mode_raw.strip('"').lower() == "true"
-    else:
-        retain_mode = bool(retain_mode_raw)
+    # Serialize cancellation, wire publishes and registry registration together.
+    async with registry.lock:
+        # ── Resolve retain mode ───────────────────────────────────────────────────
+        retain_mode_raw = settings_cache.get("led_highlight.retain_mode", "false")
+        # Settings values are stored as JSON-encoded strings; "false"/"true" (no quotes).
+        if isinstance(retain_mode_raw, str):
+            retain_mode = retain_mode_raw.strip('"').lower() == "true"
+        else:
+            retain_mode = bool(retain_mode_raw)
 
-    # ── Compute affected cubes (primary + span) ───────────────────────────────
-    primary = body.primary_cube  # dict | None
-    label_span = body.label_span or []  # list[dict]
+        # ── Compute affected cubes (primary + span) ───────────────────────────────
+        primary = body.primary_cube  # dict | None
+        label_span = body.label_span or []  # list[dict]
 
-    # Collect all distinct cubes this highlight touches.
-    seen: set[tuple[int, int, int]] = set()
-    affected: list[dict[str, int]] = []
-    for cube_dict in ([primary] if primary is not None else []) + list(label_span):
-        if cube_dict is None:
-            continue
-        key = (cube_dict["unit_id"], cube_dict["row"], cube_dict["col"])
-        if key not in seen:
-            seen.add(key)
-            affected.append(
-                {"unit_id": cube_dict["unit_id"], "row": cube_dict["row"], "col": cube_dict["col"]}
+        # Collect all distinct cubes this highlight touches.
+        seen: set[tuple[int, int, int]] = set()
+        affected: list[dict[str, int]] = []
+        for cube_dict in ([primary] if primary is not None else []) + list(label_span):
+            if cube_dict is None:
+                continue
+            key = (cube_dict["unit_id"], cube_dict["row"], cube_dict["col"])
+            if key not in seen:
+                seen.add(key)
+                affected.append(
+                    {
+                        "unit_id": cube_dict["unit_id"],
+                        "row": cube_dict["row"],
+                        "col": cube_dict["col"],
+                    }
+                )
+
+        # ── Default mode: cancel prior + immediate ambient revert ─────────────────
+        if not retain_mode:
+            prior_entries = registry.items()
+            for hid, entry in prior_entries:
+                entry.task.cancel()
+                registry.pop(hid)
+                await asyncio.gather(entry.task, return_exceptions=True)
+                # Best-effort immediate ambient revert for the cancelled cubes.
+                try:
+                    await publish_ambient(client, None, settings_cache, cubes=entry.cubes)
+                    logger.info(
+                        "Cancelled prior highlight %s; reverted %d cubes to ambient",
+                        hid,
+                        len(entry.cubes),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Best-effort ambient revert for cancelled highlight %s failed: %s",
+                        hid,
+                        exc,
+                    )
+        else:
+            # ── Retain mode: enforce the hard cap by evicting oldest (WR-02) ──────
+            # registry.items() preserves insertion order (dict ordering), so the
+            # leading entries are the oldest.  Evict just enough of them to make room
+            # for the new highlight, cancelling + reverting each before removal.
+            while len(registry) >= _RETAIN_MODE_MAX_HIGHLIGHTS:
+                oldest = registry.items()
+                if not oldest:
+                    break
+                hid, entry = oldest[0]
+                entry.task.cancel()
+                registry.pop(hid)
+                await asyncio.gather(entry.task, return_exceptions=True)
+                try:
+                    await publish_ambient(client, None, settings_cache, cubes=entry.cubes)
+                    logger.warning(
+                        "Retain-mode highlight cap (%d) reached; evicted oldest highlight %s "
+                        "(reverted %d cubes to ambient) to bound registry growth (WR-02)",
+                        _RETAIN_MODE_MAX_HIGHLIGHTS,
+                        hid,
+                        len(entry.cubes),
+                    )
+                except Exception as exc:
+                    logger.warning(
+                        "Best-effort ambient revert for evicted highlight %s failed: %s",
+                        hid,
+                        exc,
+                    )
+
+        # ── Publish the new highlight ─────────────────────────────────────────────
+        try:
+            await fan_out_illuminate(client, body, settings_cache)
+        except Exception as exc:
+            logger.warning(
+                "fan_out_illuminate failed for release_id=%s: %s",
+                getattr(body, "release_id", "unknown"),
+                exc,
             )
 
-    # ── Default mode: cancel prior + immediate ambient revert ─────────────────
-    if not retain_mode:
-        prior_entries = registry.items()
-        for hid, entry in prior_entries:
-            entry.task.cancel()
-            registry.pop(hid)
-            # Best-effort immediate ambient revert for the cancelled cubes.
-            try:
-                await publish_ambient(client, None, settings_cache, cubes=entry.cubes)
-                logger.info(
-                    "Cancelled prior highlight %s; reverted %d cubes to ambient",
-                    hid,
-                    len(entry.cubes),
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Best-effort ambient revert for cancelled highlight %s failed: %s",
-                    hid,
-                    exc,
-                )
-    else:
-        # ── Retain mode: enforce the hard cap by evicting oldest (WR-02) ──────
-        # registry.items() preserves insertion order (dict ordering), so the
-        # leading entries are the oldest.  Evict just enough of them to make room
-        # for the new highlight, cancelling + reverting each before removal.
-        while len(registry) >= _RETAIN_MODE_MAX_HIGHLIGHTS:
-            oldest = registry.items()
-            if not oldest:
-                break
-            hid, entry = oldest[0]
-            entry.task.cancel()
-            registry.pop(hid)
-            try:
-                await publish_ambient(client, None, settings_cache, cubes=entry.cubes)
-                logger.warning(
-                    "Retain-mode highlight cap (%d) reached; evicted oldest highlight %s "
-                    "(reverted %d cubes to ambient) to bound registry growth (WR-02)",
-                    _RETAIN_MODE_MAX_HIGHLIGHTS,
-                    hid,
-                    len(entry.cubes),
-                )
-            except Exception as exc:
-                logger.warning(
-                    "Best-effort ambient revert for evicted highlight %s failed: %s",
-                    hid,
-                    exc,
-                )
+        # ── Schedule the revert task ──────────────────────────────────────────────
+        if retain_mode:
+            ttl_raw = settings_cache.get("led_highlight.retain_ttl_seconds", "900")
+        else:
+            ttl_raw = settings_cache.get("led_highlight.active_ttl_seconds", "180")
 
-    # ── Publish the new highlight ─────────────────────────────────────────────
-    try:
-        await fan_out_illuminate(client, body, settings_cache)
-    except Exception as exc:
-        logger.warning(
-            "fan_out_illuminate failed for release_id=%s: %s",
-            getattr(body, "release_id", "unknown"),
-            exc,
+        try:
+            delay_seconds = int(str(ttl_raw).strip('"'))
+        except ValueError, TypeError:
+            delay_seconds = 900 if retain_mode else 180
+            logger.warning(
+                "Invalid TTL value %r; falling back to %d seconds",
+                ttl_raw,
+                delay_seconds,
+            )
+
+        highlight_id = str(uuid.uuid4())
+        task = asyncio.create_task(
+            schedule_revert(
+                registry,
+                client,
+                settings_cache,
+                highlight_id=highlight_id,
+                cubes=affected,
+                delay_seconds=delay_seconds,
+                sleep=sleep,
+            )
         )
-
-    # ── Schedule the revert task ──────────────────────────────────────────────
-    if retain_mode:
-        ttl_raw = settings_cache.get("led_highlight.retain_ttl_seconds", "900")
-    else:
-        ttl_raw = settings_cache.get("led_highlight.active_ttl_seconds", "180")
-
-    try:
-        delay_seconds = int(str(ttl_raw).strip('"'))
-    except ValueError, TypeError:
-        delay_seconds = 900 if retain_mode else 180
-        logger.warning(
-            "Invalid TTL value %r; falling back to %d seconds",
-            ttl_raw,
+        registry.add(highlight_id, task, affected)
+        logger.info(
+            "Highlight %s scheduled (retain_mode=%s, ttl=%ds, cubes=%d)",
+            highlight_id,
+            retain_mode,
             delay_seconds,
+            len(affected),
         )
-
-    highlight_id = str(uuid.uuid4())
-    task = asyncio.create_task(
-        schedule_revert(
-            registry,
-            client,
-            settings_cache,
-            highlight_id=highlight_id,
-            cubes=affected,
-            delay_seconds=delay_seconds,
-            sleep=sleep,
-        )
-    )
-    registry.add(highlight_id, task, affected)
-    logger.info(
-        "Highlight %s scheduled (retain_mode=%s, ttl=%ds, cubes=%d)",
-        highlight_id,
-        retain_mode,
-        delay_seconds,
-        len(affected),
-    )
 
 
 # ── cancel_and_revert_all ─────────────────────────────────────────────────────
@@ -351,30 +365,32 @@ async def cancel_and_revert_all(
     Degrades gracefully: if client is None, task cancellations still happen but
     ambient publishes are skipped.
     """
-    entries = registry.items()
-    if not entries:
-        return
+    async with registry.lock:
+        entries = registry.items()
+        if not entries:
+            return
 
-    logger.info("cancel_and_revert_all: cancelling %d pending revert tasks", len(entries))
+        logger.info("cancel_and_revert_all: cancelling %d pending revert tasks", len(entries))
 
-    for highlight_id, entry in entries:
-        try:
-            entry.task.cancel()
-        except Exception as exc:
-            logger.warning(
-                "Failed to cancel revert task for highlight_id=%s: %s", highlight_id, exc
-            )
-
-        if client is not None:
+        for highlight_id, entry in entries:
             try:
-                await publish_ambient(client, None, settings_cache, cubes=entry.cubes)
+                entry.task.cancel()
+                await asyncio.gather(entry.task, return_exceptions=True)
             except Exception as exc:
                 logger.warning(
-                    "Best-effort ambient revert on shutdown for highlight_id=%s failed: %s",
-                    highlight_id,
-                    exc,
+                    "Failed to cancel revert task for highlight_id=%s: %s", highlight_id, exc
                 )
 
-        registry.pop(highlight_id)
+            if client is not None:
+                try:
+                    await publish_ambient(client, None, settings_cache, cubes=entry.cubes)
+                except Exception as exc:
+                    logger.warning(
+                        "Best-effort ambient revert on shutdown for highlight_id=%s failed: %s",
+                        highlight_id,
+                        exc,
+                    )
 
-    logger.info("cancel_and_revert_all: registry cleared")
+            registry.pop(highlight_id)
+
+        logger.info("cancel_and_revert_all: registry cleared")

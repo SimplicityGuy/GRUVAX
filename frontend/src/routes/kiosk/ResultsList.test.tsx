@@ -177,6 +177,6 @@ describe('explicit selection dismissal preserves pending locate (gruvax-d5p6)', 
       resolve(located)
     })
     expect(useGruvaxStore.getState().highlight.primaryCube).toEqual(located.primary_cube)
-    expect(illuminateRecord).toHaveBeenCalledExactlyOnceWith(located)
+    expect(illuminateRecord).toHaveBeenCalledExactlyOnceWith(located, TEST_PROFILE_ID)
   })
 })

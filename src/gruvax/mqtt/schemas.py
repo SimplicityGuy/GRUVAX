@@ -21,7 +21,7 @@ to 0..255 at deserialization time.
 
 from __future__ import annotations
 
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -71,7 +71,7 @@ class IlluminatePayload(BaseModel):
 
     model_config = {"populate_by_name": True}
 
-    schema_: str = Field(default="gruvax.illuminate.v1", alias="schema")
+    schema_: Literal["gruvax.illuminate.v1"] = Field(default="gruvax.illuminate.v1", alias="schema")
     issued_at: str
     unit_id: int
     row: int
@@ -121,10 +121,15 @@ class SpanPayload(BaseModel):
 
     model_config = {"populate_by_name": True}
 
-    schema_: str = Field(default="gruvax.span.v1", alias="schema")
+    schema_: Literal["gruvax.span.v1"] = Field(default="gruvax.span.v1", alias="schema")
     issued_at: str
     change_id: str
     cubes: list[dict[str, int]]  # [{unit_id, row, col}, ...]
     color: RGBColor
     brightness: int  # clamped to led_brightness.span ceiling (D-24)
     transition: TransitionSpec
+
+
+# state/* retains existing wire schemas: primary/ambient are illuminate.v1;
+# non-primary label-span cubes are span.v1. No new firmware schema is introduced.
+type StatePayload = Annotated[IlluminatePayload | SpanPayload, Field(discriminator="schema_")]
