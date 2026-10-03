@@ -1,43 +1,9 @@
 ---
-# GRUVAX Docker Compose stack — api + mosquitto (container: gruvax-api-1)
-#
-# DATABASE CONNECTIVITY NOTE
-# ─────────────────────────────────────────────────────────────────────────────
-# This compose file wires the api service to either:
-#
-#   1. Host dev Postgres (default for local dev):
-#      The api container uses `host.docker.internal` to reach the
-#      gruvax-dev-pg container running on the host (`localhost:5432`).
-#      On Linux, add `extra_hosts: ["host.docker.internal:host-gateway"]`
-#      to the api service (already done below).
-#      DATABASE_URL must use host.docker.internal instead of localhost.
-#
-#   2. The shared discogsography Postgres (production on the deployment host):
-#      Uncomment the `discogsography_default` network references and set
-#      DATABASE_URL to point at the shared Postgres container name.
-#      The external network must be created by the discogsography stack first:
-#        docker network create discogsography_default
-#      or it already exists from `docker compose up` in that project.
-#
-# RUNBOOK (local dev)
-# ─────────────────────────────────────────────────────────────────────────────
-#   1. just up                # ONE command: builds + starts gruvax-dev-pg
-#                             # (auto-seeds the synthetic collection via initdb),
-#                             # api (auto-runs migrations + seeds cube
-#                             # boundaries), and mosquitto.
-#   2. open http://localhost:8000
-#   3. docker compose down    # stop and remove containers (no -v to keep volumes!)
-#
-# The synthetic collection (fixtures/synth_collection.sql) loads ONCE when the
-# gruvax-dev-pg data volume is first created. To re-seed from scratch, remove the
-# data volume: `docker compose down && docker volume rm gruvax_gruvax-dev-pg-data`.
-#
-# To point at the shared discogsography Postgres on the deployment host instead of the bundled
-# dev Postgres, set GRUVAX_DB_HOST/PORT/USER/PASSWORD/NAME in the environment
-# before `docker compose up` (the dev-pg service can be left running or stopped).
-#
-# Never run `docker compose down -v` unless you intentionally want to wipe the
-# mosquitto-data volume (retained LED state in Phase 5+).
+# Production: api + mosquitto + one-shot init-sync. Configure external DATABASE_URL
+# and DISCOGSOGRAPHY_BASE_URL before `docker compose pull && docker compose up -d`.
+# Local development: `just up` enables the dev profile (Postgres + synthetic API)
+# and development seeding. Stop with `just down`; retain volumes unless wiping
+# an explicitly disposable stack.
 
 services:
 
@@ -130,14 +96,15 @@ services:
     depends_on:
       gruvax-dev-pg:
         condition: service_healthy
+        required: false
       mosquitto:
         condition: service_healthy
       # Plan 01-05 / D-18: api boots against fake-discogsography in dev. In
-      # production override DISCOGSOGRAPHY_BASE_URL to point at the real
-      # discogsography service and remove this dependency (or run the
-      # fake-discogsography service via a profile gate).
+      # production set the real DISCOGSOGRAPHY_BASE_URL. The optional
+      # dependency starts only with the dev profile.
       fake-discogsography:
         condition: service_healthy
+        required: false
     healthcheck:
       test:
         - "CMD"
@@ -166,6 +133,7 @@ services:
   # The api service also seeds cube boundaries on startup. To use the
   # deployment host instead, set GRUVAX_DB_HOST (see header).
   gruvax-dev-pg:
+    profiles: ["dev"]
     image: postgres:18
     container_name: gruvax-dev-pg
     environment:
@@ -173,7 +141,7 @@ services:
       POSTGRES_PASSWORD: "${GRUVAX_DB_PASSWORD:-gruvax}"
       POSTGRES_DB: "${GRUVAX_DB_NAME:-gruvax}"
     ports:
-      - "5432:5432"
+      - "127.0.0.1:${GRUVAX_DB_PUBLISHED_PORT:-5432}:5432"
     volumes:
       # postgres:18+ stores data in a major-version subdir under this mount
       # point — mount at /var/lib/postgresql (NOT /var/lib/postgresql/data).
@@ -234,6 +202,7 @@ services:
   # discogsography service and avoid bringing this up (mitigates
   # T-01-fake-leak-prod). Internal-only network — no host port mapping.
   fake-discogsography:
+    profiles: ["dev"]
     image: gruvax/fake-discogsography:dev
     build:
       context: .
@@ -287,6 +256,7 @@ services:
         condition: service_healthy
       fake-discogsography:
         condition: service_healthy
+        required: false
     entrypoint: ["/bin/sh", "-c"]
     # D-16 idempotency precheck uses the in-venv psycopg (no psql binary —
     # python:3.14-slim doesn't ship postgresql-client and we don't add it just
