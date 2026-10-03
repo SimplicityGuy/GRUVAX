@@ -21,11 +21,10 @@ Security contract (threat register §T-07-05 through §T-07-12):
   - Redeem onto a profile with an existing token OVERWRITES it (D-10, T-07-12 accept).
 
 Pool-isolation discipline (mirrors profiles.py connect_pat, Pitfall 1 / Pitfall 6):
-  Step 1 — consume invite (pool acquired → released).
+  Step 1 — preflight invite (pool acquired → released; no consumption).
   Step 2 — validate PAT via _run_test_sync (HTTP call, NO pool slot held).
-  Step 3 — collision check (pool acquired → released).
-  Step 4 — store encrypted PAT (pool acquired → released).
-  Step 5 — add background sync task.
+  Step 3 — consume + collision check + encrypted PAT write in one short transaction.
+  Step 4 — add background sync task only after commit.
 """
 
 from __future__ import annotations
@@ -37,6 +36,7 @@ import uuid
 
 from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Request, status
 from fastapi.responses import JSONResponse
+import psycopg
 from pydantic import BaseModel
 
 from gruvax.api.admin.limiter import _REDEEM_RATE, _rate_limiter
@@ -94,10 +94,16 @@ _INSERT_INVITE = (
 _CONSUME_INVITE = (
     "UPDATE gruvax.profile_invite_codes"
     " SET consumed_at = NOW()"
-    " WHERE code = %s::uuid"
+    " WHERE code = %s::uuid AND profile_id = %s::uuid"
     "   AND consumed_at IS NULL"
     "   AND expires_at > NOW()"
     " RETURNING profile_id"
+)
+
+# Preflight before upstream validation; final consumption rechecks validity.
+_SELECT_REDEEM_PROFILE = (
+    "SELECT profile_id FROM gruvax.profile_invite_codes"
+    " WHERE code = %s::uuid AND consumed_at IS NULL AND expires_at > NOW()"
 )
 
 # Public GET: validate a code without consuming it.
@@ -279,6 +285,40 @@ async def get_invite(
     )
 
 
+async def _commit_redemption(
+    pool: Any, code: uuid.UUID, profile_id: str, user_id: str, ciphertext: bytes
+) -> None:
+    """Commit first-wins consumption and token storage together, or roll both back."""
+    try:
+        async with pool.connection() as conn, conn.cursor() as cur:
+            await cur.execute(_CONSUME_INVITE, (str(code), profile_id))
+            if await cur.fetchone() is None:
+                raise HTTPException(status_code=404, detail={"type": "invite_not_found"})
+            await cur.execute(
+                "SELECT id::text FROM gruvax.profiles"
+                " WHERE discogsography_user_id = %s::uuid"
+                "   AND id != %s::uuid AND deleted_at IS NULL",
+                (user_id, profile_id),
+            )
+            if await cur.fetchone() is not None:
+                raise HTTPException(status_code=409, detail={"type": "user_id_collision"})
+            # D-10: preserve an existing user_id while rotating the encrypted PAT.
+            await cur.execute(
+                "UPDATE gruvax.profiles SET"
+                " app_token_encrypted = %s::bytea, app_token_revoked = FALSE,"
+                " discogsography_user_id = COALESCE(discogsography_user_id, %s::uuid),"
+                " last_sync_status = NULL, last_sync_error = NULL"
+                " WHERE id = %s::uuid AND deleted_at IS NULL",
+                (ciphertext, user_id, profile_id),
+            )
+            await conn.commit()
+    except psycopg.errors.UniqueViolation as exc:
+        # Another redemption/connect can acquire the same user ID after our SELECT.
+        if exc.diag.constraint_name != "uq_profiles_dgs_user_id_active":
+            raise
+        raise HTTPException(status_code=409, detail={"type": "user_id_collision"}) from None
+
+
 # ── Public: POST /invite-codes/{code}/redeem ──────────────────────────────────
 
 
@@ -293,11 +333,10 @@ async def redeem_invite(
     """Public: consume invite, validate PAT, store encrypted, auto-sync.
 
     Pool-isolation discipline (Pitfall 1 — no pool slot held during HTTP call):
-      1. Consume invite atomically (pool acquired + released).
+      1. Preflight invite, then release the pool slot without consuming it.
       2. Validate PAT via _run_test_sync (HTTP call — NO pool slot held).
-      3. Collision check (pool acquired + released).
-      4. Store Fernet-encrypted PAT + clear revoked flag (pool acquired + released).
-      5. Add background sync task (D-04 auto-sync mirrors connect_pat).
+      3. Atomically consume invite, check collision, and store encrypted PAT.
+      4. Add background sync task only after successful commit.
 
     Error taxonomy (all negative invite cases → uniform 404, no oracle — T-07-10):
       404 invite_not_found  — expired, consumed, non-existent, or invalid UUID
@@ -315,9 +354,9 @@ async def redeem_invite(
     # Uniform 404 on invalid UUID (Pitfall 2 / T-07-10 — no oracle).
     code_uuid = _parse_invite_uuid(code)
 
-    # Step 1: atomic consume (pool acquired + released BEFORE the HTTP call — Pitfall 1).
+    # Step 1: preflight, releasing the pool before HTTP; failures leave the invite reusable.
     async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(_CONSUME_INVITE, (str(code_uuid),))
+        await cur.execute(_SELECT_REDEEM_PROFILE, (str(code_uuid),))
         row = await cur.fetchone()
         await conn.commit()
 
@@ -359,41 +398,11 @@ async def redeem_invite(
             },
         ) from exc
 
-    # Step 3: D-09 strict user_id collision check (mirrors connect_pat lines 476-497).
-    # Another ACTIVE profile must not already hold this discogsography_user_id.
-    async with pool.connection() as conn, conn.cursor() as cur:
-        await cur.execute(
-            "SELECT id::text FROM gruvax.profiles"
-            " WHERE discogsography_user_id = %s::uuid"
-            "   AND id != %s::uuid"
-            "   AND deleted_at IS NULL",
-            (new_user_id, profile_id),
-        )
-        collision_row = await cur.fetchone()
+    # Step 3: final first-wins consumption and PAT write share one transaction.
+    # An exception rolls back consumption, including a raced user-ID collision.
+    await _commit_redemption(pool, code_uuid, profile_id, new_user_id, encrypt_pat(body.pat))
 
-    if collision_row is not None:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail={"type": "user_id_collision"},
-        )
-
-    # Step 4: store Fernet-encrypted PAT + flip revoked=FALSE (T-07-09 / D-10).
-    # D-10: no guard on existing token — COALESCE preserves the existing user_id if set.
-    ciphertext = encrypt_pat(body.pat)
-    async with pool.connection() as conn:
-        await conn.execute(
-            "UPDATE gruvax.profiles SET"
-            "    app_token_encrypted = %s::bytea,"
-            "    app_token_revoked = FALSE,"
-            "    discogsography_user_id = COALESCE(discogsography_user_id, %s::uuid),"
-            "    last_sync_status = NULL,"
-            "    last_sync_error = NULL"
-            " WHERE id = %s::uuid AND deleted_at IS NULL",
-            (ciphertext, new_user_id, profile_id),
-        )
-        await conn.commit()
-
-    # Step 5: kick background sync (D-04 auto-sync mirrors connect_pat lines 514-519).
+    # Step 4: queue sync only after consumption + token storage committed.
     background_tasks.add_task(
         _run_sync_background,
         profile_id=profile_id,
