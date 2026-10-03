@@ -177,12 +177,13 @@ FROM (
     WHERE profile_id = %s::uuid AND artist IS NOT NULL
 ) AS terms
 WHERE similarity(term, %s) > %s
+  AND lower(term) <> lower(%s)
 ORDER BY sim DESC
 LIMIT 1
 """
     try:
         async with pool.connection() as conn, conn.cursor() as cur:
-            await cur.execute(sql, (q, profile_id, profile_id, q, DID_YOU_MEAN_THRESHOLD))
+            await cur.execute(sql, (q, profile_id, profile_id, q, DID_YOU_MEAN_THRESHOLD, q))
             row = await cur.fetchone()
         if row is None:
             return None
@@ -376,11 +377,15 @@ WITH fts AS (
         v.catalog_number,
         NULL::text   AS format,
         v.year,
-        ts_rank_cd(v.fts_vector, tsq.query, 4) AS score
+        CASE WHEN numnode(tsq.query) = 0 THEN 0.2
+             ELSE ts_rank_cd(v.fts_vector, tsq.query, 4) END AS score
     FROM gruvax.profile_collection v
     CROSS JOIN websearch_to_tsquery('gruvax.gruvax_fts', %s) AS tsq(query)
     WHERE v.profile_id = %s::uuid
-      AND v.fts_vector @@ tsq.query
+      AND (v.fts_vector @@ tsq.query
+           OR (numnode(tsq.query) = 0
+               AND (lower(v.artist) LIKE %s ESCAPE '\\'
+                    OR lower(v.label) LIKE %s ESCAPE '\\')))
     ORDER BY score DESC
     LIMIT 40
 ),
@@ -443,7 +448,18 @@ FROM (
 ORDER BY rank DESC
 LIMIT %s
 """
-        params = (q, profile_id, profile_id, _catalog_like_pattern(q), limit)
+        # Empty FTS queries get a literal artist/label prefix only; preserve
+        # spaces and punctuation, and escape user LIKE metacharacters.
+        term_prefix = _LIKE_METACHAR.sub(lambda m: "\\" + m.group(0), q.strip().lower()) + "%"
+        params = (
+            q,
+            profile_id,
+            term_prefix,
+            term_prefix,
+            profile_id,
+            _catalog_like_pattern(q),
+            limit,
+        )
 
     t0 = time.perf_counter()
     async with pool.connection() as conn, conn.cursor() as cur:
