@@ -27,6 +27,8 @@ Rate-limiting implementation note:
 from __future__ import annotations
 
 import logging
+import math
+from time import time
 from typing import Any
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
@@ -66,12 +68,15 @@ def _check_login_rate_limit(request: Request) -> None:
     client_ip: str = request.client.host if request.client else "unknown"
     allowed = _rate_limiter.hit(_LOGIN_RATE, "login", client_ip)
     if not allowed:
+        reset_at = _rate_limiter.get_window_stats(_LOGIN_RATE, "login", client_ip).reset_time
+        retry_after = max(1, math.ceil(reset_at - time()))
         raise HTTPException(
             status_code=status.HTTP_429_TOO_MANY_REQUESTS,
             detail={
                 "type": "rate_limited",
                 "message": "Too many login attempts. Try again later.",
             },
+            headers={"Retry-After": str(retry_after)},
         )
 
 

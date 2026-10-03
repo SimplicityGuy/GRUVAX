@@ -148,4 +148,44 @@ describe('PinOverlay', () => {
       expect(store.hardCapExpiresAt).toBe(localNow + cap * 1000)
     },
   )
+  it('counts down the returned window remainder and accepts input after reset', async () => {
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(
+        new Response(JSON.stringify({ detail: { type: 'rate_limited' } }), {
+          status: 429,
+          headers: { 'Retry-After': '10' },
+        }),
+      )
+      .mockResolvedValueOnce(
+        new Response(
+          JSON.stringify({
+            csrf_token: 'retry-csrf',
+            expires_at: '2099-01-01T00:00:00Z',
+            hard_cap_at: '2099-01-01T01:00:00Z',
+            expires_in_seconds: 120,
+            hard_cap_in_seconds: 900,
+          }),
+          { status: 200 },
+        ),
+      )
+    vi.stubGlobal('fetch', fetchMock)
+    render(<PinOverlay />)
+    await tapDigits(['1', '2', '3', '4'])
+    expect(screen.getByRole('alert')).toHaveTextContent('Try again in 10s.')
+    expect(screen.queryByRole('button', { name: '1' })).toBeNull()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(9000)
+    })
+    expect(screen.getByRole('alert')).toHaveTextContent('Try again in 1s.')
+    expect(screen.queryByRole('button', { name: '1' })).toBeNull()
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(1000)
+    })
+    expect(screen.queryByRole('alert')).toBeNull()
+    expect(screen.getByRole('button', { name: '1' })).toBeEnabled()
+    await tapDigits(['1', '2', '3', '4'])
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(useAdminStore.getState().csrfToken).toBe('retry-csrf')
+  })
 })
