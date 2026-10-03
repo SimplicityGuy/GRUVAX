@@ -300,7 +300,7 @@ async def update_settings(
             # Phase 4 (D4-06 / T-04-01-03): validate against the allowed cadence values.
             # Checked BEFORE any SQL write; invalid value returns 422 with type=invalid_cadence.
             value = body[body_key]
-            if value not in _CADENCE_VALUES:
+            if not isinstance(value, str) or value not in _CADENCE_VALUES:
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                     detail={

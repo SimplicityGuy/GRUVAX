@@ -68,6 +68,7 @@ from gruvax.api.admin.settings import (
     _ALLOWED_SETTINGS_KEYS,
     _BOOL_KEYS,
     _BRIGHTNESS_KEYS,
+    _CADENCE_VALUES,
     _COLOR_KEYS,
     _HEX_COLOR_RE,
     _INT_KEYS,
@@ -780,6 +781,20 @@ async def import_settings(
                     },
                 )
 
+        elif dotted_key == "sync.cadence" and (
+            not isinstance(value, str) or value not in _CADENCE_VALUES
+        ):
+            raise HTTPException(
+                status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+                detail={
+                    "type": "invalid_cadence",
+                    "field": dotted_key,
+                    "message": (
+                        f"sync.cadence must be one of {sorted(_CADENCE_VALUES)}. Got: {value!r}"
+                    ),
+                },
+            )
+
     # ── 6. Write settings via validated path (same as update_settings) ────────
     # Global settings live under the default profile UUID (composite PK = (profile_id, key)).
     _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
@@ -854,7 +869,8 @@ def _flatten_yaml(data: dict[str, Any], prefix: str = "") -> dict[str, Any]:
     result: dict[str, Any] = {}
     for k, v in data.items():
         full_key = f"{prefix}.{k}" if prefix else str(k)
-        if isinstance(v, dict):
+        # Cadence is a scalar setting: keep malformed mappings for validation.
+        if isinstance(v, dict) and full_key != "sync.cadence":
             result.update(_flatten_yaml(v, prefix=full_key))
         else:
             result[full_key] = v
