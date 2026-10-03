@@ -81,6 +81,7 @@ vi.mock('../../api/session', async (importOriginal) => {
 })
 
 import { getSession } from '../../api/session'
+import { searchCollection } from '../../api/client'
 
 class MockEventSource {
   static instances: MockEventSource[] = []
@@ -267,4 +268,27 @@ describe('query dismissal belongs to one search session (gruvax-6s4)', () => {
       await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument())
     },
   )
+})
+
+describe('DidYouMean debounce race (gruvax-sit7)', () => {
+  it('keeps the tapped correction after a pending extra keystroke', async () => {
+    vi.mocked(searchCollection).mockResolvedValueOnce({
+      items: [],
+      took_ms: 1,
+      did_you_mean: 'beatles',
+    })
+    await act(async () => {
+      renderKiosk()
+    })
+    await typeQuery('beatls')
+    const suggestion = await screen.findByRole('button', { name: 'Search for beatles' })
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'beatlsx' } })
+    fireEvent.click(suggestion)
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 300))
+    })
+    expect(screen.getByRole('searchbox')).toHaveValue('beatles')
+    expect(searchCollection).toHaveBeenCalledWith('beatles', 10, TEST_PROFILE_ID)
+    expect(searchCollection).not.toHaveBeenCalledWith('beatlsx', 10, TEST_PROFILE_ID)
+  })
 })

@@ -8,8 +8,8 @@
  *
  * Also covers that loading/error affordances are suppressed while offline.
  */
-import { describe, expect, it, vi } from 'vitest'
-import { render, screen } from '@testing-library/react'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { act, fireEvent, render, screen } from '@testing-library/react'
 import { SearchBox } from './SearchBox'
 import { useGruvaxStore } from '../../state/store'
 
@@ -126,5 +126,63 @@ describe('SearchBox', () => {
       // Assert: onDebouncedQuery was never called (disabled input won't propagate events)
       expect(onQuery).not.toHaveBeenCalled()
     })
+  })
+})
+
+describe('controlled query cancels pending debounce (gruvax-sit7)', () => {
+  beforeEach(() => {
+    vi.useFakeTimers()
+    useGruvaxStore.getState().clearSearch()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  it('does not let a pending keystroke overwrite a tapped suggestion', () => {
+    const onQuery = vi.fn()
+    useGruvaxStore.getState().setQuery('beatls')
+    render(<SearchBox onDebouncedQuery={onQuery} isLoading={false} hasError={false} />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'beatlsx' } })
+    act(() => {
+      // Same controlled query write + immediate search used by handleDidYouMean.
+      useGruvaxStore.getState().setQuery('beatles')
+      onQuery('beatles')
+      vi.advanceTimersByTime(250)
+    })
+    expect(screen.getByRole('searchbox')).toHaveValue('beatles')
+    expect(onQuery).toHaveBeenCalledExactlyOnceWith('beatles')
+  })
+
+  it('still debounces ordinary typing and keeps only the latest keystroke', () => {
+    const onQuery = vi.fn()
+    render(<SearchBox onDebouncedQuery={onQuery} isLoading={false} hasError={false} />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'beatl' } })
+    act(() => {
+      vi.advanceTimersByTime(200)
+    })
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'beatles' } })
+    act(() => {
+      vi.advanceTimersByTime(249)
+    })
+    expect(onQuery).not.toHaveBeenCalled()
+    act(() => {
+      vi.advanceTimersByTime(1)
+    })
+    expect(onQuery).toHaveBeenCalledExactlyOnceWith('beatles')
+  })
+
+  it.each(['reset', 'unmount'] as const)('cancels an armed timer on %s', (action) => {
+    const onQuery = vi.fn()
+    const view = render(<SearchBox onDebouncedQuery={onQuery} isLoading={false} hasError={false} />)
+    fireEvent.change(screen.getByRole('searchbox'), { target: { value: 'private query' } })
+    if (action === 'reset')
+      act(() => {
+        useGruvaxStore.getState().clearSearch()
+      })
+    else view.unmount()
+    act(() => {
+      vi.advanceTimersByTime(250)
+    })
+    expect(onQuery).not.toHaveBeenCalled()
   })
 })

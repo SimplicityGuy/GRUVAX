@@ -1,4 +1,4 @@
-import { useRef } from 'react'
+import { useCallback, useEffect, useRef } from 'react'
 import { useGruvaxStore } from '../../state/store'
 
 interface SearchBoxProps {
@@ -37,19 +37,40 @@ export function SearchBox({
   const { query, setQuery, clearSearch } = useGruvaxStore()
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
+  const cancelDebounce = useCallback(() => {
+    clearTimeout(debounceRef.current ?? undefined)
+    debounceRef.current = null
+  }, [])
+
+  useEffect(() => {
+    // Query writes are synchronous. A keystroke updates the store BEFORE arming
+    // its timer; external corrections, reset, and clear therefore cancel an old
+    // timer without cancelling the new keystroke's debounce.
+    const unsubscribe = useGruvaxStore.subscribe((state, previous) => {
+      if (state.query !== previous.query || state.searchSession !== previous.searchSession) {
+        cancelDebounce()
+      }
+    })
+    return () => {
+      unsubscribe()
+      cancelDebounce()
+    }
+  }, [cancelDebounce])
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = e.target.value
     setQuery(val)
 
     // Debounce: fire onDebouncedQuery ~250ms after last keystroke (SRCH-06)
-    if (debounceRef.current) clearTimeout(debounceRef.current)
+    cancelDebounce()
     debounceRef.current = setTimeout(() => {
+      debounceRef.current = null
       onDebouncedQuery(val)
     }, 250)
   }
 
   const handleClear = () => {
-    if (debounceRef.current) clearTimeout(debounceRef.current)
+    cancelDebounce()
     clearSearch()
     onDebouncedQuery('')
   }
