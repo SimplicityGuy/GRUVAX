@@ -208,35 +208,6 @@ async def _record_failure(
         await conn.close()
 
 
-# ── stale-lock detection (Pitfall 1) ─────────────────────────────────────────
-
-
-async def _detect_stale_in_progress(profile_id: str) -> tuple[bool, Any]:
-    """Return (is_stale, last_sync_at) for the profile.
-
-    A profile is "stale" when ``last_sync_status='in_progress'`` AND
-    ``last_sync_at IS NULL OR last_sync_at < now() - INTERVAL '5 minutes'``.
-    Used by ``sync_profile`` to produce an operator-actionable error
-    message instead of an opaque SyncInProgress.
-    """
-    conn = await psycopg.AsyncConnection.connect(_conninfo())
-    try:
-        async with conn.cursor() as cur:
-            await cur.execute(
-                "SELECT last_sync_status, last_sync_at, "
-                "       (last_sync_at IS NULL OR last_sync_at < now() - INTERVAL '5 minutes') "
-                "FROM gruvax.profiles WHERE id = %s::uuid",
-                (profile_id,),
-            )
-            row = await cur.fetchone()
-        if not row:
-            return (False, None)
-        status, ts, is_stale_window = row
-        return (status == "in_progress" and bool(is_stale_window), ts)
-    finally:
-        await conn.close()
-
-
 # ── ingest loop (RESEARCH §Pattern 2 — staging-COPY) ─────────────────────────
 
 
@@ -632,9 +603,8 @@ async def sync_profile(
       ``{"status": "ok", "item_count": int, "took_ms": float, "user_id": str}``
 
     Raises:
-      - SyncInProgress  — pg_try_advisory_lock returned FALSE
-                          (with an operator-actionable message when the
-                          existing state is a stale in_progress lock).
+      - SyncInProgress  — pg_try_advisory_lock returned FALSE; a live
+                          connection already holds this profile's sync lock.
       - PATRejected     — 401/403 or decrypt failure; sets
                           app_token_revoked=TRUE + last_sync_error='pat_rejected'.
       - RateLimitExhausted — sets last_sync_error='rate_limited'.
@@ -682,20 +652,15 @@ async def sync_profile(
             acquired = bool(row[0])
 
         if not acquired:
-            # Pitfall 1 — if the lock isn't held because a stale in_progress
-            # state exists, surface an operator-actionable error.
-            is_stale, ts = await _detect_stale_in_progress(profile_id)
-            if is_stale:
-                raise SyncInProgress(
-                    f"Stale 'in_progress' state detected for profile {profile_id} "
-                    f"(last_sync_at={ts}). Restart the API to clear the advisory lock."
-                )
+            # Session locks disappear with their connection: contention means a
+            # live holder exists. last_sync_at records a previous completion,
+            # so it cannot establish the current holder's age or hung state.
             raise SyncInProgress("Another sync for this profile is already running")
 
         client: Any = None
         try:
-            # Set 'in_progress' early so the stale-lock heuristic above can
-            # detect a hung sync after a crash.
+            # Set 'in_progress' early for the admin status surface. The
+            # advisory lock, not this status timestamp, excludes other syncs.
             await conn.execute(
                 "UPDATE gruvax.profiles SET "
                 "    last_sync_status = 'in_progress', "

@@ -1,8 +1,8 @@
 """Integration tests for Pitfalls 1 + 8 — Plan 01-03 Task 2.
 
-Pitfall 1 (RESEARCH.md): stale 'in_progress' state should produce an
-operator-actionable SyncInProgress message, not opaque "another sync
-already running" spam.
+Advisory-lock contention must report a live sync holder, regardless of when
+its previous sync finished. A session lock disappears when its holder closes;
+last_sync_at cannot diagnose the age of the current sync.
 
 Pitfall 8 (RESEARCH.md): the migration-seeded sentinel-bytea PAT
 placeholder (`'\\x'::bytea` + revoked=TRUE) must short-circuit BEFORE
@@ -89,27 +89,24 @@ async def _reset_after(db_pool) -> AsyncIterator[None]:  # type: ignore[no-untyp
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_stale_in_progress_surfaces_actionable_message(  # type: ignore[no-untyped-def]
-    db_pool, _reset_after
+@pytest.mark.parametrize("last_success", ["never", "old", "recent"])
+async def test_live_lock_reports_contention_without_stale_claim(  # type: ignore[no-untyped-def]
+    db_pool, _reset_after, last_success: str
 ) -> None:
-    """Test 5: stale lock detection — clear message mentioning 'stale'.
-
-    Setup: another session holds the advisory lock AND the profile row is
-    marked 'in_progress' with last_sync_at 10 minutes ago. sync_profile
-    must raise SyncInProgress with a 'stale'-mentioning message.
-    """
+    """A real live holder is not stale merely because its previous success is old."""
     import psycopg
 
-    # 1. Set the stale state on the profile row.
+    # 1. Prior completion time says nothing about this live lock holder.
     async with db_pool.connection() as conn:
         await conn.execute(
             "UPDATE gruvax.profiles SET "
             "    last_sync_status = 'in_progress', "
-            "    last_sync_at = now() - INTERVAL '10 minutes', "
+            "    last_sync_at = CASE WHEN %s = 'never' THEN NULL "
+            "        WHEN %s = 'old' THEN NOW() - INTERVAL '2 hours' ELSE NOW() END, "
             "    app_token_encrypted = %s, "
             "    app_token_revoked = FALSE "
             "WHERE id = %s::uuid",
-            (encrypt_pat(TEST_PAT), DEFAULT_UUID),
+            (last_success, last_success, encrypt_pat(TEST_PAT), DEFAULT_UUID),
         )
         await conn.commit()
 
@@ -123,10 +120,12 @@ async def test_stale_in_progress_surfaces_actionable_message(  # type: ignore[no
             await cur.execute("SELECT pg_try_advisory_lock(%s)", (lock_key,))
             assert (await cur.fetchone())[0] is True
 
-        # 3. sync_profile must raise SyncInProgress with a stale-mentioning msg.
+        # 3. Report actual contention without false stale/restart advice.
         with pytest.raises(SyncInProgress) as exc_info:
             await sync_profile(DEFAULT_UUID, _make_app_state(db_pool))
-        assert "stale" in str(exc_info.value).lower()
+        message = str(exc_info.value).lower()
+        assert "another sync" in message and "running" in message
+        assert "stale" not in message and "restart" not in message
     finally:
         async with holder.cursor() as cur:
             await cur.execute("SELECT pg_advisory_unlock(%s)", (lock_key,))
