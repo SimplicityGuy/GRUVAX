@@ -20,7 +20,10 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { KioskView } from './KioskView'
 import { useGruvaxStore } from '../../state/store'
 import { useRecentlyPulledStore } from '../../state/recentlyPulledStore'
+import { useIdleTimer } from '../../hooks/useIdleTimer'
 import { useSessionStore } from '../../state/sessionStore'
+
+vi.mock('../../hooks/useIdleTimer', () => ({ useIdleTimer: vi.fn() }))
 
 const mockAdminState = { isLoggedIn: false }
 
@@ -233,4 +236,35 @@ describe('KioskView — Reset kiosk clears the results dropdown (gruvax-b76z)', 
       expect(screen.getByRole('listbox', { name: /search results/i })).toBeInTheDocument()
     })
   })
+})
+
+describe('query dismissal belongs to one search session (gruvax-6s4)', () => {
+  it.each(['clear', 'reset', 'idle', 'empty input'] as const)(
+    'reopens a previously selected query after %s',
+    async (action) => {
+      await act(async () => {
+        renderKiosk()
+      })
+      await typeQuery('miles')
+      await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument())
+      fireEvent.click(screen.getByRole('option'))
+      await waitFor(() => expect(screen.queryByRole('listbox')).not.toBeInTheDocument())
+      if (action === 'clear') fireEvent.click(screen.getByRole('button', { name: /clear search/i }))
+      if (action === 'reset') {
+        fireEvent.click(screen.getByRole('button', { name: /reset kiosk/i }))
+        fireEvent.click(screen.getByRole('button', { name: /clear and reset/i }))
+      }
+      if (action === 'idle') {
+        act(() => {
+          vi.mocked(useIdleTimer).mock.calls.at(-1)![1]()
+        })
+      }
+      if (action === 'empty input') {
+        // No debounce wait: clearing and retyping the same query is a new session too.
+        fireEvent.change(screen.getByRole('searchbox'), { target: { value: '' } })
+      }
+      await typeQuery('miles')
+      await waitFor(() => expect(screen.getByRole('listbox')).toBeInTheDocument())
+    },
+  )
 })

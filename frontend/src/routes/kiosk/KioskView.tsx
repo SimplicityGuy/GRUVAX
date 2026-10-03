@@ -55,6 +55,7 @@ export function KioskView() {
     setQuery,
     shelfLayoutUnavailable,
     selectedReleaseId,
+    searchSession,
   } = useGruvaxStore()
   // Phase 4 / D-01/D-03/RTM-04: reactive shimmer state from Zustand
   const shimmerCubes = useGruvaxStore((s) => s.shimmerCubes)
@@ -90,7 +91,10 @@ export function KioskView() {
   // The dropdown is derived as open when there is a query that hasn't been
   // dismissed — so it reopens automatically on the next keystroke (new query)
   // and collapses after a pick, without a set-state-in-effect.
-  const [dismissedQuery, setDismissedQuery] = useState<string | null>(null)
+  const [dismissedQuery, setDismissedQuery] = useState<{
+    query: string
+    session: number
+  } | null>(null)
 
   useEffect(() => {
     return () => {
@@ -520,7 +524,9 @@ export function KioskView() {
   // Derived: the dropdown is open when there is a query that the user has not
   // dismissed by selecting a row. A new query (different string) reopens it
   // automatically; an explicit selection records the query as dismissed.
-  const resultsOpen = debouncedQuery.trim().length > 0 && dismissedQuery !== debouncedQuery
+  const resultsOpen =
+    debouncedQuery.trim().length > 0 &&
+    (dismissedQuery?.query !== debouncedQuery || dismissedQuery.session !== searchSession)
 
   // "Did you mean" tap (D-10): set the query the user sees AND trigger the
   // search immediately. setQuery drives the (controlled) SearchBox input;
@@ -700,7 +706,9 @@ export function KioskView() {
               showNoResults={showNoResults}
               didYouMean={searchData?.did_you_mean ?? null}
               open={resultsOpen}
-              onResultSelect={() => setDismissedQuery(debouncedQuery)}
+              onResultSelect={() =>
+                setDismissedQuery({ query: debouncedQuery, session: searchSession })
+              }
               onDidYouMean={handleDidYouMean}
             />
           )}

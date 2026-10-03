@@ -41,6 +41,8 @@ interface ConnectivityState {
 interface GruvaxStore {
   /** Current search query string */
   query: string
+  /** Search session changes on clear so a prior dropdown dismissal cannot survive it. */
+  searchSession: number
   setQuery: (q: string) => void
 
   /** The selected search result's release_id (drives locate call) */
@@ -131,9 +133,11 @@ interface GruvaxStore {
 
 export const useGruvaxStore = create<GruvaxStore>((set, get) => ({
   query: '',
+  searchSession: 0,
   setQuery: (q) =>
     set((s) => ({
       query: q,
+      searchSession: s.searchSession + (q.trim() === '' && s.query.trim() !== '' ? 1 : 0),
       locateRequestToken: s.locateRequestToken + (q !== s.query ? 1 : 0),
     })),
 
@@ -191,6 +195,7 @@ export const useGruvaxStore = create<GruvaxStore>((set, get) => ({
   clearSearch: () =>
     set((s) => ({
       locateRequestToken: s.locateRequestToken + 1,
+      searchSession: s.searchSession + 1,
       query: '',
       selectedReleaseId: null,
       selectedResult: null,
