@@ -70,7 +70,7 @@ describe('store – shelfLayoutUnavailable flag (Plan 09 / D-12)', () => {
       release_id: 1351,
       primary_cube: { unit_id: 1, row: 2, col: 3 },
       label_span: [{ unit_id: 1, row: 2, col: 3 }],
-      sub_cube_interval: { start: 0.2, end: 0.5, crosses_boundary: false },
+      sub_cube_interval: { start: 0.2, end: 0.5, next_cube: null, crosses_boundary: false },
       confidence: 0.85,
       generated_at: '2026-01-01T00:00:00Z',
       estimator_version: '1',

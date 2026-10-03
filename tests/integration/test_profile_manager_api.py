@@ -554,3 +554,36 @@ async def test_created_profile_registries_are_real_instances(
                 **cookie_header(admin_session["cookies"]),
             },
         )
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("sync_error", [None, "network"])
+async def test_profile_list_and_detail_share_nullable_sync_error(
+    client, db_pool, admin_session, sync_error
+):  # type: ignore[no-untyped-def]
+    """Real list/detail responses retain explicit NULL and classified failed-sync errors."""
+    import uuid
+
+    profile_id = str(uuid.uuid4())
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.profiles"
+            " (id, display_name, app_token_encrypted, app_token_revoked, last_sync_status, last_sync_error)"
+            " VALUES (%s::uuid, 'Contract proof', %s, TRUE, 'failed', %s)",
+            (profile_id, b"\x00", sync_error),
+        )
+        await conn.commit()
+    try:
+        headers = cookie_header(admin_session["cookies"])
+        listed = await client.get("/api/admin/profiles", headers=headers)
+        detailed = await client.get(f"/api/admin/profiles/{profile_id}", headers=headers)
+        assert listed.status_code == detailed.status_code == 200
+        item = next(profile for profile in listed.json() if profile["id"] == profile_id)
+        assert "last_sync_error" in item
+        assert item["last_sync_error"] == detailed.json()["last_sync_error"] == sync_error
+        assert item["status"] == "pending"
+        assert "app_token_encrypted" not in item
+    finally:
+        async with db_pool.connection() as conn:
+            await conn.execute("DELETE FROM gruvax.profiles WHERE id = %s::uuid", (profile_id,))
+            await conn.commit()

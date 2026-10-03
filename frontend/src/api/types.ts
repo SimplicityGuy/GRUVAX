@@ -61,8 +61,8 @@ export interface SubInterval {
   end: number
   /** True when the range extends past this cube into next_cube */
   crosses_boundary: boolean
-  /** Present when crosses_boundary === true (omitted from JSON when false) */
-  next_cube?: CubeRef
+  /** Next cube for a crossing interval; the API emits null when absent. */
+  next_cube: CubeRef | null
 }
 
 export interface LocateResult {
@@ -333,10 +333,9 @@ export interface AdminCubeBoundary {
   unit_id: number
   row: number
   col: number
-  first_label: string
-  first_catalog: string
-  last_label: string
-  last_catalog: string
+  first_label: string | null
+  first_catalog: string | null
+  is_empty: boolean
 }
 
 /** Label option from GET /api/admin/labels. */

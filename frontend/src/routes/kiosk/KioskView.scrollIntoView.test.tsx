@@ -332,6 +332,7 @@ describe('KioskView — real GSAP interruption and primary bands (gruvax-csxz)',
         locatedAt(0, {
           start: 0,
           end: 1,
+          next_cube: null,
           crosses_boundary: false,
         }),
       ),
