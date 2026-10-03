@@ -69,6 +69,7 @@ export function Settings() {
   const [syncCadence, setSyncCadence] = useState<CadenceValue>('24h')
   type CadenceSaveStatus = 'idle' | 'saved' | 'error'
   const [cadenceStatus, setCadenceStatus] = useState<CadenceSaveStatus>('idle')
+  const [cadencePending, setCadencePending] = useState(false)
   const [cadenceError, setCadenceError] = useState('')
 
   // Phase 7: BACKUP & RESTORE section state (BAK-02)
@@ -126,6 +127,8 @@ export function Settings() {
 
   // Phase 4: Auto-save cadence onChange (D4-06)
   const handleSaveCadence = async (value: CadenceValue) => {
+    const previous = syncCadence
+    setCadencePending(true)
     setSyncCadence(value) // optimistic update
     setCadenceStatus('idle')
     setCadenceError('')
@@ -135,8 +138,11 @@ export function Settings() {
       // Fade "Saved" after 2s via CSS animation; reset state after 2.5s
       setTimeout(() => setCadenceStatus('idle'), 2500)
     } catch {
+      setSyncCadence(previous)
       setCadenceStatus('error')
       setCadenceError('Could not save. Try again.')
+    } finally {
+      setCadencePending(false)
     }
   }
 
@@ -393,6 +399,7 @@ export function Settings() {
             id="sync-cadence"
             className="settings-select"
             value={syncCadence}
+            disabled={cadencePending}
             onChange={(e) => {
               void handleSaveCadence(e.target.value as CadenceValue)
             }}
