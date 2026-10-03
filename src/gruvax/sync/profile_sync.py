@@ -38,6 +38,7 @@ Security invariants:
 
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import logging
 import time
@@ -203,6 +204,25 @@ async def _record_failure(
                 "WHERE id = %s::uuid AND deleted_at IS NULL",
                 (error_tag, profile_id),
             )
+        await conn.commit()
+    finally:
+        await conn.close()
+
+
+async def _record_cancellation(profile_id: str) -> None:
+    """Finalize interrupted work, preserving deleted rows and durable success.
+
+    The caller still owns the advisory lock. A fresh connection avoids the
+    interrupted staging transaction; the status predicate also protects a swap
+    that committed before cancellation reached the cache-refresh await.
+    """
+    conn = await psycopg.AsyncConnection.connect(_conninfo())
+    try:
+        await conn.execute(
+            "UPDATE gruvax.profiles SET last_sync_status = 'failed', last_sync_error = NULL "
+            "WHERE id = %s::uuid AND deleted_at IS NULL AND last_sync_status = 'in_progress'",
+            (profile_id,),
+        )
         await conn.commit()
     finally:
         await conn.close()
@@ -613,6 +633,8 @@ async def sync_profile(
       - ShrinkGuardTripped — the incoming collection would shrink the cache
                           by more than the tolerated fraction; sets
                           last_sync_error='shrink_guard' (gruvax-envc).
+      - asyncio.CancelledError — finalizes active in_progress work as failed,
+                          preserving committed ok and deleted profiles, then propagates.
       - Any other Exception — sets last_sync_status='failed' (no tag) and re-raises.
     """
     t0 = time.perf_counter()
@@ -718,6 +740,16 @@ async def sync_profile(
                 "took_ms": took_ms,
                 "user_id": user_id,
             }
+        except asyncio.CancelledError:
+            try:
+                await _record_cancellation(profile_id)
+            except Exception:
+                logger.warning(
+                    "sync_profile: cancelled status could not be finalized (profile=%s)",
+                    profile_id,
+                    exc_info=True,
+                )
+            raise
         except ProfileDeletedDuringSync:
             # The swap TX rolled back. Do not stamp failed/ok metadata on a
             # deleted profile or refresh/publish its evicted caches.

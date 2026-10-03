@@ -8,6 +8,7 @@ from httpx import ASGITransport, AsyncClient
 import pytest
 
 import gruvax.app as app_module
+from gruvax.discogsography.errors import NetworkError
 from gruvax.sync import profile_sync
 from gruvax.sync.pat_crypto import encrypt_pat
 
@@ -50,7 +51,20 @@ async def test_real_catchup_serves_while_fetching_and_finishes_safely(db_pool, m
             stopped.set()
 
     upstream = SimpleNamespace(first_page=first_page, aclose=AsyncMock())
-    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: upstream)
+
+    def synthetic_client(_base_url, pat):  # type: ignore[no-untyped-def]
+        if pat == "dscg_synthetic_startup":
+            return upstream
+        # Other fixtures may leave eligible profiles. Give each an independent
+        # synthetic failure client rather than sharing the probe's data/closure.
+        return SimpleNamespace(
+            first_page=AsyncMock(
+                side_effect=NetworkError("synthetic unrelated upstream unavailable")
+            ),
+            aclose=AsyncMock(),
+        )
+
+    monkeypatch.setattr(profile_sync, "_make_client", synthetic_client)
     monkeypatch.setattr(app_module, "_read_sync_cadence", AsyncMock(return_value="24h"))
 
     async def loop(*_):  # type: ignore[no-untyped-def]
