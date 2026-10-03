@@ -86,8 +86,8 @@ async def db_pool():  # type: ignore[no-untyped-def]
 # ── admin session fixture (Phase 3) ──────────────────────────────────────────
 
 
-@pytest_asyncio.fixture(scope="module")
-async def admin_session(client: Any) -> dict[str, Any]:  # type: ignore[no-untyped-def]
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
+async def admin_session(client: Any, db_pool: Any) -> dict[str, Any]:  # type: ignore[no-untyped-def]
     """Module-scoped fixture that seeds a test PIN and logs in.
 
     Requires ``client`` fixture (LifespanManager + AsyncClient, see integration
@@ -123,24 +123,18 @@ async def admin_session(client: Any) -> dict[str, Any]:  # type: ignore[no-untyp
     # Settings PK is (profile_id, key) — global keys live under the default profile UUID.
     # Use ON CONFLICT (profile_id, key) with an explicit profile_id column.
     #
-    # Some test modules (e.g. test_profile_manager_api) provide a client fixture
-    # that already seeded the PIN inside their own fixture and wraps the inner
-    # app with LifespanManager without exposing client.app directly. In that case,
-    # skip the re-seed here (the PIN is already in the DB from the client fixture).
+    # Explicit fixture dependency: httpx AsyncClient has no public .app attribute.
+    # Seed through the session pool, even when no earlier test has configured a PIN.
     _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
-    pool = getattr(getattr(client, "app", None), "state", None)
-    if pool is not None:
-        pool = getattr(pool, "db_pool", None)
-    if pool is not None:
-        async with pool.connection() as conn:
-            await conn.execute(
-                "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
-                " VALUES (%s::uuid, 'auth.pin_hash', %s, 'Test PIN hash seeded by conftest', now())"
-                " ON CONFLICT (profile_id, key) DO UPDATE"
-                "  SET value = EXCLUDED.value, updated_at = now()",
-                (_DEFAULT_PROFILE_UUID, f'"{test_pin_hash}"'),
-            )
-            await conn.commit()
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "INSERT INTO gruvax.settings (profile_id, key, value, description, updated_at)"
+            " VALUES (%s::uuid, 'auth.pin_hash', %s, 'Test PIN hash seeded by conftest', now())"
+            " ON CONFLICT (profile_id, key) DO UPDATE"
+            "  SET value = EXCLUDED.value, updated_at = now()",
+            (_DEFAULT_PROFILE_UUID, f'"{test_pin_hash}"'),
+        )
+        await conn.commit()
 
     # Log in with the test PIN
     res = await client.post("/api/admin/login", json={"pin": "0000"})

@@ -10,9 +10,8 @@ These tests use ONLY synthetic data (four_cube_boundaries / thirty_two_cube_boun
 from conftest.py). The real collection CSV and background/ directory are NEVER referenced.
 
 Design notes:
-  - Reuse the module-scoped ``client`` + ``_login`` pattern from test_import.py and
-    test_export.py — do NOT rely on the admin_session conftest fixture (known broken,
-    see integration-harness notes).
+  - Use the shared admin_session fixture, which explicitly seeds its own PIN
+    through db_pool before authenticating the httpx client.
   - Force=True on the bulk seed bypasses phantom check for synthetic labels not in
     dev v_collection (established harness pattern per conftest docstring).
   - Re-seed boundary state at test start to avoid state bleed from shared dev DB.
@@ -61,26 +60,8 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
         yield ac
 
 
-async def _login(client) -> dict:  # type: ignore[no-untyped-def]
-    """Helper: log in and return cookies + csrf token dict.
-
-    Merges the browse-binding cookie (D-02 fail-loud contract) so that admin
-    write requests resolve the per-profile session required by get_write_target.
-    """
-    res = await client.post("/api/admin/login", json={"pin": "0000"})
-    if res.status_code != 200:
-        return {}
-    cookies = dict(res.cookies)
-    # Bind the default profile so get_write_target resolves without session_unbound (D-02).
-    cookies["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
-    return {
-        "cookies": cookies,
-        "csrf_token": res.cookies.get("gruvax_csrf") or "",
-    }
-
-
 @pytest.mark.asyncio(loop_scope="session")
-async def test_export_reimport_identity(client, four_cube_boundaries) -> None:  # type: ignore[no-untyped-def]
+async def test_export_reimport_identity(client, four_cube_boundaries, admin_session) -> None:  # type: ignore[no-untyped-def]
     """Seed synthetic state, export it, re-import the unedited bytes → identity (SC4, BAK-01).
 
     Steps:
@@ -97,7 +78,9 @@ async def test_export_reimport_identity(client, four_cube_boundaries) -> None:  
     Asserts the empty list explicitly — not merely a derived count (SC4 round-trip invariant).
     Synthetic data only — no real collection CSV referenced.
     """
-    auth = await _login(client)
+    auth = dict(admin_session)
+    auth["cookies"] = dict(auth["cookies"])
+    auth["cookies"]["gruvax_browse_binding"] = "00000000-0000-0000-0000-000000000001"
     assert auth, "Login must be available for identity round-trip test"
 
     # ── 1. Seed via bulk with force=True (phantom bypass for synthetic labels) ─
