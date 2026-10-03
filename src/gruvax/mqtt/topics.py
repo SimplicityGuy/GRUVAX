@@ -13,7 +13,6 @@ Topic structure (locked contract — ARCHITECTURE.md §"MQTT Topic Design"):
   sub/{unit_id}/{row}/{col}         — QoS 0, non-retained command: sub-cube interval
   state/{unit_id}/{row}/{col}       — QoS 1, RETAINED: current LED state for this cube
   all/off                           — QoS 1, non-retained command: turn all LEDs off
-  diagnostic                        — QoS 1, non-retained command: start diagnostic sweep
   status/#                          — subscribe wildcard for firmware status responses
 
 NEVER retain command topics (illuminate/span/sub) — stale-command-replay footgun
@@ -26,12 +25,8 @@ Verified false positive — ``publishers.py`` imports this module and calls
 ``all_off_topic`` and ``status_wildcard`` from live, tested code wired to
 ``POST /api/admin/leds/off`` and ``POST /api/admin/leds/diagnostic``
 (``src/gruvax/api/admin/leds.py``, registered in ``app.py`` via
-``create_admin_router()``). ``diagnostic_topic`` alone has no Python caller;
-it is kept as the locked-contract placeholder for a future firmware-triggered
-diagnostic command (see the ``diagnostic`` row above and ARCHITECTURE.md
-§"MQTT Topic Design") — the v1 diagnostic sweep is driven server-side via
-``state/*`` publishes instead, since no physical firmware exists yet
-(Phase 6: "Hardware Stubbed").
+``create_admin_router()``). Diagnostics are server-driven ``state/*`` sweeps;
+there is no firmware-side diagnostic command topic or payload schema.
 """
 
 from __future__ import annotations
@@ -82,14 +77,6 @@ def all_off_topic(prefix: str) -> str:
     QoS 1, non-retained.  ``{prefix}/all/off``
     """
     return f"{prefix}/all/off"
-
-
-def diagnostic_topic(prefix: str) -> str:
-    """Build the diagnostic sweep command topic.
-
-    QoS 1, non-retained.  ``{prefix}/diagnostic``
-    """
-    return f"{prefix}/diagnostic"
 
 
 def status_wildcard(prefix: str) -> str:

@@ -25,7 +25,7 @@ Security:
     contiguity always runs across ALL rows. test_phantom_row_rejected + test_contiguity_violation
     guard against over-broad skip.
   T-07-SETTINGS-KEY: auth.* keys are rejected with 422 before any settings write (D-14).
-    Unknown keys (not in _ALLOWED_SETTINGS_KEYS) are also rejected with 422.
+    Unknown keys (not in _BACKUP_SETTINGS_KEYS) are also rejected with 422.
     The entire file is rejected on first bad key — no partial settings write.
   T-07-DOUBLE-COMMIT: Idempotency-Key header deduplication (same pattern as cubes/bulk).
 
@@ -65,11 +65,11 @@ from gruvax.api.admin.cubes import (
     BoundaryEdit,
 )
 from gruvax.api.admin.settings import (
-    _ALLOWED_SETTINGS_KEYS,
+    _BACKUP_COLOR_KEYS,
+    _BACKUP_SETTINGS_KEYS,
     _BOOL_KEYS,
     _BRIGHTNESS_KEYS,
     _CADENCE_VALUES,
-    _COLOR_KEYS,
     _HEX_COLOR_RE,
     _INT_KEYS,
 )
@@ -679,7 +679,7 @@ async def import_settings(
       3. Flatten nested YAML keys (e.g. led_color.position → "led_color.position").
       4. For each key:
          - If key starts with "auth." → 422 auth_key_rejected (D-14, T-07-SETTINGS-KEY).
-         - If key not in _ALLOWED_SETTINGS_KEYS → 422 unknown_key (T-07-SETTINGS-KEY).
+         - If key not in _BACKUP_SETTINGS_KEYS → 422 unknown_key (T-07-SETTINGS-KEY).
          (Reject on first bad key — never write partial settings.)
       5. Validate value types (colors, brightness values).
       6. Apply via the existing validated write path (mirror update_settings).
@@ -733,7 +733,7 @@ async def import_settings(
                     ),
                 },
             )
-        if dotted_key not in _ALLOWED_SETTINGS_KEYS:
+        if dotted_key not in _BACKUP_SETTINGS_KEYS:
             raise HTTPException(
                 status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
                 detail={
@@ -747,7 +747,7 @@ async def import_settings(
     for dotted_key, value in flat_keys.items():
         if dotted_key == "version":
             continue
-        if dotted_key in _COLOR_KEYS:
+        if dotted_key in _BACKUP_COLOR_KEYS:
             if not isinstance(value, str) or not _HEX_COLOR_RE.match(value):
                 raise HTTPException(
                     status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
@@ -806,7 +806,7 @@ async def import_settings(
             if dotted_key == "version":
                 continue
 
-            if dotted_key in _COLOR_KEYS:
+            if dotted_key in _BACKUP_COLOR_KEYS:
                 json_value = f'"{value}"'
             elif dotted_key in _INT_KEYS:
                 try:

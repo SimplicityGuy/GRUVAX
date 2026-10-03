@@ -124,7 +124,7 @@ resolved cookie/device profile returns `403 profile_mismatch`.
 | `POST` | `/api/admin/import/boundaries` | Import boundaries from YAML or CSV (`?dry_run=true` for preview) |
 | `POST` | `/api/admin/import/settings` | Import settings from YAML |
 | `POST` | `/api/admin/leds/off` | Send all-LEDs-off to MQTT (clears retained state) |
-| `POST` | `/api/admin/leds/diagnostic` | Send diagnostic pattern over MQTT |
+| `POST` | `/api/admin/leds/diagnostic` | Schedule server-driven LED state sweep over MQTT |
 | `GET` | `/api/admin/diagnostics` | Ring buffers + slow-query ring + pool stats + per-profile sync diagnostics |
 | `POST` | `/api/admin/diagnostics/reset-stats` | Reset `record_stats` counters |
 | `GET` | `/api/admin/profiles` | List all profiles (name, last sync, item count, status badge) |
@@ -272,7 +272,6 @@ custom `.env` values pass through unchanged (`gruvax.mqtt.topics`):
 {prefix}/sub/{unit_id}/{row}/{col}          — QoS 0, non-retained: sub-cube position bar
 {prefix}/state/{unit_id}/{row}/{col}        — QoS 1, RETAINED: current LED state for this cube (firmware boot read)
 {prefix}/all/off                            — QoS 1, non-retained: clear all LEDs
-{prefix}/diagnostic                         — QoS 1, non-retained: diagnostic scan pattern
 {prefix}/status/#                           — subscribe-only wildcard for firmware status/heartbeat responses
 ```
 
@@ -284,10 +283,25 @@ internal Compose network only (port 1883 is not exposed to the LAN).
 - MQTT 5 with `message_expiry_interval` (`MQTT_STATE_EXPIRY_SECONDS`, default 4h) on
   retained `state/*` messages, so a broker restart never serves a permanently stale
   cube state.
-- Command topics (`illuminate`, `span`, `sub`, `diagnostic`) are **never retained** —
+- Command topics (`illuminate`, `span`, `sub`, `all/off`) are **never retained** —
   retaining a command is a stale-command-replay footgun.
 - `all/off` clears retained `state/*` topics by publishing an empty payload with
   `retain=True` (MQTT protocol: `retain=True` + empty payload = delete retained message).
+
+Off has no RGB control: it deletes retained state and uses zero brightness in
+the diagnostic sweep. Live settings and the admin UI expose only operative
+colors; `PUT /api/admin/settings` rejects the retired `led_color_all_off` field.
+Historical `led_color.all_off` database rows remain intact. Settings backups
+continue exporting/importing that legacy value with normal hex validation for
+export→reimport compatibility; it has no effect on LED output.
+
+`POST /api/admin/leds/diagnostic` immediately returns a run ID and schedules a
+server-driven sweep: each cube receives label-span → position → error → setup
+frames on its retained QoS 1 `state/*` topic, followed by an empty retained off
+frame. Configured inter-cube delay separates cubes. After the sweep, a guarded
+five-second `status/#` subscription logs firmware replies, then the server
+restores the idle ambient state on every cube. Firmware consumes these ordinary
+state updates; no `{prefix}/diagnostic` command or separate payload schema exists.
 
 Retained `state/*` uses the existing payload names: `gruvax.illuminate.v1`
 for primary and ambient state, and `gruvax.span.v1` for non-primary span cubes.

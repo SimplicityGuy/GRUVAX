@@ -153,11 +153,11 @@ def _make_app() -> Any:
 
 @pytest.mark.asyncio
 async def test_get_settings_includes_led_keys() -> None:
-    """GET /api/admin/settings must return all 12 LED keys from migration 0006.
+    """GET /api/admin/settings must return all 11 operative LED keys from migration 0006.
 
     LED-04, LED-05, D-25: The GET response must include:
       led_color_position, led_color_label_span, led_color_error, led_color_setup,
-      led_color_all_off, led_color_ambient,
+      led_color_ambient,
       led_brightness_span, led_brightness_active, led_brightness_ambient,
       led_highlight_active_ttl_seconds, led_highlight_retain_mode, led_highlight_retain_ttl_seconds
     """
@@ -169,13 +169,12 @@ async def test_get_settings_includes_led_keys() -> None:
     assert res.status_code == 200, f"Expected 200, got {res.status_code}: {res.text}"
     body = res.json()
 
-    # All 12 LED response keys must be present
+    # All 11 operative LED response keys must be present
     expected_keys = [
         "led_color_position",
         "led_color_label_span",
         "led_color_error",
         "led_color_setup",
-        "led_color_all_off",
         "led_color_ambient",
         "led_brightness_span",
         "led_brightness_active",
@@ -189,6 +188,8 @@ async def test_get_settings_includes_led_keys() -> None:
         f"GET /api/admin/settings missing LED keys: {missing}. "
         f"Response body keys: {sorted(body.keys())}"
     )
+
+    assert "led_color_all_off" not in body
 
     # Verify default values match migration 0006
     assert body["led_color_position"] == "#FFD700", (

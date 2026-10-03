@@ -103,7 +103,8 @@ def _make_mqtt_client() -> AsyncMock:
 
 
 @pytest.mark.asyncio
-async def test_all_off() -> None:
+@pytest.mark.parametrize("legacy_off_color", ["#000000", "#ABCDEF"])
+async def test_all_off(legacy_off_color: str) -> None:
     """publish_all_off publishes b'' with retain=True to every state/{id}/{r}/{c}
     topic plus one command on all/off (LED-06, D-11).
 
@@ -119,7 +120,9 @@ async def test_all_off() -> None:
         patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
     ):
-        count = await publishers.publish_all_off(client, pool, SETTINGS_CACHE)
+        count = await publishers.publish_all_off(
+            client, pool, {**SETTINGS_CACHE, "led_color.all_off": legacy_off_color}
+        )
 
     # 4 cubes → 4 state clears
     assert count == 4, f"Expected 4 published; got {count}"
@@ -214,7 +217,8 @@ async def test_all_off_uses_units_table() -> None:
 
 
 @pytest.mark.asyncio
-async def test_diagnostic_sequence() -> None:
+@pytest.mark.parametrize("legacy_off_color", ["#000000", "#ABCDEF"])
+async def test_diagnostic_sequence(legacy_off_color: str) -> None:
     """run_diagnostic publishes the 5-state color sequence for each cube, then
     restores the ambient baseline (CR-04 / LED-11 / D-20).
 
@@ -231,7 +235,12 @@ async def test_diagnostic_sequence() -> None:
         patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
     ):
-        await publishers.run_diagnostic(client, pool, SETTINGS_CACHE, run_id="test-run-001")
+        await publishers.run_diagnostic(
+            client,
+            pool,
+            {**SETTINGS_CACHE, "led_color.all_off": legacy_off_color},
+            run_id="test-run-001",
+        )
 
     publish_calls = client.publish.call_args_list
     state_publishes = [c for c in publish_calls if f"{TEST_PREFIX}/state/" in c[0][0]]
@@ -246,6 +255,14 @@ async def test_diagnostic_sequence() -> None:
         f"({expected_diagnostic} diagnostic + {expected_ambient} ambient-restore); "
         f"got {len(state_publishes)}"
     )
+    # Firmware receives the server's sweep directly, never a diagnostic command.
+    assert len(publish_calls) == len(state_publishes)
+    for index in range(4):
+        frames = state_publishes[index * 5 : index * 5 + 5]
+        assert all(call[0][0] == frames[0][0][0] for call in frames)
+        assert all(call[1]["retain"] is True and call[1]["qos"] == 1 for call in frames)
+        assert frames[4][0][1] == b""  # off deletes retained state, regardless of legacy RGB
+    assert all(call[0][1] for call in state_publishes[-4:])  # ambient restored
 
 
 @pytest.mark.asyncio
