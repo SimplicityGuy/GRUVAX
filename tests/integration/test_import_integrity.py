@@ -160,3 +160,143 @@ async def test_ragged_csv_rejected_without_import_mutation(import_api, db_pool, 
     assert "CSV line 2" in response.json()["detail"]["message"]
     assert await import_state(db_pool, app, profiles) == before
     assert all(queue.empty() for queue in queues)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("dry_run", [False, True])
+@pytest.mark.parametrize("override", [False, True])
+@pytest.mark.parametrize("address", [(99, 0, 0), (1, 0, 2)])
+async def test_outsider_rejected_before_any_fill_or_write(
+    import_api, db_pool, dry_run, override, address
+):  # type: ignore[no-untyped-def]
+    client, headers, app, profiles, queues = import_api
+    exported = await client.get("/api/admin/export/boundaries.yaml", headers=headers)
+    assert exported.status_code == 200, exported.text
+    document = yaml.safe_load(exported.content)
+    unit, row, col = address
+    outsider = {
+        "unit_id": unit,
+        "row": row,
+        "col": col,
+        "is_empty": False,
+        "first_label": "Alpha",
+        "first_catalog": "A1",
+    }
+    if override:
+        outsider["overrides"] = {"Alpha": 0.5}
+    document["cubes"].append(outsider)
+    before = await import_state(db_pool, app, profiles)
+    response = await client.post(
+        f"/api/admin/import/boundaries?dry_run={str(dry_run).lower()}",
+        content=yaml.safe_dump(document),
+        headers={**headers, "Content-Type": "application/x-yaml"},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"]["type"] == "unknown_cube_addresses"
+    assert response.json()["detail"]["addresses"] == [{"unit_id": unit, "row": row, "col": col}]
+    assert await import_state(db_pool, app, profiles) == before
+    assert all(queue.empty() for queue in queues)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_raw_identity_import_and_valid_bootstrap_stay_supported(import_api, db_pool):  # type: ignore[no-untyped-def]
+    client, headers, app, profiles, queues = import_api
+    exported = await client.get("/api/admin/export/boundaries.yaml", headers=headers)
+    assert exported.status_code == 200, exported.text
+    preview = await client.post(
+        "/api/admin/import/boundaries?dry_run=true",
+        content=exported.content,
+        headers={**headers, "Content-Type": "application/x-yaml"},
+    )
+    assert preview.status_code == 200, preview.text
+    assert preview.json()["diff_preview"] == []
+    committed = await client.post(
+        "/api/admin/import/boundaries",
+        content=exported.content,
+        headers={**headers, "Content-Type": "application/x-yaml"},
+    )
+    assert committed.status_code == 200, committed.text
+    assert committed.json()["applied"] == 2
+    reexported = await client.get("/api/admin/export/boundaries.yaml", headers=headers)
+    assert reexported.status_code == 200
+    assert reexported.content == exported.content
+    assert not queues[0].empty()
+    assert queues[1].empty()
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "DELETE FROM gruvax.cube_boundaries WHERE profile_id = %s::uuid", (profiles[0],)
+        )
+        await conn.commit()
+    await app.state.boundary_cache_registry[profiles[0]].load(db_pool, profile_id=profiles[0])
+    app.state.segment_cache_registry[profiles[0]].derive(
+        app.state.boundary_cache_registry[profiles[0]], app.state.snapshot_registry[profiles[0]], {}
+    )
+    bootstrapped = await client.post(
+        "/api/admin/import/boundaries",
+        content=exported.content,
+        headers={**headers, "Content-Type": "application/x-yaml"},
+    )
+    assert bootstrapped.status_code == 200, bootstrapped.text
+    assert bootstrapped.json()["applied"] == 2
+    assert (
+        await client.get("/api/admin/export/boundaries.yaml", headers=headers)
+    ).content == exported.content
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_raw_identity_keeps_committed_phantom_catalog_spelling(import_api, db_pool):  # type: ignore[no-untyped-def]
+    from gruvax.db.queries import cube_exact_match
+
+    client, headers, app, profiles, queues = import_api
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "UPDATE gruvax.cube_boundaries SET first_catalog = 'A-000' WHERE profile_id = %s::uuid AND col = 0",
+            (profiles[0],),
+        )
+        await conn.commit()
+    assert not await cube_exact_match(db_pool, "Alpha", "A-000", profile_id=profiles[0])
+    cache = app.state.boundary_cache_registry[profiles[0]]
+    await cache.load(db_pool, profile_id=profiles[0])
+    app.state.segment_cache_registry[profiles[0]].derive(
+        cache, app.state.snapshot_registry[profiles[0]], cache.overrides
+    )
+    exported = await client.get("/api/admin/export/boundaries.yaml", headers=headers)
+    assert exported.status_code == 200
+    assert b"A-000" in exported.content
+    other_before = await import_state(db_pool, app, [profiles[1]])
+    response = await client.post(
+        "/api/admin/import/boundaries",
+        content=exported.content,
+        headers={**headers, "Content-Type": "application/x-yaml"},
+    )
+    assert response.status_code == 200, response.text
+    assert (
+        await client.get("/api/admin/export/boundaries.yaml", headers=headers)
+    ).content == exported.content
+    assert await import_state(db_pool, app, [profiles[1]]) == other_before
+    assert not queues[0].empty()
+    assert queues[1].empty()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize("address", [(99, 0, 0), (1, 99, 0), (1, 0, 99)])
+async def test_bootstrap_rejects_unknown_unit_or_dimensions(import_api, db_pool, address):  # type: ignore[no-untyped-def]
+    client, headers, app, profiles, queues = import_api
+    async with db_pool.connection() as conn:
+        await conn.execute(
+            "DELETE FROM gruvax.cube_boundaries WHERE profile_id = %s::uuid", (profiles[0],)
+        )
+        await conn.commit()
+    before = await import_state(db_pool, app, profiles)
+    unit, row, col = address
+    response = await client.post(
+        "/api/admin/import/boundaries",
+        content=yaml.safe_dump(
+            {"version": "1", "cubes": [{"unit_id": unit, "row": row, "col": col, "is_empty": True}]}
+        ),
+        headers={**headers, "Content-Type": "application/x-yaml"},
+    )
+    assert response.status_code == 422, response.text
+    assert response.json()["detail"]["type"] == "unknown_cube_addresses"
+    assert await import_state(db_pool, app, profiles) == before
+    assert all(queue.empty() for queue in queues)

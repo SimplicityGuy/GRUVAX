@@ -140,6 +140,34 @@ def _normalize_label_or_catalog(value: str | None) -> str:
     return value
 
 
+def _validate_file_addresses(
+    file_addresses: set[tuple[int, int, int]],
+    existing: list[tuple[Any, ...]],
+    units: dict[int, tuple[int, int]],
+) -> None:
+    """Reject discarded coordinates while allowing valid empty-profile bootstrap."""
+    if existing:
+        allowed = {(row[0], row[1], row[2]) for row in existing}
+        unknown = file_addresses - allowed
+    else:
+        unknown = {
+            (unit, row, col)
+            for unit, row, col in file_addresses
+            if unit not in units or not 0 <= row < units[unit][0] or not 0 <= col < units[unit][1]
+        }
+    if unknown:
+        raise HTTPException(
+            status_code=422,
+            detail={
+                "type": "unknown_cube_addresses",
+                "message": "These cubes are outside this profile's address space.",
+                "addresses": [
+                    {"unit_id": unit, "row": row, "col": col} for unit, row, col in sorted(unknown)
+                ],
+            },
+        )
+
+
 @router.post("/import/boundaries")
 async def import_boundaries(
     request: Request,
@@ -252,6 +280,12 @@ async def import_boundaries(
             (profile_id,),
         )
         all_addresses_raw = await cur.fetchall()
+        units = {}
+        if not all_addresses_raw:
+            await cur.execute("SELECT id, rows, cols FROM gruvax.units")
+            units = {uid: (rows, cols) for uid, rows, cols in await cur.fetchall()}
+
+    _validate_file_addresses(set(file_index), all_addresses_raw, units)
 
     # Build the committed-state index: (unit_id, row, col) → {first_label, first_catalog, is_empty}
     current_index: dict[tuple[int, int, int], dict[str, Any]] = {}
@@ -573,8 +607,9 @@ async def import_boundaries(
         # imported YAML/CSV override normalizes to the same PK row a POST /overrides
         # write would use, and carry the original-case label separately in
         # label_display for the admin UI (never used in a WHERE/PK comparison).
-        for entry in entries:
-            if entry.overrides and not entry.is_empty:
+        for edit in all_edits:
+            entry = file_index.get((edit.unit_id, edit.row, edit.col))
+            if entry is not None and entry.overrides and not entry.is_empty:
                 for label, fraction in entry.overrides.items():
                     display = label.strip()
                     label_key = display.casefold()
