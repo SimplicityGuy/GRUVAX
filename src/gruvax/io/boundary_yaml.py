@@ -19,6 +19,8 @@ All SQL interaction is outside this module — pure transform only.
 from __future__ import annotations
 
 from dataclasses import dataclass, field
+import math
+from typing import Any
 
 import yaml
 
@@ -72,23 +74,70 @@ def parse_yaml_boundaries(content: bytes | str) -> list[CutPointEntry]:
             "YAML boundary documents must contain version: '1'"
         )
 
-    entries: list[CutPointEntry] = []
-    for cube in data.get("cubes", []):
-        overrides: dict[str, float] = {
-            str(k): float(v) for k, v in cube.get("overrides", {}).items()
-        }
-        entries.append(
-            CutPointEntry(
-                unit_id=int(cube["unit_id"]),
-                row=int(cube["row"]),
-                col=int(cube["col"]),
-                first_label=cube.get("first_label"),
-                first_catalog=cube.get("first_catalog"),
-                is_empty=bool(cube.get("is_empty", False)),
-                overrides=overrides,
-            )
-        )
-    return entries
+    cubes = data.get("cubes", [])
+    if not isinstance(cubes, list):
+        raise ValueError("cubes must be a list")
+    return [_parse_cube(cube, index) for index, cube in enumerate(cubes, start=1)]
+
+
+def _address_value(cube: dict[str, Any], key: str, context: str) -> int:
+    value = cube.get(key)
+    if value is None:
+        raise ValueError(f"{context}.{key} is required")
+    try:
+        if isinstance(value, bool) or (isinstance(value, float) and not value.is_integer()):
+            raise ValueError("not an integer")
+        parsed = int(value)
+    except TypeError, ValueError, OverflowError:
+        raise ValueError(f"{context}.{key} must be an integer") from None
+    minimum = 1 if key == "unit_id" else 0
+    if parsed < minimum:
+        raise ValueError(f"{context}.{key} must be at least {minimum}")
+    return parsed
+
+
+def _optional_text(cube: dict[str, Any], key: str, context: str) -> str | None:
+    value = cube.get(key)
+    if value is not None and not isinstance(value, str):
+        raise ValueError(f"{context}.{key} must be text or null")
+    return value
+
+
+def _parse_overrides(value: Any, context: str) -> dict[str, float]:
+    if not isinstance(value, dict):
+        raise ValueError(f"{context}.overrides must be a mapping")
+    overrides = {}
+    for label, raw in value.items():
+        if not isinstance(label, str) or not label.strip():
+            raise ValueError(f"{context}.overrides labels must be nonempty text")
+        try:
+            if isinstance(raw, bool):
+                raise ValueError("not a fraction")
+            fraction = float(raw)
+        except TypeError, ValueError, OverflowError:
+            raise ValueError(f"{context}.overrides[{label!r}] must be a fraction") from None
+        if not math.isfinite(fraction) or not 0 < fraction <= 1:
+            raise ValueError(f"{context}.overrides[{label!r}] must be in (0, 1]")
+        overrides[label] = fraction
+    return overrides
+
+
+def _parse_cube(cube: Any, index: int) -> CutPointEntry:
+    context = f"cubes[{index}]"
+    if not isinstance(cube, dict):
+        raise ValueError(f"{context} must be a mapping")
+    is_empty = cube.get("is_empty", False)
+    if not isinstance(is_empty, bool):
+        raise ValueError(f"{context}.is_empty must be a boolean")
+    return CutPointEntry(
+        unit_id=_address_value(cube, "unit_id", context),
+        row=_address_value(cube, "row", context),
+        col=_address_value(cube, "col", context),
+        first_label=_optional_text(cube, "first_label", context),
+        first_catalog=_optional_text(cube, "first_catalog", context),
+        is_empty=is_empty,
+        overrides=_parse_overrides(cube.get("overrides", {}), context),
+    )
 
 
 def serialize_boundaries_yaml(entries: list[CutPointEntry]) -> str:
