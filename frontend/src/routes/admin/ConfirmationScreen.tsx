@@ -16,7 +16,7 @@
  */
 
 import { useState } from 'react'
-import { useNavigate, useSearchParams } from 'react-router'
+import { Navigate, useNavigate, useSearchParams } from 'react-router'
 import './admin.css'
 
 // ── Source label maps ────────────────────────────────────────────────────────
@@ -166,7 +166,6 @@ export function ConfirmationScreen({ changeSetId, applied, source }: Confirmatio
 
 export function ConfirmationRoute() {
   const [searchParams] = useSearchParams()
-  const navigate = useNavigate()
 
   const changeSetId = searchParams.get('change_set_id') ?? ''
   const applied = parseInt(searchParams.get('applied') ?? '0', 10)
@@ -177,8 +176,7 @@ export function ConfirmationRoute() {
 
   if (!changeSetId) {
     // No result — bounce back to wizard
-    void navigate('/admin/wizard', { replace: true })
-    return null
+    return <Navigate to="/admin/wizard" replace />
   }
 
   return <ConfirmationScreen changeSetId={changeSetId} applied={applied} source={source} />
