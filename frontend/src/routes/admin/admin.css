@@ -5383,6 +5383,33 @@
 }
 
 /* Inline sync success message */
+.profile-invite-link-box {
+  display: flex;
+  flex-direction: column;
+  gap: var(--gruvax-space-1);
+  margin-top: var(--gruvax-space-2);
+}
+
+.profile-invite-url {
+  display: block;
+  font-family: var(--gruvax-font-mono);
+  font-size: var(--gruvax-text-body-sm);
+  overflow-wrap: anywhere;
+}
+
+.profile-invite-ttl {
+  display: block;
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+}
+
+.profile-invite-error {
+  margin-top: var(--gruvax-space-2);
+  font-family: var(--gruvax-font-ui);
+  font-size: var(--gruvax-text-body-sm);
+  color: var(--gruvax-error);
+}
+
 .profile-sync-success {
   font-family: var(--gruvax-font-ui);
   font-size: var(--gruvax-text-body-sm);
