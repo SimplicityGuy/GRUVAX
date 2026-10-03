@@ -600,6 +600,17 @@ async def import_boundaries(
                 profile_id=profile_id,
             )
 
+        # D-09 empties absent cubes. Their width overrides must be removed in
+        # the same transaction so a later import/restart cannot revive them.
+        # Nonempty overrides are preserved when omitted (notably CSV, D-12).
+        await conn.execute(
+            "DELETE FROM gruvax.segment_overrides o USING gruvax.cube_boundaries b"
+            " WHERE o.profile_id = b.profile_id AND o.unit_id = b.unit_id"
+            " AND o.row = b.row AND o.col = b.col"
+            " AND b.profile_id = %s::uuid AND b.is_empty",
+            (profile_id,),
+        )
+
         # Upsert segment_overrides for entries with overrides (Pitfall 4 — inside txn).
         # CR-02: use the resolved profile_id so overrides land in the correct profile's
         # rows, not the hardcoded default profile.

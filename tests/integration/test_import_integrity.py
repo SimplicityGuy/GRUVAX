@@ -1,5 +1,6 @@
 """Import rejection and replacement contracts against owned synthetic profiles."""
 
+import asyncio
 import copy
 import uuid
 
@@ -86,6 +87,7 @@ async def import_api(db_pool):  # type: ignore[no-untyped-def]
             }
             yield client, headers, app, profiles, queues
     finally:
+        await asyncio.gather(*getattr(app.state, "background_tasks", set()))
         async with db_pool.connection() as conn:
             await conn.execute(
                 "DELETE FROM gruvax.profiles WHERE id = ANY(%s::uuid[])", (profiles,)
@@ -298,5 +300,121 @@ async def test_bootstrap_rejects_unknown_unit_or_dimensions(import_api, db_pool,
     )
     assert response.status_code == 422, response.text
     assert response.json()["detail"]["type"] == "unknown_cube_addresses"
+    assert await import_state(db_pool, app, profiles) == before
+    assert all(queue.empty() for queue in queues)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_emptied_overrides_do_not_resurrect_after_reimport_and_reload(import_api, db_pool):  # type: ignore[no-untyped-def]
+    client, headers, app, profiles, queues = import_api
+    other_before = await import_state(db_pool, app, [profiles[1]])
+    exported = await client.get("/api/admin/export/boundaries.yaml", headers=headers)
+    assert exported.status_code == 200, exported.text
+    initial = await client.get("/api/locate?release_id=2", headers=headers)
+    assert initial.status_code == 200, initial.text
+    emptied = await client.post(
+        "/api/admin/import/boundaries",
+        content='version: "1"\ncubes: []\n',
+        headers={**headers, "Content-Type": "application/x-yaml"},
+    )
+    assert emptied.status_code == 200, emptied.text
+    async with db_pool.connection() as conn:
+        rows = await (
+            await conn.execute(
+                "SELECT label, fraction FROM gruvax.segment_overrides WHERE profile_id = %s::uuid",
+                (profiles[0],),
+            )
+        ).fetchall()
+    assert rows == [], "An emptied cube must not keep a persistent override"
+    assert app.state.boundary_cache_registry[profiles[0]].overrides == {}
+    document = yaml.safe_load(exported.content)
+    for cube in document["cubes"]:
+        cube.pop("overrides", None)
+    repopulated = await client.post(
+        "/api/admin/import/boundaries",
+        content=yaml.safe_dump(document),
+        headers={**headers, "Content-Type": "application/x-yaml"},
+    )
+    assert repopulated.status_code == 200, repopulated.text
+    live = await client.get("/api/locate?release_id=2", headers=headers)
+    assert live.status_code == 200, live.text
+    assert live.json()["sub_cube_interval"] != initial.json()["sub_cube_interval"]
+    alpha = next(
+        s
+        for b in app.state.segment_cache_registry[profiles[0]]._bins
+        for s in b.segments
+        if s.label == "alpha"
+    )
+    assert not alpha.is_override
+    assert alpha.applied_fraction == pytest.approx(2 / 3)
+    fresh_boundary, fresh_snapshot, fresh_segment = (
+        BoundaryCache(),
+        CollectionSnapshot(),
+        SegmentCache(),
+    )
+    await fresh_boundary.load(db_pool, profile_id=profiles[0])
+    await fresh_snapshot.load(db_pool, profile_id=profiles[0])
+    fresh_segment.derive(fresh_boundary, fresh_snapshot, fresh_boundary.overrides)
+    assert fresh_boundary.overrides == {}
+    app.state.boundary_cache_registry[profiles[0]] = fresh_boundary
+    app.state.snapshot_registry[profiles[0]] = fresh_snapshot
+    app.state.segment_cache_registry[profiles[0]] = fresh_segment
+    reloaded = await client.get("/api/locate?release_id=2", headers=headers)
+    assert reloaded.status_code == 200, reloaded.text
+    for field in ["primary_cube", "label_span", "sub_cube_interval", "confidence"]:
+        assert reloaded.json()[field] == live.json()[field]
+    assert await import_state(db_pool, app, [profiles[1]]) == other_before
+    assert not queues[0].empty()
+    assert queues[1].empty()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_csv_preserves_nonempty_overrides(import_api, db_pool):  # type: ignore[no-untyped-def]
+    client, headers, app, profiles, queues = import_api
+    response = await client.post(
+        "/api/admin/import/boundaries",
+        content="unit_id,row,col,first_label,first_catalog,is_empty\n1,0,0,Alpha,A1,false\n1,0,1,Zulu,Z2,false\n",
+        headers={**headers, "Content-Type": "text/csv"},
+    )
+    assert response.status_code == 200, response.text
+    async with db_pool.connection() as conn:
+        row = await (
+            await conn.execute(
+                "SELECT fraction FROM gruvax.segment_overrides WHERE profile_id = %s::uuid AND label = %s",
+                (profiles[0], "alpha"),
+            )
+        ).fetchone()
+    assert row == (0.25,)
+    assert app.state.boundary_cache_registry[profiles[0]].overrides[(1, 0, 0, "alpha")] == 0.25
+    assert not queues[0].empty()
+    assert queues[1].empty()
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_late_sql_failure_rolls_back_empty_override_cleanup(import_api, db_pool, monkeypatch):  # type: ignore[no-untyped-def]
+    from psycopg.errors import UniqueViolation
+
+    from gruvax.api.admin import import_ as module
+
+    client, headers, app, profiles, queues = import_api
+    before = await import_state(db_pool, app, profiles)
+
+    async def fail_after_cleanup(conn, _key, _response):  # type: ignore[no-untyped-def]
+        await conn.execute(
+            "INSERT INTO gruvax.profiles (id, display_name, app_token_encrypted) SELECT id, display_name, app_token_encrypted FROM gruvax.profiles WHERE id = %s::uuid",
+            (profiles[0],),
+        )
+
+    monkeypatch.setattr(module, "store_idempotency", fail_after_cleanup)
+    with pytest.raises(UniqueViolation):
+        await client.post(
+            "/api/admin/import/boundaries",
+            content='version: "1"\ncubes: []\n',
+            headers={
+                **headers,
+                "Content-Type": "application/x-yaml",
+                "Idempotency-Key": str(uuid.uuid4()),
+            },
+        )
     assert await import_state(db_pool, app, profiles) == before
     assert all(queue.empty() for queue in queues)
