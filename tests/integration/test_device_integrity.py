@@ -171,3 +171,54 @@ async def test_patch_maps_actual_foreign_key_race(device_api, device_rows, db_po
             )
         ).fetchone()
     assert row == (profiles[0], "Original name")
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_actual_profile_names_follow_device_responses(device_api, device_rows, db_pool):  # type: ignore[no-untyped-def]
+    client, headers = device_api
+    profiles, devices = device_rows
+    name = f"Device profile {profiles[0]}"
+    listing = await client.get("/api/admin/devices", headers=headers)
+    assert listing.status_code == 200, listing.text
+    summary = next(row for row in listing.json()["paired"] if row["id"] == devices[0])
+    assert summary["profile_name"] == name
+    assert "fingerprint" not in summary
+    renamed = await client.patch(
+        f"/api/admin/profiles/{profiles[0]}",
+        json={"display_name": f"Renamed {profiles[0]}"},
+        headers=headers,
+    )
+    assert renamed.status_code == 200, renamed.text
+    patch = await client.patch(
+        f"/api/admin/devices/{devices[0]}",
+        json={"display_name": "New device name"},
+        headers=headers,
+    )
+    assert patch.status_code == 200, patch.text
+    assert patch.json()["profile_name"] == f"Renamed {profiles[0]}"
+    async with db_pool.connection() as conn:
+        fingerprint = await (
+            await conn.execute(
+                "SELECT fingerprint FROM gruvax.devices WHERE id = %s::uuid", (devices[0],)
+            )
+        ).fetchone()
+    assert fingerprint is not None
+    client.cookies.set("gruvax_device_fp", fingerprint[0])
+    generated = await client.post("/api/devices/pairing-codes")
+    assert generated.status_code == 200, generated.text
+    bound = await client.post(
+        "/api/admin/devices/bind",
+        json={"code": generated.json()["code"], "profile_id": profiles[0]},
+        headers=headers,
+    )
+    assert bound.status_code == 200, bound.text
+    assert bound.json()["profile_name"] == f"Renamed {profiles[0]}"
+    unbound = await client.patch(
+        f"/api/admin/devices/{devices[0]}", json={"profile_id": None}, headers=headers
+    )
+    assert unbound.status_code == 200, unbound.text
+    assert unbound.json()["profile_name"] is None
+    listing = await client.get("/api/admin/devices", headers=headers)
+    assert listing.status_code == 200, listing.text
+    pending = next(row for row in listing.json()["pending"] if row["id"] == devices[0])
+    assert pending["profile_name"] is None

@@ -138,15 +138,19 @@ _UPDATE_DEVICE_BY_PROFILE = (
 
 # List all devices — never select fingerprint (T-03-08).
 _LIST_DEVICES = (
-    "SELECT id, profile_id, display_name, revoked_at, last_seen_at, created_at"
-    " FROM gruvax.devices"
-    " ORDER BY created_at"
+    "SELECT d.id, d.profile_id, d.display_name, d.revoked_at, d.last_seen_at, d.created_at,"
+    " p.display_name"
+    " FROM gruvax.devices d LEFT JOIN gruvax.profiles p"
+    " ON p.id = d.profile_id AND p.deleted_at IS NULL"
+    " ORDER BY d.created_at"
 )
 
 # Fetch a single device by id — never select fingerprint (T-03-08).
 _SELECT_DEVICE_BY_ID = (
-    "SELECT id, profile_id, display_name, revoked_at, last_seen_at, created_at"
-    " FROM gruvax.devices WHERE id = %s::uuid"
+    "SELECT d.id, d.profile_id, d.display_name, d.revoked_at, d.last_seen_at, d.created_at,"
+    " p.display_name"
+    " FROM gruvax.devices d LEFT JOIN gruvax.profiles p"
+    " ON p.id = d.profile_id AND p.deleted_at IS NULL WHERE d.id = %s::uuid"
 )
 
 _REVOKE_DEVICE = (
@@ -221,11 +225,12 @@ def _device_state(profile_id: Any, revoked_at: Any) -> str:
 
 def _row_to_device(row: tuple[Any, ...]) -> dict[str, Any]:
     """Convert a DB row tuple to a device summary dict (no fingerprint — T-03-08)."""
-    device_id, profile_id, display_name, revoked_at, last_seen_at, created_at = row
+    device_id, profile_id, display_name, revoked_at, last_seen_at, created_at, profile_name = row
     return {
         "id": str(device_id),
         "profile_id": str(profile_id) if profile_id else None,
         "display_name": display_name,
+        "profile_name": profile_name,
         "state": _device_state(profile_id, revoked_at),
         "revoked_at": revoked_at.isoformat() if revoked_at else None,
         "last_seen_at": last_seen_at.isoformat() if last_seen_at else None,
@@ -378,6 +383,9 @@ async def bind_device(
             await cur.execute(_INSERT_DEVICE, (fingerprint, profile_id_str, display_name))
             device_row = await cur.fetchone()
 
+        if device_row is not None:
+            await cur.execute(_SELECT_DEVICE_BY_ID, (str(device_row[0]),))
+            device_row = await cur.fetchone()
         await conn.commit()
 
     if device_row is None:
