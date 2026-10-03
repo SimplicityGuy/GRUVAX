@@ -160,8 +160,6 @@ export function KioskView() {
   // ── GSAP refs (Task 3 / CUBE-08) ───────────────────────────────────────
   /** Container ref — all GSAP selectors are scoped to this element */
   const shelfAreaRef = useRef<HTMLDivElement | null>(null)
-  /** Holds the active GSAP timeline for hard-cancel on new selection (D-06) */
-  const timelineRef = useRef<gsap.core.Timeline | null>(null)
 
   // Fetch units from API (drives grid)
   const { data: unitsData } = useQuery({
@@ -545,24 +543,21 @@ export function KioskView() {
   // shelfAreaRef — no forwardRef plumbing needed (02-UI-SPEC.md §Ref Strategy).
   //
   // Timeline: span fade-in → primary pulse → bar slide-in ≤600ms (SC-3).
-  // Hard-cancel: kill() on each run (D-06 — no cross-fade between selections).
+  // Hard-cancel: revert the scoped animations on cleanup (D-06).
   // Will-change: .is-animating toggled on/off (never permanently set — Pitfall 16).
   //
   // useLayoutEffect: DOM nodes for the new selection are mounted before querying.
   useLayoutEffect(() => {
-    // Hard-cancel previous in-flight timeline (D-06)
-    timelineRef.current?.kill()
-
     const container = shelfAreaRef.current
     if (!container) return
 
     // Resolve animated nodes by stable selectors (Task 2 adds these hooks)
     const primaryCube = container.querySelector<HTMLElement>('[data-state="lit"]')
-    const barNode = container.querySelector<HTMLElement>('.sub-cube-bar')
+    const barNodes = Array.from(container.querySelectorAll<HTMLElement>('.sub-cube-bar'))
     const bandNodes = Array.from(container.querySelectorAll<HTMLElement>('.span-underlay__band'))
 
     // Track resolved nodes for cleanup
-    const resolvedNodes: Array<HTMLElement | null> = [primaryCube, barNode, ...bandNodes]
+    const resolvedNodes: Array<HTMLElement | null> = [primaryCube, ...barNodes, ...bandNodes]
 
     // Apply will-change during animation window (Pi 5 compositor optimization)
     resolvedNodes.forEach((n) => n?.classList.add('is-animating'))
@@ -579,72 +574,74 @@ export function KioskView() {
       primaryCube.scrollIntoView({ block: 'center', inline: 'center', behavior: 'smooth' })
     }
 
-    // Reset elements to start state before building new timeline
-    bandNodes.forEach((band) => gsap.set(band, { opacity: 0 }))
+    // Context also owns the initial gsap.set calls, so interruption restores
+    // every original inline style instead of preserving a partially scaled cube.
+    const context = gsap.context(() => {
+      // Reset elements to start state before building new timeline
+      bandNodes.forEach((band) => gsap.set(band, { opacity: 0 }))
 
-    const isSingleton =
-      subCubeInterval != null && subCubeInterval.start === 0 && subCubeInterval.end === 1
+      const isSingleton =
+        subCubeInterval != null && subCubeInterval.start === 0 && subCubeInterval.end === 1
 
-    if (barNode) {
-      if (isSingleton) {
-        // Singleton: reset opacity (cross-fade in step 3 variant)
-        gsap.set(barNode, { opacity: 0 })
-      } else {
-        // Normal: reset scaleX for slide-in
-        gsap.set(barNode, { scaleX: 0, transformOrigin: 'left center' })
+      if (barNodes.length > 0) {
+        if (isSingleton) {
+          // Singleton: reset opacity (cross-fade in step 3 variant)
+          gsap.set(barNodes, { opacity: 0 })
+        } else {
+          // Normal: reset scaleX for slide-in
+          gsap.set(barNodes, { scaleX: 0, transformOrigin: 'left center' })
+        }
       }
-    }
 
-    const tl = gsap.timeline({
-      onComplete: () => {
-        // Release will-change after animation settles (Pitfall 16)
-        resolvedNodes.forEach((n) => n?.classList.remove('is-animating'))
-      },
-    })
+      const tl = gsap.timeline({
+        onComplete: () => {
+          // Release will-change after animation settles (Pitfall 16)
+          resolvedNodes.forEach((n) => n?.classList.remove('is-animating'))
+        },
+      })
 
-    // Step 1: Span underlay fade-in (0ms → 150ms) — skip if no bands
-    if (bandNodes.length > 0) {
-      tl.fromTo(bandNodes, { opacity: 0 }, { opacity: 0.6, duration: 0.15, ease: 'power2.out' })
-    }
-
-    // Step 2a: Primary cube spring pulse — scale out (150ms → 250ms)
-    if (primaryCube) {
-      tl.fromTo(
-        primaryCube,
-        { scale: 1 },
-        { scale: 1.04, duration: 0.1, ease: 'back.out(1.7)' },
-        bandNodes.length > 0 ? '+=0' : '0',
-      )
-      // Step 2b: Primary cube settle — scale back (250ms → 350ms)
-      tl.to(primaryCube, { scale: 1, duration: 0.1, ease: 'power2.inOut' })
-    }
-
-    // Step 3: Bar animation — overlapped -=0.10 with step 2b (300ms → 500ms)
-    if (barNode) {
-      if (isSingleton) {
-        // Singleton variant: cross-fade in (no scaleX slide — D-02)
-        tl.fromTo(
-          barNode,
-          { opacity: 0 },
-          { opacity: 0.18, duration: 0.2, ease: 'power2.out' },
-          '-=0.10',
-        )
-      } else {
-        // Normal: slide-in from left (scaleX 0→1)
-        tl.fromTo(
-          barNode,
-          { scaleX: 0, transformOrigin: 'left center' },
-          { scaleX: 1, duration: 0.2, ease: 'power2.out' },
-          '-=0.10',
-        )
+      // Step 1: Span underlay fade-in (0ms → 150ms) — skip if no bands
+      if (bandNodes.length > 0) {
+        tl.fromTo(bandNodes, { opacity: 0 }, { opacity: 0.6, duration: 0.15, ease: 'power2.out' })
       }
-    }
 
-    timelineRef.current = tl
+      // Step 2a: Primary cube spring pulse — scale out (150ms → 250ms)
+      if (primaryCube) {
+        tl.fromTo(
+          primaryCube,
+          { scale: 1 },
+          { scale: 1.04, duration: 0.1, ease: 'back.out(1.7)' },
+          bandNodes.length > 0 ? '+=0' : '0',
+        )
+        // Step 2b: Primary cube settle — scale back (250ms → 350ms)
+        tl.to(primaryCube, { scale: 1, duration: 0.1, ease: 'power2.inOut' })
+      }
+
+      // Step 3: Bar animation — overlapped -=0.10 with step 2b (300ms → 500ms)
+      if (barNodes.length > 0) {
+        if (isSingleton) {
+          // Singleton variant: cross-fade in (no scaleX slide — D-02)
+          tl.fromTo(
+            barNodes,
+            { opacity: 0 },
+            { opacity: 0.18, duration: 0.2, ease: 'power2.out' },
+            '-=0.10',
+          )
+        } else {
+          // Normal: slide-in from left (scaleX 0→1)
+          tl.fromTo(
+            barNodes,
+            { scaleX: 0, transformOrigin: 'left center' },
+            { scaleX: 1, duration: 0.2, ease: 'power2.out' },
+            '-=0.10',
+          )
+        }
+      }
+    }, container)
 
     return () => {
-      // Hard-cancel on effect cleanup (new animationToken or unmount)
-      tl.kill()
+      // Restore prior styles on selection change, clear, or unmount.
+      context.revert()
       // Release will-change on interrupt — never leave compositor layer permanently
       resolvedNodes.forEach((n) => n?.classList.remove('is-animating'))
     }
