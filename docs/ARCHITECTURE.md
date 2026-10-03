@@ -143,6 +143,12 @@ resolved cookie/device profile returns `403 profile_mismatch`.
 | `POST` | `/api/admin/devices/{device_id}/reinstate` | Un-revoke a device |
 | `DELETE` | `/api/admin/devices/{device_id}` | Delete a device row |
 
+Malformed YAML/CSV uploads return 422 `parse_error` with field or line context.
+Unknown cube addresses return 422 before filling or writing boundaries; valid
+imports into a new profile can bootstrap its configured shelving units. Preview
+entries identify changed cubes and carry `before`/`after` cut points; the UI shows
+those transitions rather than inferring record movement from the legacy delta.
+
 Boundary imports replace the profile's full address space: omitted cubes become
 empty. Width overrides for emptied cubes are deleted in the same transaction.
 Overrides on nonempty cubes are preserved when omitted from the file, including

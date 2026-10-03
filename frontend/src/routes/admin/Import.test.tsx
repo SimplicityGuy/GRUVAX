@@ -94,3 +94,46 @@ describe('Import — ErrorCard renders the backend fix string for non-phantom er
     expect(screen.getByText('Validation error.')).toBeTruthy()
   })
 })
+
+it('counts diff membership and shows actual old/new cuts even when delta is zero', async () => {
+  vi.mocked(uploadImportBoundaries).mockResolvedValue({
+    total_cubes: 4,
+    file_cube_count: 4,
+    diff_preview: [
+      {
+        unit_id: 1,
+        row: 0,
+        col: 0,
+        delta: 0,
+        will_be_empty: false,
+        before: { first_label: 'Alpha', first_catalog: 'A1', is_empty: false },
+        after: { first_label: 'Alpha', first_catalog: 'A2', is_empty: false },
+      },
+      {
+        unit_id: 1,
+        row: 0,
+        col: 1,
+        delta: 0,
+        will_be_empty: true,
+        before: { first_label: 'Zulu', first_catalog: 'Z2', is_empty: false },
+        after: { first_label: null, first_catalog: null, is_empty: true },
+      },
+    ],
+  })
+  render(
+    <MemoryRouter>
+      <Import />
+    </MemoryRouter>,
+  )
+  fireEvent.change(document.querySelector('input[type="file"]') as HTMLInputElement, {
+    target: { files: [makeFile('boundaries.yaml')] },
+  })
+  expect(await screen.findByText('2 cubes changing · 2 cubes unchanged')).toBeVisible()
+  expect(screen.getByText('Cube 1/0/0: Alpha A1 → Alpha A2')).toBeVisible()
+  expect(screen.getByText('Cube 1/0/1: Zulu Z2 → Empty')).toBeVisible()
+  expect(document.querySelectorAll('.import-diff-cell--changing')).toHaveLength(1)
+  expect(document.querySelectorAll('.import-diff-cell--empty')).toHaveLength(1)
+  expect(screen.queryByText(/approx\./)).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /COMMIT IMPORT/i })).toBeEnabled()
+  expect(uploadImportBoundaries).toHaveBeenCalledTimes(1)
+})

@@ -38,7 +38,7 @@ dry_run preview contract (POST /api/admin/import/boundaries?dry_run=true):
         "total_cubes":    <int — count of all addresses in cube_boundaries>,
         "file_cube_count": <int — cubes present in the uploaded file>,
         "diff_preview":   [
-          {unit_id, row, col, delta, will_be_empty},
+          {unit_id, row, col, before, after, delta, will_be_empty},
           ...  (only cubes that DIFFER from committed state — empty list for identity re-import)
         ]
       }
@@ -63,8 +63,6 @@ import yaml
 from gruvax.api.admin.cache_rebuild import rebuild_derived_caches
 from gruvax.api.admin.cubes import (
     BoundaryEdit,
-    _compute_movement_counts,
-    _get_nominal_capacity,
 )
 from gruvax.api.admin.settings import (
     _ALLOWED_SETTINGS_KEYS,
@@ -168,6 +166,23 @@ def _validate_file_addresses(
         )
 
 
+def _preview_change(edit: BoundaryEdit, committed: dict[str, Any] | None) -> dict[str, Any]:
+    """Describe an actual cut change without inventing record movement counts."""
+    return {
+        "unit_id": edit.unit_id,
+        "row": edit.row,
+        "col": edit.col,
+        "delta": 0,  # Legacy field; not a measured movement count.
+        "will_be_empty": bool(edit.is_empty),
+        "before": committed,
+        "after": {
+            "first_label": None if edit.is_empty else edit.first_label,
+            "first_catalog": None if edit.is_empty else edit.first_catalog,
+            "is_empty": bool(edit.is_empty),
+        },
+    }
+
+
 @router.post("/import/boundaries")
 async def import_boundaries(
     request: Request,
@@ -207,7 +222,7 @@ async def import_boundaries(
       Runs steps 1-6 identically (same parse + fill + validation), then:
       - Returns 400 on any validation error (same bodies as commit path).
       - On validation pass, returns 200 preview:
-          {total_cubes, file_cube_count, diff_preview: [{unit_id, row, col, delta, will_be_empty}]}
+          {total_cubes, file_cube_count, diff_preview: [{unit_id, row, col, before, after, delta, will_be_empty}]}
       - diff_preview contains ONLY cubes that differ from the current committed state
         (W5: equal cubes omitted entirely — identity re-import yields diff_preview==[]).
       - Performs NO INSERT/UPDATE/DELETE. Does NOT invalidate caches or publish on the bus.
@@ -465,16 +480,6 @@ async def import_boundaries(
 
     # ── dry_run: return preview, NO DB write (T-07-DRYRUN-WRITE) ─────────────
     if dry_run:
-        nominal_capacity = 95  # default; no request.app.state access needed here
-        try:
-            nominal_capacity = _get_nominal_capacity(request)
-        except Exception:  # nosec B110 - best-effort lookup; default is fine for preview delta
-            # Log at debug — this is a best-effort lookup with a sane default.
-            logger.debug(
-                "import: nominal_capacity lookup failed; using default 95",
-                exc_info=True,
-            )
-
         total_cubes = len(all_addresses_raw)
         file_cube_count = len(file_index)
 
@@ -500,21 +505,7 @@ async def import_boundaries(
                     # Equal to committed state — omit from diff_preview (W5)
                     continue
 
-            # Cube differs (or is new) — compute approximate delta
-            movement = _compute_movement_counts(edit, segment_cache, nominal_capacity)
-            delta = movement[0]["delta"] if movement else 0
-            will_be_empty = bool(edit.is_empty) and (
-                committed is None or not bool(committed.get("is_empty"))
-            )
-            diff_preview.append(
-                {
-                    "unit_id": edit.unit_id,
-                    "row": edit.row,
-                    "col": edit.col,
-                    "delta": delta,
-                    "will_be_empty": will_be_empty,
-                }
-            )
+            diff_preview.append(_preview_change(edit, committed))
 
         logger.info(
             "Admin boundaries dry_run preview: total_cubes=%d, file_cube_count=%d, diff=%d",

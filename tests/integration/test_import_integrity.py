@@ -418,3 +418,44 @@ async def test_late_sql_failure_rolls_back_empty_override_cleanup(import_api, db
         )
     assert await import_state(db_pool, app, profiles) == before
     assert all(queue.empty() for queue in queues)
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_preview_reports_actual_old_and_new_cut_without_writes(import_api, db_pool):  # type: ignore[no-untyped-def]
+    client, headers, app, profiles, queues = import_api
+    document = {
+        "version": "1",
+        "cubes": [
+            {
+                "unit_id": 1,
+                "row": 0,
+                "col": 0,
+                "first_label": "Alpha",
+                "first_catalog": "A2",
+                "is_empty": False,
+            },
+            {
+                "unit_id": 1,
+                "row": 0,
+                "col": 1,
+                "first_label": "Zulu",
+                "first_catalog": "Z2",
+                "is_empty": False,
+            },
+        ],
+    }
+    before = await import_state(db_pool, app, profiles)
+    response = await client.post(
+        "/api/admin/import/boundaries?dry_run=true",
+        content=yaml.safe_dump(document),
+        headers={**headers, "Content-Type": "application/x-yaml"},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["total_cubes"] == 2
+    diff = response.json()["diff_preview"]
+    assert len(diff) == 1
+    assert diff[0]["delta"] == 0  # membership, not approximate movement, signals change
+    assert diff[0]["before"] == {"first_label": "Alpha", "first_catalog": "A1", "is_empty": False}
+    assert diff[0]["after"] == {"first_label": "Alpha", "first_catalog": "A2", "is_empty": False}
+    assert await import_state(db_pool, app, profiles) == before
+    assert all(queue.empty() for queue in queues)

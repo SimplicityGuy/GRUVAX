@@ -11,7 +11,7 @@
  * Design constraints (CLAUDE.md + 07-UI-SPEC.md):
  * - All colors via --gruvax-* tokens; NO hardcoded hex.
  * - All user-supplied strings via JSX {} interpolation; NEVER innerHTML.
- * - Movement counts MUST be suffixed "(approx.)" when non-zero (Pitfall 5).
+ * - Preview membership identifies changes; show actual old/new cuts, not guessed movement.
  * - Partial-import warning MUST show when file cube count < total cubes (Pitfall 3).
  * - COMMIT IMPORT always visible, disabled (aria-disabled) until zero errors.
  *
@@ -29,7 +29,11 @@
 
 import { useRef, useState } from 'react'
 import { useNavigate } from 'react-router'
-import { uploadImportBoundaries, BulkSaveError } from '../../api/adminClient'
+import {
+  uploadImportBoundaries,
+  BulkSaveError,
+  type BoundaryPreviewCut,
+} from '../../api/adminClient'
 import './admin.css'
 
 // ── Types ─────────────────────────────────────────────────────────────────────
@@ -56,7 +60,8 @@ interface DiffCube {
   unit_id: number
   row: number
   col: number
-  delta: number
+  before: BoundaryPreviewCut | null
+  after: BoundaryPreviewCut | null
   willBeEmpty: boolean
 }
 
@@ -145,6 +150,26 @@ function parseServerErrors(body: Record<string, unknown>): ImportError[] {
   return []
 }
 
+function parsePreviewCut(value: unknown): BoundaryPreviewCut | null {
+  if (!value || typeof value !== 'object') return null
+  const cut = value as Record<string, unknown>
+  return {
+    first_label: typeof cut.first_label === 'string' ? cut.first_label : null,
+    first_catalog: typeof cut.first_catalog === 'string' ? cut.first_catalog : null,
+    is_empty: cut.is_empty === true,
+  }
+}
+
+function describeCut(cut: BoundaryPreviewCut | null): string {
+  if (!cut) return 'Not configured'
+  if (cut.is_empty) return 'Empty'
+  return [cut.first_label, cut.first_catalog].filter(Boolean).join(' ') || 'No cut point'
+}
+
+function describeChange(cube: DiffCube): string {
+  return `Cube ${cube.unit_id}/${cube.row}/${cube.col}: ${describeCut(cube.before)} → ${describeCut(cube.after)}`
+}
+
 /** Parse diff preview from a 200 dry_run response (diff_preview + counts). */
 function parseDiff(body: Record<string, unknown>): {
   diff: DiffCube[]
@@ -164,7 +189,8 @@ function parseDiff(body: Record<string, unknown>): {
         unit_id: typeof d.unit_id === 'number' ? d.unit_id : 0,
         row: typeof d.row === 'number' ? d.row : 0,
         col: typeof d.col === 'number' ? d.col : 0,
-        delta: typeof d.delta === 'number' ? d.delta : 0,
+        before: parsePreviewCut(d.before),
+        after: parsePreviewCut(d.after),
         willBeEmpty: d.will_be_empty === true,
       })
     }
@@ -191,8 +217,8 @@ function DiffGrid({ diff, fileCubeCount, totalCubes }: DiffGridProps) {
     byUnit.set(cube.unit_id, arr)
   }
 
-  const changingCount = diff.filter((d) => !d.willBeEmpty && d.delta !== 0).length
-  const unchangedCount = diff.filter((d) => d.delta === 0 && !d.willBeEmpty).length
+  const changingCount = diff.length
+  const unchangedCount = Math.max(0, totalCubes - changingCount)
 
   return (
     <div className="import-diff-section">
@@ -213,16 +239,19 @@ function DiffGrid({ diff, fileCubeCount, totalCubes }: DiffGridProps) {
                 if (cube) {
                   if (cube.willBeEmpty) {
                     cellClass += ' import-diff-cell--empty'
-                  } else if (cube.delta !== 0) {
+                  } else {
                     cellClass += ' import-diff-cell--changing'
                   }
                 }
                 return (
-                  <div key={`${r}-${c}`} className={cellClass}>
-                    {cube && cube.delta !== 0 && !cube.willBeEmpty && (
+                  <div
+                    key={`${r}-${c}`}
+                    className={cellClass}
+                    title={cube ? describeChange(cube) : undefined}
+                  >
+                    {cube && (
                       <span className="import-diff-count">
-                        {cube.delta > 0 ? '+' : ''}
-                        {cube.delta} (approx.)
+                        {r + 1}/{c + 1}
                       </span>
                     )}
                   </div>
@@ -231,6 +260,12 @@ function DiffGrid({ diff, fileCubeCount, totalCubes }: DiffGridProps) {
             )}
           </div>
         </div>
+      ))}
+
+      {diff.map((cube) => (
+        <p className="import-diff-summary" key={`${cube.unit_id}-${cube.row}-${cube.col}`}>
+          {describeChange(cube)}
+        </p>
       ))}
 
       {totalCubes > 0 && fileCubeCount < totalCubes && (
