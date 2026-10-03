@@ -5,6 +5,15 @@
 _default:
     @just --list
 
+# Install locked toolchains for a new worktree.
+setup:
+    uv sync --frozen --all-groups
+    npm --prefix frontend ci
+
+# Complete developer/submission gate, using a fresh synthetic database per run.
+check:
+    bash scripts/check-project.sh
+
 # ── development ──────────────────────────────────────────────────────────────
 
 # Run the full test suite (requires running Postgres)
