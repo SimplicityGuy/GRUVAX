@@ -20,6 +20,7 @@ from __future__ import annotations
 
 import asyncio
 import contextlib
+import json
 import socket
 import threading
 import time
@@ -28,6 +29,7 @@ import httpx
 import pytest
 import uvicorn
 
+import gruvax.api.version as version_module
 from gruvax.app import create_app
 from tests.cookies import cookie_header
 
@@ -89,7 +91,12 @@ def case_profile(db_pool):  # type: ignore[no-untyped-def]
 
 
 @pytest.fixture(scope="module")
-def live_server(db_pool, case_profile):  # type: ignore[no-untyped-def]
+def sse_app():  # type: ignore[no-untyped-def]
+    return create_app()
+
+
+@pytest.fixture(scope="module")
+def live_server(db_pool, case_profile, sse_app):  # type: ignore[no-untyped-def]
     """Real uvicorn server in a background thread for SSE testing.
 
     Mirrors the fixture from test_sse.py exactly, plus the ``case_profile``
@@ -97,7 +104,7 @@ def live_server(db_pool, case_profile):  # type: ignore[no-untyped-def]
     (gruvax-kol).
     """
     port = _find_free_port()
-    app = create_app()
+    app = sse_app
     config = uvicorn.Config(
         app,
         host="127.0.0.1",
@@ -437,3 +444,58 @@ async def test_no_cross_profile_leakage(live_server) -> None:  # type: ignore[no
         f"Cross-profile leakage detected: profile B received events meant for profile A: "
         f"{received_by_b}. The per-profile event bus must isolate events by profile_id (D2-05)."
     )
+
+
+async def _wait_subscribers(bus, expected):  # type: ignore[no-untyped-def]
+    async with asyncio.timeout(2):
+        while len(bus._subscribers) != expected:
+            await asyncio.sleep(0.01)
+    assert len(bus._subscribers) == expected
+
+
+@pytest.mark.asyncio(loop_scope="session")
+@pytest.mark.parametrize(
+    "profile_id", ["00000000-0000-0000-0000-000000000001", CASE_PROFILE_UUID.upper()]
+)
+async def test_each_connection_gets_build_hello_and_unsubscribes(
+    live_server, sse_app, monkeypatch, profile_id
+):  # type: ignore[no-untyped-def]
+    """Initial connection and reconnect each receive a real build/profile hello over TCP."""
+    monkeypatch.setattr(version_module, "GIT_SHA", "abc123-synthetic-build")
+    canonical_profile = profile_id.lower()
+    bus = sse_app.state.event_bus_registry[canonical_profile]
+    await _wait_subscribers(bus, 0)
+    async with httpx.AsyncClient(base_url=live_server) as client:
+        version = await client.get("/api/version")
+        assert version.status_code == 200
+        assert version.json()["git_sha"] == "abc123-synthetic-build"
+        for _connection in range(2):
+            async with (
+                asyncio.timeout(2),
+                client.stream(
+                    "GET",
+                    f"/api/events/{profile_id}",
+                    headers=cookie_header({BROWSE_BINDING_COOKIE: profile_id}),
+                ) as response,
+            ):
+                assert response.status_code == 200
+                event_name, event_data = "", ""
+                async for line in response.aiter_lines():
+                    if line.startswith("event: "):
+                        event_name = line.removeprefix("event: ")
+                    elif line.startswith("data: "):
+                        event_data = line.removeprefix("data: ")
+                    elif not line and event_name:
+                        assert event_name == "server_hello"
+                        assert json.loads(event_data) == {
+                            "version": version.json()["git_sha"],
+                            "profile_id": canonical_profile,
+                        }
+                        await _wait_subscribers(bus, 1)
+                        # Auth resolved before streaming; the open generator
+                        # must not keep a database connection checked out.
+                        pool_stats = sse_app.state.db_pool.get_stats()
+                        assert pool_stats["pool_size"] > 0
+                        assert pool_stats["pool_available"] == pool_stats["pool_size"]
+                        break
+            await _wait_subscribers(bus, 0)

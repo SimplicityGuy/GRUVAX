@@ -19,7 +19,9 @@ from fastapi.responses import JSONResponse
 
 
 try:
-    from gruvax._version import BUILD_TIMESTAMP, ENVIRONMENT, GIT_SHA
+    from gruvax._version import BUILD_TIMESTAMP, ENVIRONMENT, GIT_SHA as BUILD_GIT_SHA
+
+    GIT_SHA = BUILD_GIT_SHA
 except ImportError:
     GIT_SHA = "dev"
     BUILD_TIMESTAMP = "unknown"

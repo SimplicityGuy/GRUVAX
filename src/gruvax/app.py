@@ -308,14 +308,10 @@ async def _initialize_and_serve(app: FastAPI, pool: AsyncConnectionPool) -> Asyn
             _settings_map = {}
         app.state.settings_cache_registry[pid_str] = _settings_map
 
-        # EventBus — one per profile; publish server_hello with profile_id.
-        _bus = EventBus()
-        try:
-            await _bus.publish("server_hello", {"version": "0.1.0", "profile_id": pid_str})
-            logger.info("EventBus ready for profile=%s; server_hello published", pid_str)
-        except Exception as exc:
-            logger.error("EventBus server_hello failed for profile=%s: %s", pid_str, exc)
-        app.state.event_bus_registry[pid_str] = _bus
+        # EventBus — one per profile. Connection hellos belong to the SSE
+        # generator, after subscription; publishing here has no subscribers.
+        app.state.event_bus_registry[pid_str] = EventBus()
+        logger.info("EventBus ready for profile=%s", pid_str)
 
     # ── P1-compat singular aliases (consumed by deps.py, health.py, sync, etc.) ─
     # Point to the default profile's instances; fall back to empty objects if
