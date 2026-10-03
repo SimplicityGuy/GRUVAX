@@ -127,11 +127,15 @@ box-shadow: var(--gruvax-shadow-led);
 
 ### Type system
 
-GRUVAX uses a three-font system. Load all three from Google Fonts:
+GRUVAX uses a three-font system, bundled locally for the LAN-only kiosk.
+The design token stylesheet imports `fonts/fonts.css`: Barlow Condensed (700/900),
+Space Grotesk (400/500/700), and DM Mono (400/500), with the original Latin,
+Latin Extended and applicable Vietnamese Unicode subsets preserved. Fonts load
+from the application's own built assets with `font-display: swap`; no Google
+stylesheet or font request is made at runtime.
 
-```css
-@import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@700;900&family=Space+Grotesk:wght@400;500;700&family=DM+Mono:wght@400;500&display=swap');
-```
+The unmodified WOFF2 files, source URLs/hashes and their OFL-1.1 copyright/license
+notices are in `design/fonts/`. See its README before updating the font assets.
 
 ### Barlow Condensed — Display & Brand
 
