@@ -212,3 +212,32 @@ describe('Wizard clear persistence (gruvax-0an4)', () => {
     expect(useAdminStore.getState().reshuffleDraft!.cuts['1/0/1'].first_label).toBe('BBB')
   })
 })
+
+describe('Wizard local bin and global step numbers (gruvax-ybid)', () => {
+  it('shows BIN 1 on shelf B while retaining STEP 17 of 32', async () => {
+    const cubes = [1, 2].flatMap((unit_id) =>
+      Array.from({ length: 16 }, (_, i) => ({
+        ...TWO_CUBES.cubes[0],
+        unit_id,
+        row: Math.floor(i / 4),
+        col: i % 4,
+      })),
+    )
+    vi.mocked(adminGetCubes).mockResolvedValue({ cubes })
+    useAdminStore.getState().setReshuffleDraft({
+      mode: 'reshuffle',
+      completedSteps: 16,
+      cuts: {},
+      idempotencyKey: 'shelf-boundary',
+      startedAt: new Date().toISOString(),
+    })
+    await act(async () => {
+      await renderWizard()
+    })
+    expect(await screen.findByText('BIN 1')).toBeVisible()
+    expect(screen.getByText('17 / 32')).toBeVisible()
+    expect(screen.getByRole('progressbar', { name: 'Step 17 of 32' })).toBeVisible()
+    expect(document.querySelector('.locator-header-shelf')).toHaveTextContent('SHELF B')
+    expect(document.querySelector('[data-row="0"][data-col="0"]')).not.toBeNull()
+  })
+})

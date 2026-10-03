@@ -426,7 +426,8 @@ function WizardWalk() {
   const step = currentStep
   const shelfLetter = String.fromCharCode(64 + (step?.unit_id ?? 1))
   const shelfName = `SHELF ${shelfLetter}`
-  const binNumber = currentStepIndex + 1
+  const stepNumber = currentStepIndex + 1
+  const binNumber = step.row * 4 + step.col + 1
   const progressPct = totalSteps > 0 ? (currentStepIndex / totalSteps) * 100 : 0
 
   return (
@@ -447,7 +448,7 @@ function WizardWalk() {
         />
         <span className="wizard-step-indicator">
           {`${shelfName} · STEP `}
-          <span className="wizard-step-mono">{`${binNumber} / ${totalSteps}`}</span>
+          <span className="wizard-step-mono">{`${stepNumber} / ${totalSteps}`}</span>
         </span>
       </div>
 
@@ -458,7 +459,7 @@ function WizardWalk() {
         aria-valuenow={currentStepIndex}
         aria-valuemin={0}
         aria-valuemax={totalSteps}
-        aria-label={`Step ${binNumber} of ${totalSteps}`}
+        aria-label={`Step ${stepNumber} of ${totalSteps}`}
       >
         <div className="wizard-progress-fill" style={{ width: `${progressPct}%` }} />
       </div>
