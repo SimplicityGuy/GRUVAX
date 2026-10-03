@@ -1,4 +1,4 @@
-import { useEffect } from 'react'
+import { useEffect, useRef } from 'react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { BrowserRouter, Route, Routes, useNavigate } from 'react-router'
 import { AdminShell } from './routes/admin/AdminShell'
@@ -54,6 +54,17 @@ const queryClient = new QueryClient({
  * Design tokens are imported in main.tsx (single entry point).
  */
 
+function shouldRecoverBinding(
+  wasBound: boolean,
+  boundProfileId: string | null,
+  revokePending: boolean,
+  pathname: string,
+): boolean {
+  if (!wasBound || boundProfileId !== null || revokePending) return false
+  if (pathname === '/select' || pathname === '/pair') return false
+  return !['/admin', '/redeem'].some((prefix) => pathname.startsWith(prefix))
+}
+
 /**
  * AppInner — rendered inside BrowserRouter so useNavigate is available.
  *
@@ -73,6 +84,8 @@ const queryClient = new QueryClient({
  */
 function AppInner() {
   const navigate = useNavigate()
+  const boundProfileId = useSessionStore((s) => s.boundProfileId)
+  const previousBinding = useRef(boundProfileId)
   const setSession = useSessionStore((s) => s.setSession)
   const revokePending = useSessionStore((s) => s.revokePending)
   const clearBoundProfile = useSessionStore((s) => s.clearBoundProfile)
@@ -114,6 +127,19 @@ function AppInner() {
       })
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
+
+  // Session polling can detach a deleted profile after bootstrap has finished.
+  // Recover only a live-binding transition; failed initial requests retain offline behavior.
+  useEffect(() => {
+    const wasBound = previousBinding.current !== null
+    // Router transitions may render after the terminal-revoke handler changed the URL.
+    // Read the live destination so its /pair navigation always retains priority.
+    const pathname = window.location.pathname
+    previousBinding.current = boundProfileId
+    if (shouldRecoverBinding(wasBound, boundProfileId, revokePending, pathname)) {
+      void navigate('/select', { replace: true })
+    }
+  }, [boundProfileId, revokePending, navigate])
 
   // Global terminal-revoke handler (D-06, T-06-06).
   // Runs at App level — mount-independent of KioskView.

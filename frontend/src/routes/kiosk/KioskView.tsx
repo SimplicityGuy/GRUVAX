@@ -741,7 +741,7 @@ export function KioskView() {
             Rendered only when offline-confirmed (bannerVisible = !sseConnected AND everConnected).
             Never shown during initial bootstrap or when the first SSE connection is rejected.
             Suppresses other transient banners while offline (D-04). Not dismissible — clears on reconnect. */}
-        {bannerVisible && <OfflineBanner />}
+        {boundProfileId && bannerVisible && <OfflineBanner />}
 
         {/* Staleness banner (OBS-06, D-01) — above the grid, never overlaying it.
             Phase 9 / D-04: only rendered when online (health data unavailable offline anyway).
