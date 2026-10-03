@@ -150,8 +150,11 @@ export async function fetchCubeContents(
  *
  * Throws Error on non-2xx so the caller can decide whether to swallow it.
  */
-export async function illuminateRecord(result: LocateResult): Promise<void> {
-  const res = await fetch(`${BASE}/api/illuminate`, {
+export async function illuminateRecord(result: LocateResult, profileId?: string): Promise<void> {
+  const params = new URLSearchParams()
+  if (profileId) params.set('profile_id', profileId)
+  const query = params.size ? `?${params}` : ''
+  const res = await fetch(`${BASE}/api/illuminate${query}`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(result),

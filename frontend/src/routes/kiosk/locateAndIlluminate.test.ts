@@ -83,7 +83,7 @@ describe('shared locate generation', () => {
     pending.resolve(located(1))
     await settle()
     expect(useGruvaxStore.getState().highlight.primaryCube).toEqual(located(1).primary_cube)
-    expect(illuminateRecord).toHaveBeenCalledExactlyOnceWith(located(1))
+    expect(illuminateRecord).toHaveBeenCalledExactlyOnceWith(located(1), 'profile-a')
   })
 
   it.each([false, true])(
@@ -128,7 +128,7 @@ describe('shared locate generation', () => {
     first.resolve(located(1))
     await settle()
     expect(useGruvaxStore.getState().highlight.primaryCube).toEqual(located(2).primary_cube)
-    expect(illuminateRecord).toHaveBeenCalledExactlyOnceWith(located(2))
+    expect(illuminateRecord).toHaveBeenCalledExactlyOnceWith(located(2), 'profile-a')
   })
 
   it('does not relight after clear, even when the same record is selected again', async () => {

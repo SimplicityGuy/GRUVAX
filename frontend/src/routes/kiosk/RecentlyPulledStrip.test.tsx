@@ -82,6 +82,6 @@ describe('RecentlyPulledStrip — chip tap', () => {
       expect(useGruvaxStore.getState().highlight.primaryCube).toEqual(LOCATED.primary_cube)
     })
     expect(illuminateRecord).toHaveBeenCalledTimes(1)
-    expect(illuminateRecord).toHaveBeenCalledWith(LOCATED)
+    expect(illuminateRecord).toHaveBeenCalledWith(LOCATED, TEST_PROFILE_ID)
   })
 })

@@ -39,7 +39,7 @@ export function locateAndIlluminate(releaseId: number, { illuminate = true } = {
       useGruvaxStore.getState().setLocateResult(located)
       // Fire-and-forget illuminate — never block locate path (D-01)
       if (illuminate) {
-        void illuminateRecord(located).catch(() => {
+        void illuminateRecord(located, profileId ?? undefined).catch(() => {
           // Swallow — broker may be in degraded mode
         })
       }
