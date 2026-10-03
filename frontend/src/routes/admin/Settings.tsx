@@ -7,7 +7,6 @@
  *   - Idle session timeout (5–30 minutes, default 10)
  *
  * Phase 5 additions (UI-SPEC §H):
- *   - Segment override drift alert threshold (integer 1–20 percentage points, default 3)
  *   - REVIEW OVERRIDES secondary button
  *
  * Phase 6 additions (LED-04, LED-05, D-19):
@@ -46,11 +45,6 @@ export function Settings() {
   const [pinStatus, setPinStatus] = useState<SaveStatus>('idle')
   const [pinError, setPinError] = useState('')
 
-  // Phase 5: drift threshold (UI-SPEC §H)
-  const [driftThresholdPct, setDriftThresholdPct] = useState(3)
-  const [driftStatus, setDriftStatus] = useState<SaveStatus>('idle')
-  const [driftError, setDriftError] = useState('')
-
   // Phase 6: LED colors — five operative colors (LED-05)
   const [ledColorPosition, setLedColorPosition] = useState('#FFD700')
   const [ledColorLabelSpan, setLedColorLabelSpan] = useState('#7C3AED')
@@ -75,6 +69,7 @@ export function Settings() {
   const [syncCadence, setSyncCadence] = useState<CadenceValue>('24h')
   type CadenceSaveStatus = 'idle' | 'saved' | 'error'
   const [cadenceStatus, setCadenceStatus] = useState<CadenceSaveStatus>('idle')
+  const [cadencePending, setCadencePending] = useState(false)
   const [cadenceError, setCadenceError] = useState('')
 
   // Phase 7: BACKUP & RESTORE section state (BAK-02)
@@ -132,6 +127,8 @@ export function Settings() {
 
   // Phase 4: Auto-save cadence onChange (D4-06)
   const handleSaveCadence = async (value: CadenceValue) => {
+    const previous = syncCadence
+    setCadencePending(true)
     setSyncCadence(value) // optimistic update
     setCadenceStatus('idle')
     setCadenceError('')
@@ -141,23 +138,11 @@ export function Settings() {
       // Fade "Saved" after 2s via CSS animation; reset state after 2.5s
       setTimeout(() => setCadenceStatus('idle'), 2500)
     } catch {
+      setSyncCadence(previous)
       setCadenceStatus('error')
       setCadenceError('Could not save. Try again.')
-    }
-  }
-
-  // Phase 5: Save drift threshold (stored client-side via localStorage for now;
-  // no backend endpoint yet — D-03 deferred to backend settings extension).
-  const handleSaveDriftThreshold = async () => {
-    setDriftStatus('saving')
-    setDriftError('')
-    try {
-      localStorage.setItem('gruvax_drift_threshold_pct', String(driftThresholdPct))
-      setDriftStatus('saved')
-      setTimeout(() => setDriftStatus('idle'), 2000)
-    } catch {
-      setDriftStatus('error')
-      setDriftError('Could not save drift threshold.')
+    } finally {
+      setCadencePending(false)
     }
   }
 
@@ -414,6 +399,7 @@ export function Settings() {
             id="sync-cadence"
             className="settings-select"
             value={syncCadence}
+            disabled={cadencePending}
             onChange={(e) => {
               void handleSaveCadence(e.target.value as CadenceValue)
             }}
@@ -670,51 +656,7 @@ export function Settings() {
           SEGMENT OVERRIDES
         </h2>
 
-        <div className="settings-field">
-          <label className="settings-label" htmlFor="drift-threshold">
-            DRIFT ALERT THRESHOLD (% POINTS)
-          </label>
-          <input
-            id="drift-threshold"
-            type="number"
-            min={1}
-            max={20}
-            value={driftThresholdPct}
-            onChange={(e) =>
-              setDriftThresholdPct(Math.min(20, Math.max(1, parseInt(e.target.value, 10) || 3)))
-            }
-            className="settings-number-input settings-number-input--mono"
-          />
-          <p className="settings-hint">
-            Show a review alert when an override drifts more than this far from the row-count
-            fraction. Default: 3%.
-          </p>
-        </div>
-
-        {driftError && (
-          <p className="settings-error" role="alert">
-            {driftError}
-          </p>
-        )}
-
-        {driftStatus === 'saved' && (
-          <p className="settings-success" role="status">
-            Drift threshold saved.
-          </p>
-        )}
-
         <div className="settings-actions">
-          <button
-            type="button"
-            className="settings-btn-primary"
-            onClick={() => {
-              void handleSaveDriftThreshold()
-            }}
-            disabled={driftStatus === 'saving'}
-          >
-            {driftStatus === 'saving' ? 'SAVING…' : 'SAVE THRESHOLD'}
-          </button>
-
           <button
             type="button"
             className="settings-review-overrides-btn"
