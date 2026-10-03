@@ -209,6 +209,10 @@ interval, so no companion band is synthesized from its clamped endpoint.
    catalog sort key (Strategy C token-stream parser — zero external dependency, fully
    deterministic; `gruvax.estimator.normalize.parse_key`).
 
+**Singleton:** a known label containing exactly one record receives a faint full-cube
+position band `[0, 1]` at confidence 0.30 (`segment-v1`), as required by D-02. A lone
+record within one segment of a larger label uses that segment's midpoint instead.
+
 **Fallback:** if the profile's `CollectionSnapshot` is empty or the label has no segment
 data, the estimator falls back to the cube-only result: `primary_cube` is set,
 `sub_cube_interval` is `null`, confidence is 0.30, `estimator_version="cube-only-v1"`.

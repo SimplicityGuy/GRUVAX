@@ -301,36 +301,28 @@ async def test_multi_cube_label_span(client) -> None:  # type: ignore[no-untyped
 
 
 @pytest.mark.asyncio(loop_scope="session")
-async def test_singleton_full_cube_band(client) -> None:  # type: ignore[no-untyped-def]
-    """A singleton-label release returns sub_cube_interval start=0.0, end=1.0, confidence=0.30.
-
-    Requires a release whose label has exactly 1 record in v_collection and IS covered
-    by a boundary. The seed contains singleton labels; we use release_id=NO_BOUNDARY_RELEASE_ID
-    as a negative control, but for a positive singleton we need to identify one from the seed.
-
-    Note: If the snapshot isn't loaded, this returns cube-only-v1 with null sub_cube_interval.
-    We assert the contract is valid either way.
-    """
-    # Attempt with a covered singleton. In our seed the "Unknown" label (release_id~70s)
-    # has a boundary but the catalog is "none" which parse_key treats as a sentinel.
-    # Use the COVERED_RELEASE_ID as a covered example and skip if not singleton.
-    response = await client.get(
-        "/api/locate", params={"release_id": COVERED_RELEASE_ID, "profile_id": DEFAULT_PROFILE_UUID}
-    )
-    assert response.status_code == 200
+async def test_singleton_full_cube_band(client, db_pool) -> None:  # type: ignore[no-untyped-def]
+    """The actual startup cache must retain a covered global singleton's D-02 band."""
+    async with db_pool.connection() as conn:
+        cursor = await conn.execute(
+            "SELECT release_id FROM gruvax.profile_collection"
+            " WHERE profile_id=%s AND label='Singleton Label 1'",
+            (DEFAULT_PROFILE_UUID,),
+        )
+        records = await cursor.fetchall()
+    assert len(records) == 1, "The singleton proof requires exactly one same-label record"
+    response = await client.get("/api/locate", params={"release_id": records[0][0]})
+    assert response.status_code == 200, response.text
     body = response.json()
-
-    si = body["sub_cube_interval"]
-    if si is None:
-        pytest.skip("sub_cube_interval is null (snapshot may be empty or cube-only fallback)")
-
-    # When §4.1 fires, the interval must be valid
-    assert 0.0 <= si["start"] <= si["end"] <= 1.0, (
-        f"SubInterval bounds violated: start={si['start']} end={si['end']}"
-    )
-    # Singleton case: start=0.0 end=1.0 confidence=CUBE_ONLY_CONFIDENCE
-    # Multi-record case: start/end follow the band formula
-    assert body["confidence"] >= CUBE_ONLY_CONFIDENCE
+    assert body["primary_cube"] is not None
+    assert body["confidence"] == CUBE_ONLY_CONFIDENCE
+    assert body["estimator_version"] == "segment-v1"
+    assert body["sub_cube_interval"] == {
+        "start": 0.0,
+        "end": 1.0,
+        "crosses_boundary": False,
+        "next_cube": None,
+    }
 
 
 # ── /api/units tests ──────────────────────────────────────────────────────────

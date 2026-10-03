@@ -264,8 +264,7 @@ def test_cube_only_fallback_version_string() -> None:
     from gruvax.estimator.collection_snapshot import CollectionSnapshot
     from gruvax.estimator.segment_cache import SegmentCache
 
-    # Snapshot with 1 record for the label → k=1 → compute_confidence(1) == CUBE_ONLY_CONFIDENCE
-    # → locate() dispatcher strips sub_cube_interval and returns cube-only-v1
+    # A record absent from an otherwise populated label snapshot is a genuine fallback.
     rows = [
         BoundaryRow(
             unit_id=1,
@@ -294,15 +293,15 @@ def test_cube_only_fallback_version_string() -> None:
     sc.derive(cache, snapshot, {})
 
     result = locate(
-        release_id=1,
+        release_id=999,
         label="FallbackLabel",
         catalog_number="FL 001",
         segment_cache=sc,
         snapshot=snapshot,
     )
 
-    # k=1 → confidence==CUBE_ONLY_CONFIDENCE → dispatcher returns cube-only-v1
+    # The requested release is absent; confidence must not manufacture a position band.
     assert result.estimator_version == "cube-only-v1", (
-        f"Expected 'cube-only-v1' for singleton fallback, got {result.estimator_version!r}"
+        f"Expected 'cube-only-v1' for missing-record fallback, got {result.estimator_version!r}"
     )
     assert result.sub_cube_interval is None, "§4.8 fallback must set sub_cube_interval=None"

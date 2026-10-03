@@ -22,11 +22,9 @@ cases:
     release_id: 1
     k: 1
     idx: 0
-    # Singleton (Phase 5 / locate_by_segment): midpoint band.
-    # segment_count=1 → singleton branch: f = offset + applied_fraction * 0.5 = 0.5
-    # start = max(0, 0.5 - 0.05) = 0.45, end = min(1, 0.5 + 0.05) = 0.55
-    expected_start: 0.45
-    expected_end: 0.55
+    # D-02 owner-approved global singleton: full-cube faint band.
+    expected_start: 0.0
+    expected_end: 1.0
     expected_confidence: 0.30     # CUBE_ONLY_CONFIDENCE (D-02): singleton stays at 0.30
     expected_crosses_boundary: false
     tolerance: 0.001

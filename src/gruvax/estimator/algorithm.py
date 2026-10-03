@@ -183,7 +183,7 @@ def locate_by_segment(
 
     Single-segment bin degeneracy (D-02 regression invariant):
       When a bin has exactly one LabelSegment, the formula reduces to:
-        offset=0, fraction=1.0 → f = rank / (k-1) (or 0.5 midpoint for singleton)
+        offset=0, fraction=1.0 → f = rank / (k-1), with a full-cube band for a global singleton
       which is exactly the retired §4.1 formula. Verified by test_single_segment_bin_reproduces_v1_index.
 
     Algorithm:
@@ -197,8 +197,9 @@ def locate_by_segment(
              f = offset + seg.applied_fraction * 0.5  # midpoint for singletons (D-02)
          else:
              f = offset + (rank_in_segment / (seg.segment_count - 1)) * seg.applied_fraction
-      7. start = max(0.0, f - POSITION_HALF_WIDTH)
-         end   = min(1.0, f + POSITION_HALF_WIDTH)
+      7. For a global singleton (k=1), start=0.0 and end=1.0 (D-02).
+         Otherwise start = max(0.0, f - POSITION_HALF_WIDTH),
+         end = min(1.0, f + POSITION_HALF_WIDTH).
       8. Set crosses_boundary / next_cube only when this band reaches a continuing bin edge.
       9. confidence = compute_confidence(len(sorted_recs))
          estimator_version = SEGMENT_ESTIMATOR_VERSION = "segment-v1"
@@ -269,8 +270,8 @@ def locate_by_segment(
         f = offset + (rank_in_segment / (seg.segment_count - 1)) * seg.applied_fraction
 
     # Step 7: Apply band formula (Pitfall 21 — never zero-width).
-    start = max(0.0, f - POSITION_HALF_WIDTH)
-    end = min(1.0, f + POSITION_HALF_WIDTH)
+    start = 0.0 if k == 1 else max(0.0, f - POSITION_HALF_WIDTH)
+    end = 1.0 if k == 1 else min(1.0, f + POSITION_HALF_WIDTH)
 
     # Step 8: Crossing describes the record band, not every record in a continuing segment.
     crosses_boundary = False
@@ -470,7 +471,9 @@ def locate(
     Routes to locate_by_segment when the snapshot has records for the label, and
     falls back to locate_cube_only when:
       - The snapshot has no records for the label (stale snapshot or unknown label)
-      - locate_by_segment produces confidence <= CUBE_ONLY_CONFIDENCE (edge case)
+      - The release is missing from the snapshot or has no covering segment
+
+    A known global singleton retains its D-02 full-cube band at confidence 0.30.
 
     The fallback path always sets estimator_version = "cube-only-v1" and
     sub_cube_interval = None for a clean §4.8 response.
@@ -506,15 +509,6 @@ def locate(
         snapshot=snapshot,
     )
 
-    # If confidence is at or below the cube-only threshold, strip sub_cube_interval.
-    if result.confidence <= CUBE_ONLY_CONFIDENCE:
-        return LocateResult(
-            release_id=release_id,
-            primary_cube=result.primary_cube,
-            label_span=result.label_span,
-            sub_cube_interval=None,
-            confidence=result.confidence,
-            estimator_version="cube-only-v1",
-        )
-
+    # Coverage, rather than confidence alone, determines whether a band exists.
+    # A global singleton has a valid full-cube band at the cube-only confidence floor.
     return result

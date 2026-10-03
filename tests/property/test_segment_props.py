@@ -124,24 +124,17 @@ def test_single_segment_bin_reproduces_v1_index(singleton_props_fixture) -> None
         snapshot=snapshot,
     )
 
-    # Both must have sub_cube_interval (singleton → midpoint band)
+    # Both must have the exact D-02 singleton full-cube band
     assert seg_result.sub_cube_interval is not None
     assert v1_result.sub_cube_interval is not None
 
     si_seg = seg_result.sub_cube_interval
     si_v1 = v1_result.sub_cube_interval
 
-    # For singleton: locate_by_segment uses midpoint (0.5); _locate_by_index_v1 uses
-    # [0.0, 1.0] (full-cube band per D-02 / CUBE-10 owner override).
-    # Both are valid D-02 compliant singleton behaviors. The regression anchor is
-    # that segment_count==1 triggers the singleton branch in both paths.
-    # Assert: both produce a valid SubInterval in [0, 1].
-    assert 0.0 <= si_seg.start <= si_seg.end <= 1.0, (
-        f"locate_by_segment singleton band must be in [0,1]: {si_seg.start},{si_seg.end}"
-    )
-    assert 0.0 <= si_v1.start <= si_v1.end <= 1.0, (
-        f"_locate_by_index_v1 singleton band must be in [0,1]: {si_v1.start},{si_v1.end}"
-    )
+    assert (si_seg.start, si_seg.end) == (si_v1.start, si_v1.end) == (0.0, 1.0)
+    assert seg_result.confidence == v1_result.confidence == 0.30
+    assert not si_seg.crosses_boundary
+    assert si_seg.next_cube is None
 
     # D-02 invariant for k>1: verify the formula matches on a true single-segment bin.
     # Build a dedicated single-label single-cube fixture (k=5) — LabelA alone.
