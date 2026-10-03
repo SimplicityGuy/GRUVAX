@@ -199,7 +199,7 @@ def locate_by_segment(
              f = offset + (rank_in_segment / (seg.segment_count - 1)) * seg.applied_fraction
       7. start = max(0.0, f - POSITION_HALF_WIDTH)
          end   = min(1.0, f + POSITION_HALF_WIDTH)
-      8. Set crosses_boundary / next_cube on SubInterval when seg.continues is True (straddle).
+      8. Set crosses_boundary / next_cube only when this band reaches a continuing bin edge.
       9. confidence = compute_confidence(len(sorted_recs))
          estimator_version = SEGMENT_ESTIMATOR_VERSION = "segment-v1"
 
@@ -272,11 +272,11 @@ def locate_by_segment(
     start = max(0.0, f - POSITION_HALF_WIDTH)
     end = min(1.0, f + POSITION_HALF_WIDTH)
 
-    # Step 8: Set crosses_boundary / next_cube when seg.continues is True.
+    # Step 8: Crossing describes the record band, not every record in a continuing segment.
     crosses_boundary = False
     next_cube: CubeRef | None = None
 
-    if seg.continues:
+    if seg.continues and end >= 1.0:
         # Find the next bin in the label_span that comes after primary_cube.
         primary_idx = next(
             (
