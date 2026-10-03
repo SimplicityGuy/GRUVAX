@@ -1456,7 +1456,9 @@ async def get_top_searched(
     DISTINCT ON (rs.release_id) ensures the JOIN to profile_collection (which
     can return multiple rows per release_id when the same release lives in
     multiple folders, since the PK is (profile_id, release_id, folder_id))
-    yields exactly one row per release in the top-N result.
+    yields exactly one row per release. The lowest folder_id supplies stable
+    display metadata. An outer query ranks those distinct releases by popularity
+    before applying LIMIT, with release_id breaking tied search counts.
 
     All SQL uses %s placeholders (T-08-06, T-01-sqli-rewire).
 
@@ -1472,6 +1474,7 @@ async def get_top_searched(
         Returns [] when record_stats is empty or no records match profile_collection.
     """
     sql = """
+SELECT * FROM (
 SELECT DISTINCT ON (rs.release_id)
     rs.release_id,
     v.title,
@@ -1491,17 +1494,16 @@ JOIN LATERAL (
       AND occurred_at > now() - INTERVAL '168 hours'
 ) activity ON TRUE
 WHERE rs.profile_id = %s::uuid
-ORDER BY rs.release_id, rs.search_count DESC
+ORDER BY rs.release_id, v.folder_id
+) AS distinct_releases
+ORDER BY search_count DESC, release_id
 LIMIT %s
 """
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(sql, (profile_id, limit))
         rows_raw = await cur.fetchall()
         cols = [desc[0] for desc in (cur.description or [])]
-    result = [dict(zip(cols, row, strict=True)) for row in rows_raw]
-    # DISTINCT ON breaks the search_count ordering; re-sort in Python.
-    result.sort(key=lambda r: r.get("search_count", 0) or 0, reverse=True)
-    return result
+    return [dict(zip(cols, row, strict=True)) for row in rows_raw]
 
 
 async def get_phantom_boundary_count(
