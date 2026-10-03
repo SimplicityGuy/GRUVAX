@@ -476,3 +476,37 @@ describe('DeviceDrawer', () => {
     expect(keypadBtn1).not.toBeNull()
   })
 })
+
+it('explains how to resolve an already bound profile instead of retrying', async () => {
+  vi.useRealTimers()
+  const fetchMock = vi.fn(async (url: string) => {
+    if (url.includes('/api/admin/devices/bind')) {
+      return {
+        ok: false,
+        status: 409,
+        json: async () => ({ detail: { type: 'profile_already_bound' } }),
+      } as Response
+    }
+    return { ok: true, json: async () => PROFILES_RESPONSE } as Response
+  })
+  vi.stubGlobal('fetch', fetchMock)
+  render(
+    <QueryClientProvider client={makeQueryClient()}>
+      <DeviceDrawer mode="bind" onClose={vi.fn()} />
+    </QueryClientProvider>,
+  )
+  for (const digit of ['1', '2', '3', '4']) {
+    await act(async () => {
+      screen.getByRole('button', { name: digit }).click()
+    })
+  }
+  expect(
+    await screen.findByText(
+      'That profile already has an active device. Unbind or revoke it first.',
+    ),
+  ).toBeVisible()
+  expect(screen.queryByText('Something went wrong. Try again in a moment.')).not.toBeInTheDocument()
+  expect(
+    fetchMock.mock.calls.filter(([url]) => url.includes('/api/admin/devices/bind')),
+  ).toHaveLength(1)
+})
