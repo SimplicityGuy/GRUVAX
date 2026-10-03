@@ -289,6 +289,13 @@ internal Compose network only (port 1883 is not exposed to the LAN).
 - `all/off` clears retained `state/*` topics by publishing an empty payload with
   `retain=True` (MQTT protocol: `retain=True` + empty payload = delete retained message).
 
+Off has no RGB control: it deletes retained state and uses zero brightness in
+the diagnostic sweep. Live settings and the admin UI expose only operative
+colors; `PUT /api/admin/settings` rejects the retired `led_color_all_off` field.
+Historical `led_color.all_off` database rows remain intact. Settings backups
+continue exporting/importing that legacy value with normal hex validation for
+export→reimport compatibility; it has no effect on LED output.
+
 Retained `state/*` uses the existing payload names: `gruvax.illuminate.v1`
 for primary and ambient state, and `gruvax.span.v1` for non-primary span cubes.
 `mqtt.schemas.StatePayload` documents this union. The primary retained value

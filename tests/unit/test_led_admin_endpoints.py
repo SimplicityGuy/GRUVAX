@@ -103,7 +103,8 @@ def _make_mqtt_client() -> AsyncMock:
 
 
 @pytest.mark.asyncio
-async def test_all_off() -> None:
+@pytest.mark.parametrize("legacy_off_color", ["#000000", "#ABCDEF"])
+async def test_all_off(legacy_off_color: str) -> None:
     """publish_all_off publishes b'' with retain=True to every state/{id}/{r}/{c}
     topic plus one command on all/off (LED-06, D-11).
 
@@ -119,7 +120,9 @@ async def test_all_off() -> None:
         patch("gruvax.settings.settings.MQTT_TOPIC_PREFIX", TEST_PREFIX),
         patch("gruvax.settings.settings.MQTT_STATE_EXPIRY_SECONDS", 14400),
     ):
-        count = await publishers.publish_all_off(client, pool, SETTINGS_CACHE)
+        count = await publishers.publish_all_off(
+            client, pool, {**SETTINGS_CACHE, "led_color.all_off": legacy_off_color}
+        )
 
     # 4 cubes → 4 state clears
     assert count == 4, f"Expected 4 published; got {count}"

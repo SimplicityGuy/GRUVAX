@@ -5,11 +5,11 @@ Endpoints:
   GET /api/admin/export/settings.yaml   — export allowed settings as YAML (BAK-02, D-14)
 
 Security (D-14, T-07-PIN-LEAK):
-  Settings export uses an ALLOWLIST query: SELECT WHERE key = ANY(_ALLOWED_SETTINGS_KEYS).
-  auth.pin_hash is intentionally absent from _ALLOWED_SETTINGS_KEYS and is therefore
+  Settings export uses an ALLOWLIST query: SELECT WHERE key = ANY(_BACKUP_SETTINGS_KEYS).
+  auth.pin_hash is intentionally absent from _BACKUP_SETTINGS_KEYS and is therefore
   NEVER selected, never serialized, and NEVER present in a downloaded settings.yaml.
   This is an allowlist (not a denylist) — adding new keys requires explicit inclusion
-  in _ALLOWED_SETTINGS_KEYS.
+  in _BACKUP_SETTINGS_KEYS.
 
 Both endpoints require an active admin session (require_admin). Export GETs are
 read-only — no CSRF check is needed beyond session validation.
@@ -26,7 +26,7 @@ from fastapi import APIRouter, Depends, Request
 from fastapi.responses import Response
 import yaml
 
-from gruvax.api.admin.settings import _ALLOWED_SETTINGS_KEYS
+from gruvax.api.admin.settings import _BACKUP_SETTINGS_KEYS
 from gruvax.api.deps import (
     boundary_cache_for_profile,
     get_pool,
@@ -126,8 +126,8 @@ async def export_settings(
 ) -> Response:
     """Export allowed settings as a YAML file (BAK-02, D-14).
 
-    Reads ONLY keys in _ALLOWED_SETTINGS_KEYS from the DB.
-    auth.pin_hash is absent from _ALLOWED_SETTINGS_KEYS and is therefore
+    Reads ONLY keys in _BACKUP_SETTINGS_KEYS from the DB.
+    auth.pin_hash is absent from _BACKUP_SETTINGS_KEYS and is therefore
     provably excluded from this export (T-07-PIN-LEAK, D-14 hard exclusion).
 
     Returns a nested YAML dict (e.g. led_color.position → led_color: {position: ...})
@@ -137,13 +137,13 @@ async def export_settings(
         YAML file download with Content-Disposition attachment.
     """
     # D-14 hard exclusion: the WHERE clause IS the guard — auth.pin_hash is never
-    # in _ALLOWED_SETTINGS_KEYS, so it is never SELECTed and never serialized.
+    # in _BACKUP_SETTINGS_KEYS, so it is never SELECTed and never serialized.
     # Global settings live under the default profile UUID (composite PK = (profile_id, key)).
     _DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
     async with pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
             "SELECT key, value FROM gruvax.settings WHERE profile_id = %s::uuid AND key = ANY(%s)",
-            (_DEFAULT_PROFILE_UUID, list(_ALLOWED_SETTINGS_KEYS)),
+            (_DEFAULT_PROFILE_UUID, list(_BACKUP_SETTINGS_KEYS)),
         )
         rows = await cur.fetchall()
 

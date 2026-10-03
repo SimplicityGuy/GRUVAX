@@ -11,7 +11,7 @@
  *   - REVIEW OVERRIDES secondary button
  *
  * Phase 6 additions (LED-04, LED-05, D-19):
- *   - LEDs section: six per-state color pickers, three brightness sliders,
+ *   - LEDs section: five operative color pickers, three brightness sliders,
  *     highlight TTL, retain mode toggle, retain timeout
  *   - ColorBlindPreview next to each color picker (D-18, zero new deps)
  *   - Nordic Grid token swatches as color presets
@@ -51,12 +51,11 @@ export function Settings() {
   const [driftStatus, setDriftStatus] = useState<SaveStatus>('idle')
   const [driftError, setDriftError] = useState('')
 
-  // Phase 6: LED colors — six per-state colors (LED-05)
+  // Phase 6: LED colors — five operative colors (LED-05)
   const [ledColorPosition, setLedColorPosition] = useState('#FFD700')
   const [ledColorLabelSpan, setLedColorLabelSpan] = useState('#7C3AED')
   const [ledColorError, setLedColorError] = useState('#E63946')
   const [ledColorSetup, setLedColorSetup] = useState('#0077B6')
-  const [ledColorAllOff, setLedColorAllOff] = useState('#000000')
   const [ledColorAmbient, setLedColorAmbient] = useState('#0051A2')
   // Phase 6: LED brightness tiers (LED-04, D-24 naming — three distinct tiers)
   const [ledBrightnessSpan, setLedBrightnessSpan] = useState(128) // label-span tier
@@ -94,7 +93,6 @@ export function Settings() {
         if (s.led_color_label_span) setLedColorLabelSpan(s.led_color_label_span)
         if (s.led_color_error) setLedColorError(s.led_color_error)
         if (s.led_color_setup) setLedColorSetup(s.led_color_setup)
-        if (s.led_color_all_off) setLedColorAllOff(s.led_color_all_off)
         if (s.led_color_ambient) setLedColorAmbient(s.led_color_ambient)
         if (s.led_brightness_span !== undefined) setLedBrightnessSpan(s.led_brightness_span)
         if (s.led_brightness_active !== undefined) setLedBrightnessActive(s.led_brightness_active)
@@ -196,7 +194,6 @@ export function Settings() {
         led_color_label_span: ledColorLabelSpan,
         led_color_error: ledColorError,
         led_color_setup: ledColorSetup,
-        led_color_all_off: ledColorAllOff,
         led_color_ambient: ledColorAmbient,
         led_brightness_span: ledBrightnessSpan,
         led_brightness_active: ledBrightnessActive,
@@ -474,12 +471,6 @@ export function Settings() {
               label: 'SETUP COLOR',
               value: ledColorSetup,
               setter: setLedColorSetup,
-            },
-            {
-              id: 'led-color-all-off',
-              label: 'ALL OFF COLOR',
-              value: ledColorAllOff,
-              setter: setLedColorAllOff,
             },
             {
               id: 'led-color-ambient',

@@ -5,13 +5,13 @@ in a serialized export payload (T-PIN-LEAK).
 
 These tests are pure unit tests — they test the key-filtering logic
 directly, without a live DB or HTTP client. Always runs GREEN on existing
-code (the endpoint is not yet built but the _ALLOWED_SETTINGS_KEYS list
+code (the endpoint is not yet built but the _BACKUP_SETTINGS_KEYS list
 already exists and does not include auth.pin_hash).
 
 Tests:
-  - test_no_pin_in_export: 'auth.pin_hash' absent from _ALLOWED_SETTINGS_KEYS AND
+  - test_no_pin_in_export: 'auth.pin_hash' absent from _BACKUP_SETTINGS_KEYS AND
     no key starts with 'auth.'
-  - test_all_allowed_keys: all keys in _ALLOWED_SETTINGS_KEYS are present and
+  - test_all_allowed_keys: all keys in _BACKUP_SETTINGS_KEYS are present and
     representable (sanity check that the set was not accidentally emptied)
 """
 
@@ -22,38 +22,38 @@ import pytest
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_no_pin_in_export() -> None:
-    """_ALLOWED_SETTINGS_KEYS must not contain auth.pin_hash or any auth.* key (D-14).
+    """_BACKUP_SETTINGS_KEYS must not contain auth.pin_hash or any auth.* key (D-14).
 
     This is the primary T-PIN-LEAK guard: the export endpoint uses only
-    _ALLOWED_SETTINGS_KEYS to query the DB, so any key absent from the set
+    _BACKUP_SETTINGS_KEYS to query the DB, so any key absent from the set
     is never serialized to a downloadable file.
 
-    This test is always GREEN because _ALLOWED_SETTINGS_KEYS is pre-existing code
+    This test is always GREEN because _BACKUP_SETTINGS_KEYS is pre-existing code
     (auth.pin_hash was never added to it). It acts as a regression guard.
     """
-    from gruvax.api.admin.settings import _ALLOWED_SETTINGS_KEYS
+    from gruvax.api.admin.settings import _BACKUP_SETTINGS_KEYS
 
     # Hard exclusion: auth.pin_hash must not be in the export allowlist
-    assert "auth.pin_hash" not in _ALLOWED_SETTINGS_KEYS, (
-        "SECURITY: auth.pin_hash must never appear in _ALLOWED_SETTINGS_KEYS (D-14, T-PIN-LEAK)"
+    assert "auth.pin_hash" not in _BACKUP_SETTINGS_KEYS, (
+        "SECURITY: auth.pin_hash must never appear in _BACKUP_SETTINGS_KEYS (D-14, T-PIN-LEAK)"
     )
 
     # Broad exclusion: NO key starting with 'auth.' may be in the allowlist
-    auth_keys = [k for k in _ALLOWED_SETTINGS_KEYS if k.startswith("auth.")]
+    auth_keys = [k for k in _BACKUP_SETTINGS_KEYS if k.startswith("auth.")]
     assert auth_keys == [], (
-        f"SECURITY: No auth.* keys may be in _ALLOWED_SETTINGS_KEYS, found: {auth_keys}"
+        f"SECURITY: No auth.* keys may be in _BACKUP_SETTINGS_KEYS, found: {auth_keys}"
     )
 
 
 @pytest.mark.asyncio(loop_scope="session")
 async def test_all_allowed_keys() -> None:
-    """_ALLOWED_SETTINGS_KEYS contains all expected Phase 3 + Phase 6 keys.
+    """_BACKUP_SETTINGS_KEYS contains all expected Phase 3 + Phase 6 keys.
 
     Verifies the allowlist is populated with the expected settings keys.
     Acts as a regression guard: if a key is accidentally removed from the set,
     export would silently omit it (breaking BAK-01 round-trip identity).
     """
-    from gruvax.api.admin.settings import _ALLOWED_SETTINGS_KEYS
+    from gruvax.api.admin.settings import _BACKUP_SETTINGS_KEYS
 
     # Phase 3 keys
     expected_phase3 = {
@@ -83,13 +83,13 @@ async def test_all_allowed_keys() -> None:
 
     all_expected = expected_phase3 | expected_led_colors | expected_led_lifecycle
 
-    missing = all_expected - _ALLOWED_SETTINGS_KEYS
+    missing = all_expected - _BACKUP_SETTINGS_KEYS
     assert missing == set(), (
-        f"Keys missing from _ALLOWED_SETTINGS_KEYS (BAK-01 regression guard): {missing}"
+        f"Keys missing from _BACKUP_SETTINGS_KEYS (BAK-01 regression guard): {missing}"
     )
 
     # Also assert the set is non-empty (guards against accidental clear())
-    assert len(_ALLOWED_SETTINGS_KEYS) >= len(all_expected), (
-        f"_ALLOWED_SETTINGS_KEYS has fewer keys than expected "
-        f"(got {len(_ALLOWED_SETTINGS_KEYS)}, expected >= {len(all_expected)})"
+    assert len(_BACKUP_SETTINGS_KEYS) >= len(all_expected), (
+        f"_BACKUP_SETTINGS_KEYS has fewer keys than expected "
+        f"(got {len(_BACKUP_SETTINGS_KEYS)}, expected >= {len(all_expected)})"
     )

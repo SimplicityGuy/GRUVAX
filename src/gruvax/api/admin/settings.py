@@ -7,7 +7,7 @@ Endpoints:
 
 Phase 3 scope: Change PIN + nominal capacity + idle timeout.
 Phase 6 additions (LED-04, LED-05, D-15, D-24, D-25):
-  LED color keys — per-state hex colors (position, label_span, error, setup, all_off, ambient)
+  LED color keys — per-state hex colors (position, label_span, error, setup, ambient)
   LED brightness keys — three distinct tiers (span, active, ambient; D-24 naming contract)
   LED highlight keys — active TTL, retain mode, retain timeout
 
@@ -50,12 +50,11 @@ _ALLOWED_SETTINGS_KEYS = frozenset(
         "session.hard_cap_seconds",
         # Phase 4 — nightly sync cadence (SYN-01 / D4-06)
         "sync.cadence",
-        # Phase 6 — LED colors (all six states)
+        # Phase 6 — operative LED colors
         "led_color.position",
         "led_color.label_span",
         "led_color.error",
         "led_color.setup",
-        "led_color.all_off",
         "led_color.ambient",
         # Phase 6 — LED brightness tiers (D-24 naming contract — three DISTINCT tiers)
         "led_brightness.span",  # label-span tier (~50%) — NOT the idle baseline
@@ -68,6 +67,10 @@ _ALLOWED_SETTINGS_KEYS = frozenset(
     }
 )
 
+# Backup-only legacy key: it never controlled off wire output. Preserve historical
+# exports/imports and DB rows without advertising an operative RGB setting.
+_BACKUP_SETTINGS_KEYS = _ALLOWED_SETTINGS_KEYS | {"led_color.all_off"}
+
 # Regex for valid #RRGGBB hex color (T-06-08 — reject malformed hex with 422)
 _HEX_COLOR_RE = re.compile(r"^#[0-9A-Fa-f]{6}$")
 
@@ -79,10 +82,12 @@ _COLOR_KEYS = frozenset(
         "led_color.label_span",
         "led_color.error",
         "led_color.setup",
-        "led_color.all_off",
         "led_color.ambient",
     }
 )
+
+# Apply the same hex validation to legacy backup values, outside the live surface.
+_BACKUP_COLOR_KEYS = _COLOR_KEYS | {"led_color.all_off"}
 
 # DB keys that store integers (brightness values, TTL seconds)
 _INT_KEYS = frozenset(
@@ -197,7 +202,6 @@ async def get_settings(
         "led_color_label_span": _get_color("led_color.label_span", "#7C3AED"),
         "led_color_error": _get_color("led_color.error", "#E63946"),
         "led_color_setup": _get_color("led_color.setup", "#0077B6"),
-        "led_color_all_off": _get_color("led_color.all_off", "#000000"),
         "led_color_ambient": _get_color("led_color.ambient", "#0051A2"),
         # Phase 6 — LED brightness tiers (LED-04, D-24)
         "led_brightness_span": _get_int("led_brightness.span", 128),
@@ -210,6 +214,19 @@ async def get_settings(
     }
 
 
+def _reject_retired_off_color(body: dict[str, Any]) -> None:
+    """Do not acknowledge a legacy control whose RGB value never drove off."""
+    if "led_color_all_off" in body:
+        raise HTTPException(
+            status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+            detail={
+                "type": "unsupported_setting",
+                "field": "led_color_all_off",
+                "message": "Off clears retained state; legacy off colors are backup-only.",
+            },
+        )
+
+
 @router.put("/settings")
 async def update_settings(
     request: Request,
@@ -219,13 +236,14 @@ async def update_settings(
     """Update admin settings.
 
     Whitelisted keys: cube capacity, idle TTL, and all LED knobs (Phase 6).
-    Unknown keys are silently ignored.
+    Unknown keys are silently ignored; the retired all-off color returns 422.
     Color values are validated against #RRGGBB — malformed hex returns 422 (T-06-08).
     led_transition.* keys are NOT accepted (D-17 — fixed per-state defaults).
 
     Body: any subset of the AdminSettingsPut shape (all fields optional).
     """
     body = await request.json()
+    _reject_retired_off_color(body)
 
     # Map JSON body keys → gruvax.settings DB keys
     # Order: Phase 3 first, Phase 4, then Phase 6 LED keys.
@@ -242,7 +260,6 @@ async def update_settings(
         "led_color_label_span": "led_color.label_span",
         "led_color_error": "led_color.error",
         "led_color_setup": "led_color.setup",
-        "led_color_all_off": "led_color.all_off",
         "led_color_ambient": "led_color.ambient",
         # Phase 6 — LED brightness (LED-04, D-24 — three distinct tiers)
         "led_brightness_span": "led_brightness.span",  # label-span tier

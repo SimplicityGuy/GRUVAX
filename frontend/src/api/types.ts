@@ -145,7 +145,6 @@ export interface AdminSettings {
   led_color_label_span?: string // default "#7C3AED" (purple)
   led_color_error?: string // default "#E63946"
   led_color_setup?: string // default "#0077B6"
-  led_color_all_off?: string // default "#000000"
   led_color_ambient?: string // default "#0051A2" — idle/resting baseline color
   // Phase 6 — LED brightness tiers (LED-04, D-24)
   led_brightness_span?: number // 0..255, ~50% — label-span tier (D-24: NOT ambient)
@@ -175,7 +174,6 @@ export interface AdminSettingsPut {
   led_color_label_span?: string
   led_color_error?: string
   led_color_setup?: string
-  led_color_all_off?: string
   led_color_ambient?: string
   // Phase 6 — LED brightness tiers (D-24)
   led_brightness_span?: number // label-span tier — NEVER labeled ambient
