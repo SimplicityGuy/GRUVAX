@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import { useQuery, useQueryClient } from '@tanstack/react-query'
 import gsap from 'gsap'
 import { RotateCcw } from 'lucide-react'
-import { fetchCubesWithFill, fetchUnits, locateRelease, searchCollection } from '../../api/client'
+import { fetchCubesWithFill, fetchUnits, searchCollection } from '../../api/client'
 import type { CubeRef } from '../../api/types'
 import { useGruvaxStore, type ShimmerCube } from '../../state/store'
 import { useSessionStore } from '../../state/sessionStore'
@@ -18,6 +18,7 @@ import { ReauthBanner } from './ReauthBanner'
 import { RecentlyPulledStrip } from './RecentlyPulledStrip'
 import { ResetConfirmDialog } from './ResetConfirmDialog'
 import { ResultsList } from './ResultsList'
+import { locateAndIlluminate } from './locateAndIlluminate'
 import { ShelfLayoutNotConfigured } from './ShelfLayoutNotConfigured'
 import { SearchBox } from './SearchBox'
 import { ShelfGrid } from './ShelfGrid'
@@ -90,6 +91,12 @@ export function KioskView() {
   // dismissed — so it reopens automatically on the next keystroke (new query)
   // and collapses after a pick, without a set-state-in-effect.
   const [dismissedQuery, setDismissedQuery] = useState<string | null>(null)
+
+  useEffect(() => {
+    return () => {
+      useGruvaxStore.getState().invalidateLocateRequests()
+    }
+  }, [])
 
   // Phase 8 / SRCH-09 / D-05: read selectedResult for chip strip — only added on successful locate
   const selectedResult = useGruvaxStore((s) => s.selectedResult)
@@ -319,12 +326,9 @@ export function KioskView() {
     const relocateActiveSelection = () => {
       const { selectedReleaseId } = useGruvaxStore.getState()
       if (selectedReleaseId != null) {
-        // Read boundProfileId from session store at call-time (stale-closure safe)
-        const pid = useSessionStore.getState().boundProfileId
-        void locateRelease(selectedReleaseId, pid ?? undefined).then((result) => {
-          // Re-read setLocateResult via getState to ensure it's current (Pitfall 5)
-          useGruvaxStore.getState().setLocateResult(result)
-        })
+        // Share selection sequencing and reset guards, while preserving the
+        // resync contract: no hardware illumination, keep last highlight on error.
+        locateAndIlluminate(selectedReleaseId, { illuminate: false })
       }
     }
 

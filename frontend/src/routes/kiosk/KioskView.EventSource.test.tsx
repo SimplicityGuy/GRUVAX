@@ -17,7 +17,7 @@
  * Test D-08-a: device_reassigned SSE event calls getSession + setSession + setReassignBanner
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, fireEvent, render } from '@testing-library/react'
+import { act, cleanup, fireEvent, render } from '@testing-library/react'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 import { KioskView } from './KioskView'
 import { useGruvaxStore } from '../../state/store'
@@ -621,4 +621,93 @@ describe('KioskView EventSource consumer', () => {
     expect(container.querySelector('.sync-toast')).toBeNull()
     expect(useGruvaxStore.getState().connectivity.sseConnected).toBe(false)
   })
+})
+
+describe('SSE locate races (gruvax-82q)', () => {
+  it('keeps the newest boundary resync for the same selected record', async () => {
+    const es = await renderKioskAndFlush(makeQueryClient())
+    type Result = Awaited<ReturnType<typeof locateRelease>>
+    let first!: (result: Result) => void
+    let second!: (result: Result) => void
+    vi.mocked(locateRelease)
+      .mockReturnValueOnce(
+        new Promise((yes) => {
+          first = yes
+        }),
+      )
+      .mockReturnValueOnce(
+        new Promise((yes) => {
+          second = yes
+        }),
+      )
+    await act(async () => {
+      useGruvaxStore.getState().setSelectedReleaseId(42)
+      es.onopen?.()
+      es.dispatchEvent('boundary_changed', { cube_ids: [] })
+    })
+    const latest: Result = {
+      release_id: 42,
+      primary_cube: { unit_id: 1, row: 0, col: 2 },
+      label_span: [],
+      sub_cube_interval: null,
+      confidence: 0.8,
+      generated_at: '2026-10-03T00:00:00Z',
+      estimator_version: 'test',
+    }
+    await act(async () => {
+      second(latest)
+    })
+    await act(async () => {
+      first({ ...latest, primary_cube: { unit_id: 1, row: 0, col: 1 } })
+    })
+    expect(useGruvaxStore.getState().highlight.primaryCube).toEqual(latest.primary_cube)
+  })
+
+  it('consumes a rejected background locate without clearing the last highlight', async () => {
+    const es = await renderKioskAndFlush(makeQueryClient())
+    const cube = { unit_id: 1, row: 0, col: 1 }
+    await act(async () => {
+      useGruvaxStore.getState().setSelectedReleaseId(42)
+      useGruvaxStore.getState().setHighlightCube(cube)
+      vi.mocked(locateRelease).mockRejectedValueOnce(new Error('server restarting'))
+      es.onopen?.()
+    })
+    expect(useGruvaxStore.getState().highlight.primaryCube).toEqual(cube)
+  })
+
+  it.each(['clear', 'unmount'] as const)(
+    'does not relight after %s while SSE locate is pending',
+    async (change) => {
+      const es = await renderKioskAndFlush(makeQueryClient())
+      let resolve!: (result: Awaited<ReturnType<typeof locateRelease>>) => void
+      vi.mocked(locateRelease).mockReturnValueOnce(
+        new Promise((yes) => {
+          resolve = yes
+        }),
+      )
+      await act(async () => {
+        useGruvaxStore.getState().setSelectedReleaseId(42)
+        es.dispatchEvent('boundary_changed', { cube_ids: [] })
+      })
+      if (change === 'clear') {
+        await act(async () => {
+          useGruvaxStore.getState().clearSearch()
+        })
+      } else {
+        cleanup()
+      }
+      await act(async () => {
+        resolve({
+          release_id: 42,
+          primary_cube: { unit_id: 1, row: 0, col: 0 },
+          label_span: [],
+          sub_cube_interval: null,
+          confidence: 0.8,
+          generated_at: '2026-10-03T00:00:00Z',
+          estimator_version: 'test',
+        })
+      })
+      expect(useGruvaxStore.getState().highlight.primaryCube).toBeNull()
+    },
+  )
 })
