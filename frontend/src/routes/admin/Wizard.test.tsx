@@ -14,7 +14,7 @@
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query'
 
@@ -185,5 +185,30 @@ describe('Wizard initial draft persistence (gruvax-ofh)', () => {
     })
     expect(await screen.findByRole('button', { name: 'PICK A RECORD' })).toBeVisible()
     expect(useAdminStore.getState().reshuffleDraft!.cuts).toEqual({})
+  })
+})
+
+describe('Wizard clear persistence (gruvax-0an4)', () => {
+  it('cannot rehydrate or commit a cleared record after reload', async () => {
+    let view: Awaited<ReturnType<typeof renderWizard>>
+    await act(async () => {
+      view = await renderWizard('/admin/wizard?mode=reshuffle')
+    })
+    await screen.findByText('AAA')
+    fireEvent.click(screen.getByRole('button', { name: 'Clear selected record' }))
+    expect(screen.getByRole('button', { name: 'NEXT →' })).toBeDisabled()
+    const saved = localStorage.getItem('gruvax-admin')!
+    expect(JSON.parse(saved).state.reshuffleDraft.cuts['1/0/0']).toBeUndefined()
+    view!.unmount()
+    useAdminStore.getState().setReshuffleDraft(null)
+    localStorage.setItem('gruvax-admin', saved)
+    await useAdminStore.persist.rehydrate()
+    await act(async () => {
+      await renderWizard()
+    })
+    expect(await screen.findByRole('button', { name: 'PICK A RECORD' })).toBeVisible()
+    expect(screen.queryByText('AAA')).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'NEXT →' })).toBeDisabled()
+    expect(useAdminStore.getState().reshuffleDraft!.cuts['1/0/1'].first_label).toBe('BBB')
   })
 })

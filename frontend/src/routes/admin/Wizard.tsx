@@ -572,6 +572,7 @@ function WizardWalk() {
                     const newCuts = { ...cuts }
                     delete newCuts[key]
                     setCuts(newCuts)
+                    persistDraft(newCuts, currentStepIndex)
                   }}
                 >
                   {/* Lucide X */}
