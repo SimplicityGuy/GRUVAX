@@ -82,9 +82,11 @@ class CollectionSnapshot:
             pool:       An open ``psycopg_pool.AsyncConnectionPool`` instance.
             profile_id: UUID of the profile to load (P1: default; P2: per-session).
         """
+        # Stable release order breaks equal catalog-key ties across reloads.
+        # Downstream stable sorts retain this order for sub-cube row ranks.
         sql = (
             "SELECT release_id, label, catalog_number FROM gruvax.profile_collection "
-            "WHERE profile_id = %s::uuid"
+            "WHERE profile_id = %s::uuid ORDER BY release_id"
         )
         async with pool.connection() as conn, conn.cursor() as cur:
             await cur.execute(sql, (profile_id,))
@@ -124,7 +126,7 @@ class CollectionSnapshot:
 
         Returns:
             List of RecordRow for that label, or ``[]`` if label not in snapshot.
-            Order is insertion order (as loaded from DB); callers that need a
+            Order is ascending release_id (stable across reloads); callers that need a
             sorted view (§4.1) must sort by ``parse_key(r.catalog_number)``.
         """
         return self._by_label.get((label or "").casefold(), [])
