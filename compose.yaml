@@ -66,6 +66,8 @@ services:
       MQTT_PORT: "${MQTT_PORT:-1883}"
       MQTT_USERNAME: "${MQTT_USERNAME:-gruvax-api}"
       MQTT_PASSWORD: "${MQTT_PASSWORD:-}"
+      # Preserve custom namespaces; production operators set a distinct prefix.
+      MQTT_TOPIC_PREFIX: "${MQTT_TOPIC_PREFIX:-gruvax/v1/dev/leds}"
       LOG_LEVEL: "${LOG_LEVEL:-info}"
       # Plan 01-10 (Rule 3 auto-fix): expose GRUVAX_ENV at runtime so the
       # entrypoint's dev-only blocks fire under `just compose-smoke`. The

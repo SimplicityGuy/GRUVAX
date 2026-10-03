@@ -25,6 +25,10 @@ healthcheck verification, and the expected bring-up sequence.
     `GRUVAX_DB_*` supplies the connection pieces only when `DATABASE_URL` is unset;
     local development credentials are configurable through those variables.
   - `MQTT_PASSWORD` — the Mosquitto password for `gruvax-api` (optional in dev)
+  - `MQTT_TOPIC_PREFIX` — choose a production namespace such as `gruvax/v1/leds`,
+    distinct from the template/application development default `gruvax/v1/dev/leds`.
+    Set firmware to the identical prefix. Compose honors custom `.env` values;
+    `GRUVAX_ENV` does not automatically choose this namespace.
   - `DISCOGSOGRAPHY_BASE_URL` — HTTP base URL of the discogsography API (defaults to the
     bundled `fake-discogsography` sibling service, `http://fake-discogsography:8004`).
     **Override to the real discogsography service in production**; the development
@@ -80,7 +84,8 @@ echo "GRUVAX_ENV pre-flight check passed (unset -> production default)"
 # 3a. Production host (pull the published image):
 docker compose pull
 docker compose up -d
-# Note: the prod host pulls the published GHCR image (ghcr.io/simplicityguy/gruvax:latest).
+# The default profile pulls only the published GHCR image and Mosquitto.
+# The fake API is dev-profile-only; production does not pull its local-only tag.
 # Keep operator overrides absent when following this stock deployment recipe.
 
 # 3b. Local dev (build directly from source; no override file needed):

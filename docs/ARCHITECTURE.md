@@ -222,9 +222,11 @@ against a broker, but nothing is physically wired to it yet.
 
 ### Topic structure
 
-All topics are prefixed with `settings.MQTT_TOPIC_PREFIX` (default dev value
-`gruvax/v1/dev/leds`; production sets this to a distinct value, e.g. `gruvax/v1/leds`) so
-dev and prod retained messages never collide (`gruvax.mqtt.topics`):
+All topics are prefixed with `settings.MQTT_TOPIC_PREFIX`. The application, Compose,
+and environment template default to `gruvax/v1/dev/leds`. Production operators must
+explicitly set a distinct value, e.g. `gruvax/v1/leds`, and configure firmware with
+that same prefix to separate retained state. `GRUVAX_ENV` does not switch the prefix;
+custom `.env` values pass through unchanged (`gruvax.mqtt.topics`):
 
 ```
 {prefix}/illuminate/{unit_id}/{row}/{col}   — QoS 0, non-retained: light a single cube
@@ -463,7 +465,10 @@ The API container:
 ### GHCR pull-based deploy
 
 Production uses the pre-built image from GitHub Container Registry — no build step on
-the deployment host:
+the deployment host when using the default production profile. The bundled Postgres
+and synthetic API require the `dev` profile; `just up` enables it and builds the local
+application images for development.
+The base Compose file includes `build:` for local source builds without an override file.
 
 ```bash
 docker compose pull
@@ -535,7 +540,7 @@ than surfacing later at request time. Full list in `.env.example`.
 | `SESSION_TTL_SECONDS` | no (default 600) | Sliding idle TTL for admin sessions |
 | `MQTT_HOST` / `MQTT_PORT` | no (default `localhost` / `1883`) | Mosquitto broker address |
 | `MQTT_USERNAME` / `MQTT_PASSWORD` | no | Broker credentials |
-| `MQTT_TOPIC_PREFIX` | no (default `gruvax/v1/dev/leds`) | Namespaces retained LED topics between dev and prod |
+| `MQTT_TOPIC_PREFIX` | no (default `gruvax/v1/dev/leds`) | Retained LED namespace; production explicitly sets a distinct prefix matching firmware; no automatic environment switch |
 | `MQTT_STATE_EXPIRY_SECONDS` | no (default 14400 / 4h) | `message_expiry_interval` on retained `state/*` topics |
 | `LOG_LEVEL` | no (default `INFO`) | `structlog` log level |
 
