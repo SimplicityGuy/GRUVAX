@@ -69,6 +69,7 @@ class BoundaryCache:
     """
 
     def __init__(self) -> None:
+        self._generation = 0
         self._rows: list[BoundaryRow] = []
         self._overrides: dict[tuple[int, int, int, str], float] = {}
 
@@ -135,6 +136,18 @@ class BoundaryCache:
         # Publish both together — see the atomicity note in the docstring.
         self._rows = new_rows
         self._overrides = new_overrides
+        self._generation += 1
+
+    def publish_from(self, prepared: BoundaryCache) -> None:
+        """Publish fully loaded state without retiring captured writer references.
+
+        Rebind complete values; readers holding previous rows/maps keep them.
+        The caller publishes the matching snapshot and segments in the same
+        synchronous turn, after all fallible preparation has completed.
+        """
+        self._rows = prepared._rows
+        self._overrides = prepared._overrides
+        self._generation += 1
 
     def _load_rows(self, rows: list[BoundaryRow]) -> None:
         """Internal seam for testing: bypass DB and load rows directly.
@@ -143,6 +156,7 @@ class BoundaryCache:
         needing a live DB connection.
         """
         self._rows = list(rows)
+        self._generation += 1
 
     def _load_overrides(self, overrides: dict[tuple[int, int, int, str], float]) -> None:
         """Internal seam for testing: bypass DB and load overrides directly.
@@ -152,6 +166,12 @@ class BoundaryCache:
         a live DB connection.
         """
         self._overrides = dict(overrides)
+        self._generation += 1
+
+    @property
+    def generation(self) -> int:
+        """Monotone publication counter for detecting writes during async preparation."""
+        return self._generation
 
     @property
     def overrides(self) -> dict[tuple[int, int, int, str], float]:
@@ -184,3 +204,4 @@ class BoundaryCache:
         """
         self._rows = []
         self._overrides = {}
+        self._generation += 1

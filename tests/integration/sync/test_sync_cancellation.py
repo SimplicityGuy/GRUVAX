@@ -9,8 +9,8 @@ import pytest
 import pytest_asyncio
 
 from gruvax.discogsography.errors import SyncInProgress
-from gruvax.estimator.boundary_cache import BoundaryCache
-from gruvax.estimator.collection_snapshot import CollectionSnapshot
+from gruvax.estimator.boundary_cache import BoundaryCache, BoundaryRow
+from gruvax.estimator.collection_snapshot import CollectionSnapshot, RecordRow
 from gruvax.estimator.segment_cache import SegmentCache
 from gruvax.events.bus import EventBus
 from gruvax.sync import nightly, profile_sync
@@ -168,13 +168,24 @@ async def test_cancel_during_postcommit_cache_load_preserves_success(profile, db
         await asyncio.Event().wait()
 
     cache = BoundaryCache()
-    monkeypatch.setattr(cache, "load", blocked_load)
+    cache._load_rows([BoundaryRow(1, 0, 0, "Probe", "P1", False)])
+    snapshot = CollectionSnapshot()
+    snapshot._load_snapshot({"probe": [RecordRow(991103, "Probe", "P1")]})
+    segments = SegmentCache()
+    segments.derive(cache, snapshot, {})
+    before_rows = list(cache.get_boundaries())
+    before_records = list(snapshot.get_label_records("Probe"))
+    before_bin = segments.get_bin(1, 0, 0)
+    assert before_rows and before_records and before_bin is not None
+    # Sync prepares a fresh off-registry instance. Block its actual read,
+    # rather than the old live cache's method, to cancel AFTER SQL commit.
+    monkeypatch.setattr(BoundaryCache, "load", blocked_load)
     bus = EventBus()
     queue = bus.subscribe()
     state = _state(db_pool)
     state.boundary_cache_registry[profile.id] = cache
-    state.snapshot_registry[profile.id] = CollectionSnapshot()
-    state.segment_cache_registry[profile.id] = SegmentCache()
+    state.snapshot_registry[profile.id] = snapshot
+    state.segment_cache_registry[profile.id] = segments
     state.event_bus_registry[profile.id] = bus
     upstream = SimpleNamespace(
         first_page=AsyncMock(return_value=_page(profile.user_id)), aclose=AsyncMock()
@@ -188,6 +199,9 @@ async def test_cancel_during_postcommit_cache_load_preserves_success(profile, db
         await _cancel(task)
         assert await _metadata(db_pool, profile.id) == committed
         assert await _collection(db_pool, profile.id) == [(991104, "New synthetic probe")]
+        assert cache.get_boundaries() == before_rows
+        assert snapshot.get_label_records("Probe") == before_records
+        assert segments.get_bin(1, 0, 0) == before_bin
         assert queue.empty(), "cancelled cache refresh must not publish completion"
         upstream.aclose.assert_awaited_once()
         await _assert_lock_released(db_pool, profile.id)
