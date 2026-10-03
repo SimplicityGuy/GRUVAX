@@ -6,6 +6,8 @@ import subprocess
 import sys
 import uuid
 
+from alembic.config import Config
+from alembic.script import ScriptDirectory
 import psycopg
 from psycopg import sql
 import pytest
@@ -21,6 +23,10 @@ from tests.fixtures.migration_databases import (
 ROOT = Path(__file__).resolve().parents[2]
 DEFAULT = "00000000-0000-0000-0000-000000000001"
 OTHER = "00000000-0000-0000-0000-000000000002"
+SCRIPT = ScriptDirectory.from_config(Config(str(ROOT / "alembic.ini")))
+HEAD_REVISION = SCRIPT.get_current_head()
+HEAD_PREDECESSOR = SCRIPT.get_revision(HEAD_REVISION).down_revision
+PROFILE_CROSSING = f"-{len(list(SCRIPT.iterate_revisions(HEAD_REVISION, '0009')))}"
 
 
 def database_state(conn):  # type: ignore[no-untyped-def]
@@ -116,7 +122,7 @@ def test_default_only_roundtrip_remains_supported(migration_db):  # type: ignore
     with psycopg.connect(conninfo) as conn:
         assert conn.execute("SELECT id::text FROM gruvax.profiles").fetchall() == [(DEFAULT,)]
         assert conn.execute("SELECT version_num FROM public.alembic_version").fetchone() == (
-            "0017",
+            HEAD_REVISION,
         )
 
 
@@ -169,11 +175,15 @@ def test_late_downgrade_failure_rolls_back_entire_chain(migration_db):  # type: 
             "CREATE TABLE public.profile_sentinel (profile_id UUID REFERENCES gruvax.profiles(id))"
         )
         conn.execute("INSERT INTO public.profile_sentinel VALUES (%s::uuid)", (DEFAULT,))
+        conn.execute(
+            "INSERT INTO gruvax.record_activity(profile_id,release_id,event_kind,occurred_at) VALUES (%s,99,'search',now()-INTERVAL '8 days')",
+            (DEFAULT,),
+        )
         before = database_state(conn)
         result = migrate(url, "downgrade", "base")
         assert result.returncode != 0
         assert "profile_sentinel" in result.stderr
-        assert "Running downgrade 0017" in result.stderr
+        assert f"Running downgrade {HEAD_REVISION}" in result.stderr
         assert database_state(conn) == before
         assert conn.execute("SELECT profile_id::text FROM public.profile_sentinel").fetchall() == [
             (DEFAULT,)
@@ -224,7 +234,7 @@ def test_downgrade_waits_for_live_writer_then_refuses_its_profile(migration_db):
                 process.communicate(timeout=10)
 
 
-@pytest.mark.parametrize("target", ["-1", "-8"])
+@pytest.mark.parametrize("target", ["-1", PROFILE_CROSSING])
 def test_relative_downgrade_preserves_revision_boundary(migration_db, target):  # type: ignore[no-untyped-def]
     conninfo, url = migration_db
     with psycopg.connect(conninfo, autocommit=True) as conn:
@@ -237,7 +247,7 @@ def test_relative_downgrade_preserves_revision_boundary(migration_db, target):  
         if target == "-1":
             assert result.returncode == 0, result.stderr
             assert conn.execute("SELECT version_num FROM public.alembic_version").fetchone() == (
-                "0016",
+                HEAD_PREDECESSOR,
             )
             assert conn.execute(
                 "SELECT display_name, app_token_encrypted FROM gruvax.profiles WHERE id = %s::uuid",

@@ -32,3 +32,20 @@ BEGIN
     END IF;
 END $$;
 """
+
+
+# Writers acquire record_stats before history. Keep that order here and hold
+# both table locks through the atomic chain, including the subsequent DROP.
+ACTIVITY_DOWNGRADE_GUARD = """
+LOCK TABLE gruvax.record_stats, gruvax.record_activity IN ACCESS EXCLUSIVE MODE;
+DO $$
+BEGIN
+    IF EXISTS (
+        SELECT 1 FROM gruvax.record_activity
+        WHERE occurred_at > now() - INTERVAL '168 hours'
+    ) THEN
+        RAISE EXCEPTION 'Cannot downgrade: recent record activity would be lost; preserve the history or wait until its seven-day window expires'
+            USING ERRCODE = '55000';
+    END IF;
+END $$;
+"""

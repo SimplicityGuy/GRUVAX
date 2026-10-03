@@ -3,6 +3,7 @@
 from contextlib import contextmanager
 import os
 from pathlib import Path
+import re
 import subprocess
 import sys
 import uuid
@@ -20,15 +21,8 @@ ROOT = Path(__file__).resolve().parents[2]
 
 
 def migrate(url: str, action: str, target: str) -> subprocess.CompletedProcess[str]:
-    if action not in {"upgrade", "downgrade"} or target not in {
-        "head",
-        "base",
-        "0008",
-        "0009",
-        "0010",
-        "-1",
-        "-8",
-    }:
+    target_ok = target in {"head", "base"} or re.fullmatch(r"(?:[0-9]{4}|-[1-9][0-9]*)", target)
+    if action not in {"upgrade", "downgrade"} or not target_ok:
         raise ValueError("Unsupported test migration command")
     # Fixed interpreter/argv, allowlisted test literals, and no shell execution.
     return subprocess.run(  # noqa: S603

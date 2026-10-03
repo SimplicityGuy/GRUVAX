@@ -21,15 +21,20 @@ Tests:
     ``migrate-roundtrip`` invariant still holds).
 
 All tests require a live DB at DATABASE_URL and run with
-@pytest.mark.asyncio(loop_scope="module").
+@pytest.mark.asyncio(loop_scope="session").
 """
 
 from __future__ import annotations
 
+import psycopg
 import pytest
 import pytest_asyncio
 
-from gruvax.db.pool import create_pool
+from tests.fixtures.migration_databases import (
+    migrate,
+    migration_db as migration_db,
+    migration_pool as migration_pool,
+)
 
 
 _DEFAULT_PID = "00000000-0000-0000-0000-000000000001"
@@ -57,31 +62,32 @@ def _fullwidth_blp_4195() -> str:
     )
 
 
-# ── Session-scoped DB pool (mirrors pattern from test_migrate_0015.py) ───────
+# ── Function-owned migration pool ─────────────────────────────────────────
 
 
-@pytest_asyncio.fixture(scope="module")
-async def migrate_pool():  # type: ignore[no-untyped-def]
-    """Module-scoped async psycopg pool for migration tests."""
-    pool = create_pool(min_size=1, max_size=2, open=False)
-    await pool.open()
-    yield pool
-    await pool.close()
+@pytest.fixture(autouse=True)
+def _seeded_profile_collection(migration_db):  # type: ignore[no-untyped-def]
+    """Replace ambient module seeding with the already-provisioned owned child."""
+    expected = psycopg.conninfo.conninfo_to_dict(migration_db[0])["dbname"]
+    with psycopg.connect(migration_db[0]) as conn:
+        assert conn.execute("SELECT current_database()").fetchone() == (expected,)
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def migrate_pool(migration_pool, migration_db):  # type: ignore[no-untyped-def]
+    """Route this test to its own fresh database and verify actual ownership."""
+    expected = psycopg.conninfo.conninfo_to_dict(migration_db[0])["dbname"]
+    async with migration_pool.connection() as conn:
+        assert await (await conn.execute("SELECT current_database()")).fetchone() == (expected,)
+    yield migration_pool
 
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
 
-def _run_alembic(action: str, target: str) -> None:
-    """Run ``python -m alembic <action> <target>`` as a subprocess (mirrors 0005/0009/0015)."""
-    import subprocess
-    import sys
-
-    result = subprocess.run(  # noqa: S603
-        [sys.executable, "-m", "alembic", action, target],
-        capture_output=True,
-        text=True,
-    )
+def _run_alembic(action: str, target: str, database_url: str) -> None:
+    """Run the validated migration command against this test's owned database."""
+    result = migrate(database_url, action, target)
     assert result.returncode == 0, (
         f"alembic {action} {target} failed:\n{result.stdout}\n{result.stderr}"
     )
@@ -138,8 +144,8 @@ async def _cleanup_row(pool, release_id: int) -> None:  # type: ignore[no-untype
 # ── Backfill correctness ───────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
-async def test_backfill_normalizes_preexisting_fullwidth_row(migrate_pool) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.asyncio(loop_scope="session")
+async def test_backfill_normalizes_preexisting_fullwidth_row(migrate_pool, migration_db) -> None:  # type: ignore[no-untyped-def]
     """A pre-normalization (full-width) row is NFKC-normalized by the 0016 backfill.
 
     Seeds the row while pinned at 0015 (simulating data written by the
@@ -147,11 +153,11 @@ async def test_backfill_normalizes_preexisting_fullwidth_row(migrate_pool) -> No
     comes out as plain ASCII 'BLP-4195' — matching what the fixed
     ``profile_sync`` ingest path would now write directly.
     """
-    _run_alembic("downgrade", "0015")
+    _run_alembic("downgrade", "0015", migration_db[1])
     try:
         await _seed_row(migrate_pool, _RELEASE_ID_FULLWIDTH, _fullwidth_blp_4195())
 
-        _run_alembic("upgrade", "head")
+        _run_alembic("upgrade", "head", migration_db[1])
 
         normalized = await _get_catalog_number(migrate_pool, _RELEASE_ID_FULLWIDTH)
         assert normalized == "BLP-4195", (
@@ -162,8 +168,10 @@ async def test_backfill_normalizes_preexisting_fullwidth_row(migrate_pool) -> No
         await _cleanup_row(migrate_pool, _RELEASE_ID_FULLWIDTH)
 
 
-@pytest.mark.asyncio(loop_scope="module")
-async def test_backfill_leaves_already_normalized_rows_untouched(migrate_pool) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.asyncio(loop_scope="session")
+async def test_backfill_leaves_already_normalized_rows_untouched(
+    migrate_pool, migration_db
+) -> None:  # type: ignore[no-untyped-def]
     """A row whose catalog_number is already NFKC-normalized is not rewritten."""
     await _seed_row(migrate_pool, _RELEASE_ID_ALREADY_NORMALIZED, "BLP-4195")
     try:
@@ -191,8 +199,8 @@ async def test_backfill_leaves_already_normalized_rows_untouched(migrate_pool) -
 # ── Idempotency ────────────────────────────────────────────────────────────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
-async def test_backfill_is_idempotent(migrate_pool) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.asyncio(loop_scope="session")
+async def test_backfill_is_idempotent(migrate_pool, migration_db) -> None:  # type: ignore[no-untyped-def]
     """Re-running the 0016 backfill statement a second time updates zero rows.
 
     Seeds a fresh full-width row, runs the exact backfill SQL (mirroring the
@@ -237,16 +245,16 @@ async def test_backfill_is_idempotent(migrate_pool) -> None:  # type: ignore[no-
 # ── Round-trip test: downgrade to 0015 → upgrade head ──────────────────────────
 
 
-@pytest.mark.asyncio(loop_scope="module")
-async def test_0016_round_trip_down_up(migrate_pool) -> None:  # type: ignore[no-untyped-def]
+@pytest.mark.asyncio(loop_scope="session")
+async def test_0016_round_trip_down_up(migrate_pool, migration_db) -> None:  # type: ignore[no-untyped-def]
     """Migration 0016 round-trips clean: downgrade to 0015 then upgrade to head.
 
     0016 has no schema of its own (data-only backfill, no-op downgrade) —
     this asserts the round trip completes without error and leaves the DB
     at head, matching the ``just migrate-roundtrip`` CI gate.
     """
-    _run_alembic("downgrade", "0015")
-    _run_alembic("upgrade", "head")
+    _run_alembic("downgrade", "0015", migration_db[1])
+    _run_alembic("upgrade", "head", migration_db[1])
 
     # Resolve the script head dynamically (gruvax-envc added 0017; hardcoding
     # "0016" here made every later migration fail this unrelated round-trip).

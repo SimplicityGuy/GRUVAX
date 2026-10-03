@@ -14,23 +14,41 @@ in Plan 03-01. The fixture and helper patterns mirror test_migrate_0010.py exact
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 import subprocess
 
+import psycopg
 import pytest
 import pytest_asyncio
 
-from gruvax.settings import settings
+from tests.fixtures.migration_databases import (
+    migration_db as migration_db,
+    migration_pool as migration_pool,
+)
+
+
+@pytest.fixture(autouse=True)
+def _seeded_profile_collection(migration_db):  # type: ignore[no-untyped-def]
+    """Replace ambient module seeding with the already-provisioned owned child."""
+    expected = psycopg.conninfo.conninfo_to_dict(migration_db[0])["dbname"]
+    with psycopg.connect(migration_db[0]) as conn:
+        assert conn.execute("SELECT current_database()").fetchone() == (expected,)
+
+
+@pytest_asyncio.fixture(loop_scope="session")
+async def db_pool(migration_pool, migration_db):  # type: ignore[no-untyped-def]
+    """Use only the function-owned migration database, verified before assertions."""
+    expected = psycopg.conninfo.conninfo_to_dict(migration_db[0])["dbname"]
+    async with migration_pool.connection() as conn:
+        assert await (await conn.execute("SELECT current_database()")).fetchone() == (expected,)
+    yield migration_pool
 
 
 # ── shared helpers ──────────────────────────────────────────────────────────
 
 
-def _conninfo() -> str:
-    return settings.DATABASE_URL.replace("postgresql+psycopg://", "postgresql://", 1)
-
-
-async def _alembic(action: str, target: str) -> None:
+async def _alembic(action: str, target: str, database_url: str) -> None:
     """Run ``alembic <action> <target>`` via subprocess inside the test process.
 
     Uses asyncio.to_thread to avoid blocking the event loop — mirrors the
@@ -46,6 +64,7 @@ async def _alembic(action: str, target: str) -> None:
         subprocess.run,
         cmd,
         cwd=str(cwd),
+        env={**os.environ, "DATABASE_URL": database_url},
         capture_output=True,
         text=True,
         timeout=120,
@@ -59,15 +78,15 @@ async def _alembic(action: str, target: str) -> None:
         )
 
 
-@pytest_asyncio.fixture
-async def fresh_head(db_pool):  # type: ignore[no-untyped-def]
+@pytest_asyncio.fixture(loop_scope="session")
+async def fresh_head(db_pool, migration_db):  # type: ignore[no-untyped-def]
     """Ensure the schema is at HEAD before each test.
 
     Mirrors the fresh_head fixture from test_migrate_0010.py.
     """
-    await _alembic("upgrade", "head")
+    await _alembic("upgrade", "head", migration_db[1])
     yield
-    # Leave HEAD in place for the next test.
+    # The owned fixtures close the pool and drop this test database.
 
 
 # ── Behaviour 1: round-trip ──────────────────────────────────────────────────
@@ -77,6 +96,7 @@ async def fresh_head(db_pool):  # type: ignore[no-untyped-def]
 async def test_roundtrip_clean(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
+    migration_db,  # type: ignore[no-untyped-def]
 ) -> None:
     """Behaviour 1: upgrade head → downgrade -1 → upgrade head exits 0.
 
@@ -90,9 +110,9 @@ async def test_roundtrip_clean(
     # Already at HEAD (fresh_head). Downgrade to 0010 (explicit target, NOT the
     # HEAD-relative "-1" — once a later migration is stacked on top, "-1" no longer
     # reaches the pre-0011 state and the round-trip stops exercising 0011's downgrade).
-    await _alembic("downgrade", "0010")
+    await _alembic("downgrade", "0010", migration_db[1])
     # Re-upgrade to HEAD (lands at the current head, ≥ 0011).
-    await _alembic("upgrade", "head")
+    await _alembic("upgrade", "head", migration_db[1])
 
     # Verify the profiles table survived the round-trip (sanity check)
     async with db_pool.connection() as conn, conn.cursor() as cur:
@@ -111,6 +131,7 @@ async def test_roundtrip_clean(
 async def test_devices_table_created(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
+    migration_db,  # type: ignore[no-untyped-def]
 ) -> None:
     """Behaviour 2: gruvax.devices table exists after upgrade head.
 
@@ -158,6 +179,7 @@ async def test_devices_table_created(
 async def test_devices_table_absent_after_downgrade(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
+    migration_db,  # type: ignore[no-untyped-def]
 ) -> None:
     """gruvax.devices does NOT exist after downgrade -1 (back to 0010).
 
@@ -165,7 +187,7 @@ async def test_devices_table_absent_after_downgrade(
     """
     # Downgrade to 0010 (explicit target — "-1" is HEAD-relative and no longer
     # reaches the pre-0011 state once a later migration sits on top of 0011).
-    await _alembic("downgrade", "0010")
+    await _alembic("downgrade", "0010", migration_db[1])
 
     async with db_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
@@ -179,7 +201,7 @@ async def test_devices_table_absent_after_downgrade(
     )
 
     # Re-upgrade so the schema is back at HEAD for subsequent tests
-    await _alembic("upgrade", "head")
+    await _alembic("upgrade", "head", migration_db[1])
 
 
 # ── Behaviour 3: gruvax.pairing_codes exists after upgrade ──────────────────
@@ -189,6 +211,7 @@ async def test_devices_table_absent_after_downgrade(
 async def test_pairing_codes_table_created(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
+    migration_db,  # type: ignore[no-untyped-def]
 ) -> None:
     """Behaviour 3: gruvax.pairing_codes table exists after upgrade head.
 
@@ -242,6 +265,7 @@ async def test_pairing_codes_table_created(
 async def test_pairing_codes_table_absent_after_downgrade(
     db_pool,  # type: ignore[no-untyped-def]
     fresh_head: None,
+    migration_db,  # type: ignore[no-untyped-def]
 ) -> None:
     """gruvax.pairing_codes does NOT exist after downgrade -1 (back to 0010).
 
@@ -249,7 +273,7 @@ async def test_pairing_codes_table_absent_after_downgrade(
     """
     # Downgrade to 0010 (explicit target — "-1" is HEAD-relative and no longer
     # reaches the pre-0011 state once a later migration sits on top of 0011).
-    await _alembic("downgrade", "0010")
+    await _alembic("downgrade", "0010", migration_db[1])
 
     async with db_pool.connection() as conn, conn.cursor() as cur:
         await cur.execute(
@@ -263,4 +287,4 @@ async def test_pairing_codes_table_absent_after_downgrade(
     )
 
     # Re-upgrade so the schema is back at HEAD for subsequent tests
-    await _alembic("upgrade", "head")
+    await _alembic("upgrade", "head", migration_db[1])
