@@ -573,8 +573,8 @@ export function Diagnostics(): React.ReactElement {
       <SlowQuerySection entries={data?.slow_queries ?? []} loading={isLoading && !data} />
       <SystemStatusSection
         mqttStatus={data?.mqtt ?? 'disconnected'}
-        poolSizeUsed={data?.pool.size_used ?? 0}
-        poolSizeMin={data?.pool.size_min ?? 0}
+        poolSizeUsed={data?.pool?.size_used ?? 0}
+        poolSizeMin={data?.pool?.size_min ?? 0}
         phantomCount={data?.phantom_boundary_count ?? 0}
         loading={isLoading && !data}
       />
