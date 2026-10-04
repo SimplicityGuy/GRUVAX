@@ -84,7 +84,7 @@ def reset_login_rate_limit() -> None:  # type: ignore[return]
 # ── Module-scoped ASGI client fixture ────────────────────────────────────────
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan.
 

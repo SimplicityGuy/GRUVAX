@@ -89,7 +89,7 @@ def profile_b() -> Any:
         conn.commit()
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def app_and_client(db_pool, profile_b):  # type: ignore[no-untyped-def]
     """Yield ``(app, client)`` — the app object is needed to inspect the registries."""
     from gruvax.auth.pin import hash_pin

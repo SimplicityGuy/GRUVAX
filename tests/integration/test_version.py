@@ -24,7 +24,7 @@ from gruvax.app import create_app
 _FORBIDDEN_KEYS = {"session_secret", "database_url", "pin", "csrf", "password", "secret"}
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan.
 

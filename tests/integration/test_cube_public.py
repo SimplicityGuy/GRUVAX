@@ -27,7 +27,7 @@ BROWSE_BINDING_COOKIE = "gruvax_browse_binding"
 DEFAULT_PROFILE_UUID = "00000000-0000-0000-0000-000000000001"
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped async test client with full ASGI lifespan."""
     app = create_app()
@@ -42,7 +42,7 @@ async def client(db_pool):  # type: ignore[no-untyped-def]
         yield ac
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def unbound_client(db_pool):  # type: ignore[no-untyped-def]
     """Client with NO browse-binding cookie (gruvax-5dm 400 path)."""
     app = create_app()
