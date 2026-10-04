@@ -252,3 +252,39 @@ def test_dscg_pattern_matches_bare_and_bearer_forms() -> None:
     # Non-matches:
     assert _DSCG_PATTERN.search("dscg_") is None  # alphabet requires at least one char
     assert _DSCG_PATTERN.search("DSCG_ABC123") is None  # case-sensitive prefix
+
+
+@pytest.mark.asyncio
+async def test_actual_httpx_requests_and_error_chains_redact_snapshot_tokens(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    import httpx
+
+    logging_stream = io.StringIO()
+    monkeypatch.setattr("sys.stderr", logging_stream)
+    ring: deque[dict[str, Any]] = deque(maxlen=20)
+    configure_logging("INFO", ring)
+    token = "gAAAAA-syntheticSnapshotCanary123_opaque"
+    url = f"http://synthetic/api/user/collection?%73napshot={token}&limit=200&snapshot={token}"
+    async with httpx.AsyncClient(
+        transport=httpx.MockTransport(lambda request: httpx.Response(503))
+    ) as client:
+        response = await client.get(url)
+        logging.getLogger("gruvax.snapshot-proof").info(
+            "visible snapshot request %s", response.request.url
+        )
+        try:
+            response.raise_for_status()
+        except httpx.HTTPStatusError:
+            logging.getLogger("gruvax.snapshot-proof").exception("visible service failure")
+    emitted = logging_stream.getvalue()
+    assert token not in emitted
+    records = [json.loads(line) for line in emitted.splitlines()]
+    assert any("HTTP Request" in record.get("event", "") for record in records)
+    assert any("visible service failure" in record.get("event", "") for record in records)
+    assert "503" in emitted and "limit=200" in emitted
+    assert emitted.count("[REDACTED]") >= 4
+    assert len(ring) == 2
+    assert "visible snapshot request" in ring[0]["msg"]
+    assert token not in json.dumps(list(ring))
+    assert "[REDACTED]" in ring[0]["msg"]

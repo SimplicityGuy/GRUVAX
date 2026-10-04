@@ -44,7 +44,9 @@ from gruvax.discogsography.errors import (
     PATRejected,
     RateLimitExhausted,
     ServerError,
+    SnapshotMismatch,
 )
+from gruvax.discogsography.snapshot_pages import SnapshotPin, validate_page
 
 
 if TYPE_CHECKING:  # pragma: no cover — type-only imports
@@ -131,7 +133,14 @@ class DiscogsographyClient:
 
     # ── core paged fetch ────────────────────────────────────────────────────
 
-    async def _get_page(self, *, limit: int, offset: int) -> dict[str, Any]:
+    async def _get_page(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        snapshot: str | None = None,
+        snapshot_generation: str | None = None,
+    ) -> dict[str, Any]:
         """Fetch one page; apply locked retry semantics; raise typed errors.
 
         Architecture: two nested retry loops via ``stamina.retry_context``.
@@ -153,7 +162,12 @@ class DiscogsographyClient:
                 wait_jitter=0.01,
             ):
                 with outer_attempt:
-                    return await self._do_inner_retry(limit=limit, offset=offset)
+                    return await self._do_inner_retry(
+                        limit=limit,
+                        offset=offset,
+                        snapshot=snapshot,
+                        snapshot_generation=snapshot_generation,
+                    )
         except (httpx.ConnectError, httpx.ReadTimeout, httpx.WriteTimeout) as e:
             # Stamina exhausted network retries — translate to typed error.
             raise NetworkError("network error reaching discogsography") from e
@@ -162,7 +176,14 @@ class DiscogsographyClient:
         # returns a value or raises a typed/HTTP error.
         raise NetworkError("network retry loop exhausted without an exception")
 
-    async def _do_inner_retry(self, *, limit: int, offset: int) -> dict[str, Any]:
+    async def _do_inner_retry(
+        self,
+        *,
+        limit: int,
+        offset: int,
+        snapshot: str | None = None,
+        snapshot_generation: str | None = None,
+    ) -> dict[str, Any]:
         """Inner retry loop — HTTP-status errors (429/5xx) only.
 
         Stamina's exhaustion behavior re-raises the *last* exception out of
@@ -170,6 +191,11 @@ class DiscogsographyClient:
         it). We catch the propagated ``HTTPStatusError`` here and translate
         it to the typed error before returning to the outer (network) loop.
         """
+        params: dict[str, str | int] = {"limit": limit, "offset": offset}
+        if snapshot is not None:
+            params["snapshot"] = snapshot
+        if snapshot_generation is not None:
+            params["snapshot_generation"] = snapshot_generation
         try:
             async for inner_attempt in stamina.retry_context(
                 on=self._should_retry_http,
@@ -182,7 +208,7 @@ class DiscogsographyClient:
                 with inner_attempt:
                     resp = await self._client.get(
                         "/api/user/collection",
-                        params={"limit": limit, "offset": offset},
+                        params=params,
                     )
                     try:
                         resp.raise_for_status()
@@ -195,9 +221,31 @@ class DiscogsographyClient:
                             # either, since httpx error reprs can quote
                             # bodies that could in turn quote headers.
                             raise PATRejected("PAT rejected by discogsography (401/403)") from None
+                        if snapshot is not None and code in (409, 410):
+                            try:
+                                detail = e.response.json().get("detail", {})
+                                error_code = (
+                                    detail.get("code") if isinstance(detail, dict) else None
+                                )
+                            except ValueError, AttributeError:
+                                error_code = None
+                            if isinstance(error_code, str) and (code, error_code) in {
+                                (409, "snapshot_mismatch"),
+                                (409, "snapshot_scope_mismatch"),
+                                (409, "snapshot_unavailable"),
+                                (410, "snapshot_expired"),
+                            }:
+                                raise SnapshotMismatch(
+                                    "Collection snapshot unavailable or invalid"
+                                ) from None
                         raise  # 429 / 5xx — let stamina decide to retry
                     # 2xx — return the envelope.
-                    data: dict[str, Any] = resp.json()
+                    try:
+                        data: dict[str, Any] = resp.json()
+                    except ValueError:
+                        if snapshot is not None:
+                            raise SnapshotMismatch("Invalid collection snapshot envelope") from None
+                        raise
                     return data
         except httpx.HTTPStatusError as e:
             code = e.response.status_code
@@ -220,7 +268,9 @@ class DiscogsographyClient:
         envelope before iterating the rest of the collection via the
         staging-swap path.
         """
-        return await self._get_page(limit=200, offset=0)
+        page = await self._get_page(limit=200, offset=0, snapshot="new")
+        validate_page(page, offset=0, limit=200)
+        return page
 
     async def fetch_user_id(self) -> str:
         """Test-sync helper: GET ``/api/user/collection?limit=1``, return ``user_id``.
@@ -232,19 +282,27 @@ class DiscogsographyClient:
         page = await self._get_page(limit=1, offset=0)
         return str(page["user_id"])
 
-    async def iter_collection(self, *, page_size: int = 200) -> AsyncIterator[dict[str, Any]]:
-        """Yield one release dict at a time across all pages.
-
-        Termination is driven by the contract's ``has_more`` field. The
-        caller is responsible for terminating its own loop on the StopIteration
-        analog (the generator simply returns).
-        """
+    async def iter_pages(self, *, page_size: int = 200) -> AsyncIterator[dict[str, Any]]:
+        """Yield validated pages from one immutable generation; never use live fallback."""
+        if type(page_size) is not int or not 1 <= page_size <= 200:
+            raise ValueError("page_size must be between 1 and 200")
         offset = 0
+        pin: SnapshotPin | None = None
         while True:
-            page = await self._get_page(limit=page_size, offset=offset)
-            releases: list[dict[str, Any]] = list(page.get("releases", []))
-            for release in releases:
+            page = await self._get_page(
+                limit=page_size,
+                offset=offset,
+                snapshot=pin.token if pin else "new",
+                snapshot_generation=pin.generation if pin else None,
+            )
+            pin = validate_page(page, offset=offset, limit=page_size, pin=pin)
+            yield page
+            if not page["has_more"]:
+                return
+            offset += len(page["releases"])
+
+    async def iter_collection(self, *, page_size: int = 200) -> AsyncIterator[dict[str, Any]]:
+        """Yield releases only after their immutable snapshot page is validated."""
+        async for page in self.iter_pages(page_size=page_size):
+            for release in page["releases"]:
                 yield release
-            if not page.get("has_more"):
-                break
-            offset += page_size

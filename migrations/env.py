@@ -23,7 +23,11 @@ sys.path.insert(0, str(Path(__file__).parent.parent / "src"))
 
 from typing import TYPE_CHECKING, Protocol
 
-from gruvax.db.migration_safety import ACTIVITY_DOWNGRADE_GUARD, PROFILE_DOWNGRADE_GUARD
+from gruvax.db.migration_safety import (
+    ACTIVITY_DOWNGRADE_GUARD,
+    PROFILE_DOWNGRADE_GUARD,
+    SNAPSHOT_ERROR_DOWNGRADE_GUARD,
+)
 from gruvax.settings import settings
 
 
@@ -125,6 +129,8 @@ def _guard_profile_downgrade(connection: Connection) -> None:
         # Destination is not an ancestor (upgrade or invalid revision); Alembic
         # handles that command normally and still reports invalid destinations.
         return
+    if any(step.revision == "0019" for step in steps):
+        connection.execute(text(SNAPSHOT_ERROR_DOWNGRADE_GUARD))
     if any(step.revision in {"0009", "0010"} for step in steps):
         connection.execute(text(PROFILE_DOWNGRADE_GUARD))
     if any(step.revision == "0018" for step in steps):

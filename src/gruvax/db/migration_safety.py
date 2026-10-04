@@ -49,3 +49,15 @@ BEGIN
     END IF;
 END $$;
 """
+
+
+SNAPSHOT_ERROR_DOWNGRADE_GUARD = """
+LOCK TABLE gruvax.profiles IN ACCESS EXCLUSIVE MODE;
+DO $$
+BEGIN
+    IF EXISTS (SELECT 1 FROM gruvax.profiles WHERE last_sync_error = 'snapshot_mismatch') THEN
+        RAISE EXCEPTION 'Cannot downgrade: snapshot mismatch status would be lost; preserve affected profile state before retrying'
+            USING ERRCODE = '55000';
+    END IF;
+END $$;
+"""

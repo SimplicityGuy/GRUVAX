@@ -26,12 +26,12 @@ import time
 import types
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI, Header, HTTPException, Query
 from httpx import ASGITransport, AsyncClient
 from psycopg_pool import AsyncConnectionPool
 import pytest
 import pytest_asyncio
 
+from gruvax._internal.fake_discogsography import create_fake_app
 from gruvax.discogsography.client import DiscogsographyClient
 from gruvax.estimator.boundary_cache import BoundaryCache
 from gruvax.estimator.collection_snapshot import CollectionSnapshot
@@ -45,6 +45,8 @@ from gruvax.sync.profile_sync import sync_profile
 if TYPE_CHECKING:
     from collections.abc import AsyncIterator
     from typing import Any
+
+    from fastapi import FastAPI
 
 
 DEFAULT_UUID = "00000000-0000-0000-0000-000000000001"
@@ -63,7 +65,6 @@ def _make_slow_fake_app(
     Total sync time ≈ seed_pages * page_sleep_s. With defaults that's ~2.5s —
     enough to observe pool-checkout races without making the test slow.
     """
-    app = FastAPI()
     total_rows = seed_pages * page_size
     rows = [
         {
@@ -78,25 +79,14 @@ def _make_slow_fake_app(
         for i in range(1, total_rows + 1)
     ]
 
-    @app.get("/api/user/collection")
-    async def _slow_collection(
-        authorization: str | None = Header(default=None),
-        limit: int = Query(50, ge=1, le=200),
-        offset: int = Query(0, ge=0),
-    ) -> dict:
-        if not authorization or not authorization.startswith("Bearer dscg_"):
-            raise HTTPException(401)
-        # Sleep BEFORE returning so the pool-checkout test has time to fire.
+    app = create_fake_app(seed=rows, user_id="55555555-5555-5555-5555-555555555555")
+
+    @app.middleware("http")
+    async def _slow_page(request, call_next):  # type: ignore[no-untyped-def]
+        # Preserve the canonical immutable wire contract while keeping the
+        # original multi-second pool-checkout barrier.
         await asyncio.sleep(page_sleep_s)
-        page = rows[offset : offset + limit]
-        return {
-            "user_id": "55555555-5555-5555-5555-555555555555",
-            "releases": page,
-            "total": len(rows),
-            "offset": offset,
-            "limit": limit,
-            "has_more": offset + len(page) < len(rows),
-        }
+        return await call_next(request)
 
     return app
 

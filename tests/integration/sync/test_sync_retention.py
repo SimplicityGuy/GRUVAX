@@ -14,6 +14,7 @@ import gruvax.app as app_module
 from gruvax.app import create_app
 from gruvax.sync import profile_sync
 from gruvax.sync.pat_crypto import encrypt_pat
+from tests.fixtures.sync import add_page_iterator
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -80,7 +81,7 @@ async def test_delete_and_purge_during_fetch_cannot_resurrect_collection(
         }
 
     upstream = SimpleNamespace(first_page=first_page, aclose=AsyncMock())
-    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: upstream)
+    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: add_page_iterator(upstream))
     task = asyncio.create_task(profile_sync.sync_profile(profile_id, app.state))
     try:
         await asyncio.wait_for(fetching.wait(), timeout=5)
@@ -147,7 +148,7 @@ async def test_delete_waits_for_protected_swap_then_purges(
         ),
         aclose=AsyncMock(),
     )
-    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: upstream)
+    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: add_page_iterator(upstream))
     sync_task = asyncio.create_task(profile_sync.sync_profile(profile_id, app.state))
     delete_task = None
     try:

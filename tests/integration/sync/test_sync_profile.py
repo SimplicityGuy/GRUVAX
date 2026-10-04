@@ -516,13 +516,13 @@ async def test_sync_lock_released_on_unexpected_exception(  # type: ignore[no-un
 ) -> None:
     """Test 11: try/finally releases the advisory lock even on a non-typed crash."""
 
-    # Build a client whose first_page raises an arbitrary RuntimeError.
+    # Build a page iterator whose first fetch raises an arbitrary RuntimeError.
     class _ExplodingClient:
         async def first_page(self) -> dict:
             raise RuntimeError("non-typed mid-fetch boom")
 
-        async def _get_page(self, *, limit: int, offset: int) -> dict:
-            raise RuntimeError("non-typed mid-fetch boom")
+        async def iter_pages(self) -> AsyncIterator[dict]:
+            yield await self.first_page()
 
         async def aclose(self) -> None:
             pass
