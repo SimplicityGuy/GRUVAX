@@ -35,7 +35,7 @@ def _admin_stub() -> dict[str, str]:
     return {"role": "admin"}
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def diag_client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped ASGI client with require_admin bypassed.
 

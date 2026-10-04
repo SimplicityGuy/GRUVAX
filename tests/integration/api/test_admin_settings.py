@@ -82,7 +82,7 @@ def _ensure_secrets(monkeypatch: pytest.MonkeyPatch) -> None:
         monkeypatch.setenv("GRUVAX_SECRET_KEY", Fernet.generate_key().decode())
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def client(db_pool) -> AsyncIterator[AsyncClient]:  # type: ignore[no-untyped-def]
     """Module-scoped ASGI client with full lifespan + seeded test PIN."""
     if not os.environ.get("SESSION_SECRET"):
@@ -114,7 +114,7 @@ async def client(db_pool) -> AsyncIterator[AsyncClient]:  # type: ignore[no-unty
         yield ac
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def admin_session(client) -> dict:  # type: ignore[no-untyped-def]
     """Log in with test PIN and return session cookies + CSRF token."""
     # Reset the rate limiter so a prior test module's logins don't block us

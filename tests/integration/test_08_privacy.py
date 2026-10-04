@@ -41,7 +41,7 @@ PROBE_TERM = "probe_priv02_xyz"
 # ── Module-scoped client (no admin override — /api/search is public) ──────────
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def privacy_client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped ASGI client for privacy assertion tests.
 

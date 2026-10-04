@@ -37,7 +37,7 @@ def _admin_stub() -> dict[str, str]:
     return {"role": "admin"}
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def diag_client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped ASGI client with require_admin bypassed via dependency_overrides.
 
@@ -62,7 +62,7 @@ async def diag_client(db_pool):  # type: ignore[no-untyped-def]
 # ── Unauthenticated client (no override) ──────────────────────────────────────
 
 
-@pytest_asyncio.fixture(scope="module")
+@pytest_asyncio.fixture(scope="module", loop_scope="session")
 async def unauth_client(db_pool):  # type: ignore[no-untyped-def]
     """Module-scoped ASGI client with NO require_admin override (tests 401/403)."""
     app = create_app()
