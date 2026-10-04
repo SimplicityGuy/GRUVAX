@@ -550,6 +550,64 @@ async def test_sync_lock_released_on_unexpected_exception(  # type: ignore[no-un
         await conn.close()
 
 
+# ── canonical upstream label/catalog pairs (gruvax-kj3j) ──
+
+
+@pytest.mark.asyncio(loop_scope="session")
+async def test_sync_preserves_canonical_pairs_and_null_counterparts(  # type: ignore[no-untyped-def]
+    db_pool, clean_db, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The upstream pair is authoritative, including missing source members.
+
+    Exercise the canonical HTTP fixture, real client, staging swap and cache
+    refresh. Existing pairs must not fill a null member of a newer source pair.
+    Upstream producer/relationship-order behavior is tested in discogsography.
+    """
+    expected = [
+        (555601, "Label A", "A-1"),
+        (555602, "New label", None),
+        (555603, None, "NEW-2"),
+        (555604, None, None),
+    ]
+    async with db_pool.connection() as conn:
+        for release_id, _label, _catalog in expected:
+            await conn.execute(
+                "INSERT INTO gruvax.profile_collection "
+                "(profile_id, release_id, folder_id, label, catalog_number) "
+                "VALUES (%s::uuid, %s, 1, 'Old label', 'OLD-1')",
+                (DEFAULT_UUID, release_id),
+            )
+        await conn.commit()
+
+    seed = [
+        {**_make_release(release_id), "label": label, "catalog_number": catalog}
+        for release_id, label, catalog in expected
+    ]
+    app = create_fake_app(seed=seed)
+    monkeypatch.setattr(profile_sync, "_make_client", _client_factory_for(app))
+    state = _make_app_state(db_pool)
+    result = await sync_profile(DEFAULT_UUID, state)
+    assert result["status"] == "ok"
+    assert result["item_count"] == 4
+    snapshot = state.snapshot_registry[DEFAULT_UUID]
+    assert snapshot.get_label_records("Old label") == []
+    assert sorted(
+        record.release_id
+        for label in ("Label A", "New label", "")
+        for record in snapshot.get_label_records(label)
+    ) == [555601, 555602, 555603, 555604]
+
+    async with db_pool.connection() as conn:
+        rows = await (
+            await conn.execute(
+                "SELECT release_id, label, catalog_number FROM gruvax.profile_collection "
+                "WHERE profile_id = %s::uuid ORDER BY release_id",
+                (DEFAULT_UUID,),
+            )
+        ).fetchall()
+    assert rows == expected
+
+
 # ── NFKC catalog normalization at ingest (gruvax-rn7l.6, supersedes gruvax-pjyz) ──
 
 
@@ -598,11 +656,12 @@ async def test_sync_nfkc_normalizes_fullwidth_catalog_at_ingest(  # type: ignore
         # Stored value is NFKC-normalized to plain, human-readable ASCII —
         # NOT the estimator's fully-collapsed/casefolded key form.
         await cur.execute(
-            "SELECT catalog_number FROM gruvax.profile_collection "
+            "SELECT label, catalog_number FROM gruvax.profile_collection "
             "WHERE profile_id = %s::uuid AND release_id = %s",
             (DEFAULT_UUID, release_id),
         )
-        stored = (await cur.fetchone())[0]
+        label, stored = await cur.fetchone()
+        assert label == "Blue Note"
         assert stored == "BLP-4195", f"expected NFKC-normalized 'BLP-4195', got {stored!r}"
 
         # Path A — FTS: fts_vector (regenerated from the new catalog_number by

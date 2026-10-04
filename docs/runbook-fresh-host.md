@@ -9,6 +9,14 @@ healthcheck verification, and the expected bring-up sequence.
 - Docker Engine 26+ with Compose v2 (`docker compose` — no hyphen required)
 - A running [discogsography](https://github.com/SimplicityGuy/discogsography) stack on the
   same host (provides the shared Postgres instance)
+  - Deploy the canonical label/catalog pair fix from
+    [discogsography PR #503](https://github.com/SimplicityGuy/discogsography/pull/503)
+    before relying on correct multi-label sorting. Legacy graph releases without
+    pair provenance need source-bearing reingest through the normal upstream
+    release pipeline; its version backfill also processes unchanged hashes. Then complete an upstream
+    collection sync and run GRUVAX **Sync now**. A GRUVAX sync alone cannot recover
+    which original label supplied a catalog number. Legacy releases without
+    source provenance safely return a null pair until that source is available.
 - A `.env` file in the repo root with at minimum:
   - `SESSION_SECRET` — a long random string (use `python3 -c "import secrets; print(secrets.token_hex(32))"`).
     Required — `compose.yaml` uses `${SESSION_SECRET:?...}` and refuses to start the `api`

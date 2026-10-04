@@ -482,6 +482,12 @@ client wrapping `GET /api/user/collection` (paged, `Authorization: Bearer <PAT>`
   link and pastes their own PAT directly (self-connect; the owner never sees the token).
   The PAT is Fernet-encrypted at rest (`GRUVAX_SECRET_KEY`) and never logged
   (`gruvax.discogsography.log_redactor` defends against accidental interpolation).
+- **Label/catalog authority:** discogsography returns `label` and `catalog_number`
+  from the same persisted first-label source pair. Either member can be null;
+  legacy releases without known source provenance return null for both until
+  upstream source-bearing reingest backfills them. GRUVAX preserves that pair and
+  NFKC-normalizes only the catalog number (ADR-0001); it never selects another
+  label from graph relationships or fills a missing member from an old pair.
 - **Retry policy:** `401`/`403` → `PATRejected`, no retry. `429` → honor `Retry-After`,
   then exponential backoff (max 3 retries). `5xx` → exponential backoff (max 3 retries).
   Network errors → 1 retry.
