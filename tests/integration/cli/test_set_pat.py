@@ -37,7 +37,8 @@ import subprocess
 import threading
 from typing import TYPE_CHECKING
 
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, Header, HTTPException, Query, Request, Response
+from httpx import ASGITransport, AsyncClient
 import pytest
 import pytest_asyncio
 import uvicorn
@@ -111,23 +112,27 @@ def _build_outer_app() -> FastAPI:
     outer = FastAPI()
 
     @outer.get("/api/user/collection")
-    async def _proxy_collection(
-        authorization: str | None = Header(default=None),
-        limit: int = Query(50, ge=1, le=200),
-        offset: int = Query(0, ge=0),
-    ) -> dict:
+    async def _proxy_collection(request: Request) -> Response:
         if _MUX.app is None:
             raise HTTPException(503, "no fake app configured")
-        # Invoke the inner route directly via the app's own dependency-resolution.
-        # The simplest path is to call the route function via lookup since both
-        # outer and inner expose the same signature.
-        inner = _MUX.app
-        # Find the matching route handler on the inner app
-        for route in inner.routes:
-            if getattr(route, "path", None) == "/api/user/collection":
-                handler = route.endpoint  # type: ignore[attr-defined]
-                return await handler(authorization=authorization, limit=limit, offset=offset)
-        raise HTTPException(500, "inner app has no /api/user/collection route")
+        # Dispatch through the real ASGI dependency resolution. Calling the
+        # endpoint directly leaves Query defaults as parameter objects and
+        # bypasses parsing/validation of the custom test apps.
+        async with AsyncClient(
+            transport=ASGITransport(app=_MUX.app), base_url="http://inner"
+        ) as client:
+            response = await client.get(
+                "/api/user/collection",
+                params=request.query_params,
+                headers={"Authorization": request.headers["Authorization"]}
+                if "Authorization" in request.headers
+                else {},
+            )
+        return Response(
+            content=response.content,
+            status_code=response.status_code,
+            headers=dict(response.headers),
+        )
 
     return outer
 

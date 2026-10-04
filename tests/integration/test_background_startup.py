@@ -11,6 +11,7 @@ import gruvax.app as app_module
 from gruvax.discogsography.errors import NetworkError
 from gruvax.sync import profile_sync
 from gruvax.sync.pat_crypto import encrypt_pat
+from tests.fixtures.sync import add_page_iterator
 
 
 @pytest.mark.asyncio(loop_scope="session")
@@ -54,14 +55,16 @@ async def test_real_catchup_serves_while_fetching_and_finishes_safely(db_pool, m
 
     def synthetic_client(_base_url, pat):  # type: ignore[no-untyped-def]
         if pat == "dscg_synthetic_startup":
-            return upstream
+            return add_page_iterator(upstream)
         # Other fixtures may leave eligible profiles. Give each an independent
         # synthetic failure client rather than sharing the probe's data/closure.
-        return SimpleNamespace(
-            first_page=AsyncMock(
-                side_effect=NetworkError("synthetic unrelated upstream unavailable")
-            ),
-            aclose=AsyncMock(),
+        return add_page_iterator(
+            SimpleNamespace(
+                first_page=AsyncMock(
+                    side_effect=NetworkError("synthetic unrelated upstream unavailable")
+                ),
+                aclose=AsyncMock(),
+            )
         )
 
     monkeypatch.setattr(profile_sync, "_make_client", synthetic_client)

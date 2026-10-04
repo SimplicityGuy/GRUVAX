@@ -33,7 +33,7 @@ import types
 from typing import TYPE_CHECKING
 
 from asgi_lifespan import LifespanManager
-from fastapi import FastAPI, Header, HTTPException, Query
+from fastapi import FastAPI, HTTPException
 from httpx import ASGITransport, AsyncClient
 import psycopg
 import pytest
@@ -576,7 +576,6 @@ async def test_pitfall_6_handler_does_not_hold_pool_during_sync(  # type: ignore
 
 def _make_slow_fake_app(*, seed_pages: int = 5, page_size: int = 200, page_sleep_s: float = 0.5):  # type: ignore[no-untyped-def]
     """A fake-discogsography app that sleeps `page_sleep_s` per page fetch (Test 10 helper)."""
-    app = FastAPI()
     total_rows = seed_pages * page_size
     rows = [
         {
@@ -591,23 +590,13 @@ def _make_slow_fake_app(*, seed_pages: int = 5, page_size: int = 200, page_sleep
         for i in range(1, total_rows + 1)
     ]
 
-    @app.get("/api/user/collection")
-    async def _slow_collection(
-        authorization: str | None = Header(default=None),
-        limit: int = Query(50, ge=1, le=200),
-        offset: int = Query(0, ge=0),
-    ) -> dict:
-        if not authorization or not authorization.startswith("Bearer dscg_"):
-            raise HTTPException(401)
+    app = create_fake_app(seed=rows, user_id="55555555-5555-5555-5555-555555555555")
+
+    @app.middleware("http")
+    async def _slow_page(request, call_next):  # type: ignore[no-untyped-def]
+        # Keep the original owner and timing barrier, using the one canonical
+        # fake for immutable paging rather than a separate legacy envelope.
         await asyncio.sleep(page_sleep_s)
-        page = rows[offset : offset + limit]
-        return {
-            "user_id": "55555555-5555-5555-5555-555555555555",
-            "releases": page,
-            "total": len(rows),
-            "offset": offset,
-            "limit": limit,
-            "has_more": offset + len(page) < len(rows),
-        }
+        return await call_next(request)
 
     return app

@@ -349,8 +349,8 @@ async def test_sync_503_exits_nonzero(  # type: ignore[no-untyped-def]
         async def first_page(self) -> dict:
             raise ServerError("simulated upstream 500")
 
-        async def _get_page(self, *, limit: int, offset: int) -> dict:
-            raise ServerError("simulated upstream 500")
+        async def iter_pages(self):  # type: ignore[no-untyped-def]
+            yield await self.first_page()
 
         async def aclose(self) -> None:
             pass

@@ -133,11 +133,13 @@ def test_downgrade_waits_for_stats_writer_then_refuses_history(migration_db):  #
             text=True,
         )
         try:
+            # Newer heads may first wait on profiles: the actual stats writer
+            # holds its FK key-share lock until commit. Both guards precede DDL.
             blocked = False
             deadline = time.monotonic() + 10
             while time.monotonic() < deadline and process.poll() is None:
                 blocked = observer.execute(
-                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND query LIKE '%%LOCK TABLE gruvax.record_stats%%')"
+                    "SELECT EXISTS (SELECT 1 FROM pg_stat_activity WHERE datname=current_database() AND wait_event_type='Lock' AND (query LIKE '%%LOCK TABLE gruvax.record_stats%%' OR query LIKE '%%LOCK TABLE gruvax.profiles%%'))"
                 ).fetchone()[0]
                 if blocked:
                     break

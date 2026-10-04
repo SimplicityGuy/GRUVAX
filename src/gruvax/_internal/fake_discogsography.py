@@ -16,7 +16,10 @@ Routes mounted by ``create_fake_app``:
 
 Envelope shape returned on 200:
   ``{user_id, releases, total, offset, limit, has_more}`` where
-  ``has_more = offset + len(page) < len(seed)``.
+  ``has_more = offset + len(page) < len(seed)`` for legacy probes.
+  Strict snapshot requests add a pinned token, generation, UTC expiry and
+  ``completed_collection_sync`` source. Per-app immutable copies have finite
+  count/byte admission bounds; new requests never evict an unexpired pin.
 
 Keeping this in ONE module satisfies D-15's "one fake-discogsography FastAPI
 fixture" mandate — no ``just sync-fake`` drift guard is needed because both
@@ -25,13 +28,20 @@ consumers import from this file directly.
 
 from __future__ import annotations
 
+from copy import deepcopy
+import datetime as dt
+import json
 from typing import Any
+from uuid import uuid4
 
 from fastapi import FastAPI, Header, HTTPException, Query
 from pydantic import BaseModel
 
 
 __all__ = ["create_fake_app"]
+
+_MAX_SNAPSHOTS = 16
+_MAX_SNAPSHOT_BYTES = 16 * 1024 * 1024
 
 
 class _Release(BaseModel):
@@ -82,12 +92,15 @@ def create_fake_app(
     # at runtime; keeping it on app.state preserves that future-proofing.
     app.state._seed = seed
     app.state._user_id = user_id
+    snapshots: dict[str, tuple[str, str, str, list[dict[str, Any]], int]] = {}
 
     @app.get("/api/user/collection")
     async def get_collection(
         authorization: str | None = Header(default=None),
         limit: int = Query(50, ge=1, le=200),
         offset: int = Query(0, ge=0),
+        snapshot: str | None = Query(None),
+        snapshot_generation: str | None = Query(None),
     ) -> dict[str, Any]:
         # Token routing — contract §3.2: any missing/wrong-prefix token is 401.
         # The contract returns identical body shape for "missing", "invalid",
@@ -105,14 +118,59 @@ def create_fake_app(
         if authorization == "Bearer dscg_force_500":
             raise HTTPException(status_code=500, detail="Server error (test injection)")
 
-        page = seed[offset : offset + limit]
+        rows = app.state._seed
+        owner = app.state._user_id
+        metadata: dict[str, Any] = {}
+        if snapshot is not None:
+            if snapshot == "new":
+                if offset != 0 or snapshot_generation is not None:
+                    raise HTTPException(409, detail={"code": "snapshot_mismatch"})
+                now = dt.datetime.now(dt.UTC)
+                for old_token, entry in list(snapshots.items()):
+                    if dt.datetime.fromisoformat(entry[2]) <= now:
+                        del snapshots[old_token]
+                payload_bytes = len(json.dumps(rows).encode("utf-8"))
+                if (
+                    len(snapshots) >= _MAX_SNAPSHOTS
+                    or sum(entry[4] for entry in snapshots.values()) + payload_bytes
+                    > _MAX_SNAPSHOT_BYTES
+                ):
+                    raise HTTPException(409, detail={"code": "snapshot_unavailable"})
+                token = uuid4().hex
+                generation = str(uuid4())
+                expiry = (
+                    (now + dt.timedelta(seconds=900))
+                    .isoformat(timespec="microseconds")
+                    .replace("+00:00", "Z")
+                )
+                snapshots[token] = (owner, generation, expiry, deepcopy(rows), payload_bytes)
+            else:
+                token = snapshot
+            stored = snapshots.get(token)
+            if stored is None:
+                raise HTTPException(409, detail={"code": "snapshot_mismatch"})
+            stored_owner, generation, expiry, rows, _payload_bytes = stored
+            if owner != stored_owner:
+                raise HTTPException(409, detail={"code": "snapshot_scope_mismatch"})
+            if dt.datetime.fromisoformat(expiry) <= dt.datetime.now(dt.UTC):
+                raise HTTPException(410, detail={"code": "snapshot_expired"})
+            if snapshot != "new" and snapshot_generation != generation:
+                raise HTTPException(409, detail={"code": "snapshot_mismatch"})
+            metadata = {
+                "snapshot_token": token,
+                "snapshot_generation": generation,
+                "snapshot_expires_at": expiry,
+                "snapshot_source": "completed_collection_sync",
+            }
+        page = rows[offset : offset + limit]
         return {
-            "user_id": user_id,
+            "user_id": owner,
             "releases": page,
-            "total": len(seed),
+            "total": len(rows),
             "offset": offset,
             "limit": limit,
-            "has_more": offset + len(page) < len(seed),
+            "has_more": offset + len(page) < len(rows),
+            **metadata,
         }
 
     return app

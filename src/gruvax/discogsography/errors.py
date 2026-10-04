@@ -40,3 +40,7 @@ class NetworkError(DiscogsographyError):
 
 class SyncInProgress(DiscogsographyError):
     """pg_try_advisory_lock returned FALSE — another sync is already running for this profile."""
+
+
+class SnapshotMismatch(DiscogsographyError):
+    """Terminal snapshot contract failure; preserve the previous collection and PAT."""

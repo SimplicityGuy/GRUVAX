@@ -53,6 +53,7 @@ from gruvax.discogsography.errors import (
     PATRejected,
     RateLimitExhausted,
     ServerError,
+    SnapshotMismatch,
     SyncInProgress,
 )
 from gruvax.estimator.boundary_cache import BoundaryCache
@@ -173,6 +174,7 @@ _FAILED_STATUS_UPDATES: dict[type[Exception], str] = {
     RateLimitExhausted: "rate_limited",
     ServerError: "server_error",
     NetworkError: "network",
+    SnapshotMismatch: "snapshot_mismatch",
 }
 
 
@@ -263,26 +265,17 @@ async def _ingest_into_staging(
     swap transaction (next step) — ON COMMIT DROP guarantees cleanup
     regardless of how the function exits.
     """
-    # Get the first page first so we can capture user_id and decide
-    # whether to keep paging.
-    first_page = await client.first_page()
-    user_id = str(first_page["user_id"])
-
+    user_id: str | None = None
     row_count = 0
     async with conn.cursor() as cur, cur.copy(_STAGING_COPY) as copy:
-        for release in first_page.get("releases", []):
-            await copy.write_row(_release_to_tuple(release))
-            row_count += 1
-
-        offset = first_page.get("limit", 200)
-        has_more = bool(first_page.get("has_more"))
-        while has_more:
-            page = await client._get_page(limit=200, offset=offset)
-            for release in page.get("releases", []):
+        async for page in client.iter_pages():
+            if user_id is None:
+                user_id = page["user_id"]
+            for release in page["releases"]:
                 await copy.write_row(_release_to_tuple(release))
                 row_count += 1
-            has_more = bool(page.get("has_more"))
-            offset += page.get("limit", 200)
+    if user_id is None:
+        raise SnapshotMismatch("Collection snapshot did not return an initial page")
 
     return user_id, row_count
 
@@ -801,6 +794,9 @@ async def sync_profile(
             raise
         except NetworkError:
             await _record_failure(profile_id, error_tag="network", flip_revoked=False)
+            raise
+        except SnapshotMismatch:
+            await _record_failure(profile_id, error_tag="snapshot_mismatch", flip_revoked=False)
             raise
         except ShrinkGuardTripped:
             # gruvax-envc: the swap transaction already rolled back (raised

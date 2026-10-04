@@ -15,6 +15,7 @@ from gruvax.estimator.segment_cache import SegmentCache
 from gruvax.events.bus import EventBus
 from gruvax.sync import nightly, profile_sync
 from gruvax.sync.pat_crypto import encrypt_pat
+from tests.fixtures.sync import add_page_iterator
 
 
 @pytest_asyncio.fixture(loop_scope="session")
@@ -112,7 +113,7 @@ async def blocked_sync(profile, db_pool, monkeypatch):  # type: ignore[no-untype
         return _page(profile.user_id)
 
     upstream = SimpleNamespace(first_page=page, aclose=AsyncMock())
-    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: upstream)
+    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: add_page_iterator(upstream))
     state = _state(db_pool)
     task = asyncio.create_task(profile_sync.sync_profile(profile.id, state))
     try:
@@ -140,7 +141,7 @@ async def test_cancel_before_swap_is_retryable_and_next_real_sweep_selects_profi
     retry_client = SimpleNamespace(
         first_page=AsyncMock(return_value=_page(profile.user_id)), aclose=AsyncMock()
     )
-    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: retry_client)
+    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: add_page_iterator(retry_client))
     selected = []
     real_sync = nightly.sync_profile
 
@@ -190,7 +191,7 @@ async def test_cancel_during_postcommit_cache_load_preserves_success(profile, db
     upstream = SimpleNamespace(
         first_page=AsyncMock(return_value=_page(profile.user_id)), aclose=AsyncMock()
     )
-    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: upstream)
+    monkeypatch.setattr(profile_sync, "_make_client", lambda *_: add_page_iterator(upstream))
     task = asyncio.create_task(profile_sync.sync_profile(profile.id, state))
     try:
         await asyncio.wait_for(loading.wait(), timeout=5)

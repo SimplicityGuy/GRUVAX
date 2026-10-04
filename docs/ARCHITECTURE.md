@@ -488,6 +488,24 @@ client wrapping `GET /api/user/collection` (paged, `Authorization: Bearer <PAT>`
   upstream source-bearing reingest backfills them. GRUVAX preserves that pair and
   NFKC-normalizes only the catalog number (ADR-0001); it never selects another
   label from graph relationships or fills a missing member from an old pair.
+- **Collection snapshots:** full sync starts with `snapshot=new` and pins the returned
+  token, generation, user, total and UTC expiry across every continuation. Both
+  iterator and transactional staging validate the same strict envelope before using
+  rows. The upstream must have published a successful collection generation; there
+  is no live-pagination fallback. Wire totals include distinct collection instances;
+  GRUVAX retains its release/folder estimator deduplication. Missing v1 genres/styles
+  use the existing empty defaults.
+  Deployment order is: update upstream schema/API, complete a successful upstream
+  collection sync to publish a generation, then roll out GRUVAX migration 0019 and
+  the strict client. A full GRUVAX sync before publication correctly fails safely;
+  deployment does not itself perform an upstream resync.
+- **Snapshot failures:** malformed or drifting pages and upstream snapshot 409/410
+  codes fail without retry as `snapshot_mismatch`. Staging rolls back; previous
+  collection, caches, successful-sync timestamp and new-record metadata remain intact.
+  The PAT stays active and no collection event is emitted. Migration 0019 refuses
+  downgrade before DDL if any profile retains that error, including deleted profiles.
+  Opaque snapshot query values and fields are redacted alongside PATs in configured
+  JSON logs and diagnostics-ring messages.
 - **Retry policy:** `401`/`403` → `PATRejected`, no retry. `429` → honor `Retry-After`,
   then exponential backoff (max 3 retries). `5xx` → exponential backoff (max 3 retries).
   Network errors → 1 retry.
