@@ -1,6 +1,6 @@
 ---
 # Source: adapted from discogsography/.github/dependabot.yml
-# Key changes: single-dir fan-out (one service); four ecosystems only.
+# Key changes: single-dir fan-out (one service); six ecosystems, each grouped into one security PR and one version PR.
 version: 2
 updates:
   - package-ecosystem: "github-actions"
@@ -26,12 +26,19 @@ updates:
     assignees:
       - "SimplicityGuy"
     groups:
-      actions:
+      actions-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      actions-version:
+        applies-to: version-updates
         patterns:
           - "*"
 
   - package-ecosystem: "docker"
-    directory: "/"
+    directories:
+      - "/"
+      - "/services/fake-discogsography"
     cooldown:
       # Deliberately 2 days, not semgrep's suggested 7 (gruvax-ajgw). This is a
       # home-LAN-only kiosk with no public exposure, and the shorter window keeps
@@ -52,6 +59,15 @@ updates:
       - "docker"
     assignees:
       - "SimplicityGuy"
+    groups:
+      docker-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      docker-version:
+        applies-to: version-updates
+        patterns:
+          - "*"
 
   - package-ecosystem: "npm"
     directory: "/frontend"
@@ -97,7 +113,12 @@ updates:
       - dependency-name: "typescript"
         update-types: ["version-update:semver-major"]
     groups:
-      npm-dependencies:
+      npm-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      npm-version:
+        applies-to: version-updates
         patterns:
           - "*"
 
@@ -125,15 +146,73 @@ updates:
     assignees:
       - "SimplicityGuy"
     groups:
-      python-production:
-        dependency-type: "production"
-        patterns:
-          - "*"
-      python-development:
-        dependency-type: "development"
-        patterns:
-          - "*"
-      python-security:
+      pip-security:
         applies-to: security-updates
+        patterns:
+          - "*"
+      pip-version:
+        applies-to: version-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "docker-compose"
+    directory: "/"
+    cooldown:
+      # Deliberately 2 days, not semgrep's suggested 7 (gruvax-ajgw). This is a
+      # home-LAN-only kiosk with no public exposure, and the shorter window keeps
+      # GRUVAX in step with discogsography. The control is still in force — a
+      # same-day compromised release cannot land — just narrower than the default.
+      # nosemgrep: dependabot-missing-cooldown
+      default-days: 2
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Los_Angeles"
+    commit-message:
+      prefix: "docker"
+      include: "scope"
+    labels:
+      - "dependencies"
+    assignees:
+      - "SimplicityGuy"
+    groups:
+      docker-compose-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      docker-compose-version:
+        applies-to: version-updates
+        patterns:
+          - "*"
+
+  - package-ecosystem: "pre-commit"
+    directory: "/"
+    cooldown:
+      # Deliberately 2 days, not semgrep's suggested 7 (gruvax-ajgw). This is a
+      # home-LAN-only kiosk with no public exposure, and the shorter window keeps
+      # GRUVAX in step with discogsography. The control is still in force — a
+      # same-day compromised release cannot land — just narrower than the default.
+      # nosemgrep: dependabot-missing-cooldown
+      default-days: 2
+    schedule:
+      interval: "weekly"
+      day: "monday"
+      time: "09:00"
+      timezone: "America/Los_Angeles"
+    commit-message:
+      prefix: "ci"
+      include: "scope"
+    labels:
+      - "dependencies"
+    assignees:
+      - "SimplicityGuy"
+    groups:
+      pre-commit-security:
+        applies-to: security-updates
+        patterns:
+          - "*"
+      pre-commit-version:
+        applies-to: version-updates
         patterns:
           - "*"
