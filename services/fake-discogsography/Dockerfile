@@ -17,7 +17,7 @@
 # image size is not a constraint. Keeping the build dead-simple favors
 # readability + faster CI iteration on compose-smoke.
 
-FROM python:3.14-slim AS runtime
+FROM python:3.15-slim AS runtime
 
 # uv is installed for the package install only; runtime invokes uvicorn directly.
 # Test-fixture image; intentionally tracks latest uv to match astral-sh/uv:latest in the api image.
