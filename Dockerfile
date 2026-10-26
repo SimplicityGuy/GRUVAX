@@ -35,7 +35,7 @@ COPY design/ /design/
 RUN npm run build
 
 # ── Stage 2: Python dependency builder ───────────────────────────────────────
-FROM python:3.14-slim AS python-builder
+FROM python:3.15-slim AS python-builder
 
 # Install uv (latest from the official image)
 COPY --from=ghcr.io/astral-sh/uv:latest /uv /uvx /usr/local/bin/
@@ -65,7 +65,7 @@ RUN --mount=type=cache,target=/root/.cache/uv \
     uv sync --frozen --no-dev
 
 # ── Stage 3: runtime ──────────────────────────────────────────────────────────
-FROM python:3.14-slim
+FROM python:3.15-slim
 
 # Create a non-root user (security baseline for 2026).
 # UID/GID are pinned rather than auto-assigned so the numeric id in the USER
