@@ -152,6 +152,27 @@ async def test_disconnect_wakes_capture_and_disposes_waiters(
 
 
 @pytest.mark.asyncio
+async def test_disconnect_wins_over_a_queued_reply(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    client, incoming = controlled_client(monkeypatch)
+    monitor = asyncio.create_task(client.monitor_messages())
+    try:
+        async with diagnostic_messages(client, "owned") as captured:
+            await incoming.put(message("owned/status/reply"))
+            await incoming.put(aiomqtt.MqttError("controlled disconnect"))
+            async with asyncio.timeout(1):
+                while not client._failed.is_set():
+                    await asyncio.sleep(0)
+            assert client._status_queue is not None and client._status_queue.qsize() == 1
+            with pytest.raises(aiomqtt.MqttError, match="Disconnected during diagnostic"):
+                await anext(captured)
+    finally:
+        monitor.cancel()
+        await asyncio.gather(monitor, return_exceptions=True)
+
+
+@pytest.mark.asyncio
 async def test_cancel_capture_disposes_waiters_without_stopping_monitor(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
