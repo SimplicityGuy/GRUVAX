@@ -77,6 +77,15 @@ class _HealthReportingClient(aiomqtt.Client):
             self._failed.set()
 
     async def _next_status(self, queue: asyncio.Queue[aiomqtt.Message]) -> aiomqtt.Message:
+        # Disconnect wins over a queued reply, as in the race below. A reply already
+        # queued skips the race: its task churn costs several loop turns per message,
+        # which a full five-state burst cannot afford.
+        if self._failed.is_set():
+            raise aiomqtt.MqttError("Disconnected during diagnostic capture")
+        try:
+            return queue.get_nowait()
+        except asyncio.QueueEmpty:
+            pass
         message = asyncio.create_task(queue.get())
         disconnected = asyncio.create_task(self._failed.wait())
         try:
