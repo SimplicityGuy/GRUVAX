@@ -184,7 +184,7 @@ services:
         max-file: "3"
 
   mosquitto:
-    image: eclipse-mosquitto:2.1.2-alpine
+    image: eclipse-mosquitto:2.1.4-alpine
     environment:
       MQTT_USERNAME: "${MQTT_USERNAME:-gruvax-api}"
       MQTT_PASSWORD: "${MQTT_PASSWORD:-}"
